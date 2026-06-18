@@ -303,8 +303,8 @@ test("platform console is declared through RVM and styled through WCSS", async (
   assert.equal(page?.semantic.identity, "surface:platform");
   assert.equal(page?.semantic.className, "platform-console");
   assert.equal(page?.semantic.props?.title, "Platform Console");
-  assert.equal(page?.semantic.props?.summary, "Self-model, lifecycle board, profile map, verification gates, and proposal lane.");
-  assert.equal(page?.semantic.children.includes("PlatformProposalPanel"), true);
+  assert.equal(page?.semantic.props?.summary, "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, and model inspection.");
+  assert.equal(page?.semantic.children.includes("PlatformWorkflowPage"), true);
   assert.equal(createCommand?.semantic.route, "/api/platform-proposals");
   assert.match(css, /Generated from plugins\/platform\/platform-console\.wcss/);
   assert.match(css, /body\.platform-console/);
@@ -318,22 +318,33 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(layout.page.title, "Platform Console");
   assert.equal(layout.page.identity, "surface:platform");
   assert.deepEqual(layout.page.children, [
-    "PlatformConsoleSummary",
-    "PlatformLifecycleBoard",
-    "PlatformMap",
+    "PlatformOverviewPage",
+    "PlatformWorkflowPage",
+    "PlatformVerificationPage",
+    "PlatformKnowledgePage",
+    "PlatformSignalsPage",
+    "PlatformModelPage"
+  ]);
+  const workflowPage = layout.children.find(surface => surface.name === "PlatformWorkflowPage");
+  const signalsPage = layout.children.find(surface => surface.name === "PlatformSignalsPage");
+  assert.ok(workflowPage);
+  assert.equal(workflowPage.pageId, "workflow");
+  assert.deepEqual(workflowPage.children, [
+    "PlatformBranchBoard",
+    "PlatformWorkflowList",
+    "PlatformWorkflowDetail",
     "PlatformProposalPanel",
-    "PlatformGapList",
-    "PlatformProfileComparison",
     "PlatformProposalReviewList"
   ]);
-  const proposalPanel = layout.children.find(surface => surface.name === "PlatformProposalPanel");
-  const gapList = layout.children.find(surface => surface.name === "PlatformGapList");
-  assert.ok(proposalPanel);
-  assert.equal(proposalPanel.title, "Proposal Panel");
-  assert.equal(proposalPanel.processRoute, "/api/platform-proposals");
-  assert.ok(gapList);
-  assert.equal(gapList.title, "Platform Gaps");
-  assert.deepEqual(gapList.projectionRoutes, ["/api/platform-gaps"]);
+  assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
+  assert.ok(signalsPage);
+  assert.equal(signalsPage.pageId, "signals");
+  assert.deepEqual(signalsPage.children, [
+    "PlatformGapList",
+    "PlatformSignalList",
+    "PlatformSignalDetail"
+  ]);
+  assert.equal(signalsPage.childSurfaces.some(surface => surface.name === "PlatformGapList" && surface.projectionRoutes.includes("/api/platform-gaps")), true);
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -4644,7 +4655,7 @@ test("platform change-set apply rolls back previously promoted files on mid-appl
 }));
 
 test("platform page renders required operating views", async () => {
-  const model = await buildPlatformModel({
+  const baseModel = await buildPlatformModel({
     diagnostics: {
       activeProfile: "full",
       activeBundles: [{ id: "bundle-platform" }],
@@ -4655,142 +4666,238 @@ test("platform page renders required operating views", async () => {
     },
     project: () => []
   });
-  const html = renderPlatformPage(model);
+  const branches = Array.from({ length: 21 }, (_, index) => ({
+    id: `branch:demo-${index}`,
+    title: `Demo Branch ${index}`,
+    status: index === 0 ? "draft" : "active",
+    lifecycleLane: index === 0 ? "draft" : "review",
+    owner: "aaron",
+    changeSetIds: [`changeSet:demo-${index}`],
+    changeSetCount: 1,
+    docsFreshness: { status: "fresh", summary: "fresh" },
+    testRedGreen: { status: "green", summary: "all gates passing" },
+    latestCandidateSnapshotId: `candidateSnapshot:demo-${index}`,
+    affectedSystemSummaries: [{ label: "platform console" }],
+    telemetryImpactSummaries: [{ label: "requests" }]
+  }));
+  const changeSets = branches.map((branch, index) => ({
+    id: `changeSet:demo-${index}`,
+    title: `Demo Change Set ${index}`,
+    status: index === 0 ? "draft" : "validated",
+    branchId: branch.id,
+    owner: "aaron",
+    editCount: 1,
+    changedPaths: ["plugins/platform/platform-console.rvm"],
+    latestCandidateSnapshotId: `candidateSnapshot:demo-${index}`,
+    testRedGreen: { status: "green", summary: "all gates passing" }
+  }));
+  const candidateSnapshots = branches.map((branch, index) => ({
+    id: `candidateSnapshot:demo-${index}`,
+    status: "valid",
+    branchId: branch.id,
+    changeSetId: `changeSet:demo-${index}`,
+    revision: index + 1,
+    files: [{ path: "plugins/platform/platform-console.rvm" }],
+    errors: []
+  }));
+  const model = {
+    ...baseModel,
+    profiles: [{ id: "full", status: "active", pluginIds: ["plugin.platform"], capabilities: ["platform.self"] }],
+    branchBoard: [
+      {
+        id: "draft",
+        title: "Draft",
+        count: 1,
+        branches: [{ id: "branch:demo-0", title: "Demo Branch 0", status: "draft", changeSetCount: 1, reviewProposalCount: 0 }]
+      },
+      {
+        id: "review",
+        title: "Review",
+        count: 20,
+        branches: branches.slice(1).map(branch => ({ id: branch.id, title: branch.title, status: branch.status, changeSetCount: 1, reviewProposalCount: 1 }))
+      }
+    ],
+    branches,
+    changeSets,
+    changeSetEdits: [{ changeSetId: "changeSet:demo-0", path: "plugins/platform/platform-console.rvm", sourceLanguage: "rvm", previousHash: "abc123", nextHash: "def456" }],
+    candidateSnapshots,
+    proposals: [{ id: "proposal:demo", status: "open", targetProcess: "platform.changeSet.create", targetId: "changeSet:demo-0", reason: "Demo proposal" }],
+    proposalActions: [{ action: "changeSet.create", sampleBody: { branchId: "branch:demo-0" } }],
+    testGates: [{
+      id: "gate:demo",
+      title: "Demo gate",
+      runner: "node-test",
+      environment: "local-node",
+      timeoutMs: 1000,
+      costEstimate: "low",
+      command: "node --test demo",
+      protectedObjects: ["branch:demo-0", "route:GET /platform"],
+      selectedByBranches: ["branch:demo-0"],
+      selectedByChangeSets: ["changeSet:demo-0"],
+      lastResult: { status: "passed", exitCode: 0 }
+    }],
+    testRuns: [{
+      id: "testRun:demo",
+      title: "Demo gate",
+      status: "passed",
+      gateId: "gate:demo",
+      branchId: "branch:demo-0",
+      changeSetId: "changeSet:demo-0",
+      candidateSnapshotId: "candidateSnapshot:demo-0",
+      durationMs: 12,
+      exitCode: 0
+    }],
+    branchTestRedGreen: [{
+      branchId: "branch:demo-0",
+      status: "green",
+      totalSelectedGates: 1,
+      passedGateIds: ["gate:demo"],
+      failedGateIds: [],
+      errorGateIds: [],
+      timedOutGateIds: [],
+      summary: "all selected gates passing"
+    }],
+    changeSetTestRedGreen: [{
+      changeSetId: "changeSet:demo-0",
+      status: "green",
+      totalSelectedGates: 1,
+      passedGateIds: ["gate:demo"],
+      failedGateIds: [],
+      errorGateIds: [],
+      timedOutGateIds: [],
+      summary: "all selected gates passing"
+    }],
+    runtimeRevisions: [{
+      id: "runtimeRevision:demo",
+      revision: 21,
+      status: "active",
+      trigger: "platform-change-set-apply",
+      branchId: "branch:demo-0",
+      changeSetId: "changeSet:demo-0",
+      changedSources: ["plugins/platform/platform-console.rvm"],
+      buildErrorCount: 0
+    }],
+    snapshotBuilds: [{
+      id: "snapshotBuild:demo",
+      status: "valid",
+      candidateSnapshotId: "candidateSnapshot:demo-0",
+      branchId: "branch:demo-0",
+      changeSetId: "changeSet:demo-0",
+      revision: 21,
+      errorCount: 0
+    }],
+    snapshotBuildErrors: [],
+    snapshotDiagnostics: { appRevision: 21, lastGoodAppRevision: 21, pendingDirtySources: [] },
+    docs: [{
+      id: "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
+      path: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
+      role: "roadmap",
+      owner: "plugin.platform",
+      status: "active",
+      freshness: { status: "fresh" },
+      sectionCount: 1,
+      taskCount: 1,
+      references: {
+        routes: ["route:GET /platform"],
+        pluginIds: ["plugin.platform"],
+        filePaths: ["plugins/platform/platform-console.rvm"]
+      }
+    }],
+    docSections: [{ doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", title: "Phase 12", line: 1, depth: 1 }],
+    docTasks: [{ id: "docTask:roadmap:1", doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", status: "open", title: "Split console into platform pages", line: 2, section: "Phase 12" }],
+    roadmapTasks: [{
+      id: "roadmapTask:1",
+      doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
+      status: "open",
+      derivedStatus: "ready",
+      title: "Split console pages",
+      line: 2,
+      section: "Phase 12",
+      derivedSummary: "ready to land",
+      targets: [{ targetId: "route:GET /platform" }]
+    }],
+    epics: [{
+      id: "epic:platform",
+      title: "Platform",
+      status: "active",
+      roadmapId: "roadmap:platform",
+      branchIds: ["branch:demo-0"],
+      featureIds: ["feature:console"],
+      gateIds: ["gate:demo"],
+      docIds: ["doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"]
+    }],
+    features: [{
+      id: "feature:console",
+      title: "Console",
+      status: "active",
+      epicId: "epic:platform",
+      branchIds: ["branch:demo-0"],
+      gateIds: ["gate:demo"],
+      docIds: ["doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"]
+    }],
+    gaps: [{ id: "gap.demo", severity: "low", kind: "meta-defect", target: "branch:demo-0", reason: "Demo gap" }],
+    nodes: [
+      ...baseModel.nodes,
+      { id: "telemetryMetric:requests", kind: "telemetryMetric", title: "Requests", status: "known", owner: "plugin.platform", source: "platform", lifecycle: ["observe"] },
+      { id: "defectCluster:demo", kind: "defectCluster", title: "Console drift", status: "open", owner: "plugin.platform", source: "platform", lifecycle: ["observe"] },
+      { id: "boundary:git", kind: "boundary", title: "Git", status: "known", owner: "plugin.platform", source: "platform", lifecycle: ["execute"] }
+    ],
+    edges: [
+      ...baseModel.edges,
+      { from: "telemetryMetric:requests", rel: "verifies", to: "route:GET /platform" },
+      { from: "defectCluster:demo", rel: "targets", to: "branch:demo-0" },
+      { from: "boundary:git", rel: "supports", to: "plugin.platform" }
+    ]
+  };
 
-  assert.match(html, /Platform Console/);
-  assert.match(html, /Generated from plugins\/platform\/platform-console\.wcss/);
-  assert.match(html, /body class="platform-console"/);
-  assert.match(html, /Authored Surface Tree/);
-  assert.match(html, /Rendered from plugins\/platform\/platform-console\.rvm top-level surface declarations\./);
-  assert.match(html, /data-platform-rvm-view="PlatformConsolePage"/);
-  assert.match(html, /data-platform-rvm-view="PlatformLifecycleBoard"/);
-  assert.match(html, /data-platform-rvm-view="PlatformProposalPanel"/);
-  assert.match(html, /Lifecycle Board/);
-  assert.match(html, /Branch Board/);
-  assert.match(html, /Platform Map/);
-  assert.match(html, /Runtime Profiles/);
-  assert.match(html, /Proposal Panel/);
-  assert.match(html, /Review Proposals/);
-  assert.match(html, /Change Sets/);
-  assert.match(html, /Branches/);
-  assert.match(html, /Branch Detail/);
-  assert.match(html, /Docs freshness/);
-  assert.match(html, /Affected systems/);
-  assert.match(html, /Telemetry impacts/);
-  assert.match(html, /Selected test gates/);
-  assert.match(html, /Red \/ Green/);
-  assert.match(html, /Branch Red \/ Green/);
-  assert.match(html, /Change Set Red \/ Green/);
-  assert.match(html, /Test Gates/);
-  assert.match(html, /Affected Test Gates By Branch/);
-  assert.match(html, /Selected Test Gates By Branch/);
-  assert.match(html, /Affected Test Gate Selections/);
-  assert.match(html, /Selected Test Gates By Change Set/);
-  assert.match(html, /Test Gate Index/);
-  assert.match(html, /Protected Objects/);
-  assert.match(html, /Selected Branches/);
-  assert.match(html, /Test Runs/);
-  assert.match(html, /Latest Test Results/);
-  assert.match(html, /Test Suites/);
-  assert.match(html, /Test Cases/);
-  assert.match(html, /Live Test Run Events/);
-  assert.match(html, /Run Test Gate/);
-  assert.match(html, /Run Selected Gates/);
-  assert.match(html, /Candidate Snapshots/);
-  assert.match(html, /Runtime Revisions/);
-  assert.match(html, /Revision detail/);
-  assert.match(html, /platform-runtime-revision-select/);
-  assert.match(html, /Revision Snapshot Builds/);
-  assert.match(html, /Revision Build Errors/);
-  assert.match(html, /\/api\/platform-model\?view=runtimeRevisions/);
-  assert.match(html, /Backend Revision Stream/);
-  assert.match(html, /Snapshot Builds/);
-  assert.match(html, /Last Good/);
-  assert.match(html, /Failed Snapshot Builds/);
-  assert.match(html, /Gaps/);
-  assert.match(html, /Meta-System/);
-  assert.match(html, /Meta-System Detail/);
-  assert.match(html, /Meta gaps/);
-  assert.match(html, /Meta categories/);
-  assert.match(html, /Boundaries/);
-  assert.match(html, /Boundary Relationships/);
-  assert.match(html, /Coverage Matrix/);
-  assert.match(html, /Coverage Matrix Detail/);
-  assert.match(html, /Coverage edges/);
-  assert.match(html, /Protected objects/);
-  assert.match(html, /Source dependencies/);
-  assert.match(html, /Dependency Graph/);
-  assert.match(html, /Dependency Graph Detail/);
-  assert.match(html, /Graph nodes/);
-  assert.match(html, /Graph edges/);
-  assert.match(html, /Relation kinds/);
-  assert.match(html, /Defect Clusters/);
-  assert.match(html, /Defect Cluster Detail/);
-  assert.match(html, />Clusters</);
-  assert.match(html, /Cluster edges/);
-  assert.match(html, /Telemetry/);
-  assert.match(html, /Telemetry Detail/);
-  assert.match(html, />Metrics</);
-  assert.match(html, /Telemetry edges/);
-  assert.match(html, /Governed Docs/);
-  assert.match(html, /Doc Structure/);
-  assert.match(html, /Doc Tasks/);
-  assert.match(html, /Epic View/);
-  assert.match(html, /Epic detail/);
-  assert.match(html, /platform-epic-select/);
-  assert.match(html, /platform-epic-detail-output/);
-  assert.match(html, /platform-epic-status/);
-  assert.match(html, /platform-epic-branches-count/);
-  assert.match(html, /platform-epic-features-count/);
-  assert.match(html, /platform-epic-defects-count/);
-  assert.match(html, /platform-epic-gates-count/);
-  assert.match(html, /Roadmap Tasks/);
-  assert.match(html, /Roadmap detail/);
-  assert.match(html, /platform-roadmap-select/);
-  assert.match(html, /platform-roadmap-detail-output/);
-  assert.match(html, /\/api\/platform-model\?view=roadmap/);
-  assert.match(html, />Derived</);
-  assert.match(html, />Evidence</);
-  assert.match(html, /platform-proposal-form/);
-  assert.match(html, /platform-review-form/);
-  assert.match(html, /platform-branch-create-form/);
-  assert.match(html, /platform-change-set-create-form/);
-  assert.match(html, /branch:/);
-  assert.match(html, /changeSet:/);
-  assert.match(html, /platform-change-set-edit-form/);
-  assert.match(html, /platform-change-set-validate-form/);
-  assert.match(html, /platform-change-set-apply-form/);
-  assert.match(html, /platform-change-set-lifecycle-form/);
-  assert.match(html, /platform-test-run-form/);
-  assert.match(html, /platform-selected-test-run-form/);
-  assert.match(html, /selected-test-run-status/);
-  assert.match(html, /test-run-stream-status/);
-  assert.match(html, /test-run-stream-log/);
-  assert.match(html, /platform-branch-detail-select/);
-  assert.match(html, /platform-branch-test-gates-summary/);
-  assert.match(html, /platform-branch-red-green-status/);
-  assert.match(html, /platform-branch-red-green-summary/);
-  assert.match(html, /data-branch-lane="draft"/);
-  assert.match(html, /data-branch-lane="validate"/);
-  assert.match(html, /data-branch-lane="review"/);
-  assert.match(html, /data-branch-lane="apply"/);
-  assert.match(html, /data-branch-lane="push"/);
-  assert.match(html, /data-branch-lane="ship"/);
-  assert.match(html, />Lane</);
-  assert.match(html, />Docs</);
-  assert.match(html, />Affected Systems</);
-  assert.match(html, />Telemetry</);
-  assert.match(html, /Parent branch/);
-  assert.match(html, /Epic/);
-  assert.match(html, /Feature/);
-  assert.match(html, /Defect/);
-  assert.match(html, /\/api\/platform-branches/);
-  assert.match(html, /\/api\/platform-proposals/);
-  assert.match(html, /\/api\/platform-change-sets/);
-  assert.match(html, /\/api\/platform-test-runs/);
-  assert.match(html, /\/api\/platform-test-runs\/events/);
-  assert.match(html, /\/api\/runtime\/backend-revisions\/events/);
-  assert.match(html, /\/apply/);
-  assert.match(html, /\/reject/);
-  assert.match(html, /\/abandon/);
+  const overviewHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform") });
+  const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0") });
+  const verificationHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=gate:demo") });
+  const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
+  const signalsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.demo") });
+  const modelHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
+
+  assert.match(overviewHtml, /Platform Console - Overview/);
+  assert.match(overviewHtml, /Generated from plugins\/platform\/platform-console\.wcss/);
+  assert.match(overviewHtml, /Authored Surface Tree/);
+  assert.match(overviewHtml, /data-platform-rvm-view="PlatformOverviewPage"/);
+  assert.match(overviewHtml, /Sections: Platform Summary, Lifecycle Board, Platform Map, Runtime Profiles/);
+  assert.match(overviewHtml, /\?view=workflow/);
+  assert.doesNotMatch(overviewHtml, /<pre/);
+
+  assert.match(workflowHtml, /Platform Console - Workflow/);
+  assert.match(workflowHtml, /Workflow Items/);
+  assert.match(workflowHtml, /Branch Detail/);
+  assert.match(workflowHtml, /Proposal Panel/);
+  assert.match(workflowHtml, /platform-proposal-form/);
+  assert.match(workflowHtml, /platform-change-set-edit-form/);
+  assert.match(workflowHtml, /platform-test-run-form/);
+  assert.match(workflowHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
+  assert.match(workflowHtml, /offset=20/);
+  assert.doesNotMatch(workflowHtml, /platform-initial-state/);
+  assert.doesNotMatch(workflowHtml, /<pre/);
+
+  assert.match(verificationHtml, /Platform Console - Verification/);
+  assert.match(verificationHtml, /Verification Items/);
+  assert.match(verificationHtml, /Test Gate Detail/);
+  assert.match(verificationHtml, /\/api\/platform-test-runs\/events/);
+  assert.match(verificationHtml, /\/api\/runtime\/backend-revisions\/events/);
+  assert.doesNotMatch(verificationHtml, /<pre/);
+
+  assert.match(knowledgeHtml, /Platform Console - Knowledge/);
+  assert.match(knowledgeHtml, /Knowledge Items/);
+  assert.match(knowledgeHtml, /Document Detail/);
+  assert.match(knowledgeHtml, /Roadmap/);
+  assert.doesNotMatch(knowledgeHtml, /<pre/);
+
+  assert.match(signalsHtml, /Platform Console - Signals/);
+  assert.match(signalsHtml, /Gap Detail/);
+  assert.match(signalsHtml, /API resource/);
+  assert.doesNotMatch(signalsHtml, /<pre/);
+
+  assert.match(modelHtml, /Platform Console - Model/);
+  assert.match(modelHtml, /Platform Map/);
+  assert.match(modelHtml, /Platform Object Detail/);
+  assert.match(modelHtml, /Coverage Edges/);
+  assert.doesNotMatch(modelHtml, /<pre/);
 });

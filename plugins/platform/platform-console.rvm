@@ -61,18 +61,95 @@ view PlatformConsolePage {
   kind page
   class platform-console
   prop title = "Platform Console"
-  prop summary = "Self-model, lifecycle board, profile map, verification gates, and proposal lane."
+  prop summary = "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, and model inspection."
   capabilities {
     platform.self
   }
   children {
+    PlatformOverviewPage
+    PlatformWorkflowPage
+    PlatformVerificationPage
+    PlatformKnowledgePage
+    PlatformSignalsPage
+    PlatformModelPage
+  }
+}
+
+view PlatformOverviewPage {
+  kind page
+  class platform-overview
+  prop pageId = "overview"
+  prop title = "Overview"
+  prop summary = "Counts, authored surface ownership, lifecycle, and quick platform links."
+  children {
     PlatformConsoleSummary
     PlatformLifecycleBoard
     PlatformMap
-    PlatformProposalPanel
-    PlatformGapList
     PlatformProfileComparison
+  }
+}
+
+view PlatformWorkflowPage {
+  kind page
+  class platform-workflow
+  prop pageId = "workflow"
+  prop title = "Workflow"
+  prop summary = "Branches, change sets, proposals, and authoring commands."
+  children {
+    PlatformBranchBoard
+    PlatformWorkflowList
+    PlatformWorkflowDetail
+    PlatformProposalPanel
     PlatformProposalReviewList
+  }
+}
+
+view PlatformVerificationPage {
+  kind page
+  class platform-verification
+  prop pageId = "verification"
+  prop title = "Verification"
+  prop summary = "Test gates, test runs, candidate snapshots, and runtime revisions."
+  children {
+    PlatformVerificationList
+    PlatformVerificationDetail
+  }
+}
+
+view PlatformKnowledgePage {
+  kind page
+  class platform-knowledge
+  prop pageId = "knowledge"
+  prop title = "Knowledge"
+  prop summary = "Governed docs, roadmap tasks, epics, and features."
+  children {
+    PlatformKnowledgeList
+    PlatformKnowledgeDetail
+  }
+}
+
+view PlatformSignalsPage {
+  kind page
+  class platform-signals
+  prop pageId = "signals"
+  prop title = "Signals"
+  prop summary = "Gaps, telemetry, defect clusters, and boundary actors."
+  children {
+    PlatformGapList
+    PlatformSignalList
+    PlatformSignalDetail
+  }
+}
+
+view PlatformModelPage {
+  kind page
+  class platform-model
+  prop pageId = "model"
+  prop title = "Model"
+  prop summary = "Platform objects, relationships, runtime profiles, and dependency evidence."
+  children {
+    PlatformModelList
+    PlatformModelDetail
   }
 }
 
@@ -96,11 +173,41 @@ view PlatformLifecycleBoard {
   }
 }
 
+view PlatformBranchBoard {
+  kind region
+  class platform-board
+  prop title = "Branch Board"
+  prop summary = "Lifecycle lanes for branch-backed work."
+  projections {
+    PlatformModelRead
+  }
+}
+
 view PlatformMap {
   kind table
   class platform-map
   prop title = "Platform Map"
   prop summary = "Primary platform objects projected from the live model."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformWorkflowList {
+  kind table
+  class platform-workflow-list
+  prop title = "Workflow Items"
+  prop summary = "Paginated list of branches, change sets, and proposals."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformWorkflowDetail {
+  kind region
+  class platform-workflow-detail
+  prop title = "Workflow Detail"
+  prop summary = "Properties and linked resources for the selected workflow item."
   projections {
     PlatformModelRead
   }
@@ -128,6 +235,26 @@ view PlatformProposalReviewList {
   }
 }
 
+view PlatformVerificationList {
+  kind table
+  class platform-verification-list
+  prop title = "Verification Items"
+  prop summary = "Paginated list of gates, runs, candidate snapshots, and runtime revisions."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformVerificationDetail {
+  kind region
+  class platform-verification-detail
+  prop title = "Verification Detail"
+  prop summary = "Properties and linked resources for the selected verification object."
+  projections {
+    PlatformModelRead
+  }
+}
+
 view PlatformGapList {
   kind table
   class platform-gaps
@@ -138,11 +265,71 @@ view PlatformGapList {
   }
 }
 
+view PlatformSignalList {
+  kind table
+  class platform-signal-list
+  prop title = "Signals"
+  prop summary = "Paginated list of gaps, telemetry metrics, defect clusters, and boundaries."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformSignalDetail {
+  kind region
+  class platform-signal-detail
+  prop title = "Signal Detail"
+  prop summary = "Properties and linked relationships for the selected signal."
+  projections {
+    PlatformModelRead
+  }
+}
+
 view PlatformProfileComparison {
   kind table
   class platform-profiles
   prop title = "Runtime Profiles"
   prop summary = "Profile exposure and plugin composition differences."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformKnowledgeList {
+  kind table
+  class platform-knowledge-list
+  prop title = "Knowledge Items"
+  prop summary = "Paginated list of docs, roadmap tasks, epics, and features."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformKnowledgeDetail {
+  kind region
+  class platform-knowledge-detail
+  prop title = "Knowledge Detail"
+  prop summary = "Properties and linked resources for the selected knowledge object."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformModelList {
+  kind table
+  class platform-model-list
+  prop title = "Platform Map"
+  prop summary = "Paginated list of modeled platform objects."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformModelDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Platform Object Detail"
+  prop summary = "Properties and linked relationships for the selected platform object."
   projections {
     PlatformModelRead
   }

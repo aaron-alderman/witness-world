@@ -12,25 +12,65 @@ const FALLBACK_LAYOUT = Object.freeze({
     surfaceKind: "page",
     className: "platform-console",
     title: "Platform Console",
-    summary: "Self-model, lifecycle board, profile map, verification gates, and proposal lane.",
+    summary: "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, and model inspection.",
     children: Object.freeze([
-      "PlatformConsoleSummary",
-      "PlatformLifecycleBoard",
-      "PlatformMap",
-      "PlatformProposalPanel",
-      "PlatformGapList",
-      "PlatformProfileComparison",
-      "PlatformProposalReviewList"
+      "PlatformOverviewPage",
+      "PlatformWorkflowPage",
+      "PlatformVerificationPage",
+      "PlatformKnowledgePage",
+      "PlatformSignalsPage",
+      "PlatformModelPage"
     ])
   }),
   children: Object.freeze([
-    fallbackSurface("PlatformConsoleSummary", { surfaceKind: "region", className: "platform-summary", title: "Platform Summary" }),
-    fallbackSurface("PlatformLifecycleBoard", { surfaceKind: "region", className: "platform-board", title: "Lifecycle Board" }),
-    fallbackSurface("PlatformMap", { surfaceKind: "table", className: "platform-map", title: "Platform Map" }),
-    fallbackSurface("PlatformProposalPanel", { surfaceKind: "form", className: "platform-proposal-panel", title: "Proposal Panel", processRoute: "/api/platform-proposals" }),
-    fallbackSurface("PlatformGapList", { surfaceKind: "table", className: "platform-gaps", title: "Platform Gaps", projectionRoutes: ["/api/platform-gaps"] }),
-    fallbackSurface("PlatformProfileComparison", { surfaceKind: "table", className: "platform-profiles", title: "Runtime Profiles", projectionRoutes: ["/api/platform-model"] }),
-    fallbackSurface("PlatformProposalReviewList", { surfaceKind: "form", className: "platform-review-panel", title: "Review Proposals", processRoute: "/api/platform-proposals/:id/approve" })
+    fallbackSurface("PlatformOverviewPage", {
+      surfaceKind: "page",
+      className: "platform-overview",
+      pageId: "overview",
+      title: "Overview",
+      summary: "Counts, authored surface ownership, lifecycle, and quick platform links.",
+      children: ["PlatformConsoleSummary", "PlatformLifecycleBoard", "PlatformMap", "PlatformProfileComparison"]
+    }),
+    fallbackSurface("PlatformWorkflowPage", {
+      surfaceKind: "page",
+      className: "platform-workflow",
+      pageId: "workflow",
+      title: "Workflow",
+      summary: "Branches, change sets, proposals, and authoring commands.",
+      children: ["PlatformBranchBoard", "PlatformWorkflowList", "PlatformWorkflowDetail", "PlatformProposalPanel", "PlatformProposalReviewList"]
+    }),
+    fallbackSurface("PlatformVerificationPage", {
+      surfaceKind: "page",
+      className: "platform-verification",
+      pageId: "verification",
+      title: "Verification",
+      summary: "Test gates, test runs, candidate snapshots, and runtime revisions.",
+      children: ["PlatformVerificationList", "PlatformVerificationDetail"]
+    }),
+    fallbackSurface("PlatformKnowledgePage", {
+      surfaceKind: "page",
+      className: "platform-knowledge",
+      pageId: "knowledge",
+      title: "Knowledge",
+      summary: "Governed docs, roadmap tasks, epics, and features.",
+      children: ["PlatformKnowledgeList", "PlatformKnowledgeDetail"]
+    }),
+    fallbackSurface("PlatformSignalsPage", {
+      surfaceKind: "page",
+      className: "platform-signals",
+      pageId: "signals",
+      title: "Signals",
+      summary: "Gaps, telemetry, defect clusters, and boundary actors.",
+      children: ["PlatformGapList", "PlatformSignalList", "PlatformSignalDetail"]
+    }),
+    fallbackSurface("PlatformModelPage", {
+      surfaceKind: "page",
+      className: "platform-model",
+      pageId: "model",
+      title: "Model",
+      summary: "Platform objects, relationships, runtime profiles, and dependency evidence.",
+      children: ["PlatformModelList", "PlatformModelDetail"]
+    })
   ])
 });
 
@@ -45,6 +85,9 @@ function fallbackSurface(name, overrides = {}) {
     projectionRefs: Object.freeze([]),
     projectionRoutes: Object.freeze([]),
     capabilityRefs: Object.freeze([]),
+    children: Object.freeze([]),
+    childSurfaces: Object.freeze([]),
+    pageId: null,
     title: titleFromViewName(name),
     summary: null,
     ...overrides
@@ -71,8 +114,28 @@ function readSurfaceRow(semantic, name, routeByName) {
     projectionRefs,
     projectionRoutes: Object.freeze(projectionRefs.map(ref => routeByName.get(ref)).filter(Boolean)),
     capabilityRefs,
+    children: Object.freeze([...(semantic?.children ?? [])].map(String)),
+    childSurfaces: Object.freeze([]),
+    pageId: semantic?.props?.pageId ? String(semantic.props.pageId) : null,
     title: semantic?.props?.title ? String(semantic.props.title) : titleFromViewName(name),
     summary: semantic?.props?.summary ? String(semantic.props.summary) : null
+  });
+}
+
+function readSurfaceTree(name, surfaceByName, routeByName, fallbackByName, seen = new Set()) {
+  if (seen.has(name)) return fallbackByName.get(name) ?? fallbackSurface(name);
+  const semantic = surfaceByName.get(name) ?? null;
+  const base = semantic
+    ? readSurfaceRow(semantic, name, routeByName)
+    : (fallbackByName.get(name) ?? fallbackSurface(name));
+  const nextSeen = new Set(seen);
+  nextSeen.add(name);
+  const childSurfaces = Object.freeze((base.children ?? []).map(childName =>
+    readSurfaceTree(childName, surfaceByName, routeByName, fallbackByName, nextSeen)
+  ));
+  return Object.freeze({
+    ...base,
+    childSurfaces
   });
 }
 
@@ -103,11 +166,9 @@ export function readPlatformConsoleLayout() {
       children: Object.freeze(childNames)
     });
     const fallbackByName = new Map(FALLBACK_LAYOUT.children.map(surface => [surface.name, surface]));
-    const children = Object.freeze(childNames.map(name => {
-      const semantic = surfaceByName.get(name) ?? null;
-      if (semantic) return readSurfaceRow(semantic, name, routeByName);
-      return fallbackByName.get(name) ?? fallbackSurface(name);
-    }));
+    const children = Object.freeze(childNames.map(name =>
+      readSurfaceTree(name, surfaceByName, routeByName, fallbackByName)
+    ));
     return {
       sourceFile: PLATFORM_CONSOLE_RVM_FILE,
       page,

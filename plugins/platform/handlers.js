@@ -693,15 +693,16 @@ export function createPlatformHandlers({
       sendJson(res, result.status, { proposal: result.proposal, witness: result.witness });
     },
 
-    "page.platform": async ({ res, requestActor, appContext }) => {
+    "page.platform": async ({ res, requestActor, requestUrl, appContext }) => {
       const model = await platformModelFor(appContext);
+      const view = requestUrl?.searchParams?.get("view") || "overview";
       world.observe({
         process: "frontend.renderPlatformPage",
         actor: requestActor || frontendHost,
         claims: [relation(frontendHost, "rendered", "platformConsole")],
-        body: { nodes: model.nodes.length, gaps: model.gaps.length }
+        body: { view, nodes: model.nodes.length, gaps: model.gaps.length }
       });
-      send(res, 200, "text/html; charset=utf-8", renderPlatformPage(model));
+      send(res, 200, "text/html; charset=utf-8", renderPlatformPage(model, { requestUrl }));
     }
   };
 }
