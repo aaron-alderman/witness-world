@@ -578,7 +578,7 @@ test("platform console is declared through RVM and styled through WCSS", async (
   assert.equal(page?.semantic.identity, "surface:platform");
   assert.equal(page?.semantic.className, "platform-console");
   assert.equal(page?.semantic.props?.title, "Platform Console");
-  assert.equal(page?.semantic.props?.summary, "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, and model inspection.");
+  assert.equal(page?.semantic.props?.summary, "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, model inspection, and supplemental governance/model seams.");
   assert.equal(page?.semantic.children.includes("PlatformWorkflowPage"), true);
   assert.equal(createCommand?.semantic.route, "/api/platform-proposals");
   assert.match(css, /Generated from plugins\/platform\/platform-console\.wcss/);
@@ -701,8 +701,11 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(workflowListSurface.props.pageSize, "20");
   const overviewMapSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformMap");
   assert.ok(overviewMapSurface);
-  assert.equal(overviewMapSurface.props.tableSource, "platformMapRows");
+  assert.equal(overviewMapSurface.props.listSource, "platformMapRows");
   assert.equal(overviewMapSurface.props.rowFields, "Kind=kind|Resource=id@concept|Lifecycle=lifecycleText|Status=status|Source=source");
+  assert.equal(overviewMapSurface.props.sortOptions, "kind=kind|resource=id|lifecycle=lifecycleText|status=status|source=source");
+  assert.equal(overviewMapSurface.props.defaultSort, "kind:asc");
+  assert.equal(overviewMapSurface.props.pageSize, "12");
   const surfaceTreeSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformAuthoredSurfaceTree");
   assert.ok(surfaceTreeSurface);
   assert.equal(surfaceTreeSurface.props.surfaceFields, "View=pageId||name|Kind=surfaceKind|Class=className|Process=processRoute|Projection=projectionRoutesText|Summary=summary|Sections=sectionTitles");
@@ -903,12 +906,18 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(selectedTestRunPanelSurface.props.successMessageTemplate, "Selected gates finished: {summaries.passed}/{summaries.totalRuns} passed");
   const branchRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformBranchRedGreenList");
   assert.ok(branchRedGreenSurface);
-  assert.equal(branchRedGreenSurface.props.tableSource, "branchRedGreenRows");
+  assert.equal(branchRedGreenSurface.props.listSource, "branchRedGreenRows");
   assert.equal(branchRedGreenSurface.props.rowFields, "Status=status|Branch=branchId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
+  assert.equal(branchRedGreenSurface.props.sortOptions, "status=status|branch=branchId|selected=totalSelectedGates|passed=passedCount|failed=failedCount|summary=summary");
+  assert.equal(branchRedGreenSurface.props.defaultSort, "branch:asc");
+  assert.equal(branchRedGreenSurface.props.pageSize, "12");
   const changeSetRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetRedGreenList");
   assert.ok(changeSetRedGreenSurface);
-  assert.equal(changeSetRedGreenSurface.props.tableSource, "changeSetRedGreenRows");
+  assert.equal(changeSetRedGreenSurface.props.listSource, "changeSetRedGreenRows");
   assert.equal(changeSetRedGreenSurface.props.rowFields, "Status=status|Change Set=changeSetId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
+  assert.equal(changeSetRedGreenSurface.props.sortOptions, "status=status|changeSet=changeSetId|selected=totalSelectedGates|passed=passedCount|failed=failedCount|summary=summary");
+  assert.equal(changeSetRedGreenSurface.props.defaultSort, "changeSet:asc");
+  assert.equal(changeSetRedGreenSurface.props.pageSize, "12");
   const verificationListSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationList");
   assert.ok(verificationListSurface);
   assert.equal(verificationListSurface.props.listSource, "verificationItems");
@@ -941,11 +950,13 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(signalsPage.childSurfaces.some(surface => surface.name === "PlatformGapList" && surface.projectionRoutes.includes("/api/platform-gaps")), true);
   const gapListSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformGapList");
   assert.ok(gapListSurface);
-  assert.equal(gapListSurface.props.tableSource, "gapRows");
+  assert.equal(gapListSurface.props.listSource, "gapRows");
   assert.equal(gapListSurface.props.columns, "Severity|Kind|Target|Reason");
   assert.equal(gapListSurface.props.rowFields, "Severity=severity|Kind=kind|Target=target@concept|Reason=reason");
+  assert.equal(gapListSurface.props.sortOptions, "severity=severity|kind=kind|target=target|reason=reason");
+  assert.equal(gapListSurface.props.defaultSort, "severity:asc");
   assert.equal(gapListSurface.props.emptyState, "No gaps.");
-  assert.equal(gapListSurface.props.rowLimit, "12");
+  assert.equal(gapListSurface.props.pageSize, "12");
   const signalListSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformSignalList");
   assert.ok(signalListSurface);
   assert.equal(signalListSurface.props.listSource, "signalItems");
@@ -1105,10 +1116,12 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(consoleSummarySurface.props.summaryPageId, "overview");
   const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
   assert.ok(profileSurface);
-  assert.equal(profileSurface.props.tableSource, "profileComparisonRows");
+  assert.equal(profileSurface.props.listSource, "profileComparisonRows");
   assert.equal(profileSurface.props.columns, "Profile|Status|Plugins|Capabilities");
   assert.equal(profileSurface.props.rowFields, "Profile=id|Status=status|Plugins=pluginCount|Capabilities=capabilityCount");
-  assert.equal(profileSurface.props.rowLimit, "12");
+  assert.equal(profileSurface.props.sortOptions, "profile=id|status=status|plugins=pluginCount|capabilities=capabilityCount");
+  assert.equal(profileSurface.props.defaultSort, "profile:asc");
+  assert.equal(profileSurface.props.pageSize, "12");
   const modelListSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelList");
   assert.ok(modelListSurface);
   assert.equal(modelListSurface.props.listSource, "modelItems");
@@ -1117,8 +1130,11 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(modelListSurface.props.defaultSort, "kind:asc");
   const coverageSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformCoverageMatrix");
   assert.ok(coverageSurface);
-  assert.equal(coverageSurface.props.tableSource, "coverageRows");
+  assert.equal(coverageSurface.props.listSource, "coverageRows");
   assert.equal(coverageSurface.props.rowFields, "Gate=gateId@concept|Target=targetId||targetLabel@concept|Kind=coverageKind");
+  assert.equal(coverageSurface.props.sortOptions, "gate=gateId|target=targetId|kind=coverageKind");
+  assert.equal(coverageSurface.props.defaultSort, "gate:asc");
+  assert.equal(coverageSurface.props.pageSize, "12");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
   assert.equal(modelDetailSurface.props.detailSource, "model");
@@ -1204,7 +1220,7 @@ test("platform page views filter the model to page-scoped slices", () => {
 
   assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleBoard", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
   assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "summaries"]);
-  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites"]);
+  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites", "verificationExecutions", "verificationPersistence", "verificationPolicies", "verificationQueue"]);
   assert.deepEqual(Object.keys(knowledge).sort(), ["docSections", "docTasks", "docs", "epics", "features", "roadmapTasks", "summaries"]);
   assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
   assert.deepEqual(Object.keys(bridges).sort(), ["compatibilityBridges", "summaries"]);
@@ -6053,6 +6069,8 @@ test("platform page renders required operating views", async () => {
   assert.match(overviewHtml, /data-platform-rvm-view="PlatformOverviewPage"/);
   assert.match(overviewHtml, /Platform Summary, Authored Surface Tree, Lifecycle Board, Platform Map, Runtime Profiles/);
   assert.match(overviewHtml, /Counts, authored surface ownership, lifecycle, and quick platform links\./);
+  assert.match(overviewHtml, /offset=12/);
+  assert.match(overviewHtml, /sort=kind&amp;dir=desc/);
   assert.match(overviewHtml, /\?view=workflow/);
   assert.match(overviewHtml, /\?view=bridges/);
   assert.match(overviewHtml, /\?view=governance/);
@@ -6129,6 +6147,10 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /<form id="platform-selected-test-run-form" data-platform-client-action="testRun.selected" data-platform-submit-spec=/);
   assert.match(verificationHtml, /\/api\/platform-test-runs\/events/);
   assert.match(verificationHtml, /\/api\/runtime\/backend-revisions\/events/);
+  assert.match(verificationHtml, /Branch Red \/ Green/);
+  assert.match(verificationHtml, /Change Set Red \/ Green/);
+  assert.match(verificationHtml, /sort=branch&amp;dir=desc/);
+  assert.match(verificationHtml, /sort=changeSet&amp;dir=desc/);
   assert.doesNotMatch(verificationHtml, /<pre/);
   assert.match(verificationPolicyHtml, /Verification Policy Detail/);
   assert.match(verificationPolicyHtml, /Verification Persistence/);
@@ -6178,10 +6200,12 @@ test("platform page renders required operating views", async () => {
   assert.match(signalsHtml, /Linked graph relationships for the selected signal when available\./);
   assert.match(signalsHtml, /Gap Detail/);
   assert.match(signalsHtml, /API resource/);
+  assert.match(signalsHtml, /sort=severity&amp;dir=desc/);
   assert.doesNotMatch(signalsHtml, /<pre/);
 
   assert.match(modelHtml, /Platform Console - Model/);
   assert.match(modelHtml, /Platform Map/);
+  assert.match(modelHtml, /Runtime Profiles/);
   assert.match(modelHtml, /Properties and linked relationships for the selected platform object\./);
   assert.match(modelHtml, /Primary Detail/);
   assert.match(modelHtml, /Selected platform object properties and long-tail fields\./);
@@ -6189,6 +6213,8 @@ test("platform page renders required operating views", async () => {
   assert.match(modelHtml, /Linked graph relationships for the selected platform object when available\./);
   assert.match(modelHtml, /Platform Object Detail/);
   assert.match(modelHtml, /Coverage Edges/);
+  assert.match(modelHtml, /sort=profile&amp;dir=desc/);
+  assert.match(modelHtml, /sort=gate&amp;dir=desc/);
   assert.doesNotMatch(modelHtml, /<pre/);
 });
 

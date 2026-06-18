@@ -2086,29 +2086,6 @@ function renderModelDetail(surface, node, model, ctx) {
 
 function recordsForAuthoredListSource(source, model) {
   switch (source) {
-    case "workflowItems":
-      return workflowItems(model);
-    case "verificationItems":
-      return verificationItems(model);
-    case "knowledgeItems":
-      return knowledgeItems(model);
-    case "signalItems":
-      return signalItems(model);
-    case "modelItems":
-      return modelItems(model);
-    case "bridges":
-    case "governance":
-    case "semantics":
-    case "packageCoexistence":
-    case "packageConvergence":
-      return platformSourceRows(source, model);
-    default:
-      return [];
-  }
-}
-
-function recordsForAuthoredTableSource(source, model) {
-  switch (source) {
     case "platformMapRows":
       return (model.nodes ?? []).map(node => ({
         ...node,
@@ -2136,6 +2113,22 @@ function recordsForAuthoredTableSource(source, model) {
         passedCount: (row.passedGateIds ?? []).length,
         failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
       }));
+    case "workflowItems":
+      return workflowItems(model);
+    case "verificationItems":
+      return verificationItems(model);
+    case "knowledgeItems":
+      return knowledgeItems(model);
+    case "signalItems":
+      return signalItems(model);
+    case "modelItems":
+      return modelItems(model);
+    case "bridges":
+    case "governance":
+    case "semantics":
+    case "packageCoexistence":
+    case "packageConvergence":
+      return platformSourceRows(source, model);
     default:
       return [];
   }
@@ -2151,12 +2144,6 @@ function renderAuthoredListSection(surface, model, ctx) {
     ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, () => ""))}
     ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
-}
-
-function renderAuthoredTableSection(surface, model, ctx) {
-  const source = surfacePropText(surface, "tableSource", "");
-  const rows = recordsForAuthoredTableSource(source, model).slice(0, surfaceRowLimit(surface, 12));
-  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, () => "")));
 }
 
 function renderAuthoredFormSection(surface, model) {
@@ -2552,9 +2539,6 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   }
   if (surface?.props?.listSource) {
     return renderAuthoredListSection(surface, model, ctx);
-  }
-  if (surface?.props?.tableSource) {
-    return renderAuthoredTableSection(surface, model, ctx);
   }
   if (surface?.props?.formId && surface?.props?.formFields) {
     return renderAuthoredFormSection(surface, model);
