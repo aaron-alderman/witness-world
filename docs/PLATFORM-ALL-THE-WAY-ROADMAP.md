@@ -715,8 +715,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 5.3 Efficient Red/Green
 
-- [ ] Build dependency path aware test selection.
-- [ ] Compute changed source objects for branch/change set.
+- [~] Build dependency path aware test selection.
+- [X] Compute changed source objects for branch/change set.
 - [ ] Compute affected runtime objects:
   - [ ] routes
   - [ ] handlers
@@ -746,6 +746,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add tests that plugin route edit runs plugin ownership/profile route gates.
 - [ ] Add tests that WCSS-only edit does not run backend-only gates.
 - [ ] Add tests that dependency graph misses are logged as meta-defects.
+- [L] Current V1 now exposes `changedPaths`, affected system summaries, docs freshness, and telemetry impact summaries on both branches and change sets, and the platform model derives affected test gates for both scopes by matching declared source dependencies and protected objects. It still does not compute the smallest meaningful gate set, attach formal selection explanations per gate, or automatically run the selected set.
 
 ## Phase 6: Pure Dependency Analysis And Coverage
 

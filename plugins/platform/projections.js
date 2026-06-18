@@ -1,4 +1,5 @@
 import { moduleProjectors } from "../../src/modules.js";
+import { platformChangeSetInsights } from "./branch-insights.js";
 
 function latestBodiesByProcess(witnesses, process) {
   const rows = new Map();
@@ -612,7 +613,10 @@ export const platformModuleProjectors = {
     const editIndex = platformModuleProjectors.changeSetEditIndex(witnesses);
     return sortRows([...rows.values()].map(row => ({
       ...row,
-      editCount: (editIndex.byChangeSet[row.id] ?? []).length
+      editCount: (editIndex.byChangeSet[row.id] ?? []).length,
+      ...platformChangeSetInsights(row, {
+        edits: editIndex.byChangeSet[row.id] ?? []
+      })
     })), ["id"]);
   },
 

@@ -67,9 +67,10 @@ export function renderPlatformPage(model) {
   const docSections = model.docSections ?? [];
   const docTasks = model.docTasks ?? [];
   const testGates = model.testGates ?? [];
-  const testGateIndex = model.testGateIndex ?? { byId: {}, byProtectedObject: {}, byBranch: {} };
+  const testGateIndex = model.testGateIndex ?? { byId: {}, byProtectedObject: {}, byBranch: {}, byChangeSet: {} };
   const affectedTestGates = model.affectedTestGates ?? [];
   const affectedTestGatesByBranch = model.affectedTestGatesByBranch ?? {};
+  const affectedTestGatesByChangeSet = model.affectedTestGatesByChangeSet ?? {};
   const testRuns = model.testRuns ?? [];
   const latestTestResultsByGate = model.latestTestResultsByGate ?? {};
   const roadmapTasks = model.roadmapTasks ?? [];
@@ -320,7 +321,7 @@ export function renderPlatformPage(model) {
     <section>
       <h2>Test Gates</h2>
       <table>
-        <thead><tr><th>Gate</th><th>Runner</th><th>Environment</th><th>Timeout</th><th>Protected Objects</th><th>Selected Branches</th><th>Last Result</th><th>Cost</th></tr></thead>
+        <thead><tr><th>Gate</th><th>Runner</th><th>Environment</th><th>Timeout</th><th>Protected Objects</th><th>Selected Branches</th><th>Selected Change Sets</th><th>Last Result</th><th>Cost</th></tr></thead>
         <tbody>${tableRows(testGates.slice(0, 80), [
           row => row.title,
           row => row.runner,
@@ -328,6 +329,7 @@ export function renderPlatformPage(model) {
           row => row.timeoutMs,
           row => row.protectedObjectLabels.join(", "),
           row => row.selectedByBranches.join(", "),
+          row => (row.selectedByChangeSets ?? []).join(", "),
           row => row.lastResult ? `${row.lastResult.status} (${row.lastResult.exitCode ?? "n/a"})` : "",
           row => row.costEstimate
         ])}</tbody>
@@ -339,6 +341,10 @@ export function renderPlatformPage(model) {
       <div class="card">
         <h3>Affected Test Gate Selections</h3>
         <pre>${esc(JSON.stringify(affectedTestGates.slice(0, 80), null, 2))}</pre>
+      </div>
+      <div class="card">
+        <h3>Affected Test Gates By Change Set</h3>
+        <pre>${esc(JSON.stringify(affectedTestGatesByChangeSet, null, 2))}</pre>
       </div>
       <div class="card">
         <h3>Test Gate Index</h3>

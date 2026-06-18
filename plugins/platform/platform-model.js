@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { moduleProjectors } from "../../src/modules.js";
-import { platformBranchInsights, PLATFORM_BRANCH_LIFECYCLE_LANES, summarizePlatformPathSystem } from "./branch-insights.js";
+import { platformBranchInsights, platformChangeSetInsights, PLATFORM_BRANCH_LIFECYCLE_LANES, summarizePlatformPathSystem } from "./branch-insights.js";
 import { platformProposalTemplates } from "./platform-proposals.js";
 
 export const PLATFORM_LIFECYCLES = Object.freeze([
@@ -730,21 +730,24 @@ function packageScriptProtectedObjects(scriptName, command, nodes) {
   return unique(targets);
 }
 
-function buildTestGateIndex(rows, affectedRows = []) {
+function buildTestGateIndex(rows, affectedRows = [], affectedRowsByChangeSet = []) {
   const byId = Object.create(null);
   const byProtectedObject = Object.create(null);
   const byBranch = Object.create(null);
+  const byChangeSet = Object.create(null);
   for (const row of rows) {
     byId[row.id] = { ...row };
     for (const target of row.protectedObjects ?? []) pushByKey(byProtectedObject, target, row.id);
   }
   for (const row of affectedRows) pushByKey(byBranch, row.branchId, row.gateId);
+  for (const row of affectedRowsByChangeSet) pushByKey(byChangeSet, row.changeSetId, row.gateId);
   for (const target of Object.keys(byProtectedObject)) byProtectedObject[target] = unique(byProtectedObject[target]).sort();
   for (const branchId of Object.keys(byBranch)) byBranch[branchId] = unique(byBranch[branchId]).sort();
-  return { byId, byProtectedObject, byBranch };
+  for (const changeSetId of Object.keys(byChangeSet)) byChangeSet[changeSetId] = unique(byChangeSet[changeSetId]).sort();
+  return { byId, byProtectedObject, byBranch, byChangeSet };
 }
 
-function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Object.create(null)) {
+function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestResultsByGate = Object.create(null)) {
   const outgoing = new Map();
   for (const edge of edges.values()) {
     if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
@@ -783,19 +786,21 @@ function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Ob
           : null,
         flakeScore: null,
         costEstimate: gateCostEstimateForPath(command || node.title),
-        selectedByBranches: []
+        selectedByBranches: [],
+        selectedByChangeSets: []
       };
     })
     .sort((left, right) => left.id.localeCompare(right.id));
 
   const affectedRows = [];
-  for (const branch of branches) {
-    const affectedSystems = new Set((branch.affectedSystemSummaries ?? []).map(row => String(row.system || "")));
-    const changedPaths = new Set((branch.changedPaths ?? []).map(String));
+  const affectedRowsByChangeSet = [];
+  function collectAffectedRows(scopeType, scope) {
+    const affectedSystems = new Set((scope.affectedSystemSummaries ?? []).map(row => String(row.system || "")));
+    const changedPaths = new Set((scope.changedPaths ?? []).map(String));
     const docTargets = new Set([
-      ...(branch.docsFreshness?.requiredDocs ?? []).map(doc => `doc:${doc}`),
-      ...(branch.docsFreshness?.touchedDocs ?? []).map(doc => `doc:${doc}`),
-      ...(branch.docsFreshness?.missingDocs ?? []).map(doc => `doc:${doc}`)
+      ...(scope.docsFreshness?.requiredDocs ?? []).map(doc => `doc:${doc}`),
+      ...(scope.docsFreshness?.touchedDocs ?? []).map(doc => `doc:${doc}`),
+      ...(scope.docsFreshness?.missingDocs ?? []).map(doc => `doc:${doc}`)
     ]);
     for (const gate of rows) {
       const matchedTargets = unique(gate.protectedObjects.filter(target =>
@@ -806,11 +811,9 @@ function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Ob
       ));
       const matchedSourceDependencies = unique(gate.sourceDependencies.filter(dependency => changedPaths.has(dependency)));
       if (!matchedTargets.length && !matchedSourceDependencies.length) continue;
-      const branchId = String(branch.id);
-      gate.selectedByBranches.push(branchId);
-      affectedRows.push({
-        id: `affectedTestGate:${branchId}:${gate.id}`,
-        branchId,
+      const scopeId = String(scope.id);
+      const affectedRow = {
+        id: `affectedTestGate:${scopeType}:${scopeId}:${gate.id}`,
         gateId: gate.id,
         gateTitle: gate.title,
         protectedObjects: [...gate.protectedObjects],
@@ -819,17 +822,38 @@ function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Ob
         matchedTargetLabels: matchedTargets.map(target => nodes.get(target)?.title || target),
         matchedSourceDependencies,
         sourceDependencies: [...gate.sourceDependencies]
-      });
+      };
+      if (scopeType === "branch") {
+        gate.selectedByBranches.push(scopeId);
+        affectedRows.push({
+          ...affectedRow,
+          branchId: scopeId
+        });
+      } else {
+        gate.selectedByChangeSets.push(scopeId);
+        affectedRowsByChangeSet.push({
+          ...affectedRow,
+          changeSetId: scopeId
+        });
+      }
     }
   }
-  for (const row of rows) row.selectedByBranches = unique(row.selectedByBranches);
+  for (const branch of branches) collectAffectedRows("branch", branch);
+  for (const changeSet of changeSets) collectAffectedRows("changeSet", changeSet);
+  for (const row of rows) {
+    row.selectedByBranches = unique(row.selectedByBranches);
+    row.selectedByChangeSets = unique(row.selectedByChangeSets);
+  }
   affectedRows.sort((left, right) => left.branchId.localeCompare(right.branchId) || left.gateId.localeCompare(right.gateId));
-  const index = buildTestGateIndex(rows, affectedRows);
+  affectedRowsByChangeSet.sort((left, right) => left.changeSetId.localeCompare(right.changeSetId) || left.gateId.localeCompare(right.gateId));
+  const index = buildTestGateIndex(rows, affectedRows, affectedRowsByChangeSet);
   return {
     rows,
     affectedRows,
+    affectedRowsByChangeSet,
     index,
-    byBranch: index.byBranch
+    byBranch: index.byBranch,
+    byChangeSet: index.byChangeSet
   };
 }
 
@@ -896,14 +920,20 @@ export async function buildPlatformModel({
   ];
   const capabilityInstalls = projectRows(project, moduleProjectors.capabilityInstalls);
   const proposals = projectRows(project, moduleProjectors.proposals);
-  const changeSets = projectRows(project, moduleProjectors.changeSets);
+  const rawChangeSets = projectRows(project, moduleProjectors.changeSets);
   const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
   const conflicts = projectRows(project, moduleProjectors.conflicts);
   const mergeIntents = projectRows(project, moduleProjectors.mergeIntents);
   const changeSetsByBranch = Object.create(null);
   const editsByChangeSet = Object.create(null);
-  for (const changeSet of changeSets) pushByKey(changeSetsByBranch, changeSet.branchId, changeSet);
   for (const edit of changeSetEdits) pushByKey(editsByChangeSet, edit.changeSetId, edit);
+  const changeSets = rawChangeSets.map(row => ({
+    ...row,
+    ...platformChangeSetInsights(row, {
+      edits: editsByChangeSet[row.id] ?? []
+    })
+  }));
+  for (const changeSet of changeSets) pushByKey(changeSetsByBranch, changeSet.branchId, changeSet);
   const branches = projectRows(project, moduleProjectors.branches).map(branch => ({
     ...branch,
     ...platformBranchInsights(branch, {
@@ -1461,7 +1491,7 @@ export async function buildPlatformModel({
     }
   }
 
-  const testGateProjection = buildTestGateRows(nodes, edges, branches, latestTestResultsProjection.byGate ?? Object.create(null));
+  const testGateProjection = buildTestGateRows(nodes, edges, branches, changeSets, latestTestResultsProjection.byGate ?? Object.create(null));
   addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts);
   const gaps = buildGaps(nodes, edges);
   const docs = parsedDocs.map(doc => ({
@@ -1497,8 +1527,12 @@ export async function buildPlatformModel({
     docTasks,
     testGates: testGateProjection.rows,
     testGateIndex: testGateProjection.index,
-    affectedTestGates: testGateProjection.affectedRows,
+    affectedTestGates: [
+      ...testGateProjection.affectedRows,
+      ...testGateProjection.affectedRowsByChangeSet
+    ],
     affectedTestGatesByBranch: testGateProjection.byBranch,
+    affectedTestGatesByChangeSet: testGateProjection.byChangeSet,
     testRuns: testRuns.map(row => ({ ...row })),
     testResults: testResults.map(row => ({ ...row })),
     testArtifacts: testArtifacts.map(row => ({ ...row })),
@@ -1552,26 +1586,38 @@ export function filterPlatformModel(model, view, id = null) {
         row.id === id
         || row.protectedObjects.includes(id)
         || row.selectedByBranches.includes(id)
+        || row.selectedByChangeSets.includes(id)
       )
       : model.testGates;
     const relevantBranchIds = new Set();
+    const relevantChangeSetIds = new Set();
     if (id && Object.prototype.hasOwnProperty.call(model.affectedTestGatesByBranch ?? {}, id)) relevantBranchIds.add(id);
+    if (id && Object.prototype.hasOwnProperty.call(model.affectedTestGatesByChangeSet ?? {}, id)) relevantChangeSetIds.add(id);
     for (const gate of testGates) {
       for (const branchId of gate.selectedByBranches ?? []) relevantBranchIds.add(branchId);
+      for (const changeSetId of gate.selectedByChangeSets ?? []) relevantChangeSetIds.add(changeSetId);
     }
     const affectedTestGates = (model.affectedTestGates ?? []).filter(row =>
       !id
       || row.id === id
       || row.gateId === id
       || relevantBranchIds.has(row.branchId)
+      || relevantChangeSetIds.has(row.changeSetId)
+    );
+    const affectedTestGatesByChangeSet = Object.fromEntries(
+      Object.entries(model.affectedTestGatesByChangeSet ?? {})
+        .filter(([changeSetId, gateIds]) => !id || relevantChangeSetIds.has(changeSetId) || gateIds.includes(id))
+        .map(([changeSetId, gateIds]) => [changeSetId, [...gateIds]])
     );
     const affectedTestGatesByBranch = Object.fromEntries(
       Object.entries(model.affectedTestGatesByBranch ?? {})
         .filter(([branchId, gateIds]) => !id || relevantBranchIds.has(branchId) || gateIds.includes(id))
         .map(([branchId, gateIds]) => [branchId, [...gateIds]])
     );
-    const testGateIndex = buildTestGateIndex(testGates, affectedTestGates);
-    return { testGates, testGateIndex, affectedTestGates, affectedTestGatesByBranch, summaries: model.summaries };
+    const affectedTestGatesForBranches = affectedTestGates.filter(row => row.branchId);
+    const affectedTestGatesForChangeSets = affectedTestGates.filter(row => row.changeSetId);
+    const testGateIndex = buildTestGateIndex(testGates, affectedTestGatesForBranches, affectedTestGatesForChangeSets);
+    return { testGates, testGateIndex, affectedTestGates, affectedTestGatesByBranch, affectedTestGatesByChangeSet, summaries: model.summaries };
   }
   if (view === "testRuns") {
     const testRuns = id

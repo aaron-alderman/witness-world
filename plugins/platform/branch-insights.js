@@ -79,6 +79,60 @@ export function summarizePlatformPathSystem(path) {
   return { id: segment, label: segment, kind: "workspace" };
 }
 
+function platformPathInsights(paths = []) {
+  const normalizedPaths = uniqueSorted(paths);
+  const systems = new Map();
+  const touchedDocs = normalizedPaths.filter(path => path.startsWith("docs/"));
+  for (const path of normalizedPaths) {
+    const system = summarizePlatformPathSystem(path);
+    const current = systems.get(system.id) ?? { ...system, pathCount: 0, paths: [] };
+    current.pathCount += 1;
+    current.paths.push(path);
+    systems.set(system.id, current);
+  }
+  const affectedSystems = [...systems.values()]
+    .map(system => ({
+      ...system,
+      paths: uniqueSorted(system.paths)
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const affectedSystemSummaries = affectedSystems.map(system => ({
+    system: system.id,
+    label: system.label,
+    kind: system.kind,
+    pathCount: system.pathCount,
+    paths: system.paths
+  }));
+
+  const telemetryImpacts = uniqueSorted(affectedSystems.map(system => TELEMETRY_IMPACT_RULES[system.id]?.id))
+    .map(id => {
+      const rule = Object.values(TELEMETRY_IMPACT_RULES).find(entry => entry.id === id);
+      return rule ? { ...rule } : null;
+    })
+    .filter(Boolean);
+
+  const requiredDocs = uniqueSorted(affectedSystems.flatMap(system => DOC_REQUIREMENTS[system.id] ?? []));
+  const missingDocs = requiredDocs.filter(doc => !touchedDocs.includes(doc));
+  const docsFreshness = {
+    status: requiredDocs.length === 0 ? "not-needed" : (missingDocs.length ? "stale" : "fresh"),
+    requiredDocs,
+    touchedDocs: uniqueSorted(touchedDocs),
+    missingDocs,
+    summary: requiredDocs.length === 0
+      ? "No governed doc update is required for the currently affected systems."
+      : (missingDocs.length
+        ? `Missing governed doc updates for ${missingDocs.join(", ")}.`
+        : "Required governed docs are updated in this branch.")
+  };
+
+  return {
+    changedPaths: normalizedPaths,
+    affectedSystemSummaries,
+    telemetryImpactSummaries: telemetryImpacts,
+    docsFreshness
+  };
+}
+
 export function platformBranchLifecycle(branch, {
   changeSets = [],
   proposals = []
@@ -124,56 +178,16 @@ export function platformBranchInsights(branch, {
   proposals = []
 } = {}) {
   const lifecycle = platformBranchLifecycle(branch, { changeSets, proposals });
-  const paths = uniqueSorted((Array.isArray(edits) ? edits : []).map(edit => edit?.path));
-  const systems = new Map();
-  const touchedDocs = paths.filter(path => path.startsWith("docs/"));
-  for (const path of paths) {
-    const system = summarizePlatformPathSystem(path);
-    const current = systems.get(system.id) ?? { ...system, pathCount: 0, paths: [] };
-    current.pathCount += 1;
-    current.paths.push(path);
-    systems.set(system.id, current);
-  }
-  const affectedSystems = [...systems.values()]
-    .map(system => ({
-      ...system,
-      paths: uniqueSorted(system.paths)
-    }))
-    .sort((left, right) => left.id.localeCompare(right.id));
-  const affectedSystemSummaries = affectedSystems.map(system => ({
-    system: system.id,
-    label: system.label,
-    kind: system.kind,
-    pathCount: system.pathCount,
-    paths: system.paths
-  }));
-
-  const telemetryImpacts = uniqueSorted(affectedSystems.map(system => TELEMETRY_IMPACT_RULES[system.id]?.id))
-    .map(id => {
-      const rule = Object.values(TELEMETRY_IMPACT_RULES).find(entry => entry.id === id);
-      return rule ? { ...rule } : null;
-    })
-    .filter(Boolean);
-
-  const requiredDocs = uniqueSorted(affectedSystems.flatMap(system => DOC_REQUIREMENTS[system.id] ?? []));
-  const missingDocs = requiredDocs.filter(doc => !touchedDocs.includes(doc));
-  const docsFreshness = {
-    status: requiredDocs.length === 0 ? "not-needed" : (missingDocs.length ? "stale" : "fresh"),
-    requiredDocs,
-    touchedDocs: uniqueSorted(touchedDocs),
-    missingDocs,
-    summary: requiredDocs.length === 0
-      ? "No governed doc update is required for the currently affected systems."
-      : (missingDocs.length
-        ? `Missing governed doc updates for ${missingDocs.join(", ")}.`
-        : "Required governed docs are updated in this branch.")
-  };
+  const insights = platformPathInsights((Array.isArray(edits) ? edits : []).map(edit => edit?.path));
 
   return {
     ...lifecycle,
-    changedPaths: paths,
-    affectedSystemSummaries,
-    telemetryImpactSummaries: telemetryImpacts,
-    docsFreshness
+    ...insights
   };
+}
+
+export function platformChangeSetInsights(_changeSet, {
+  edits = []
+} = {}) {
+  return platformPathInsights((Array.isArray(edits) ? edits : []).map(edit => edit?.path));
 }

@@ -276,14 +276,16 @@ test("platform model filters support MCP views", async () => {
         title: "test/runtime-profile.test.js",
         protectedObjects: ["profile:minimal", "plugin.platform"],
         protectedObjectLabels: ["Minimal runtime", "Platform plugin"],
-        selectedByBranches: ["branch.demo"]
+        selectedByBranches: ["branch.demo"],
+        selectedByChangeSets: ["changeset.demo"]
       },
       {
         id: "gate:plugins/platform/platform.test.js",
         title: "plugins/platform/platform.test.js",
         protectedObjects: ["plugin.platform"],
         protectedObjectLabels: ["Platform plugin"],
-        selectedByBranches: []
+        selectedByBranches: [],
+        selectedByChangeSets: []
       }
     ],
     testGateIndex: {
@@ -303,6 +305,9 @@ test("platform model filters support MCP views", async () => {
       },
       byBranch: {
         "branch.demo": ["gate:test/runtime-profile.test.js"]
+      },
+      byChangeSet: {
+        "changeset.demo": ["gate:test/runtime-profile.test.js"]
       }
     },
     affectedTestGates: [
@@ -316,12 +321,73 @@ test("platform model filters support MCP views", async () => {
         matchedTargets: ["profile:minimal"],
         matchedTargetLabels: ["Minimal runtime"],
         sourceDependencies: ["test/runtime-profile.test.js"]
+      },
+      {
+        id: "affectedTestGate:changeSet:changeset.demo:gate:test/runtime-profile.test.js",
+        changeSetId: "changeset.demo",
+        gateId: "gate:test/runtime-profile.test.js",
+        gateTitle: "test/runtime-profile.test.js",
+        protectedObjects: ["profile:minimal", "plugin.platform"],
+        protectedObjectLabels: ["Minimal runtime", "Platform plugin"],
+        matchedTargets: ["profile:minimal"],
+        matchedTargetLabels: ["Minimal runtime"],
+        sourceDependencies: ["test/runtime-profile.test.js"]
       }
     ],
     affectedTestGatesByBranch: {
       "branch.demo": ["gate:test/runtime-profile.test.js"]
+    },
+    affectedTestGatesByChangeSet: {
+      "changeset.demo": ["gate:test/runtime-profile.test.js"]
     }
   }, "testGates", "branch.demo");
+  const testGatesByChangeSet = filterPlatformModel({
+    ...model,
+    testGates: [
+      {
+        id: "gate:test/runtime-profile.test.js",
+        title: "test/runtime-profile.test.js",
+        protectedObjects: ["profile:minimal", "plugin.platform"],
+        protectedObjectLabels: ["Minimal runtime", "Platform plugin"],
+        selectedByBranches: ["branch.demo"],
+        selectedByChangeSets: ["changeset.demo"]
+      }
+    ],
+    testGateIndex: {
+      byId: {
+        "gate:test/runtime-profile.test.js": {
+          id: "gate:test/runtime-profile.test.js",
+          title: "test/runtime-profile.test.js"
+        }
+      },
+      byProtectedObject: {
+        "profile:minimal": ["gate:test/runtime-profile.test.js"]
+      },
+      byBranch: {
+        "branch.demo": ["gate:test/runtime-profile.test.js"]
+      },
+      byChangeSet: {
+        "changeset.demo": ["gate:test/runtime-profile.test.js"]
+      }
+    },
+    affectedTestGates: [
+      {
+        id: "affectedTestGate:changeSet:changeset.demo:gate:test/runtime-profile.test.js",
+        changeSetId: "changeset.demo",
+        gateId: "gate:test/runtime-profile.test.js",
+        gateTitle: "test/runtime-profile.test.js",
+        protectedObjects: ["profile:minimal", "plugin.platform"],
+        protectedObjectLabels: ["Minimal runtime", "Platform plugin"],
+        matchedTargets: ["profile:minimal"],
+        matchedTargetLabels: ["Minimal runtime"],
+        sourceDependencies: ["test/runtime-profile.test.js"]
+      }
+    ],
+    affectedTestGatesByBranch: {},
+    affectedTestGatesByChangeSet: {
+      "changeset.demo": ["gate:test/runtime-profile.test.js"]
+    }
+  }, "testGates", "changeset.demo");
   const testRuns = filterPlatformModel({
     ...model,
     testRuns: [
@@ -393,9 +459,13 @@ test("platform model filters support MCP views", async () => {
   assert.equal(testGates.testGates[0].id, "gate:test/runtime-profile.test.js");
   assert.equal(testGates.testGateIndex.byId["gate:test/runtime-profile.test.js"].title, "test/runtime-profile.test.js");
   assert.deepEqual(testGates.testGateIndex.byBranch["branch.demo"], ["gate:test/runtime-profile.test.js"]);
+  assert.deepEqual(testGates.testGateIndex.byChangeSet["changeset.demo"], ["gate:test/runtime-profile.test.js"]);
   assert.equal(testGates.affectedTestGates[0].branchId, "branch.demo");
   assert.equal(testGates.affectedTestGates[0].gateId, "gate:test/runtime-profile.test.js");
   assert.deepEqual(testGates.affectedTestGatesByBranch["branch.demo"], ["gate:test/runtime-profile.test.js"]);
+  assert.equal(testGatesByChangeSet.testGates[0].selectedByChangeSets.includes("changeset.demo"), true);
+  assert.equal(testGatesByChangeSet.affectedTestGates[0].changeSetId, "changeset.demo");
+  assert.deepEqual(testGatesByChangeSet.affectedTestGatesByChangeSet["changeset.demo"], ["gate:test/runtime-profile.test.js"]);
   assert.equal(testRuns.testRuns.length, 1);
   assert.equal(testRuns.testRuns[0].id, "testRun:demo");
   assert.equal(testRuns.testResults[0].id, "testResult:demo:1");
@@ -455,6 +525,7 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(runtimeProfileGate.sourceDependencies.includes("test/runtime-profile.test.js"), true);
   assert.equal(runtimeProfileGate.costEstimate, "high");
   assert.equal(runtimeProfileGate.selectedByBranches.includes("branch.platform.gates"), true);
+  assert.equal(runtimeProfileGate.selectedByChangeSets.includes("changeSet:platform-gates"), true);
   assert.ok(platformGate);
   assert.equal(platformGate.protectedObjects.includes("route:GET /platform"), true);
   assert.equal(platformGate.protectedObjects.includes("handler:page.platform"), true);
@@ -462,10 +533,12 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(platformGate.sourceDependencies.includes("plugins/platform/platform-model.js"), true);
   assert.equal(platformGate.sourceDependencies.includes("plugins/platform/platform-console.rvm"), true);
   assert.equal(platformGate.selectedByBranches.includes("branch.platform.gates"), true);
+  assert.equal(platformGate.selectedByChangeSets.includes("changeSet:platform-gates"), true);
   assert.ok(packageScriptGate);
   assert.equal(packageScriptGate.protectedObjects.includes("plugin.mcp"), true);
   assert.deepEqual(packageScriptGate.sourceDependencies, ["package.json"]);
   assert.equal(packageScriptGate.selectedByBranches.includes("branch.platform.gates"), true);
+  assert.equal(packageScriptGate.selectedByChangeSets.includes("changeSet:platform-gates"), true);
   assert.ok(docGate);
   assert.equal(docGate.protectedObjects.includes("doc:docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md"), true);
   assert.equal(docGate.runner, "node-test");
@@ -484,11 +557,19 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:test/runtime-profile.test.js"), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:plugins/platform/platform.test.js"), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes(packageScriptGate.id), true);
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-gates"].includes("gate:test/runtime-profile.test.js"), true);
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-gates"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-gates"].includes(packageScriptGate.id), true);
   assert.equal(branchView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
   assert.equal(branchView.testGates.some(row => row.id === packageScriptGate.id), true);
   assert.equal(branchView.affectedTestGates.some(row => row.branchId === "branch.platform.gates"), true);
   assert.deepEqual(branchView.testGateIndex.byBranch["branch.platform.gates"], model.testGateIndex.byBranch["branch.platform.gates"]);
   assert.deepEqual(branchView.affectedTestGatesByBranch["branch.platform.gates"], model.affectedTestGatesByBranch["branch.platform.gates"]);
+  const changeSetView = filterPlatformModel(model, "testGates", "changeSet:platform-gates");
+  assert.equal(changeSetView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
+  assert.equal(changeSetView.affectedTestGates.some(row => row.changeSetId === "changeSet:platform-gates"), true);
+  assert.deepEqual(changeSetView.testGateIndex.byChangeSet["changeSet:platform-gates"], model.testGateIndex.byChangeSet["changeSet:platform-gates"]);
+  assert.deepEqual(changeSetView.affectedTestGatesByChangeSet["changeSet:platform-gates"], model.affectedTestGatesByChangeSet["changeSet:platform-gates"]);
 });
 
 test("platform roadmap task parser preserves extended status markers", () => {
@@ -2104,6 +2185,11 @@ test("platform change-set handlers list, read, remove edits, and close change se
   assert.equal(sent.at(-1).body.changeSet.id, "changeset.inspect.lifecycle");
   assert.equal(sent.at(-1).body.branch.id, "branch.inspect.lifecycle");
   assert.equal(sent.at(-1).body.edits.length, 1);
+  assert.equal(sent.at(-1).body.changeSet.changedPaths.includes("plugins/platform/platform-console.rvm"), true);
+  assert.equal(sent.at(-1).body.changeSet.affectedSystemSummaries.some(row => row.system === "plugin.platform"), true);
+  assert.equal(sent.at(-1).body.changeSet.telemetryImpactSummaries.some(row => row.id === "platform.self"), true);
+  assert.equal(sent.at(-1).body.changeSet.docsFreshness.status, "stale");
+  assert.equal(sent.at(-1).body.changeSet.docsFreshness.missingDocs.includes("docs/CAPABILITIES.md"), true);
 
   await handlers["platform.changeSet.removeEdit"]({
     res: {},
