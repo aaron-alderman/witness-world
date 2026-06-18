@@ -5442,6 +5442,33 @@ test("platform page uses authored change-set snapshot empty state", () => {
   assert.doesNotMatch(html, /No candidate snapshots for this branch\./);
 });
 
+test("platform workflow detail follows authored child-surface order", () => {
+  const model = {
+    lifecycleVocabulary: [],
+    lifecycleBoard: [],
+    branchLifecycleVocabulary: [],
+    branchBoard: [],
+    branches: [],
+    changeSets: [{
+      id: "changeSet:demo",
+      title: "Demo Change Set",
+      status: "draft",
+      branchId: "branch:demo",
+      owner: "aaron",
+      changedPaths: []
+    }],
+    changeSetEdits: [],
+    candidateSnapshots: [],
+    proposals: [],
+    proposalActions: [],
+    summaries: {}
+  };
+
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=changeSet:demo") });
+
+  assert.ok(html.indexOf("Candidate Snapshots") < html.indexOf("Staged Edits"));
+});
+
 test("platform page uses authored empty-detail states", () => {
   const emptyModel = {
     lifecycleVocabulary: [],
