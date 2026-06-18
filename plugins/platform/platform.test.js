@@ -651,6 +651,50 @@ test("platform route edits select platform and runtime-profile gates through own
   assert.equal(model.affectedTestGatesByBranch["branch.platform.route"].includes(packageScriptGate?.id), false);
 });
 
+test("platform WCSS-only edits do not select runtime-core backend gates", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.platform.wcss", title: "Platform WCSS", status: "open" }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeSet:platform-wcss", branchId: "branch.platform.wcss", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:platform-wcss:styles", changeSetId: "changeSet:platform-wcss", path: "plugins/platform/platform-console.wcss" }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const runtimeServerGate = model.testGates.find(row => row.id === "gate:test/runtime-server.test.js");
+  const platformGateSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.platform.wcss"
+    && row.gateId === "gate:plugins/platform/platform.test.js"
+  );
+
+  assert.ok(runtimeServerGate);
+  assert.equal(runtimeServerGate.sourceDependencies.includes("src/runtime-server.js"), true);
+  assert.equal(runtimeServerGate.selectedByBranches.includes("branch.platform.wcss"), false);
+  assert.equal(runtimeServerGate.selectedByChangeSets.includes("changeSet:platform-wcss"), false);
+
+  assert.ok(platformGateSelection);
+  assert.equal(platformGateSelection.matchedTargets.includes("route:GET /platform"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.wcss"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.wcss"].includes("gate:test/runtime-server.test.js"), false);
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-wcss"].includes("gate:test/runtime-server.test.js"), false);
+});
+
 test("platform roadmap task parser preserves extended status markers", () => {
   const tasks = parseRoadmapTasks("docs/demo.md", `
 # Demo

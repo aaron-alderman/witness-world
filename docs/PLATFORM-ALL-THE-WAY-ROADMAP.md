@@ -744,11 +744,12 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Invalidate cache when dependencies change.
 - [ ] Add tests that one RVM file edit runs only relevant RVM/snapshot gates.
 - [X] Add tests that plugin route edit runs plugin ownership/profile route gates.
-- [ ] Add tests that WCSS-only edit does not run backend-only gates.
+- [X] Add tests that WCSS-only edit does not run backend-only gates.
 - [ ] Add tests that dependency graph misses are logged as meta-defects.
 - [L] Current V1 now exposes `changedPaths`, affected system summaries, docs freshness, and telemetry impact summaries on both branches and change sets, and the platform model derives affected test gates for both scopes by matching declared source dependencies and protected objects. It still does not compute the smallest meaningful gate set, attach formal selection explanations per gate, or automatically run the selected set.
 - [L] Affected gate rows now carry explicit `selectionReasons` for direct file dependency, imported source dependency, and plugin ownership dependency. Route ownership, doc freshness, telemetry regression, and prior defect cluster explanations still need dedicated affected-object modeling instead of the current broad target/path matching.
 - [L] Current route-aware gate selection is still heuristic rather than a general dependency graph. It now infers platform-owned route, handler, capability, plugin, profile, and surface targets from known files such as `plugins/platform/runtime.js`, `plugins/platform/handlers.js`, `plugins/platform/platform-page.js`, `plugins/platform/platform-console.rvm`, `plugins/platform/platform-console.wcss`, `plugins/platform/platform-style.js`, `plugins/mcp/*`, and `store/seeds/runtime-profiles.json`.
+- [L] The current WCSS-only backend exclusion proof is anchored on runtime-core gate selection: a `plugins/platform/platform-console.wcss` change continues to select platform-facing gates while leaving `gate:test/runtime-server.test.js` unselected.
 
 ## Phase 6: Pure Dependency Analysis And Coverage
 
