@@ -352,6 +352,7 @@ test("platform model filters support MCP views", async () => {
   });
   const mcp = filterPlatformModel(model, "mcp");
   const docs = filterPlatformModel(model, "docs", "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
+  const roadmap = filterPlatformModel(model, "roadmap", "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
   const gates = filterPlatformModel(model, "gates");
   const testGates = filterPlatformModel({
     ...model,
@@ -620,6 +621,11 @@ test("platform model filters support MCP views", async () => {
   assert.equal(docs.docSections.length > 0, true);
   assert.equal(docs.docTasks.length > 0, true);
   assert.equal(docs.roadmapTasks.length > 0, true);
+  assert.equal(roadmap.docs.length, 1);
+  assert.equal(roadmap.docs[0].path, "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
+  assert.equal(roadmap.docSections.length > 0, true);
+  assert.equal(roadmap.docTasks.length > 0, true);
+  assert.equal(roadmap.roadmapTasks.length > 0, true);
   assert.equal(gates.gates.every(node => node.kind === "testGate"), true);
   assert.equal(testGates.testGates.length, 1);
   assert.equal(testGates.testGates[0].id, "gate:test/runtime-profile.test.js");

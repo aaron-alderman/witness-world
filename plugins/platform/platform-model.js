@@ -2392,6 +2392,33 @@ export async function buildPlatformModel({
 export function filterPlatformModel(model, view, id = null) {
   if (!view || view === "model") return model;
   if (view === "gaps") return { gaps: model.gaps, summaries: model.summaries };
+  if (view === "roadmap") {
+    const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
+    const roadmapDocs = model.docs.filter(doc => doc.path === roadmapDocPath);
+    const roadmapDocIds = new Set(roadmapDocs.map(doc => doc.path));
+    const roadmapTasks = (model.roadmapTasks ?? []).filter(task =>
+      (!id && roadmapDocIds.has(task.doc))
+      || task.id === id
+      || task.doc === id
+      || task.section === id
+    );
+    const includeRoadmapDoc = !id || roadmapTasks.length > 0 || roadmapDocIds.has(id);
+    const docs = includeRoadmapDoc ? roadmapDocs : [];
+    const docIds = new Set(docs.map(doc => doc.path));
+    return {
+      docs,
+      docSections: model.docSections.filter(section =>
+        (docIds.has(section.doc) && (!id || section.id === id || section.doc === id || section.title === id))
+        || section.id === id
+      ),
+      docTasks: model.docTasks.filter(task =>
+        (docIds.has(task.doc) && (!id || task.id === id || task.doc === id || task.section === id))
+        || task.id === id
+      ),
+      roadmapTasks,
+      summaries: model.summaries
+    };
+  }
   if (view === "docs") {
     const matchDoc = doc => !id || doc.id === id || doc.path === id;
     const docs = model.docs.filter(matchDoc);

@@ -1196,9 +1196,10 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `platform.docs`
   - [ ] `platform.telemetry`
   - [ ] `platform.defects`
-  - [ ] `platform.roadmap`
+  - [X] `platform.roadmap`
 - [ ] Add tests for human/MCP parity.
 - [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated telemetry, defect, and roadmap MCP lanes remain later work.
+- [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, and checkbox task rows. This is not yet the broader Phase 10 planning model with first-class epics, milestones, features, or evidence-backed task status.
 
 ## Phase 13: Policy, Authority, And Safety
 
