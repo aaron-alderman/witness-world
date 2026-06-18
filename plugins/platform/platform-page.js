@@ -736,19 +736,27 @@ function renderSurfaceTree(surface, consoleLayout, ctx) {
     : baseSummary;
   return renderSurfaceFrame(surface, `
     <div class="summary">
-      ${(consoleLayout.children ?? []).map(childSurface => `
-        <div class="card" data-platform-rvm-view="${esc(childSurface.name)}" data-platform-rvm-kind="${esc(childSurface.surfaceKind || "")}">
-          <div><strong>${esc(childSurface.title || childSurface.name)}</strong></div>
-          <div class="muted">${esc(childSurface.pageId || childSurface.name)}</div>
-          <div class="muted">${esc(childSurface.surfaceKind || "surface")}${childSurface.className ? `, class ${esc(childSurface.className)}` : ""}</div>
-          ${childSurface.processRoute ? `<div class="muted">Process: ${esc(childSurface.processRoute)}</div>` : ""}
-          ${(childSurface.projectionRoutes ?? []).length ? `<div class="muted">Projection: ${esc(childSurface.projectionRoutes.join(", "))}</div>` : ""}
-          ${childSurface.summary ? `<div class="muted">${esc(childSurface.summary)}</div>` : ""}
-          ${(childSurface.childSurfaces ?? []).length ? `
-            <div class="muted">Sections: ${(childSurface.childSurfaces ?? []).map(child => esc(child.title || child.name)).join(", ")}</div>
-          ` : ""}
-        </div>
-      `).join("")}
+      ${(consoleLayout.children ?? []).map(childSurface => {
+        const row = {
+          ...childSurface,
+          projectionRoutesText: (childSurface.projectionRoutes ?? []).join(", "),
+          sectionTitles: (childSurface.childSurfaces ?? []).map(child => child.title || child.name).join(", ")
+        };
+        const card = propertyRowsFromSurfaceSchema(
+          surface,
+          null,
+          "surfaceFields",
+          ctx,
+          row,
+          childSurface.title || childSurface.name,
+          []
+        );
+        return `
+          <div data-platform-rvm-view="${esc(childSurface.name)}" data-platform-rvm-kind="${esc(childSurface.surfaceKind || "")}">
+            ${renderPropertyCard(card)}
+          </div>
+        `;
+      }).join("")}
     </div>
   `, { summary });
 }

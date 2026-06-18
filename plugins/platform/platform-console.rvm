@@ -195,6 +195,7 @@ view PlatformAuthoredSurfaceTree {
   class platform-surface-tree
   prop title = "Authored Surface Tree"
   prop summary = "Inspectable page and section ownership compiled from the authored console RVM."
+  prop surfaceFields = "View=pageId||name|Kind=surfaceKind|Class=className|Process=processRoute|Projection=projectionRoutesText|Summary=summary|Sections=sectionTitles"
 }
 
 view PlatformLifecycleBoard {

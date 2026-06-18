@@ -420,6 +420,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   const overviewMapSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformMap");
   assert.ok(overviewMapSurface);
   assert.equal(overviewMapSurface.props.rowFields, "Kind=kind|Resource=id@concept|Lifecycle=lifecycleText|Status=status|Source=source");
+  const surfaceTreeSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformAuthoredSurfaceTree");
+  assert.ok(surfaceTreeSurface);
+  assert.equal(surfaceTreeSurface.props.surfaceFields, "View=pageId||name|Kind=surfaceKind|Class=className|Process=processRoute|Projection=projectionRoutesText|Summary=summary|Sections=sectionTitles");
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformChangeSetEditPanel"), true);
   assert.ok(verificationPage);
@@ -5186,7 +5189,8 @@ test("platform page renders required operating views", async () => {
   assert.match(overviewHtml, /Authored Surface Tree/);
   assert.match(overviewHtml, /Inspectable page and section ownership compiled from the authored console RVM\./);
   assert.match(overviewHtml, /data-platform-rvm-view="PlatformOverviewPage"/);
-  assert.match(overviewHtml, /Sections: Platform Summary, Authored Surface Tree, Lifecycle Board, Platform Map, Runtime Profiles/);
+  assert.match(overviewHtml, /Platform Summary, Authored Surface Tree, Lifecycle Board, Platform Map, Runtime Profiles/);
+  assert.match(overviewHtml, /Counts, authored surface ownership, lifecycle, and quick platform links\./);
   assert.match(overviewHtml, /\?view=workflow/);
   assert.doesNotMatch(overviewHtml, /<pre/);
 
