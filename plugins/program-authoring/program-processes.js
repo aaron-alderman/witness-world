@@ -1,5 +1,5 @@
 import { projectors, relation } from "../../src/kernel.js";
-import { resolveContextualRef } from "../../src/modules.js";
+import { CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES, resolveContextualRef } from "../../src/modules.js";
 import { defineFrontendProgram, defineFrontendStep } from "../../src/widgets.js";
 import {
   defineBackendProgram,
@@ -55,13 +55,15 @@ function resolveBodyRef(world, body, {
   contextField = "context",
   idField,
   refField,
-  label
+  label,
+  allowedCanonicalIdPolicyClasses = null
 }) {
   return resolveContextualRef(world.allWitnesses(), {
     context: body?.[contextField] ?? null,
     id: body?.[idField] ?? null,
     ref: body?.[refField] ?? null,
-    label
+    label,
+    allowedCanonicalIdPolicyClasses
   });
 }
 
@@ -83,7 +85,8 @@ export function requestBootstrapFrontendProgramDefine(world, {
     contextField: "context",
     idField: "rootWidget",
     refField: "rootWidgetRef",
-    label: "root widget"
+    label: "root widget",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!resolvedRootWidget.ok) {
     const witness = fail(world, {

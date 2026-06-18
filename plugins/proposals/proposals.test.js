@@ -263,3 +263,36 @@ name = "importedRunner"
     && row.targetId === "source_server"
   ), true);
 });
+
+test("proposal create rejects unsupported target processes before proposal storage", async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    readJson: async () => ({
+      id: "proposal.unsupported.target",
+      targetProcess: "proposal.executor.unsupported",
+      targetKind: "thing",
+      targetId: "anything",
+      bodyJson: "{}",
+      reason: "Should fail early"
+    }),
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      executeBootstrapProposal: () => async () => ({ ok: true, witnessIds: [] })
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ status, body });
+    }
+  });
+
+  await handlers["proposal.create"]({ req: {}, res: {}, requestActor: "aaron" });
+
+  assert.equal(sent[0]?.status, 400);
+  assert.equal(sent[0]?.body?.error, "proposal target process not supported");
+  assert.equal(world.project(moduleProjectors.proposals).some(row => row.id === "proposal.unsupported.target"), false);
+});

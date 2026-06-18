@@ -154,7 +154,7 @@ The architecture-first checklist above is complete, the fast compatibility verif
 ### Next Migration Cleanup
 
 - [x] Finish migrating the maintained demo off the remaining runtime-owned `bundle-demo` / `handlerSet = "demo"` compatibility seam so served-example composition is explained entirely by authored installs plus explicit runtime-owned bundle ownership rather than example glue.
-- [ ] Remove the remaining demo handler-set model shims from authored backend programs, starting with `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel`, so authored demo/backend execution no longer bounces through `src/demo-handler-set.js` for core app logic.
+- [ ] Remove the remaining demo handler-set mutation shims from authored backend programs, specifically `todos.createModel`, `todos.updateModel`, `todos.deleteModel`, `privateNotes.createModel`, and `widgets.createModel`, so authored demo/backend execution no longer bounces through `src/demo-handler-set.js` for core app logic.
 - [ ] Bring blank-world bootstrap/tutorial startup onto the same explicit runtime-composition story as the maintained demo so bootstrap can eventually run from a narrow baseline instead of a compatibility-heavy runtime path.
 - [ ] Add runner-scoped runtime-plugin reconcile and repair flows so authored installs that point at missing, invalid, incompatible, metadata-only, or dependency-broken local packages become operable cleanup work instead of only startup failures and review warnings.
 - [ ] Decide whether runtime profile choice remains operator-only startup input or becomes authored runtime intent on `serverRunner` / runtime config, and make that decision explicit before the bootstrap/runtime migration converges.

@@ -22,9 +22,7 @@ export const DEMO_HANDLER_SET_DEFINITION = Object.freeze({
   handlers: Object.freeze([
     "privateNotes.list",
     "privateNotes.create",
-    "privateNotes.readModel",
     "privateNotes.createModel",
-    "todos.readModel",
     "todos.createModel",
     "todos.updateModel",
     "todos.deleteModel",
@@ -34,7 +32,6 @@ export const DEMO_HANDLER_SET_DEFINITION = Object.freeze({
     "todos.delete",
     "widgets.createModel",
     "widgets.create",
-    "network.simulateModel",
     "network.simulateError"
   ]),
   jobHandlers: Object.freeze([
@@ -622,14 +619,10 @@ export async function createDemoHandlerSet({
         sendJson(res, result.status, result.body.payload);
       },
 
-      "privateNotes.readModel": async ({ requestActor }) => readPrivateNotesModel(requestActor),
-
       "privateNotes.createModel": async ({ req, requestActor }) => createPrivateNoteModel({
         requestActor,
         body: await readJson(req)
       }),
-
-      "todos.readModel": async ({ requestActor }) => readTodoModel(requestActor),
 
       "todos.createModel": async ({ req, requestActor }) => createTodoModel({
         requestActor,
@@ -696,8 +689,6 @@ export async function createDemoHandlerSet({
         }
         sendJson(res, result.status, result.body.payload);
       },
-
-      "network.simulateModel": async ({ requestActor }) => simulateNetworkErrorModel({ requestActor }),
 
       "network.simulateError": async ({ res, requestActor }) => {
         const result = simulateNetworkErrorModel({ requestActor });

@@ -23,6 +23,10 @@ import {
   createRuntimeAuthoringPolicy,
   defaultRuntimeAuthoringMode
 } from "../../src/runtime-authoring-policy.js";
+import {
+  proposalTargetGovernanceCatalog,
+  proposalTargetProcessIds
+} from "../../src/runtime-governance.js";
 
 export function createBootstrapReadModels({
   world,
@@ -244,6 +248,7 @@ export function createBootstrapReadModels({
 
   const bootstrapModel = async (appContext = null) => {
     const authored = await bootstrapState(null, appContext);
+    const proposalTargetGovernance = proposalTargetGovernanceCatalog({ bootstrapSelectableOnly: true });
     const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
     const appReady = Boolean(homeRoute && homeRoute.params?.rootWidget);
     const typeModel = world.project(typeModelProjection);
@@ -298,62 +303,11 @@ export function createBootstrapReadModels({
         ...(authored.capabilities || [])
       ],
       attachableContexts: authored.contexts || [],
-      proposalTargetProcesses: [
-        "identity.update",
-        "todo.create",
-        "todo.update",
-        "todo.delete",
-        "canvas.place",
-        "canvas.move",
-        "canvas.moveMany",
-        "canvas.style",
-        "canvas.remove",
-        "canvas.removeMany",
-        "canvas.duplicate",
-        "canvas.camera",
-        "canvas.grid",
-        "canvas.batch",
-        "canvas.createThing",
-        "canvas.perspective.create",
-        "canvas.thing.setTitle",
-        "canvas.relate",
-        "canvas.unrelate",
-        "asset.attach",
-        "asset.detach",
-        "context.define",
-        "context.bind",
-        "context.unbind",
-        "context.export",
-        "context.unexport",
-        "context.import",
-        "context.unimport",
-        "perspective.define",
-        "stewardship.grant",
-        "stewardship.revoke",
-        "widget.define",
-        "widget.update",
-        "widgetVersion.activate",
-        "widgetVersion.rollback",
-        "edenVersions.publish",
-        "frontendProgram.define",
-        "frontendStep.define",
-        "backendProgram.define",
-        "backendProgramVersion.define",
-        "backendStep.define",
-        "backendProgramVersion.activate",
-        "backendProgramVersion.rollback",
-        "route.define",
-        "serve.define",
-        "serverRunner.define",
-        "mcpServer.define",
-        "capability.define",
-        "capability.install",
-        "capability.remove",
-        "runtimePlugin.install",
-        "runtimePlugin.remove",
-        "mcpTool.install",
-        "mcpTool.remove"
-      ]
+      proposalTargetProcesses: proposalTargetProcessIds({ bootstrapSelectableOnly: true }),
+      proposalTargetGovernance: Object.entries(proposalTargetGovernance).map(([targetProcess, entry]) => ({
+        targetProcess,
+        ...entry
+      }))
     };
   };
 

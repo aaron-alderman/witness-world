@@ -586,6 +586,7 @@ function correlateRequests(runId, observations, witnesses) {
         durationMs: observation.body.durationMs ?? 0,
         route: observation.body.route ?? null,
         handler: observation.body.handler ?? null,
+        projector: observation.body.projector ?? null,
         failureWitnesses,
         emittedWitnesses
       };

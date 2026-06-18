@@ -23,6 +23,7 @@ Primary sources:
 - [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md)
 - [docs/AUTHORITY-MODEL.md](C:\Users\aaron\Documents\world\docs\AUTHORITY-MODEL.md)
 - [docs/PLATFORM-ALL-THE-WAY-ROADMAP.md](C:\Users\aaron\Documents\world\docs\PLATFORM-ALL-THE-WAY-ROADMAP.md)
+- [docs/INTENT-REGISTRY-ROADMAP.md](C:\Users\aaron\Documents\world\docs\INTENT-REGISTRY-ROADMAP.md)
 
 ## Status Key
 
@@ -136,10 +137,11 @@ Move from hard-coded gate metadata to authored verification policy.
 
 ### Immediate Work
 
-- [ ] define authored verification nouns such as `verificationGate`, `verificationSuite`, `verificationPolicy`, and `verificationArtifact`
+- [ ] define authored verification nouns such as `verificationGate`, `verificationSuite`, `verificationPolicy`, `verificationArtifact`, and `testReport`
 - [ ] decide whether these live as standalone WTOML objects, `serverRunner` declarations, or both
 - [ ] let policy declare defaults such as `enabled`, `startup`, `watch`, `onChangeSet`, `maxConcurrency`, and `priority`
 - [ ] let policy declare regression thresholds such as timing deltas, failure budgets, or minimum coverage floors
+- [ ] let gates or suites declare which RVM-authored report surfaces they produce so report structure is authored rather than hidden in JS
 
 ### Dependencies
 
@@ -226,6 +228,7 @@ Treat verification outputs as explicit derived artifacts with provider-backed st
 - logs
 - benchmark history
 - snapshot outputs
+- test reports
 - provider-backed artifact storage
 
 ### Desired End State
@@ -240,6 +243,7 @@ Treat verification outputs as explicit derived artifacts with provider-backed st
 - [ ] bind those roles through the same runtime-config/provider story as other backend seams
 - [ ] distinguish lightweight committed metadata from heavyweight external payloads
 - [ ] attach artifact provenance to runtime revision, gate, execution class, environment posture, and dependency hash
+- [ ] model report payloads as explicit artifacts that can back both `/platform` and downstream generated docs
 
 ### Dependencies
 
@@ -296,6 +300,7 @@ Expose verification truth through the product rather than burying it in logs.
 - stale verification state
 - health surfaces
 - operator repair controls
+- platform verification page surfaces
 
 ### Desired End State
 
@@ -309,6 +314,8 @@ Expose verification truth through the product rather than burying it in logs.
 - [ ] distinguish hard product failure from degraded confidence and from stale evidence
 - [ ] surface regression explanations such as "timing regressed 28% over last good baseline"
 - [ ] add operator actions for rerun, quarantine, invalidate, and repair where honest
+- [ ] make `/platform?view=verification` the dedicated live test page with current runs, issues, regressions, and RVM-authored report sections
+- [ ] keep the visible test-report layout authored in RVM so the console shape is not hard-coded in JS
 
 ### Dependencies
 

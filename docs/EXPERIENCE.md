@@ -41,7 +41,7 @@ Current honesty snapshot:
 - same-context and unscoped canonical-id authoring still acts as compatibility sugar, but hidden foreign-scoped canonical-id bypasses on covered bootstrap/DSL surfaces are now blocked
 - some live editing and proposal flows are real but narrow, even where ambient refresh now works
 - the next real honesty risks are migration and governance seams, not a fake command product
-- widget-version routes and Eden version routes now do flow through shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, the Eden versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, and the Eden capability shelf now has a first `capability.install` proposal fallback, but remaining app-specific and other operating-surface mutation actions still do not all flow through one shared authority/proposal path
+- widget-version routes and Eden version routes now do flow through shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, the Eden versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, the Eden capability shelf now has a first `capability.install` proposal fallback, direct runtime-plugin / MCP authoring routes now create real proposals on `403` instead of dead-ending, and bootstrap proposal target selection is now sourced from a shared proposal-target governance catalog instead of a UI-local string list, but remaining app-specific and other operating-surface mutation actions still do not all flow through one shared authority/proposal path
 
 Current honesty ledger:
 
@@ -116,7 +116,7 @@ Contexts are how the user understands what belongs together and what has authori
 
 The first honest slice now exists through explicit local bindings plus explicit export/import edges.
 What is still missing is the stronger product-wide rule where contexts become hard naming boundaries rather than a composition layer that still coexists with canonical-id compatibility.
-In practice today that means contextual naming is real on the covered bootstrap/DSL surfaces, including capability, route attachment, runtime-plugin attachment, MCP tool attachment, stewardship, and proposal target naming, but it is still a first slice with bounded ref-lowering coverage and an explicit compatibility bypass through canonical ids.
+In practice today that means contextual naming is real on the covered bootstrap/DSL surfaces, including capability, route attachment, runtime-plugin attachment, MCP tool attachment, stewardship, and proposal target naming. Bootstrap state now also exposes grouped name-resolution and conflict rows so that visible names are more explainable, and validation now classifies the remaining canonical-id compatibility into same-context, imported-visible, and legacy-only cases, but the system is still only at a first slice with bounded ref-lowering coverage and an explicit compatibility bypass through canonical ids.
 
 Contexts should eventually carry:
 

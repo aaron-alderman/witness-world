@@ -1415,8 +1415,8 @@ test("process view route runs through authored backend programs and preserves ba
       assert.equal(body.selection.event, "request");
       assert.equal(Array.isArray(body.catalog), true);
       assert.equal(Array.isArray(body.runs), true);
-      assert.equal(body.run.requests.some(request => request.handler === "todos.readModel"), true);
-      assert.equal(body.run.requests.some(request => request.url === "/api/todos"), true);
+      assert.equal(body.run.requests.some(request => request.projector === "demo.todosReadModel"), true);
+      assert.equal(body.run.requests.some(request => request.url === "project:demo.todosReadModel"), true);
     };
 
     await fetch(`${server.url}/api/todos`).then(r => r.json());
@@ -1481,8 +1481,8 @@ test("process run route runs through authored backend programs and preserves rep
     const assertProcessRunShape = body => {
       assert.equal(body.run.program, "todo.todos.list.v1");
       assert.equal(body.run.event, "request");
-      assert.equal(body.run.requests.some(request => request.handler === "todos.readModel"), true);
-      assert.equal(body.run.requests.some(request => request.url === "/api/todos"), true);
+      assert.equal(body.run.requests.some(request => request.projector === "demo.todosReadModel"), true);
+      assert.equal(body.run.requests.some(request => request.url === "project:demo.todosReadModel"), true);
       assert.equal(body.replay.cursor, 1);
       assert.equal(body.replay.max >= 1, true);
     };

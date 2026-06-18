@@ -412,9 +412,9 @@ strategy = "compatible"
 actor = "aaron"
 version = "todo.todos.list.v1"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "todos.readModel", method = "GET", path = "/api/todos", into = "todoResponse" }
+params = { projector = "demo.todosReadModel", into = "todoResponse" }
 
 [[backendStep]]
 actor = "aaron"
@@ -428,9 +428,9 @@ params = { from = "todoResponse" }
 actor = "aaron"
 version = "todo.todos.list.v2"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "todos.readModel", method = "GET", path = "/api/todos", into = "todoResponse" }
+params = { projector = "demo.todosReadModel", into = "todoResponse" }
 
 [[backendStep]]
 actor = "aaron"
@@ -736,9 +736,9 @@ params = { statusFrom = "deleteResult.status", messageFrom = "deleteResult.error
 actor = "aaron"
 version = "todo.privateNotes.list.v1"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "privateNotes.readModel", method = "GET", path = "/api/private-notes", into = "privateNotesResponse" }
+params = { projector = "demo.privateNotesReadModel", into = "privateNotesResponse" }
 
 [[backendStep]]
 actor = "aaron"
@@ -752,9 +752,9 @@ params = { from = "privateNotesResponse" }
 actor = "aaron"
 version = "todo.privateNotes.list.v2"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "privateNotes.readModel", method = "GET", path = "/api/private-notes", into = "privateNotesResponse" }
+params = { projector = "demo.privateNotesReadModel", into = "privateNotesResponse" }
 
 [[backendStep]]
 actor = "aaron"

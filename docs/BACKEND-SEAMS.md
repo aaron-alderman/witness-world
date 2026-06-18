@@ -49,7 +49,7 @@ The current backend slice is real but narrow:
 - authored MCP transport and tool surfaces through `mcpServer` + `mcpToolInstall`
 - many shipped demo/backend routes now execute through authored `backendProgram` definitions instead of raw handler-set glue
 - the remaining demo/runtime compatibility seam is explicit: `serverRunner.handlerSet = "demo"` still causes startup to add `bundle-demo`, and that ownership is now reported honestly in runtime diagnostics
-- several shipped backend-program versions still call demo handler-set model helpers such as `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel`, so the remaining app-logic compatibility seam is narrower than before but not gone yet
+- several shipped backend-program versions still call demo handler-set mutation helpers such as `todos.createModel`, `todos.updateModel`, `todos.deleteModel`, `privateNotes.createModel`, and `widgets.createModel`, so the remaining app-logic compatibility seam is narrower than before but not gone yet
 
 That is an honest baseline.
 

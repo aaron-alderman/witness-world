@@ -4,7 +4,8 @@ import {
   installMcpTool,
   removeMcpTool,
   moduleProjectors,
-  resolveContextualRef
+  resolveContextualRef,
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
 } from "../../src/modules.js";
 import { processSpecFor, typeModelProjection, validateProcessInput } from "../../src/type-model.js";
 
@@ -78,7 +79,8 @@ function resolveBodyRef(world, body, {
     context: body?.[contextField] ?? null,
     id: body?.[idField] ?? null,
     ref: body?.[refField] ?? null,
-    label
+    label,
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
 }
 
@@ -87,6 +89,23 @@ export function resolveMcpServerInput(world, body, {
   idField = "server",
   refField = "serverRef",
   label = "mcp server"
+} = {}) {
+  const resolved = resolveBodyRef(world, body, {
+    contextField,
+    idField,
+    refField,
+    label
+  });
+  if (!resolved.ok) return resolved;
+  if (!resolved.target) return { ok: false, error: `${label} is required` };
+  return resolved;
+}
+
+export function resolveMcpServerRunnerInput(world, body, {
+  contextField = "context",
+  idField = "serverRunner",
+  refField = "serverRunnerRef",
+  label = "server runner"
 } = {}) {
   const resolved = resolveBodyRef(world, body, {
     contextField,
@@ -124,7 +143,7 @@ export function requestBootstrapMcpServerDefine(world, {
     });
     return { ok: false, status: 409, error: "mcp server id already exists", witness };
   }
-  const serverRunnerResolved = resolveBodyRef(world, body, {
+  const serverRunnerResolved = resolveMcpServerRunnerInput(world, body, {
     contextField: "context",
     idField: "serverRunner",
     refField: "serverRunnerRef",
@@ -134,11 +153,7 @@ export function requestBootstrapMcpServerDefine(world, {
     const witness = fail(world, { process: "mcpServer.define.failed", actor: actor || backendHost, body: { reason: serverRunnerResolved.error } });
     return { ok: false, status: 400, error: serverRunnerResolved.error, witness };
   }
-  const resolvedServerRunner = serverRunnerResolved.target ?? input.serverRunner ?? null;
-  if (!resolvedServerRunner) {
-    const witness = fail(world, { process: "mcpServer.define.failed", actor: actor || backendHost, body: { reason: "serverRunner is required" } });
-    return { ok: false, status: 400, error: "serverRunner is required", witness };
-  }
+  const resolvedServerRunner = serverRunnerResolved.target;
   if (!project(moduleProjectors.serverRunners).some(row => row.id === resolvedServerRunner)) {
     const witness = fail(world, { process: "mcpServer.define.failed", actor: actor || backendHost, body: { reason: "server runner not found", serverRunner: resolvedServerRunner } });
     return { ok: false, status: 404, error: "server runner not found", witness };

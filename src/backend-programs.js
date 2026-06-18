@@ -7,6 +7,9 @@ export const SUPPORTED_BACKEND_OPS = Object.freeze([
   "request.readJson",
   "state.assign",
   "handler.invoke",
+  "process.request",
+  "project.read",
+  "witness.emit",
   "response.json",
   "response.error",
   "run"

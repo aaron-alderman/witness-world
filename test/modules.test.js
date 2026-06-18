@@ -21,6 +21,9 @@ import {
   importContextName,
   explainContextualName,
   explainContextualTargetVisibility,
+  classifyCanonicalIdPolicy,
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
+  resolveContextualRef,
   resolveContextualName,
   moduleProjectors
 } from "../src/modules.js";
@@ -265,4 +268,91 @@ test("context explanation helpers expose resolved, ambiguous, and hidden context
   const unscoped = explainContextualTargetVisibility(world.allWitnesses(), { context: "ctx.target", target: "legacy.shell" });
   assert.equal(unscoped.ok, true);
   assert.equal(unscoped.visibility, "unscoped");
+});
+
+test("contextual ref resolution classifies canonical-id compatibility and enforces explicit allowed classes", () => {
+  const world = createWorld();
+  defineContext(world, { actor: "system", id: "ctx.source", label: "Source" });
+  defineContext(world, { actor: "system", id: "ctx.target", label: "Target" });
+  createThing(world, { actor: "system", id: "page.local" });
+  createThing(world, { actor: "system", id: "page.imported" });
+  createThing(world, { actor: "system", id: "legacy.shell" });
+  world.emit({
+    process: "scope.page.local",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.local", rel: "inContext", to: "ctx.target" }],
+    body: {}
+  });
+  world.emit({
+    process: "scope.page.imported",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.imported", rel: "inContext", to: "ctx.source" }],
+    body: {}
+  });
+  bindContextName(world, { actor: "system", context: "ctx.source", name: "sourcePage", target: "page.imported" });
+  exportContextName(world, { actor: "system", context: "ctx.source", name: "sourcePage", target: "page.imported" });
+  importContextName(world, { actor: "system", context: "ctx.target", sourceContext: "ctx.source", exportName: "sourcePage", name: "importedPage" });
+
+  assert.deepEqual(CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES, [
+    "same-context-convenience",
+    "imported-target-reference",
+    "legacy-only-path"
+  ]);
+
+  const sameContext = classifyCanonicalIdPolicy(world.allWitnesses(), {
+    context: "ctx.target",
+    target: "page.local"
+  });
+  assert.equal(sameContext.ok, true);
+  assert.equal(sameContext.policyClass, "same-context-convenience");
+
+  const imported = classifyCanonicalIdPolicy(world.allWitnesses(), {
+    context: "ctx.target",
+    target: "page.imported"
+  });
+  assert.equal(imported.ok, true);
+  assert.equal(imported.policyClass, "imported-target-reference");
+
+  const legacy = classifyCanonicalIdPolicy(world.allWitnesses(), {
+    context: "ctx.target",
+    target: "legacy.shell"
+  });
+  assert.equal(legacy.ok, true);
+  assert.equal(legacy.policyClass, "legacy-only-path");
+
+  const localResolved = resolveContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.local",
+    label: "root widget",
+    allowedCanonicalIdPolicyClasses: ["same-context-convenience"]
+  });
+  assert.equal(localResolved.ok, true);
+  assert.equal(localResolved.canonicalIdPolicyClass, "same-context-convenience");
+
+  const importedResolved = resolveContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.imported",
+    label: "root widget",
+    allowedCanonicalIdPolicyClasses: ["imported-target-reference"]
+  });
+  assert.equal(importedResolved.ok, true);
+  assert.equal(importedResolved.canonicalIdPolicyClass, "imported-target-reference");
+
+  const blockedImported = resolveContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.imported",
+    label: "root widget",
+    allowedCanonicalIdPolicyClasses: ["same-context-convenience"]
+  });
+  assert.equal(blockedImported.ok, false);
+  assert.match(blockedImported.error, /imported-target-reference/);
+
+  const blockedLegacy = resolveContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "legacy.shell",
+    label: "parent widget",
+    allowedCanonicalIdPolicyClasses: ["same-context-convenience", "imported-target-reference"]
+  });
+  assert.equal(blockedLegacy.ok, false);
+  assert.match(blockedLegacy.error, /legacy-only-path/);
 });

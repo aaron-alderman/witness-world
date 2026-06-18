@@ -4,7 +4,8 @@ import {
   installRuntimePlugin,
   removeRuntimePlugin,
   moduleProjectors,
-  resolveContextualRef
+  resolveContextualRef,
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
 } from "../../src/modules.js";
 import { processSpecFor, typeModelProjection, validateProcessInput } from "../../src/type-model.js";
 
@@ -62,7 +63,8 @@ function resolveBodyRef(world, body, {
     context: body?.[contextField] ?? null,
     id: body?.[idField] ?? null,
     ref: body?.[refField] ?? null,
-    label
+    label,
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
 }
 

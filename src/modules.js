@@ -211,6 +211,19 @@ function delegatedModuleProjector(name, fallback) {
   };
 }
 
+export function moduleProjectorByName(name, {
+  fallback = () => null
+} = {}) {
+  const projectorName = typeof name === "string" && name.trim() ? name.trim() : "";
+  if (!projectorName) return null;
+  const builtin = moduleProjectors[projectorName];
+  if (typeof builtin === "function") return builtin;
+  const fallbackProjector = typeof fallback === "function"
+    ? fallback
+    : (() => fallback);
+  return delegatedModuleProjector(projectorName, fallbackProjector);
+}
+
 function emptyRows() {
   return [];
 }
@@ -1583,30 +1596,120 @@ export function explainContextualTargetVisibility(witnesses, {
   };
 }
 
+export const CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES = Object.freeze([
+  "same-context-convenience",
+  "imported-target-reference",
+  "legacy-only-path"
+]);
+
+const CONTEXTUAL_CANONICAL_ID_POLICY_CLASS_SET = new Set(CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES);
+
+function normalizeCanonicalIdPolicyClasses(values = null) {
+  if (!Array.isArray(values)) return null;
+  const normalized = [...new Set(values
+    .map(value => String(value || "").trim())
+    .filter(value => CONTEXTUAL_CANONICAL_ID_POLICY_CLASS_SET.has(value)))];
+  return normalized;
+}
+
+export function classifyCanonicalIdPolicy(witnesses, {
+  context,
+  target
+}) {
+  const authoringContext = typeof context === "string" && context.trim() ? context.trim() : "";
+  const canonicalTarget = typeof target === "string" && target.trim() ? target.trim() : "";
+  if (!authoringContext || !canonicalTarget) {
+    return {
+      ok: false,
+      policyClass: null,
+      reason: "context and target are required for canonical-id policy classification"
+    };
+  }
+  const visibility = explainContextualTargetVisibility(witnesses, {
+    context: authoringContext,
+    target: canonicalTarget
+  });
+  if (!visibility.ok) {
+    return {
+      ok: false,
+      policyClass: null,
+      reason: visibility.reason,
+      visibility
+    };
+  }
+  if (visibility.targetContext === authoringContext) {
+    return {
+      ok: true,
+      policyClass: "same-context-convenience",
+      visibility
+    };
+  }
+  if (visibility.targetContext) {
+    return {
+      ok: true,
+      policyClass: "imported-target-reference",
+      visibility
+    };
+  }
+  if (visibility.visibility === "unscoped") {
+    return {
+      ok: true,
+      policyClass: "legacy-only-path",
+      visibility
+    };
+  }
+  return {
+    ok: true,
+    policyClass: null,
+    visibility
+  };
+}
+
 export function resolveContextualRef(witnesses, {
   context,
   id = null,
   ref = null,
-  label = "reference"
+  label = "reference",
+  allowedCanonicalIdPolicyClasses = null
 }) {
   const canonical = typeof id === "string" && id.trim() ? id.trim() : null;
   const contextual = typeof ref === "string" && ref.trim() ? ref.trim() : null;
+  const allowedPolicyClasses = normalizeCanonicalIdPolicyClasses(allowedCanonicalIdPolicyClasses);
   if (canonical && contextual) {
     return { ok: false, error: `provide either ${label} id or ${label} ref, not both` };
   }
   if (canonical) {
     const authoringContext = typeof context === "string" && context.trim() ? context.trim() : null;
     if (!authoringContext) return { ok: true, target: canonical, source: "canonical" };
-    const targetContext = moduleProjectors.objectContexts(witnesses).get(canonical) ?? null;
-    if (!targetContext || targetContext === authoringContext) {
-      return { ok: true, target: canonical, source: "canonical" };
+    if (!projectors.things(witnesses).has(canonical)) {
+      return { ok: true, target: canonical, source: "canonical", canonicalIdPolicyClass: null, visibility: null };
     }
-    const visible = moduleProjectors.contextScopes(witnesses)
-      .some(row => row.context === authoringContext && row.target === canonical);
-    if (visible) return { ok: true, target: canonical, source: "canonical" };
+    const classified = classifyCanonicalIdPolicy(witnesses, {
+      context: authoringContext,
+      target: canonical
+    });
+    if (!classified.ok) {
+      const targetContext = classified.visibility?.targetContext ?? moduleProjectors.objectContexts(witnesses).get(canonical) ?? null;
+      if (targetContext) {
+        return {
+          ok: false,
+          error: `${label} id targets ${canonical} in context ${targetContext} and is not visible in authoring context ${authoringContext}`
+        };
+      }
+      return { ok: false, error: `${label} id ${classified.reason}` };
+    }
+    if (classified.policyClass && Array.isArray(allowedPolicyClasses) && !allowedPolicyClasses.includes(classified.policyClass)) {
+      return {
+        ok: false,
+        error: `${label} id uses canonical-id compatibility class ${classified.policyClass}, which is not allowed here`
+      };
+    }
     return {
-      ok: false,
-      error: `${label} id targets ${canonical} in context ${targetContext} and is not visible in authoring context ${authoringContext}`
+      ok: true,
+      target: canonical,
+      source: "canonical",
+      canonicalIdPolicyClass: classified.policyClass ?? null,
+      visibility: classified.visibility ?? null
     };
   }
   if (!contextual) return { ok: true, target: null, source: "empty" };

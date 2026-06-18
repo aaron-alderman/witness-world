@@ -4,8 +4,10 @@ import {
   approveProposal,
   rejectProposal,
   moduleProjectors,
-  resolveContextualRef
+  resolveContextualRef,
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
 } from "../../src/modules.js";
+import { proposalTargetGovernanceEntry } from "../../src/runtime-governance.js";
 import { processSpecFor, typeModelProjection, validateProcessInput } from "../../src/type-model.js";
 
 function fail(world, { process, actor, body }) {
@@ -62,7 +64,8 @@ function resolveProposalTargetIdInput(world, body, {
     context: body?.[contextField] ?? null,
     id: body?.[idField] ?? null,
     ref: body?.[refField] ?? null,
-    label
+    label,
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
 }
 
@@ -89,6 +92,14 @@ export function requestBootstrapProposalCreate(world, {
       body: { reason: "proposal id already exists", id: input.id }
     });
     return { ok: false, status: 409, error: "proposal id already exists", witness };
+  }
+  if (!proposalTargetGovernanceEntry(input.targetProcess)) {
+    const witness = fail(world, {
+      process: "proposal.create.failed",
+      actor: actor || backendHost,
+      body: { reason: "proposal target process not supported", targetProcess: input.targetProcess }
+    });
+    return { ok: false, status: 400, error: "proposal target process not supported", witness };
   }
   const bodyParsed = normalizeJsonObject(parseJsonField(body.bodyJson, "bodyJson"), "bodyJson");
   if (!bodyParsed.ok) {

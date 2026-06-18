@@ -292,7 +292,7 @@ text = "Params JSON"
 [[textarea]]
 id = "bootstrap_backend_step_params_input"
 name = "paramsJson"
-placeholder = "{\"handler\":\"todos.readModel\",\"method\":\"GET\",\"into\":\"todoResponse\"}"
+placeholder = "{\"projector\":\"demo.todosReadModel\",\"into\":\"todoResponse\"}"
 
 [[box]]
 id = "bootstrap_backend_step_when_field"

@@ -72,7 +72,7 @@ test("backend authoring submit request builder preserves typed backend create pa
         event: "request",
         op: "emit",
         order: 0,
-        paramsJson: "{\"handler\":\"todos.readModel\"}",
+        paramsJson: "{\"projector\":\"demo.todosReadModel\"}",
         whenJson: "",
         repeatJson: "",
         afterJson: ""
@@ -85,7 +85,7 @@ test("backend authoring submit request builder preserves typed backend create pa
         event: "request",
         op: "emit",
         order: 0,
-        paramsJson: "{\"handler\":\"todos.readModel\"}"
+        paramsJson: "{\"projector\":\"demo.todosReadModel\"}"
       }
     }
   );
@@ -106,7 +106,7 @@ test("backend authoring submit helper posts, resets, and refreshes on success", 
       event: "request",
       op: "emit",
       order: 0,
-      paramsJson: "{\"handler\":\"todos.readModel\"}",
+      paramsJson: "{\"projector\":\"demo.todosReadModel\"}",
       whenJson: "",
       repeatJson: "",
       afterJson: ""
@@ -130,7 +130,7 @@ test("backend authoring submit helper posts, resets, and refreshes on success", 
       event: "request",
       op: "emit",
       order: 0,
-      paramsJson: "{\"handler\":\"todos.readModel\"}"
+      paramsJson: "{\"projector\":\"demo.todosReadModel\"}"
     }
   }]);
   assert.deepEqual(statuses, [{ id: "backend-step-status", text: "Saved." }]);

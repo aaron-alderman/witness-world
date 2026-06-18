@@ -1,5 +1,6 @@
 import { DEMO_HANDLER_SET_PROVIDER } from "./handler-set.js";
 import { DEMO_RUNTIME_BUILTIN_SEEDS } from "./runtime-builtins.js";
+import { demoModuleProjectors } from "./projections.js";
 
 export const bundleId = "bundle-demo";
 
@@ -15,6 +16,11 @@ export const surfaces = Object.freeze([]);
 export const capabilities = Object.freeze(["fs.json.read", "fs.json.write"]);
 export const providers = Object.freeze([
   DEMO_HANDLER_SET_PROVIDER,
+  {
+    kind: "moduleProjectors",
+    id: "demo.projections",
+    projectors: demoModuleProjectors
+  },
   {
     kind: "defaultHostCapabilities",
     hostKind: "backend",

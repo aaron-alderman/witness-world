@@ -90,6 +90,8 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert(model.supportedHandlers.includes("page.home"));
     assert.equal(model.supportedHandlerMetadata["backendProgram.run"].routeKind, "backendProgram");
     assert(model.supportedBackendOps.includes("handler.invoke"));
+    assert(model.supportedBackendOps.includes("project.read"));
+    assert(model.supportedBackendOps.includes("witness.emit"));
     assert(model.supportedFrontendOps.includes("renderCollection"));
     assert.equal(model.authoringPolicy.mode, "mcp_only");
     assert.equal(model.authoringPolicy.llmWritePath, "plugin.authoring");
@@ -710,6 +712,14 @@ test("bootstrap runtime plugin availability and authoring flows are exposed thro
     const model = await fetch(`${server.url}/api/bootstrap-model`).then(response => response.json());
     assert.equal(model.proposalTargetProcesses.includes("runtimePlugin.install"), true);
     assert.equal(model.proposalTargetProcesses.includes("runtimePlugin.remove"), true);
+    assert.equal(
+      model.proposalTargetGovernance.some(row =>
+        row.targetProcess === "runtimePlugin.install"
+        && row.governanceMode === "proposal-fallback"
+        && row.authorityMechanism === "bootstrap-target-authority"
+      ),
+      true
+    );
 
     assert.equal((await post("/api/server-runners", {
       id: "demo_server",
@@ -799,6 +809,14 @@ test("bootstrap MCP authoring and grouped MCP state are exposed through the gene
     assert.equal(model.proposalTargetProcesses.includes("mcpServer.define"), true);
     assert.equal(model.proposalTargetProcesses.includes("mcpTool.install"), true);
     assert.equal(model.proposalTargetProcesses.includes("mcpTool.remove"), true);
+    assert.equal(
+      model.proposalTargetGovernance.some(row =>
+        row.targetProcess === "mcpServer.define"
+        && row.governanceMode === "proposal-fallback"
+        && row.authorityMechanism === "bootstrap-target-authority"
+      ),
+      true
+    );
     assert.equal(model.supportedMcpActingModes.includes("delegated"), true);
     assert.equal(model.supportedMcpActingModes.includes("service"), true);
     assert.equal(model.supportedMcpTools.some(row => row.name === "world.read"), true);
@@ -907,6 +925,104 @@ test("bootstrap MCP authoring and grouped MCP state are exposed through the gene
 
     const afterRemove = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
     assert.equal(afterRemove.mcp.servers.find(row => row.id === "ops_mcp")?.tools.some(row => row.tool === "world.read"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("direct runtime-plugin and MCP authoring routes create proposals when target authority is missing", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await post("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+    await post("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie);
+
+    assert.equal((await post("/api/contexts", { id: "ctx.runtime", label: "Runtime" }, aaron.cookie)).status, 201);
+    assert.equal((await post("/api/server-runners", {
+      id: "shared_runner",
+      context: "ctx.runtime",
+      backendHost: "backendHost",
+      frontendHost: "frontendHost"
+    }, aaron.cookie)).status, 201);
+
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    const proposedPluginInstall = await post("/api/runtime-plugin-installs", {
+      serverRunner: "shared_runner",
+      plugin: "plugin.inspect"
+    }, callan.cookie);
+    assert.equal(proposedPluginInstall.status, 202);
+    const proposedPluginInstallBody = await proposedPluginInstall.json();
+    assert.equal(proposedPluginInstallBody.proposal.targetProcess, "runtimePlugin.install");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedPluginInstallBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    const proposedMcpServer = await post("/api/mcp-servers", {
+      id: "shared_mcp",
+      label: "Shared MCP",
+      serverRunner: "shared_runner",
+      transportsJson: JSON.stringify(["http"])
+    }, callan.cookie);
+    assert.equal(proposedMcpServer.status, 202);
+    const proposedMcpServerBody = await proposedMcpServer.json();
+    assert.equal(proposedMcpServerBody.proposal.targetProcess, "mcpServer.define");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedMcpServerBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    const proposedToolInstall = await post("/api/mcp-tool-installs", {
+      server: "shared_mcp",
+      tool: "world.read",
+      actingMode: "delegated"
+    }, callan.cookie);
+    assert.equal(proposedToolInstall.status, 202);
+    const proposedToolInstallBody = await proposedToolInstall.json();
+    assert.equal(proposedToolInstallBody.proposal.targetProcess, "mcpTool.install");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedToolInstallBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    let state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(response => response.json());
+    assert.equal(state.runtimePluginInstalls.some(row => row.serverRunner === "shared_runner" && row.plugin === "plugin.inspect"), true);
+    assert.equal(state.mcpServers.some(row => row.id === "shared_mcp" && row.serverRunner === "shared_runner"), true);
+    assert.equal(state.mcpToolInstalls.some(row => row.server === "shared_mcp" && row.tool === "world.read"), true);
+
+    const proposedToolRemove = await post("/api/mcp-tool-installs", {
+      server: "shared_mcp",
+      tool: "world.read"
+    }, callan.cookie, "DELETE");
+    assert.equal(proposedToolRemove.status, 202);
+    const proposedToolRemoveBody = await proposedToolRemove.json();
+    assert.equal(proposedToolRemoveBody.proposal.targetProcess, "mcpTool.remove");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedToolRemoveBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    const proposedPluginRemove = await post("/api/runtime-plugin-installs", {
+      serverRunner: "shared_runner",
+      plugin: "plugin.inspect"
+    }, callan.cookie, "DELETE");
+    assert.equal(proposedPluginRemove.status, 202);
+    const proposedPluginRemoveBody = await proposedPluginRemove.json();
+    assert.equal(proposedPluginRemoveBody.proposal.targetProcess, "runtimePlugin.remove");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedPluginRemoveBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(response => response.json());
+    assert.equal(state.runtimePluginInstalls.some(row => row.serverRunner === "shared_runner" && row.plugin === "plugin.inspect"), false);
+    assert.equal(state.mcpToolInstalls.some(row => row.server === "shared_mcp" && row.tool === "world.read"), false);
   } finally {
     await server.close();
   }

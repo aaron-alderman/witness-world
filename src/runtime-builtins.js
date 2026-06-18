@@ -49,7 +49,7 @@ const VALUE_TYPES = [
   { id: "backendProgram.version", label: "Backend Program Version", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "backendProgram.label", label: "Backend Program Label", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "backendProgram.transitionStrategy", label: "Backend Program Transition Strategy", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["compatible", "migrate", "block", "fork"] } },
-  { id: "backendProgram.op", label: "Backend Program Operation", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["request.readJson", "state.assign", "handler.invoke", "response.json", "response.error", "run"] } },
+  { id: "backendProgram.op", label: "Backend Program Operation", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["request.readJson", "state.assign", "handler.invoke", "process.request", "project.read", "witness.emit", "response.json", "response.error", "run"] } },
   { id: "route.id", label: "Route Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "route.path", label: "Route Path", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "route.serves", label: "Route Serves", compatibleWith: ["textual"], editor: { control: "text" } },

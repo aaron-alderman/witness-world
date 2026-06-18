@@ -130,14 +130,17 @@ test("blank world can bootstrap into a working todo app purely through the UI", 
     assert.equal(bootstrapState.backendProgramVersions.filter(row => row.version === "todo.processRun.read.v1").length, 1);
     assert.equal(bootstrapState.backendProgramVersions.some(row => row.version === "todo.processEvents.record.v1" && row.active === true), true);
     assert.equal(bootstrapState.backendProgramVersions.filter(row => row.version === "todo.processEvents.record.v1").length, 1);
+    assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.todos.list.v1" && row.op === "project.read"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.todos.list.v2" && row.op === "run"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.todos.create.v1" && row.op === "request.readJson"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.todos.update.v1" && row.op === "state.assign"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.todos.delete.v1" && row.op === "handler.invoke"), true);
+    assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.privateNotes.list.v1" && row.op === "project.read"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.privateNotes.list.v1" && row.op === "response.json"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.privateNotes.create.v1" && row.op === "request.readJson"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.widgets.create.v1" && row.op === "handler.invoke"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.witnesses.list.v1" && row.op === "handler.invoke"), true);
+    assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.network.simulateError.v1" && row.op === "witness.emit"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.network.simulateError.v1" && row.op === "response.error"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.worldGraph.read.v2" && row.op === "run"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.processView.read.v2" && row.op === "run"), true);
@@ -198,13 +201,13 @@ test("blank world can bootstrap into a working todo app purely through the UI", 
     assert.equal(processView.selection.event, "request");
     assert.equal(Array.isArray(processView.catalog), true);
     assert.equal(Array.isArray(processView.runs), true);
-    assert.equal(processView.run.requests.some(request => request.handler === "todos.readModel"), true);
+    assert.equal(processView.run.requests.some(request => request.projector === "demo.todosReadModel"), true);
 
     const processRun = await fetch(`${server.url}/api/process-runs/${processView.run.runId}?replay=1`, {
       headers: { cookie: sessionCookie }
     }).then(response => response.json());
     assert.equal(processRun.run.runId, processView.run.runId);
-    assert.equal(processRun.run.requests.some(request => request.handler === "todos.readModel"), true);
+    assert.equal(processRun.run.requests.some(request => request.projector === "demo.todosReadModel"), true);
     assert.equal(processRun.replay.cursor, 1);
 
     const recordedTrace = await fetch(`${server.url}/api/process-events`, {

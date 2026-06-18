@@ -978,9 +978,9 @@
     {
       "version": "todo.todos.list.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"todos.readModel\",\"method\":\"GET\",\"path\":\"/api/todos\",\"into\":\"todoResponse\"}"
+      "paramsJson": "{\"projector\":\"demo.todosReadModel\",\"into\":\"todoResponse\"}"
     },
     {
       "version": "todo.todos.list.v1",
@@ -992,9 +992,9 @@
     {
       "version": "todo.todos.list.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"todos.readModel\",\"method\":\"GET\",\"path\":\"/api/todos\",\"into\":\"todoResponse\"}"
+      "paramsJson": "{\"projector\":\"demo.todosReadModel\",\"into\":\"todoResponse\"}"
     },
     {
       "version": "todo.todos.list.v2",
@@ -1263,9 +1263,9 @@
     {
       "version": "todo.privateNotes.list.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"privateNotes.readModel\",\"method\":\"GET\",\"path\":\"/api/private-notes\",\"into\":\"privateNotesResponse\"}"
+      "paramsJson": "{\"projector\":\"demo.privateNotesReadModel\",\"into\":\"privateNotesResponse\"}"
     },
     {
       "version": "todo.privateNotes.list.v1",
@@ -1277,9 +1277,9 @@
     {
       "version": "todo.privateNotes.list.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"privateNotes.readModel\",\"method\":\"GET\",\"path\":\"/api/private-notes\",\"into\":\"privateNotesResponse\"}"
+      "paramsJson": "{\"projector\":\"demo.privateNotesReadModel\",\"into\":\"privateNotesResponse\"}"
     },
     {
       "version": "todo.privateNotes.list.v2",
@@ -1523,23 +1523,23 @@
     {
       "version": "todo.network.simulateError.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "witness.emit",
       "order": 0,
-      "paramsJson": "{\"handler\":\"network.simulateModel\",\"method\":\"GET\",\"path\":\"/api/simulate-network-error\",\"into\":\"networkFailure\",\"allowFailure\":true}"
+      "paramsJson": "{\"process\":\"network.simulated.failed\",\"claims\":[{\"op\":\"relation\",\"from\":\"${state.actor}\",\"rel\":\"attempted\",\"to\":\"simulatedNetworkRequest\"}],\"body\":{\"reason\":\"simulated network error\",\"status\":503}}"
     },
     {
       "version": "todo.network.simulateError.v1",
       "event": "request",
       "op": "response.error",
       "order": 1,
-      "paramsJson": "{\"statusFrom\":\"networkFailure.status\",\"messageFrom\":\"networkFailure.error\",\"bodyFrom\":\"networkFailure.payload\"}"
+      "paramsJson": "{\"status\":503,\"message\":\"simulated network error\"}"
     },
     {
       "version": "todo.network.simulateError.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "witness.emit",
       "order": 0,
-      "paramsJson": "{\"handler\":\"network.simulateModel\",\"method\":\"GET\",\"path\":\"/api/simulate-network-error\",\"into\":\"networkFailure\",\"allowFailure\":true}"
+      "paramsJson": "{\"process\":\"network.simulated.failed\",\"claims\":[{\"op\":\"relation\",\"from\":\"${state.actor}\",\"rel\":\"attempted\",\"to\":\"simulatedNetworkRequest\"}],\"body\":{\"reason\":\"simulated network error\",\"status\":503}}"
     },
     {
       "version": "todo.network.simulateError.v2",
@@ -1560,7 +1560,7 @@
       "event": "respond",
       "op": "response.error",
       "order": 0,
-      "paramsJson": "{\"statusFrom\":\"networkFailure.status\",\"messageFrom\":\"networkFailure.error\",\"bodyFrom\":\"networkFailure.payload\"}"
+      "paramsJson": "{\"status\":503,\"message\":\"simulated network error\"}"
     },
     {
       "version": "todo.worldGraph.read.v1",

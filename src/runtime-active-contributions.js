@@ -38,6 +38,7 @@ export function collectActiveRuntimeContributions({
   const providerRuntimeFactories = {};
   const jobHandlerFactories = {};
   const handlerSetProviders = {};
+  const backendProcessRequestHandlers = {};
   const runtimeBuiltinSeeds = [];
   const capabilityDefinitions = [];
   const staticAssetProviders = [];
@@ -92,6 +93,18 @@ export function collectActiveRuntimeContributions({
           pluginId
         };
       }
+      continue;
+    }
+    if (provider.kind === "backendProcessRequestHandlers") {
+      const handlers = provider.handlers && typeof provider.handlers === "object" && !Array.isArray(provider.handlers)
+        ? provider.handlers
+        : {};
+      for (const [name, handler] of Object.entries(handlers)) {
+        if (typeof handler !== "function") {
+          throw new Error(`backend process requester provider ${providerId} must expose function handler ${name}`);
+        }
+      }
+      mergeNamed(backendProcessRequestHandlers, handlers, providerId);
       continue;
     }
     if (provider.kind === "runtimeBuiltinSeeds") {
@@ -182,6 +195,7 @@ export function collectActiveRuntimeContributions({
     providerRuntimeFactories: Object.freeze(providerRuntimeFactories),
     jobHandlerFactories: Object.freeze(jobHandlerFactories),
     handlerSetProviders: Object.freeze(handlerSetProviders),
+    backendProcessRequestHandlers: Object.freeze(backendProcessRequestHandlers),
     runtimeBuiltinSeeds: Object.freeze(runtimeBuiltinSeeds),
     capabilityDefinitions: Object.freeze(capabilityDefinitions),
     moduleProjectors: Object.freeze(moduleProjectors),

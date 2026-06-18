@@ -3,7 +3,8 @@ import {
   createMcpServer,
   installMcpTool,
   removeMcpTool,
-  resolveContextualRef
+  resolveContextualRef,
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
 } from "../../src/modules.js";
 
 function req(values, key) {
@@ -65,13 +66,15 @@ function resolvePreparedDocRef(world, values, {
   contextField = "context",
   idField,
   refField,
-  label
+  label,
+  allowedCanonicalIdPolicyClasses = null
 }) {
   return resolveContextualRef(world.allWitnesses(), {
     context: values[contextField] ?? null,
     id: values[idField] ?? null,
     ref: values[refField] ?? null,
-    label
+    label,
+    allowedCanonicalIdPolicyClasses
   });
 }
 
@@ -80,7 +83,8 @@ function applyMcpServer(world, doc) {
   const serverRunner = resolvePreparedDocRef(world, values, {
     idField: "serverRunner",
     refField: "serverRunnerRef",
-    label: "server runner"
+    label: "server runner",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!serverRunner.ok) throw new Error(serverRunner.error);
   if (!serverRunner.target) return null;
@@ -103,7 +107,8 @@ function applyMcpToolInstall(world, doc) {
   const server = resolvePreparedDocRef(world, values, {
     idField: "server",
     refField: "serverRef",
-    label: "mcp server"
+    label: "mcp server",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!server.ok) throw new Error(server.error);
   if (!server.target) throw new Error("missing required field: server");
@@ -124,7 +129,8 @@ function applyMcpToolRemove(world, doc) {
   const server = resolvePreparedDocRef(world, values, {
     idField: "server",
     refField: "serverRef",
-    label: "mcp server"
+    label: "mcp server",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!server.ok) throw new Error(server.error);
   if (!server.target) throw new Error("missing required field: server");

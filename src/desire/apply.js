@@ -20,6 +20,7 @@ import {
   validateContextBinding,
   validateContextExport,
   validateContextImport,
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
   resolveContextualRef,
   removeCapability,
   createCompiler,
@@ -1118,7 +1119,8 @@ function applyCoreRuntimeDeclaration(world, doc) {
         const target = resolvePreparedDocRef(world, values, {
           idField: "targetId",
           refField: "targetIdRef",
-          label: "proposal target"
+          label: "proposal target",
+          allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
         });
         if (!target.ok) throw new Error(target.error);
         return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
@@ -1216,7 +1218,8 @@ function applyCoreRuntimeDeclaration(world, doc) {
         const serverRunner = resolvePreparedDocRef(world, values, {
           idField: "serverRunner",
           refField: "serverRunnerRef",
-          label: "server runner"
+          label: "server runner",
+          allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
         });
         if (!serverRunner.ok) throw new Error(serverRunner.error);
         if (!serverRunner.target) throw new Error("server runner is required");
@@ -1233,7 +1236,8 @@ function applyCoreRuntimeDeclaration(world, doc) {
         const serverRunner = resolvePreparedDocRef(world, values, {
           idField: "serverRunner",
           refField: "serverRunnerRef",
-          label: "server runner"
+          label: "server runner",
+          allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
         });
         if (!serverRunner.ok) throw new Error(serverRunner.error);
         if (!serverRunner.target) throw new Error("server runner is required");
@@ -1280,7 +1284,8 @@ function applyCoreRuntimeDeclaration(world, doc) {
         const serves = resolvePreparedDocRef(world, values, {
           idField: "serves",
           refField: "servesRef",
-          label: "route target"
+          label: "route target",
+          allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
         });
         if (!serves.ok) throw new Error(serves.error);
         if (!serves.target) return null;
@@ -1346,14 +1351,16 @@ function applyCoreRuntimeDeclaration(world, doc) {
         const serverRunner = resolvePreparedDocRef(world, values, {
           idField: "serverRunner",
           refField: "serverRunnerRef",
-          label: "server runner"
+          label: "server runner",
+          allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
         });
         if (!serverRunner.ok) throw new Error(serverRunner.error);
         if (!serverRunner.target) return null;
         const route = resolvePreparedDocRef(world, values, {
           idField: "route",
           refField: "routeRef",
-          label: "route"
+          label: "route",
+          allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
         });
         if (!route.ok) throw new Error(route.error);
         if (!route.target) return null;
@@ -1750,7 +1757,8 @@ function applyNativeWidgetLikeDoc(world, doc, values, kind) {
   const parent = resolvePreparedDocRef(world, values, {
     idField: "parent",
     refField: "parentRef",
-    label: "parent widget"
+    label: "parent widget",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!parent.ok) throw new Error(parent.error);
   const actor = req(values, "actor");
@@ -1835,14 +1843,16 @@ function routeParamsResolved(world, values) {
   const rootWidget = resolvePreparedDocRef(world, values, {
     idField: "rootWidget",
     refField: "rootWidgetRef",
-    label: "root widget"
+    label: "root widget",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!rootWidget.ok) return { ok: false, error: rootWidget.error };
   if (rootWidget.target) params.rootWidget = rootWidget.target;
   const rootSurface = resolvePreparedDocRef(world, values, {
     idField: "rootSurface",
     refField: "rootSurfaceRef",
-    label: "root surface"
+    label: "root surface",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!rootSurface.ok) return { ok: false, error: rootSurface.error };
   if (rootSurface.target) params.rootSurface = rootSurface.target;
@@ -1851,7 +1861,8 @@ function routeParamsResolved(world, values) {
   const backendProgramSoul = resolvePreparedDocRef(world, values, {
     idField: "backendProgramSoul",
     refField: "backendProgramSoulRef",
-    label: "backend program soul"
+    label: "backend program soul",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!backendProgramSoul.ok) return { ok: false, error: backendProgramSoul.error };
   if (backendProgramSoul.target) params.backendProgramSoul = backendProgramSoul.target;
@@ -1884,13 +1895,15 @@ function resolvePreparedDocRef(world, values, {
   contextField = "context",
   idField,
   refField,
-  label
+  label,
+  allowedCanonicalIdPolicyClasses = null
 }) {
   return resolveContextualRef(world.allWitnesses(), {
     context: values[contextField] ?? null,
     id: values[idField] ?? null,
     ref: values[refField] ?? null,
-    label
+    label,
+    allowedCanonicalIdPolicyClasses
   });
 }
 

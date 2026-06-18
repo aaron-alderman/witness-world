@@ -18,6 +18,7 @@ test("demo plugin owns demo handler-set provider", async () => {
   assert.equal(manifest.runtime.entry, "./runtime.js");
   assert.equal(runtimeSource.includes('bundleId = "bundle-demo"'), true);
   assert.equal(providers.some(provider => provider.kind === "handlerSet" && provider.id === "demo"), true);
+  assert.equal(providers.some(provider => provider.kind === "moduleProjectors" && provider.id === "demo.projections"), true);
   assert.equal(providers.some(provider => provider.kind === "runtimeBuiltinSeeds" && provider.processSpecs?.some(spec => spec.id === "demo_server_runner_storage_spec")), true);
   assert.equal(runtimeSource.includes("handlerSetProvider = DEMO_HANDLER_SET_PROVIDER"), true);
   assert.equal(handlerSetSource.includes('kind: "handlerSet"'), true);
@@ -38,6 +39,25 @@ test("demo plugin owns todo, private-note, and public witness helpers", () => {
   assert.equal(publicWitnessesFor(world.allWitnesses(), "callan").some(w => w.body?.note?.text === "secret"), false);
   assert.equal(privateNotesPrivacyState(null).mode, "signin");
   assert.equal(privateNotesPrivacyState("aaron").mode, "private");
+});
+
+test("demo plugin exposes projector-backed read models through runtime providers", () => {
+  const world = createWorld();
+  world.emit({ process: "todo.create", actor: "aaron", claims: [], body: { todo: { id: "t1", title: "One", done: false } } });
+  world.emit({ process: "privateNote.create", actor: "aaron", claims: [], body: { note: { id: "n1", text: "secret" } } });
+
+  const projectorProvider = providers.find(provider => provider.kind === "moduleProjectors" && provider.id === "demo.projections");
+  assert.ok(projectorProvider);
+  assert.equal(typeof projectorProvider.projectors["demo.todosReadModel"], "function");
+  assert.equal(typeof projectorProvider.projectors["demo.privateNotesReadModel"], "function");
+
+  const todoModel = projectorProvider.projectors["demo.todosReadModel"](world.allWitnesses(), { requestActor: "aaron" });
+  assert.deepEqual(todoModel.todos.map(todo => todo.title), ["One"]);
+  assert.equal(todoModel.authority.mode, "mutate");
+
+  const privateNotesModel = projectorProvider.projectors["demo.privateNotesReadModel"](world.allWitnesses(), { requestActor: "aaron" });
+  assert.deepEqual(privateNotesModel.notes.map(note => note.text), ["secret"]);
+  assert.equal(privateNotesModel.privacy.mode, "private");
 });
 
 test("demo plugin owns todo mutation runtime and proposal target execution", async () => {

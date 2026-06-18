@@ -15,6 +15,7 @@ import {
   validateContextExport,
   validateContextImport,
   resolveContextualRef,
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
   grantStewardship,
   revokeStewardship,
   defineRoute,
@@ -121,13 +122,15 @@ function resolveBodyRef(world, body, {
   contextField = "context",
   idField,
   refField,
-  label
+  label,
+  allowedCanonicalIdPolicyClasses = null
 }) {
   return resolveContextualRef(world.allWitnesses(), {
     context: body?.[contextField] ?? null,
     id: body?.[idField] ?? null,
     ref: body?.[refField] ?? null,
-    label
+    label,
+    allowedCanonicalIdPolicyClasses
   });
 }
 
@@ -1381,7 +1384,8 @@ export function requestBootstrapRouteDefine(world, {
     contextField: "context",
     idField: "backendProgramSoul",
     refField: "backendProgramSoulRef",
-    label: "backend program soul"
+    label: "backend program soul",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!backendProgramResolved.ok) {
     const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: backendProgramResolved.error } });
@@ -1391,7 +1395,8 @@ export function requestBootstrapRouteDefine(world, {
     contextField: "context",
     idField: "serves",
     refField: "servesRef",
-    label: "route serves"
+    label: "route serves",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!servesResolved.ok) {
     const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: servesResolved.error } });
@@ -1402,7 +1407,8 @@ export function requestBootstrapRouteDefine(world, {
     contextField: "context",
     idField: "rootWidget",
     refField: "rootWidgetRef",
-    label: "route root widget"
+    label: "route root widget",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!rootWidgetResolved.ok) {
     const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: rootWidgetResolved.error } });
@@ -1413,7 +1419,8 @@ export function requestBootstrapRouteDefine(world, {
     contextField: "context",
     idField: "rootSurface",
     refField: "rootSurfaceRef",
-    label: "route root surface"
+    label: "route root surface",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!rootSurfaceResolved.ok) {
     const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: rootSurfaceResolved.error } });
@@ -1573,7 +1580,8 @@ export function requestBootstrapServeDefine(world, {
     contextField: "context",
     idField: "serverRunner",
     refField: "serverRunnerRef",
-    label: "server runner"
+    label: "server runner",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!serverRunnerResolved.ok) {
     const witness = fail(world, { process: "serve.define.failed", actor: actor || backendHost, body: { reason: serverRunnerResolved.error } });
@@ -1583,7 +1591,8 @@ export function requestBootstrapServeDefine(world, {
     contextField: "context",
     idField: "route",
     refField: "routeRef",
-    label: "route"
+    label: "route",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!routeResolved.ok) {
     const witness = fail(world, { process: "serve.define.failed", actor: actor || backendHost, body: { reason: routeResolved.error } });
@@ -1643,7 +1652,8 @@ export function requestWidgetDefine(world, {
     contextField: "context",
     idField: "parent",
     refField: "parentRef",
-    label: "parent widget"
+    label: "parent widget",
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
   if (!resolvedParent.ok) {
     const witness = fail(world, {

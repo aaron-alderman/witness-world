@@ -2,7 +2,8 @@ import {
   requestBootstrapMcpServerDefine,
   requestBootstrapMcpToolInstall,
   requestBootstrapMcpToolRemove,
-  resolveMcpServerInput
+  resolveMcpServerInput,
+  resolveMcpServerRunnerInput
 } from "./mcp-processes.js";
 
 export function executeMcpAuthoringProposalTarget({
@@ -17,9 +18,14 @@ export function executeMcpAuthoringProposalTarget({
 }) {
   switch (proposal.targetProcess) {
     case "mcpServer.define": {
-      const gate = body.serverRunner
-        ? ensureTargetAuthority(actor, body.serverRunner)
-        : ensureContextAuthority(actor, body.context ?? null);
+      const resolvedServerRunner = resolveMcpServerRunnerInput(world, body, {
+        contextField: "context",
+        idField: "serverRunner",
+        refField: "serverRunnerRef",
+        label: "server runner"
+      });
+      if (!resolvedServerRunner.ok) return { ok: false, status: 400, error: resolvedServerRunner.error };
+      const gate = ensureTargetAuthority(actor, resolvedServerRunner.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
       const result = requestBootstrapMcpServerDefine(world, { actor, backendHost, body });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;

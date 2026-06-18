@@ -442,6 +442,7 @@ Current molecules:
 - explicit local alias rows through `contextBinding`
 - explicit cross-context export/import rows through `contextExport` and `contextImport`
 - explanatory `contextScopes` read models showing local vs imported visibility
+- grouped `contextNameResolutions` and `contextNameConflicts` read models so visible names and ambiguous collisions are inspectable
 - shared contextual resolution and first-slice scope validation on the bootstrap/DSL authoring paths while preserving canonical stored ids
   Covered first-slice refs are `parentRef`, `rootWidgetRef`, `rootSurfaceRef`, `servesRef`, `backendProgramSoulRef`, `serverRunnerRef`, `serverRef`, `routeRef`, `backendHostRef`, `frontendHostRef`, `targetRef`, and `targetIdRef`.
 - covered bootstrap/DSL authoring surfaces now reject direct canonical references to foreign scoped targets that are not explicitly visible in the authoring context
@@ -467,11 +468,12 @@ Honest caveats:
 - Imports are named-import only and visibility is intentionally explicit rather than automatic.
 - The current slice only lowers contextual refs for a bounded set of authoring fields.
 - Canonical-id authoring is still a compatibility path on those covered surfaces, but it no longer bypasses hidden foreign scoped targets.
+  Validation now classifies those canonical-id paths explicitly as `same-context convenience`, `imported-target reference`, or `legacy-only path`.
   The parallel canonical id fields remain valid for same-context targets, unscoped legacy targets, and foreign targets that are already explicitly visible through import/binding until the platform decides whether to narrow compatibility further.
 - The low-level JS helper functions still expose permissive witness emitters.
   The honest guardrails for duplicate names, bad exports, and bad imports live on the bootstrap and DSL authoring paths rather than every internal helper call.
 - Some read surfaces still lag behind the write semantics.
-  Widget parenting can now be authored through `parentRef`, but the bootstrap widget read model is still mostly a flat list rather than a full attachment/placement explanation surface.
+  Widget parenting can now be authored through `parentRef`, and contextual naming now has grouped resolution/conflict rows, but the bootstrap widget read model is still mostly a flat list rather than a full attachment/placement explanation surface.
 - Most app-specific runtime actions still primarily use canonical ids.
   Capability install/remove targets, route root-surface and backend-program attachments, runtime plugin attachment targets, MCP tool attachment targets, stewardship targets, and proposal target ids now also lower through the shared contextual visibility rules when authored with `targetRef`, `rootSurfaceRef`, `backendProgramSoulRef`, `serverRunnerRef`, `serverRef`, and `targetIdRef`.
 
@@ -804,7 +806,7 @@ Current molecules:
 - metadata-first local plugin package discovery and validation through `plugins/<plugin-id>/plugin.json`
 - runtime and bootstrap read models that expose package validity, compatibility, installability-in-principle, and declared capability sources
 - startup-local plugin activation through `PluginManifest.activatesBundles`, repeatable CLI `--runtime-plugin <id>`, and `RUNTIME_PLUGINS=plugin.a,plugin.b`
-- authored `serverRunner` plugin installs through witnessed `runtimePlugin.install` / `runtimePlugin.remove`, with proposal parity and additive operator overlay
+- authored `serverRunner` plugin installs through witnessed `runtimePlugin.install` / `runtimePlugin.remove`, with direct-route proposal fallback, proposal parity, and additive operator overlay
 - bootstrap runtime-plugin install/remove/proposal forms plus runner-scoped availability rows that show authored installability, missing dependencies, and metadata-only packages without pretending CLI/env overlays are durable world state
 - runtime-owned review reads plus bootstrap plugin detail panels that preview authored runner composition, no-op installs, reverse dependencies, and declared-vs-resolved plugin contributions before mutation
 - runtime composition reads that expose requested, eligible, active, rejected, resolved-bundle, and resolved-runtime-contribution state for local plugin packages
@@ -1042,7 +1044,7 @@ Current molecules:
 
 - browser-hosted operation through `serverRunner`
 - first local MCP server model through authored `mcpServer`
-- per-server tool exposure, acting mode, and local scope through authored `mcpToolInstall`
+- per-server tool exposure, acting mode, and local scope through authored `mcpToolInstall`, with direct `mcpServer.define` / `mcpTool.install` / `mcpTool.remove` routes now proposing instead of dead-ending when target authority is missing
 - stdio and local-first HTTP MCP transports over the real witnessed host/tool surface
 - delegated versus service identity execution instead of one implicit global automation identity
 - a real `desktop` startup mode over the same runtime/profile/operator seams

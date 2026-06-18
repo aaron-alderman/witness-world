@@ -25,7 +25,7 @@ Current honesty notes:
 - tutorial recovery commands derive from persisted tutorial state rather than a second onboarding-only model
 - stub-provider paths remain real runtime behavior with deterministic or local transports
 - legacy capability-string lowering and covered canonical-id authoring bypasses remain compatibility paths rather than final composition rules
-- widget-version routes and Eden version routes now use shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, the Eden versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, and the Eden capability shelf now has a first `capability.install` proposal fallback, but remaining app-specific and other operating-surface mutation actions still are not all under one shared authority/proposal derivation path
+- widget-version routes and Eden version routes now use shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, the Eden versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, the Eden capability shelf now has a first `capability.install` proposal fallback, and direct runtime-plugin / MCP authoring routes now also create real proposals on `403` instead of dead-ending, but remaining app-specific and other operating-surface mutation actions still are not all under one shared authority/proposal derivation path
 
 Current honesty ledger:
 
@@ -85,10 +85,15 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
 - Covered authoring surfaces may also accept explicit contextual ref fields in parallel with canonical ids.
   Current first-slice ref fields are `parentRef`, `rootWidgetRef`, `rootSurfaceRef`, `servesRef`, `backendProgramSoulRef`, `serverRunnerRef`, `serverRef`, `routeRef`, `backendHostRef`, `frontendHostRef`, `targetRef`, and `targetIdRef`.
   These resolve against authored `contextBinding` / `contextImport` visibility before witnesses are stored, but the stored witness truth remains canonical ids.
+  Where covered surfaces still accept direct canonical ids beside `*Ref` fields, validation now classifies that usage explicitly as same-context convenience, imported-target reference, or legacy-only path instead of treating it as one undifferentiated bypass.
 - Capability-specific sections now include:
   - `[[capability]]`
   - `[[capabilityInstall]]`
   - `[[capabilityRemove]]`
+- Context explanation reads now include:
+  - visible scope rows through `contextScopes`
+  - grouped name explanations through `contextNameResolutions`
+  - explicit ambiguity rows through `contextNameConflicts`
 - MCP-specific sections now include:
   - `[[mcpServer]]`
   - `[[mcpToolInstall]]`
@@ -192,13 +197,17 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
 - `/api/widget-versions/:soul/activate`, `/api/widget-versions/:soul/rollback`, and the Eden version mutation routes now also respect the governing context of the versioned widget soul rather than acting like sign-in-only version toggles.
 - `/api/context-bindings`, `/api/context-exports`, and `/api/context-imports` project explicit local naming and import/export rows while preserving canonical ids as stored witness truth.
 - Bootstrap model/state now also expose explanatory composition metadata such as `contextBindableTargets`, `contextScopes`, and source-context export choices so the product surface can explain what is visible in a context and why.
+- Bootstrap model now also exposes proposal-target governance metadata:
+  - `proposalTargetProcesses` is now derived from the shared proposal-target governance catalog rather than a bootstrap-local string list
+  - `proposalTargetGovernance` explains the governance mode and authority mechanism for each bootstrap-selectable proposal target
+  - `POST /api/proposals` now rejects unsupported `targetProcess` values at proposal-creation time instead of letting uncatalogued targets drift into later approval/executor failures
 - Bootstrap model/state now also expose MCP authoring and transport metadata:
   - `supportedMcpTransports`
   - `supportedMcpActingModes`
   - `supportedMcpTools`
   - projected `mcpServers`
   - projected `mcpToolInstalls`
-- `/api/mcp-servers` and `/api/mcp-tool-installs` now use witnessed `mcpServer.define`, `mcpTool.install`, and `mcpTool.remove` process specs for typed validation and bootstrap/proposal execution.
+- `/api/mcp-servers` and `/api/mcp-tool-installs` now use witnessed `mcpServer.define`, `mcpTool.install`, and `mcpTool.remove` process specs for typed validation and bootstrap/proposal execution, including direct-route proposal fallback when a signed-in actor lacks target authority.
 - `/mcp/:id` is the first local-first MCP transport surface:
   - it currently supports `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`
   - `GET /mcp/:id` is intentionally a `405` in the current slice because streaming GET/SSE transport is not yet implemented

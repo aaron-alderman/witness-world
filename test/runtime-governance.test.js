@@ -6,6 +6,9 @@ import { pathToFileURL } from "node:url";
 import {
   buildGovernanceRouteInventory,
   isPotentiallyMutatingMethod,
+  proposalTargetGovernanceCatalog,
+  proposalTargetGovernanceEntry,
+  proposalTargetProcessIds,
   runtimeGovernanceCoverageModes,
   runtimeGovernanceEntry
 } from "../src/runtime-governance.js";
@@ -77,9 +80,29 @@ test("governance inventory preserves proposal, operator, mixed, and session clas
 
   assert.equal(byHandler.get("asset.attach")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("asset.attach")?.sharedAuthorityPath, true);
+  assert.equal(byHandler.get("serverRunner.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("runtimePlugin.install")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("mcpServer.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("mcpTool.install")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("platform.changeSet.apply")?.governanceMode, "operator-only");
   assert.equal(byHandler.get("platform.changeSet.apply")?.sharedAuthorityPath, false);
   assert.equal(byHandler.get("mcp.http")?.operationSemantics, "mixed");
   assert.equal(byHandler.get("session.open")?.authorityMechanism, "credential-session");
   assert.equal(byHandler.get("webhook.inbound.receive")?.authorityMechanism, "external-signature");
+});
+
+test("proposal target governance catalog covers every supported executor target and drives bootstrap-selectable targets", async () => {
+  const executorSource = await fs.readFile(path.join(process.cwd(), "plugins", "proposals", "proposal-executor.js"), "utf8");
+  const executorTargets = [...new Set([...executorSource.matchAll(/case "([^"]+)":/g)].map(match => match[1]))];
+  const missing = executorTargets.filter(targetProcess => !proposalTargetGovernanceEntry(targetProcess));
+
+  assert.deepEqual(missing, []);
+
+  const bootstrapCatalog = proposalTargetGovernanceCatalog({ bootstrapSelectableOnly: true });
+  assert.deepEqual(proposalTargetProcessIds({ bootstrapSelectableOnly: true }), Object.keys(bootstrapCatalog));
+  assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("runtimePlugin.install"), true);
+  assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("mcpServer.define"), true);
+  assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("changeSet.apply"), false);
+  assert.equal(proposalTargetGovernanceEntry("changeSet.apply")?.governanceMode, "operator-only");
+  assert.equal(proposalTargetGovernanceEntry("widget.define")?.governanceMode, "proposal-fallback");
 });
