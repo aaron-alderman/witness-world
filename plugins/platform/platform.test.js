@@ -993,6 +993,54 @@ test("platform docs view surfaces stale and fresh governed docs from branch chan
   assert.equal(freshModel.gaps.some(gap => gap.kind === "stale-doc" && gap.target === "doc:docs/CAPABILITIES.md"), false);
 });
 
+test("stale governed docs contribute doc-freshness selection reasons to affected gates", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.docs.reason", title: "Docs Reason", status: "open", changeSetIds: ["changeset.docs.reason"] }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeset.docs.reason", branchId: "branch.docs.reason", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [{ id: "changeSetEdit:changeset.docs.reason:platform", changeSetId: "changeset.docs.reason", path: "plugins/platform/platform-console.rvm" }];
+      }
+      return [];
+    }
+  });
+
+  const branchSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.docs.reason"
+    && row.gateId === "gate:plugins/platform/platform.test.js"
+  );
+  const changeSetSelection = model.affectedTestGates.find(row =>
+    row.changeSetId === "changeset.docs.reason"
+    && row.gateId === "gate:plugins/platform/platform.test.js"
+  );
+
+  assert.ok(branchSelection);
+  assert.equal(branchSelection.matchedTargets.includes("doc:docs/CAPABILITIES.md"), true);
+  assert.equal(branchSelection.selectionReasons.some(reason =>
+    reason.kind === "doc-freshness-dependency"
+    && reason.targets.includes("doc:docs/CAPABILITIES.md")
+  ), true);
+
+  assert.ok(changeSetSelection);
+  assert.equal(changeSetSelection.matchedTargets.includes("doc:docs/CAPABILITIES.md"), true);
+  assert.equal(changeSetSelection.selectionReasons.some(reason =>
+    reason.kind === "doc-freshness-dependency"
+    && reason.targets.includes("doc:docs/CAPABILITIES.md")
+  ), true);
+});
+
 test("platform model includes projected conflict nodes from validation errors", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
