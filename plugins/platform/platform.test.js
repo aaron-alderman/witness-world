@@ -4598,6 +4598,10 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Defect Cluster Detail/);
   assert.match(html, />Clusters</);
   assert.match(html, /Cluster edges/);
+  assert.match(html, /Telemetry/);
+  assert.match(html, /Telemetry Detail/);
+  assert.match(html, />Metrics</);
+  assert.match(html, /Telemetry edges/);
   assert.match(html, /Governed Docs/);
   assert.match(html, /Doc Structure/);
   assert.match(html, /Doc Tasks/);

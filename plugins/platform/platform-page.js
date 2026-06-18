@@ -78,6 +78,10 @@ export function renderPlatformPage(model) {
   const defectClusterEdges = model.edges.filter(edge =>
     defectClusters.some(cluster => cluster.id === edge.from || cluster.id === edge.to)
   ).slice(0, 120);
+  const telemetryMetrics = model.nodes.filter(node => node.kind === "telemetryMetric").slice(0, 80);
+  const telemetryEdges = model.edges.filter(edge =>
+    telemetryMetrics.some(metric => metric.id === edge.from || metric.id === edge.to)
+  ).slice(0, 120);
   const boundaries = model.nodes.filter(node => node.kind === "boundary").slice(0, 80);
   const boundaryEdges = model.edges.filter(edge =>
     edge.rel === "usesBoundary"
@@ -796,6 +800,37 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Defect Cluster Detail</h2>
         <pre>${esc(JSON.stringify({ clusters: defectClusters, edges: defectClusterEdges }, null, 2))}</pre>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Telemetry</h2>
+        <div class="platform-branch-summary">
+          <div class="card">
+            <h3>Metrics</h3>
+            <div>${esc(telemetryMetrics.length)}</div>
+            <div class="muted">Modeled telemetry metrics</div>
+          </div>
+          <div class="card">
+            <h3>Telemetry edges</h3>
+            <div>${esc(telemetryEdges.length)}</div>
+            <div class="muted">Verification and dependency relationships touching telemetry metrics</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Status</th><th>Metric</th><th>Lifecycle</th><th>Source</th></tr></thead>
+          <tbody>${tableRows(telemetryMetrics, [
+            row => row.status,
+            row => row.title,
+            row => row.lifecycle.join(", "),
+            row => row.source || ""
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Telemetry Detail</h2>
+        <pre>${esc(JSON.stringify({ metrics: telemetryMetrics, edges: telemetryEdges }, null, 2))}</pre>
       </div>
     </section>
 

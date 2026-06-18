@@ -1169,15 +1169,17 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add Test Runs view.
 - [X] Add Dependency Graph view.
 - [X] Add Coverage Matrix view.
-- [ ] Add Defects view.
+- [B] Add Defects view.
 - [X] Add Defect Clusters view.
-- [ ] Add Telemetry view.
+- [X] Add Telemetry view.
 - [ ] Add Sessions view.
 - [X] Add Roadmap/Epics view.
 - [X] Add Boundaries view.
 - [X] Add Meta-System view.
-- [L] `/platform` now renders section-based human views for branches, change sets, candidate snapshots, runtime revisions, governed docs, test gates, test runs, roadmap tasks, epic detail, boundary nodes/relationships, coverage edges, dependency-graph edges, defect clusters, and meta-system gaps on the main console page. Standalone defect, telemetry, and session views remain later work.
+- [L] `/platform` now renders section-based human views for branches, change sets, candidate snapshots, runtime revisions, governed docs, test gates, test runs, roadmap tasks, epic detail, boundary nodes/relationships, coverage edges, dependency-graph edges, defect clusters, telemetry metrics, and meta-system gaps on the main console page. Standalone defect and session views remain later work.
 - [L] The current defect-cluster view is backed by existing `defectCluster` graph nodes and their relationships to branches, features, epics, and historically relevant gates. It does not claim the later full `defect` / `defectObservation` / `rootCauseHypothesis` model is complete.
+- [L] The current telemetry view is backed by existing `telemetryMetric` graph nodes plus linked `verifies` / `verifiedBy` relationships and branch/change-set telemetry-impact hints. It does not claim the later live `telemetrySample` / `telemetryWindow` / detector model from Phase 8 is complete.
+- [L] `Add Defects view.` is currently blocked on the later standalone defect model from Phase 7.3. The platform can project defect clusters today, but it does not yet expose first-class `defect`, `defectObservation`, `rootCauseHypothesis`, or fix-proposal rows that would make a dedicated defects view truthful.
 - [L] The current dependency-graph view is backed by the existing platform-model `nodes` and `edges` projection rather than by the later dedicated `dependencyGraph` / `dependencyEdge` module kinds from Phase 6.1. It makes the already-modeled relationships inspectable in `/platform` without claiming the later incremental graph subsystem is complete.
 
 ### 12.2 RVM/WCSS Dogfooding
