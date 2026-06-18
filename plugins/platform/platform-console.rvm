@@ -190,17 +190,14 @@ view PlatformBridgesPage {
   class platform-model
   prop pageId = "bridges"
   prop modelView = "bridges"
+  prop summaryCards = "Bridges=compatibilityBridges@count"
   prop supplementalPageSource = "bridges"
-  prop columns = "Bridge|Class|Owner|Status|Surfaces"
-  prop rowFields = "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value"
-  prop emptyState = "No compatibility bridges."
-  prop pageSize = "20"
-  prop detailCardTitle = "Bridge Detail"
-  prop primaryFields = "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value|Sample Targets=sampleTargets@value"
-  prop longTailCardTitle = "Properties"
-  prop longTailExcludedFields = "title|scope|summary"
   prop title = "Bridges"
   prop summary = "Compatibility bridge inventory for remaining convenience seams."
+  children {
+    PlatformBridgesList
+    PlatformBridgesDetail
+  }
 }
 
 view PlatformGovernancePage {
@@ -208,17 +205,14 @@ view PlatformGovernancePage {
   class platform-model
   prop pageId = "governance"
   prop modelView = "governance"
+  prop summaryCards = "Routes=governanceRoutes@count|Proposal Targets=proposalTargetGovernance@count"
   prop supplementalPageSource = "governance"
-  prop columns = "Kind|Object|Mode|Authority|Scope"
-  prop rowFields = "Kind=pageKind|Object=objectLink@concept|Mode=governanceMode|Authority=authorityMechanism|Scope=scopeValue@value"
-  prop emptyState = "No governance rows."
-  prop pageSize = "20"
-  prop detailCardTitle = "Governance Object Detail"
-  prop primaryFields = "Object=objectLink@concept|Kind=pageKind|Mode=governanceMode|Authority=authorityMechanism|Workflow=workflowRole|Operation=operationSemantics"
-  prop longTailCardTitle = "Properties"
-  prop longTailExcludedFields = "title|scope|summary|objectLink|scopeValue"
   prop title = "Governance"
   prop summary = "Route and proposal-target governance coverage for mutating platform seams."
+  children {
+    PlatformGovernanceList
+    PlatformGovernanceDetail
+  }
 }
 
 view PlatformSemanticsPage {
@@ -226,17 +220,14 @@ view PlatformSemanticsPage {
   class platform-model
   prop pageId = "semantics"
   prop modelView = "semantics"
+  prop summaryCards = "Mutable Surfaces=mutableSurfaceSemantics@count"
   prop supplementalPageSource = "semantics"
-  prop columns = "Surface|Sharing|State Class|Authority|Visibility"
-  prop rowFields = "Surface=surfaceLink@concept|Sharing=sharingClass|State Class=stateClass|Authority=authorityRule|Visibility=visibilityRule"
-  prop emptyState = "No mutable-surface semantics rows."
-  prop pageSize = "20"
-  prop detailCardTitle = "Mutable Surface Detail"
-  prop primaryFields = "Surface=surfaceLink@concept|Sharing=sharingClass|State Class=stateClass|Authority=authorityRule|Visibility=visibilityRule|Mutation Mode=mutationMode"
-  prop longTailCardTitle = "Properties"
-  prop longTailExcludedFields = "title|scope|summary|surfaceLink"
   prop title = "Semantics"
   prop summary = "Personal, shared, and mixed mutable-surface semantics contract rows."
+  children {
+    PlatformSemanticsList
+    PlatformSemanticsDetail
+  }
 }
 
 view PlatformPackageCoexistencePage {
@@ -244,17 +235,14 @@ view PlatformPackageCoexistencePage {
   class platform-model
   prop pageId = "packageCoexistence"
   prop modelView = "packageCoexistence"
+  prop summaryCards = "Packages=packageCoexistence@count"
   prop supplementalPageSource = "packageCoexistence"
-  prop columns = "Package|Mode|Selected Revisions|Namespaces"
-  prop rowFields = "Package=packageLink@concept|Mode=coexistenceMode|Selected Revisions=selectedRevisionIds@value|Namespaces=namespaceSelectionIds@value"
-  prop emptyState = "No package coexistence rows."
-  prop pageSize = "20"
-  prop detailCardTitle = "Package Coexistence Detail"
-  prop primaryFields = "Package=packageLink@concept|Mode=coexistenceMode|Selected Revisions=selectedRevisionIds@value|Revision Lines=revisionIds@value"
-  prop longTailCardTitle = "Properties"
-  prop longTailExcludedFields = "title|scope|summary|packageLink|namespaceSelectionIds"
   prop title = "Package Coexistence"
   prop summary = "Divergent package revision lines and namespace selections."
+  children {
+    PlatformPackageCoexistenceList
+    PlatformPackageCoexistenceDetail
+  }
 }
 
 view PlatformPackageConvergencePage {
@@ -262,17 +250,144 @@ view PlatformPackageConvergencePage {
   class platform-model
   prop pageId = "packageConvergence"
   prop modelView = "packageConvergence"
+  prop summaryCards = "Packages=packageConvergence@count"
   prop supplementalPageSource = "packageConvergence"
+  prop title = "Package Convergence"
+  prop summary = "Transformer contracts, convergence patches, and remaining authored glue."
+  children {
+    PlatformPackageConvergenceList
+    PlatformPackageConvergenceDetail
+  }
+}
+
+view PlatformBridgesList {
+  kind table
+  class platform-model-list
+  prop title = "Bridge Inventory"
+  prop summary = "Compatibility bridge inventory for remaining convenience seams."
+  prop supplementalTableSource = "bridges"
+  prop columns = "Bridge|Class|Owner|Status|Surfaces"
+  prop rowFields = "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value"
+  prop emptyState = "No compatibility bridges."
+  prop pageSize = "20"
+}
+
+view PlatformBridgesDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Bridge Detail"
+  prop summary = "Selected bridge properties and long-tail fields."
+  prop supplementalDetailSource = "bridges"
+  prop detailCardTitle = "Bridge Detail"
+  prop primaryFields = "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value|Sample Targets=sampleTargets@value"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary"
+  prop emptyTitle = "Bridge Detail"
+  prop emptyState = "No compatibility bridge selected."
+}
+
+view PlatformGovernanceList {
+  kind table
+  class platform-model-list
+  prop title = "Governance Rows"
+  prop summary = "Route and proposal-target governance coverage for mutating platform seams."
+  prop supplementalTableSource = "governance"
+  prop columns = "Kind|Object|Mode|Authority|Scope"
+  prop rowFields = "Kind=pageKind|Object=objectLink@concept|Mode=governanceMode|Authority=authorityMechanism|Scope=scopeValue@value"
+  prop emptyState = "No governance rows."
+  prop pageSize = "20"
+}
+
+view PlatformGovernanceDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Governance Object Detail"
+  prop summary = "Selected governance object properties and long-tail fields."
+  prop supplementalDetailSource = "governance"
+  prop detailCardTitle = "Governance Object Detail"
+  prop primaryFields = "Object=objectLink@concept|Kind=pageKind|Mode=governanceMode|Authority=authorityMechanism|Workflow=workflowRole|Operation=operationSemantics"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|objectLink|scopeValue"
+  prop emptyTitle = "Governance Object Detail"
+  prop emptyState = "No governance object selected."
+}
+
+view PlatformSemanticsList {
+  kind table
+  class platform-model-list
+  prop title = "Mutable Surface Semantics"
+  prop summary = "Personal, shared, and mixed mutable-surface semantics contract rows."
+  prop supplementalTableSource = "semantics"
+  prop columns = "Surface|Sharing|State Class|Authority|Visibility"
+  prop rowFields = "Surface=surfaceLink@concept|Sharing=sharingClass|State Class=stateClass|Authority=authorityRule|Visibility=visibilityRule"
+  prop emptyState = "No mutable-surface semantics rows."
+  prop pageSize = "20"
+}
+
+view PlatformSemanticsDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Mutable Surface Detail"
+  prop summary = "Selected mutable-surface properties and long-tail fields."
+  prop supplementalDetailSource = "semantics"
+  prop detailCardTitle = "Mutable Surface Detail"
+  prop primaryFields = "Surface=surfaceLink@concept|Sharing=sharingClass|State Class=stateClass|Authority=authorityRule|Visibility=visibilityRule|Mutation Mode=mutationMode"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|surfaceLink"
+  prop emptyTitle = "Mutable Surface Detail"
+  prop emptyState = "No mutable surface selected."
+}
+
+view PlatformPackageCoexistenceList {
+  kind table
+  class platform-model-list
+  prop title = "Package Coexistence Rows"
+  prop summary = "Divergent package revision lines and namespace selections."
+  prop supplementalTableSource = "packageCoexistence"
+  prop columns = "Package|Mode|Selected Revisions|Namespaces"
+  prop rowFields = "Package=packageLink@concept|Mode=coexistenceMode|Selected Revisions=selectedRevisionIds@value|Namespaces=namespaceSelectionIds@value"
+  prop emptyState = "No package coexistence rows."
+  prop pageSize = "20"
+}
+
+view PlatformPackageCoexistenceDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Package Coexistence Detail"
+  prop summary = "Selected package coexistence properties and long-tail fields."
+  prop supplementalDetailSource = "packageCoexistence"
+  prop detailCardTitle = "Package Coexistence Detail"
+  prop primaryFields = "Package=packageLink@concept|Mode=coexistenceMode|Selected Revisions=selectedRevisionIds@value|Revision Lines=revisionIds@value"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|packageLink|namespaceSelectionIds"
+  prop emptyTitle = "Package Coexistence Detail"
+  prop emptyState = "No package coexistence row selected."
+}
+
+view PlatformPackageConvergenceList {
+  kind table
+  class platform-model-list
+  prop title = "Package Convergence Rows"
+  prop summary = "Transformer contracts, convergence patches, and remaining authored glue."
+  prop supplementalTableSource = "packageConvergence"
   prop columns = "Package|Status|Transformers|Patches|Glue"
   prop rowFields = "Package=packageLink@concept|Status=status|Transformers=transformerIds@value|Patches=convergencePatchIds@value|Glue=remainingGlueMessages@value"
   prop emptyState = "No package convergence rows."
   prop pageSize = "20"
+}
+
+view PlatformPackageConvergenceDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Package Convergence Detail"
+  prop summary = "Selected package convergence properties and long-tail fields."
+  prop supplementalDetailSource = "packageConvergence"
   prop detailCardTitle = "Package Convergence Detail"
   prop primaryFields = "Package=packageLink@concept|Status=status|Transformers=transformerIds@value|Convergence Patches=convergencePatchIds@value|Explanation=explanation"
   prop longTailCardTitle = "Properties"
   prop longTailExcludedFields = "title|scope|summary|packageLink|remainingGlueMessages"
-  prop title = "Package Convergence"
-  prop summary = "Transformer contracts, convergence patches, and remaining authored glue."
+  prop emptyTitle = "Package Convergence Detail"
+  prop emptyState = "No package convergence row selected."
 }
 
 view PlatformConsoleSummary {
@@ -640,7 +755,10 @@ view PlatformVerificationDetail {
   prop title = "Verification Detail"
   prop summary = "Properties and linked resources for the selected verification object."
   prop detailSource = "verification"
-  prop detailSelectionSources = "testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots"
+  prop detailSelectionSources = "verificationPolicies|verificationQueue|verificationExecutions|testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots"
+  prop verificationPolicyIdPrefixes = "verificationPolicy:"
+  prop verificationQueueIdPrefixes = "verificationQueue:"
+  prop verificationExecutionIdPrefixes = "verificationExecution:"
   prop gateIdPrefixes = "gate:"
   prop runtimeRevisionIdPrefixes = "runtimeRevision:|backendRevision:|frontendRevision:"
   prop candidateSnapshotIdPrefixes = "candidateSnapshot:"
@@ -672,7 +790,7 @@ view PlatformVerificationStatusBanner {
   prop summary = "Current verification health, active execution, and first-pass regression signals."
   prop propertyRecordSource = "verificationStatus"
   prop propertyCardTitle = "Current Verification State"
-  prop propertyFields = "Status=status|Summary=summary|Running runs=runningCount|Failing gates=failingGateCount|Regressed runs=regressedRunCount|Latest completed run=latestCompletedRunId@concept|Latest completion=latestCompletedAt|Active runtime revision=activeRuntimeRevision@concept"
+  prop propertyFields = "Status=status|Summary=summary|Running runs=runningCount|Failing gates=failingGateCount|Regressed runs=regressedRunCount|Queued items=queueCount|Policy source=policySource|Persistence source=persistenceSource|Ledger backend=ledgerBackend|Artifact backend=artifactBackend|Cache backend=cacheBackend|Latest completed run=latestCompletedRunId@concept|Latest completion=latestCompletedAt|Active runtime revision=activeRuntimeRevision@concept"
   projections {
     PlatformModelRead
   }
@@ -694,8 +812,12 @@ view PlatformVerificationPrimaryPanel {
   prop candidateSnapshotLongTailExcludedFields = "files|errors"
   prop candidateSnapshotCardTitle = "Candidate Snapshot Detail"
   prop candidateSnapshotFields = "Snapshot=id@concept|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Revision=revision|API resource=id@api"
+  prop verificationPolicyCardTitle = "Verification Policy Detail"
+  prop verificationPolicyFields = "Policy=id@concept|Status=status|Source=policySource|Gate=gateId@concept|Execution class=executionClass|Enabled=enabled|Startup=startup|Watch=watch|Change set=onChangeSet|Exclusive=exclusive|Clean workspace=requiresCleanWorkspace|Priority=priority|Timeout=timeoutMs"
+  prop verificationExecutionCardTitle = "Verification Execution Detail"
+  prop verificationExecutionFields = "Execution=id@concept|Status=status|Gate=gateId@concept|Run=runId@concept|Trigger=triggerKind|Execution class=executionClass|Exclusive=exclusive|Started=startedAt|Finished=finishedAt"
   prop testRunCardTitle = "Test Run Detail"
-  prop testRunFields = "Run=id@concept|Status=status|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Duration=durationMs|Exit=exitCode|API resource=id@api"
+  prop testRunFields = "Run=id@concept|Status=status|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Cache=cacheStatus|Cache hit run=cacheHitRunId@concept|Duration=durationMs|Exit=exitCode|API resource=id@api"
 }
 
 view PlatformVerificationRelatedPanel {
@@ -709,9 +831,11 @@ view PlatformVerificationRelatedPanel {
   prop runtimeRevisionLinkCards = "Changed Sources=changedSources"
   prop runtimeRevisionLinkCardEmptyStates = "Changed Sources=No changed sources recorded for this revision."
   prop runtimeRevisionPropertyCardTitle = "Snapshot Diagnostics"
-  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Monitor status=testMonitorDiagnostics.status|Queued sources=testMonitorDiagnostics.pendingSourceCount|Queued change sets=testMonitorDiagnostics.pendingChangeSetCount|Backend revision event stream=backendRevisionEventsHref@href"
+  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Verification status=testMonitorDiagnostics.status|Queued sources=testMonitorDiagnostics.pendingSourceCount|Queued change sets=testMonitorDiagnostics.pendingChangeSetCount|Persistence source=verificationPersistence.source|Ledger backend=verificationPersistence.ledgerBackend.provider|Backend revision event stream=backendRevisionEventsHref@href"
   prop candidateSnapshotTextCards = "Files=files@path|Errors=errors@errorMessage"
   prop candidateSnapshotTextCardEmptyStates = "Files=No files captured in this candidate snapshot.|Errors=No build or validation errors."
+  prop verificationPersistenceCardTitle = "Verification Persistence"
+  prop verificationPersistenceFields = "Source=source|Root=verificationRoot|Ledger=ledgerBackendLabel|Artifacts=artifactBackendLabel|Cache=cacheBackendLabel|Diagnostics=diagnostics@count"
   prop testRunPropertyCardTitle = "Verification Streams"
   prop testRunPropertyFields = "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href"
 }

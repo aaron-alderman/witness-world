@@ -1158,6 +1158,30 @@ function workflowItems(model) {
 }
 
 function verificationItems(model) {
+  const policies = (model.verificationPolicies ?? []).map(policy => ({
+    pageKind: "verificationPolicy",
+    id: policy.id,
+    title: policy.gateId ? `Policy ${policy.gateId}` : "Verification Defaults",
+    status: policy.status || (policy.enabled ? "resolved" : "disabled"),
+    scope: policy.runtimeProfile || policy.policySource || "",
+    summary: `${policy.executionClass || "defaults"}, ${policy.policySource || "synthesized"}`
+  }));
+  const queueRows = (model.verificationQueue ?? []).map(row => ({
+    pageKind: "verificationQueue",
+    id: row.id,
+    title: row.gateTitle || row.gateId || row.id,
+    status: row.status,
+    scope: row.triggerKind || "",
+    summary: `${row.executionClass || "child_process"}, ${row.runId || "no run"}`
+  }));
+  const executions = (model.verificationExecutions ?? []).map(row => ({
+    pageKind: "verificationExecution",
+    id: row.id,
+    title: row.gateTitle || row.gateId || row.id,
+    status: row.status,
+    scope: row.triggerKind || "",
+    summary: `${row.executionClass || "child_process"}, ${row.runId || "no run"}`
+  }));
   const gates = (model.testGates ?? []).map(gate => ({
     pageKind: "testGate",
     id: gate.id,
@@ -1190,7 +1214,7 @@ function verificationItems(model) {
     scope: snapshot.branchId || "",
     summary: `revision ${snapshot.revision ?? "n/a"}, ${snapshot.errorCount ?? snapshot.errors?.length ?? 0} errors`
   }));
-  return [...gates, ...runs, ...revisions, ...snapshots].sort((left, right) =>
+  return [...policies, ...queueRows, ...executions, ...gates, ...runs, ...revisions, ...snapshots].sort((left, right) =>
     left.pageKind.localeCompare(right.pageKind)
     || left.id.localeCompare(right.id)
   );
@@ -1328,6 +1352,12 @@ function detailRecordsForSource(source, model) {
       return model.proposals ?? [];
     case "testGates":
       return model.testGates ?? [];
+    case "verificationPolicies":
+      return model.verificationPolicies ?? [];
+    case "verificationQueue":
+      return model.verificationQueue ?? [];
+    case "verificationExecutions":
+      return model.verificationExecutions ?? [];
     case "runtimeRevisions":
       return model.runtimeRevisions ?? [];
     case "testRuns":
@@ -1512,6 +1542,7 @@ function countByStatus(rows = []) {
 function verificationStatusRecord(model) {
   const runs = model.testRuns ?? [];
   const runningCount = runs.filter(run => run.status === "running").length;
+  const queueCount = (model.verificationQueue ?? []).filter(row => row.status === "queued" || row.status === "running").length;
   const latestResults = Object.values(model.latestTestResultsByGate ?? {});
   const failingGateCount = latestResults.filter(result =>
     ["failed", "error"].includes(String(result?.status || ""))
@@ -1544,6 +1575,12 @@ function verificationStatusRecord(model) {
     runningCount,
     failingGateCount,
     regressedRunCount,
+    queueCount,
+    policySource: model.testMonitorDiagnostics?.policySource ?? "synthesized",
+    persistenceSource: model.verificationPersistence?.source ?? "synthesized",
+    ledgerBackend: model.verificationPersistence?.ledgerBackend?.provider ?? "sqlite",
+    artifactBackend: model.verificationPersistence?.artifactBackend?.provider ?? "disk",
+    cacheBackend: model.verificationPersistence?.cacheBackend?.provider ?? "disk",
     latestCompletedRunId: latestCompletedRun?.id ?? null,
     latestCompletedAt: latestCompletedRun?.finishedAt ?? null,
     activeRuntimeRevision: model.activeRuntimeRevision?.id ?? null
@@ -1585,12 +1622,49 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const suiteSummarySurface = authoredChildSurface(surface, "PlatformVerificationSuiteSummary");
   const failingCasesSurface = authoredChildSurface(surface, "PlatformVerificationFailingCases");
   const regressionSurface = authoredChildSurface(surface, "PlatformVerificationRegressionSummary");
+  const verificationPolicyIdPrefixes = surfaceIdPrefixes(surface, "verificationPolicyIdPrefixes", ["verificationPolicy:"]);
+  const verificationQueueIdPrefixes = surfaceIdPrefixes(surface, "verificationQueueIdPrefixes", ["verificationQueue:"]);
+  const verificationExecutionIdPrefixes = surfaceIdPrefixes(surface, "verificationExecutionIdPrefixes", ["verificationExecution:"]);
   const gateIdPrefixes = surfaceIdPrefixes(surface, "gateIdPrefixes", ["gate:"]);
   const runtimeRevisionIdPrefixes = surfaceIdPrefixes(surface, "runtimeRevisionIdPrefixes", ["runtimeRevision:", "backendRevision:", "frontendRevision:"]);
   const candidateSnapshotIdPrefixes = surfaceIdPrefixes(surface, "candidateSnapshotIdPrefixes", ["candidateSnapshot:"]);
   const testRunIdPrefixes = surfaceIdPrefixes(surface, "testRunIdPrefixes", ["testRun:"]);
   const testReportIdPrefixes = surfaceIdPrefixes(surface, "testReportIdPrefixes", ["testReport:"]);
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No verification rows are projected yet." });
+  if (recordMatchesIdPrefixes(detail, verificationPolicyIdPrefixes)) {
+    const policy = detail;
+    const policyRecord = {
+      ...policy,
+      policySource: policy.policySource ?? policy.source ?? "synthesized"
+    };
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "verificationPolicyCardTitle", "verificationPolicyFields", ctx, policyRecord, "Verification Policy Detail");
+    const persistenceRecord = {
+      ...(model.verificationPersistence ?? {}),
+      ledgerBackendLabel: model.verificationPersistence?.ledgerBackend?.provider ?? null,
+      artifactBackendLabel: model.verificationPersistence?.artifactBackend?.provider ?? null,
+      cacheBackendLabel: model.verificationPersistence?.cacheBackend?.provider ?? null
+    };
+    const persistenceCard = propertyRowsFromSurfaceSchema(relatedSurface, "verificationPersistenceCardTitle", "verificationPersistenceFields", ctx, persistenceRecord, "Verification Persistence");
+    return renderAuthoredDetailLayout(surface, new Map([
+      [primarySurface.name, renderSurfaceFrame(primarySurface, `
+        ${renderPropertyCard(primaryCard)}
+        ${renderLongTailProperties(primarySurface, ctx, policy, rootKeysFromSurfaceSchema(primarySurface, "verificationPolicyFields"))}
+      `)],
+      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
+        ${renderPropertyCard(persistenceCard)}
+      `)]
+    ]));
+  }
+  if (recordMatchesIdPrefixes(detail, verificationQueueIdPrefixes) || recordMatchesIdPrefixes(detail, verificationExecutionIdPrefixes)) {
+    const execution = detail;
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "verificationExecutionCardTitle", "verificationExecutionFields", ctx, execution, "Verification Execution Detail");
+    return renderAuthoredDetailLayout(surface, new Map([
+      [primarySurface.name, renderSurfaceFrame(primarySurface, `
+        ${renderPropertyCard(primaryCard)}
+        ${renderLongTailProperties(primarySurface, ctx, execution, rootKeysFromSurfaceSchema(primarySurface, "verificationExecutionFields"))}
+      `)]
+    ]));
+  }
   if (recordMatchesIdPrefixes(detail, gateIdPrefixes)) {
     const gate = detail;
     const runRows = (model.testRuns ?? []).filter(run => run.gateId === gate.id).slice(0, surfaceRowLimit(runHistorySurface, 12));
@@ -1630,6 +1704,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       ...revision,
       snapshotDiagnostics: model.snapshotDiagnostics,
       testMonitorDiagnostics: model.testMonitorDiagnostics,
+      verificationPersistence: model.verificationPersistence,
       backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
     };
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "runtimeRevisionCardTitle", "runtimeRevisionFields", ctx, revision, "Runtime Revision Detail");
@@ -1696,6 +1771,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   }
   const runRecord = {
     ...run,
+    cacheHitRunId: run.cacheHit?.runId ?? null,
     testRunEventsHref: "/api/platform-test-runs/events",
     backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
   };
@@ -1755,7 +1831,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       <tr>
         <td>${esc(artifact.artifactKind || "")}</td>
         <td>${renderConceptLink(ctx, artifact.id)}</td>
-        <td>${esc(artifact.fileName || "")}</td>
+        <td>${artifact.contentUrl ? `<a href="${esc(artifact.contentUrl)}" target="_blank" rel="noreferrer">${esc(artifact.fileName || "")}</a>` : esc(artifact.fileName || "")}</td>
         <td>${esc(artifact.contentType || "")}</td>
         <td>${esc(artifact.sizeBytes ?? "")}</td>
       </tr>
@@ -2100,7 +2176,7 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
     case "verification":
       return renderSurfaceFrame(surface, renderVerificationDetail(
         surface,
-        findAuthoredDetailBySources(surface, model, ctx.id, ["testGates", "runtimeRevisions", "testRuns", "testReports", "candidateSnapshots"]),
+        findAuthoredDetailBySources(surface, model, ctx.id, ["verificationPolicies", "verificationQueue", "verificationExecutions", "testGates", "runtimeRevisions", "testRuns", "testReports", "candidateSnapshots"]),
         model,
         ctx
       ));
@@ -2414,11 +2490,17 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   if (surface?.props?.tableSource) {
     return renderAuthoredTableSection(surface, model, ctx);
   }
+  if (surfacePropText(surface, "supplementalTableSource", "")) {
+    return renderAuthoredSupplementalTableSection(surface, model, ctx);
+  }
   if (surface?.props?.formId && surface?.props?.formFields) {
     return renderAuthoredFormSection(surface, model);
   }
   if (surface?.props?.propertyValues && surface?.props?.propertyFields) {
     return renderAuthoredStaticPropertySection(surface);
+  }
+  if (surfacePropText(surface, "supplementalDetailSource", "")) {
+    return renderAuthoredSupplementalDetailSection(surface, model, ctx);
   }
   if (surface?.props?.detailSource) {
     return renderAuthoredDetailSourceSection(surface, model, ctx);
@@ -2540,142 +2622,44 @@ function supplementalRecordForView(viewId, model, id) {
   }
   return rows.find(row => row.id === id) ?? null;
 }
-
-function supplementalPrimaryFields(viewId) {
-  switch (viewId) {
-    case "bridges":
-      return [
-        { label: "Bridge", key: "id" },
-        { label: "Class", key: "bridgeClass" },
-        { label: "Owner", key: "owner" },
-        { label: "Status", key: "status" },
-        { label: "Surfaces", key: "surfaces" },
-        { label: "Sample Targets", key: "sampleTargets" }
-      ];
-    case "governance":
-      return [
-        { label: "Object", key: "id" },
-        { label: "Mode", key: "governanceMode" },
-        { label: "Authority", key: "authorityMechanism" },
-        { label: "Workflow", key: "workflowRole" },
-        { label: "Operation", key: "operationSemantics" }
-      ];
-    case "semantics":
-      return [
-        { label: "Surface", key: "surface" },
-        { label: "Sharing", key: "sharingClass" },
-        { label: "State Class", key: "stateClass" },
-        { label: "Authority", key: "authorityRule" },
-        { label: "Visibility", key: "visibilityRule" },
-        { label: "Mutation Mode", key: "mutationMode" }
-      ];
-    case "packageCoexistence":
-      return [
-        { label: "Package", key: "packageId" },
-        { label: "Mode", key: "coexistenceMode" },
-        { label: "Selected Revisions", key: "selectedRevisionIds" },
-        { label: "Revision Lines", key: "revisionIds" }
-      ];
-    case "packageConvergence":
-      return [
-        { label: "Package", key: "packageId" },
-        { label: "Status", key: "status" },
-        { label: "Transformers", key: "transformerIds" },
-        { label: "Convergence Patches", key: "convergencePatchIds" },
-        { label: "Explanation", key: "explanation" }
-      ];
-    default:
-      return [{ label: "Object", key: "id" }];
-  }
-}
-
-function supplementalTableHeaders(viewId) {
-  switch (viewId) {
-    case "bridges":
-      return ["Bridge", "Class", "Owner", "Status", "Surfaces"];
-    case "governance":
-      return ["Kind", "Object", "Mode", "Authority", "Scope"];
-    case "semantics":
-      return ["Surface", "Sharing", "State Class", "Authority", "Visibility"];
-    case "packageCoexistence":
-      return ["Package", "Mode", "Selected Revisions", "Namespaces"];
-    case "packageConvergence":
-      return ["Package", "Status", "Transformers", "Patches", "Glue"];
-    default:
-      return ["Object"];
-  }
-}
-
-function renderSupplementalRow(viewId, row, ctx) {
-  switch (viewId) {
-    case "bridges":
-      return `<tr><td>${renderConceptLink(ctx, row.id)}</td><td>${esc(row.bridgeClass || "")}</td><td>${renderValue(ctx, row.owner)}</td><td>${esc(row.status || "")}</td><td>${renderValue(ctx, row.surfaces || [])}</td></tr>`;
-    case "governance":
-      return `<tr><td>${esc(row.pageKind || "route")}</td><td>${renderConceptLink(ctx, row.id, row.title || row.id)}</td><td>${esc(row.governanceMode || "")}</td><td>${esc(row.authorityMechanism || "")}</td><td>${renderValue(ctx, row.handler || row.targetProcess || "")}</td></tr>`;
-    case "semantics":
-      return `<tr><td>${renderConceptLink(ctx, row.id, row.title || row.surface || row.id)}</td><td>${esc(row.sharingClass || "")}</td><td>${esc(row.stateClass || "")}</td><td>${esc(row.authorityRule || "")}</td><td>${esc(row.visibilityRule || "")}</td></tr>`;
-    case "packageCoexistence":
-      return `<tr><td>${renderConceptLink(ctx, row.packageId, row.packageLabel || row.packageId)}</td><td>${esc(row.coexistenceMode || "")}</td><td>${renderValue(ctx, row.selectedRevisionIds || [])}</td><td>${renderValue(ctx, (row.namespaceSelections ?? []).map(namespace => namespace.id))}</td></tr>`;
-    case "packageConvergence":
-      return `<tr><td>${renderConceptLink(ctx, row.packageId, row.packageLabel || row.packageId)}</td><td>${esc(row.status || "")}</td><td>${renderValue(ctx, row.transformerIds || [])}</td><td>${renderValue(ctx, row.convergencePatchIds || [])}</td><td>${renderValue(ctx, (row.remainingGlue ?? []).map(item => item.message))}</td></tr>`;
-    default:
-      return `<tr><td>${renderConceptLink(ctx, row.id)}</td></tr>`;
-  }
-}
-
-function renderSupplementalPage(currentView, sourceId, model, ctx) {
-  const pageSurface = currentView.surface ?? null;
+function renderAuthoredSupplementalTableSection(surface, model, ctx) {
+  const sourceId = surfacePropText(surface, "supplementalTableSource", "");
   const rows = supplementalRowsForView(sourceId, model);
-  const page = paginateRows(rows, ctx, surfacePageSize(pageSurface, DEFAULT_PAGE_SIZE));
+  const page = paginateRows(rows, ctx, surfacePageSize(surface, DEFAULT_PAGE_SIZE));
+  return renderSurfaceFrame(surface, `
+    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, () => ""))}
+    ${renderPagination(ctx, page.total, page.offset, page.limit)}
+  `);
+}
+
+function renderAuthoredSupplementalDetailSection(surface, model, ctx) {
+  const sourceId = surfacePropText(surface, "supplementalDetailSource", "");
   const detail = supplementalRecordForView(sourceId, model, ctx.id);
-  const fallbackPrimaryFields = supplementalPrimaryFields(sourceId);
-  const fallbackPrimaryEntries = fallbackPrimaryFields.map(field => ({
-    label: field.label,
-    valueHtml: renderValueWithApi(ctx, detail?.[field.key])
-  }));
+  if (!detail) {
+    return renderSurfaceEmptyCard(surface, {
+      title: surfacePropText(surface, "emptyTitle", surface.title || "Detail"),
+      message: surfaceEmptyState(surface, "No rows are projected yet.")
+    });
+  }
   const primaryCard = propertyRowsFromSurfaceSchema(
-    pageSurface,
+    surface,
     "detailCardTitle",
     "primaryFields",
     ctx,
     detail,
-    `${currentView.title} Detail`,
-    fallbackPrimaryEntries
+    surfacePropText(surface, "detailCardTitle", surface.title || "Detail"),
+    []
   );
   const primaryKeys = new Set([
-    ...(rootKeysFromSurfaceSchema(pageSurface, "primaryFields").length
-      ? rootKeysFromSurfaceSchema(pageSurface, "primaryFields")
-      : fallbackPrimaryFields.map(field => field.key)),
-    ...surfaceKeyList(pageSurface, "longTailExcludedFields", ["title", "scope", "summary"])
+    ...rootKeysFromSurfaceSchema(surface, "primaryFields"),
+    ...surfaceKeyList(surface, "longTailExcludedFields", ["title", "scope", "summary"])
   ]);
-  return `
-    ${renderSummaryCards([
-      { label: "Rows", value: rows.length },
-      { label: "Selected", value: detail ? 1 : 0 }
-    ])}
-    <section class="card">
-      <h2>${esc(currentView.title)}</h2>
-      <div class="muted">${esc(currentView.subtitle || "")}</div>
-      ${renderTable(
-        surfaceColumnLabels(pageSurface, supplementalTableHeaders(sourceId)),
-        renderRowsFromSurfaceSchema(pageSurface, "rowFields", page.items, ctx, row => renderSupplementalRow(sourceId, row, ctx)),
-        surfaceEmptyState(pageSurface, "No rows.")
-      )}
-      ${renderPagination(ctx, page.total, page.offset, page.limit)}
-    </section>
-    <section class="grid2">
-      <div>
-        ${detail
-          ? renderPropertyCard(primaryCard)
-          : renderPropertyTable(surfacePropText(pageSurface, "detailCardTitle", `${currentView.title} Detail`), [])}
-      </div>
-      <div>
-        ${detail
-          ? renderRecordLongTailTable(ctx, surfacePropText(pageSurface, "longTailCardTitle", "Properties"), detail, [...primaryKeys])
-          : renderPropertyTable(surfacePropText(pageSurface, "longTailCardTitle", "Properties"), [])}
-      </div>
-    </section>
-  `;
+  return renderSurfaceFrame(surface, `
+    <div class="grid2">
+      <div>${renderPropertyCard(primaryCard)}</div>
+      <div>${renderRecordLongTailTable(ctx, surfacePropText(surface, "longTailCardTitle", "Properties"), detail, [...primaryKeys])}</div>
+    </div>
+  `);
 }
 
 export function renderPlatformPage(model, { requestUrl = null } = {}) {
@@ -2693,11 +2677,9 @@ export function renderPlatformPage(model, { requestUrl = null } = {}) {
     name: ctx.name,
     target: ctx.target
   });
-  const supplementalPageSource = optionalText(currentView.supplementalPageSource)
-    || surfacePropText(currentView.surface, "supplementalPageSource", "");
-  const body = supplementalPageSource
-    ? renderSupplementalPage(currentView, supplementalPageSource, pageModel, ctx)
-    : renderPageFromSurface(currentView.surface ?? null, pageModel, ctx, consoleLayout);
+  const body = currentView.surface
+    ? renderPageFromSurface(currentView.surface, pageModel, ctx, consoleLayout)
+    : "";
   return `<!doctype html>
 <html lang="en">
 <head>
