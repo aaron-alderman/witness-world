@@ -255,6 +255,7 @@ view PlatformWorkflowList {
   class platform-workflow-list
   prop title = "Workflow Items"
   prop summary = "Paginated list of branches, change sets, and proposals."
+  prop listSource = "workflowItems"
   prop columns = "Kind|Status|Resource|Scope|Summary"
   prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
@@ -409,6 +410,7 @@ view PlatformVerificationList {
   class platform-verification-list
   prop title = "Verification Items"
   prop summary = "Paginated list of gates, runs, candidate snapshots, and runtime revisions."
+  prop listSource = "verificationItems"
   prop columns = "Kind|Status|Resource|Scope|Summary"
   prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
@@ -594,6 +596,7 @@ view PlatformSignalList {
   class platform-signal-list
   prop title = "Signals"
   prop summary = "Paginated list of gaps, telemetry metrics, defect clusters, and boundaries."
+  prop listSource = "signalItems"
   prop columns = "Kind|Status|Resource|Scope|Summary"
   prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
@@ -678,6 +681,7 @@ view PlatformKnowledgeList {
   class platform-knowledge-list
   prop title = "Knowledge Items"
   prop summary = "Paginated list of docs, roadmap tasks, epics, and features."
+  prop listSource = "knowledgeItems"
   prop columns = "Kind|Status|Resource|Scope|Summary"
   prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
@@ -771,6 +775,7 @@ view PlatformModelList {
   class platform-model-list
   prop title = "Platform Map"
   prop summary = "Paginated list of modeled platform objects."
+  prop listSource = "modelItems"
   prop columns = "Kind|Status|Resource|Source|Owner"
   prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Source=scope|Owner=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|source=scope|owner=summary"

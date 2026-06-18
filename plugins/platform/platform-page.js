@@ -1519,6 +1519,35 @@ function renderModelDetail(surface, node, model, ctx) {
   ]));
 }
 
+function recordsForAuthoredListSource(source, model) {
+  switch (source) {
+    case "workflowItems":
+      return workflowItems(model);
+    case "verificationItems":
+      return verificationItems(model);
+    case "knowledgeItems":
+      return knowledgeItems(model);
+    case "signalItems":
+      return signalItems(model);
+    case "modelItems":
+      return modelItems(model);
+    default:
+      return [];
+  }
+}
+
+function renderAuthoredListSection(surface, model, ctx) {
+  const source = surfacePropText(surface, "listSource", "");
+  const items = recordsForAuthoredListSource(source, model);
+  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
+  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
+  return renderSurfaceFrame(surface, `
+    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
+    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, () => ""))}
+    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
+  `);
+}
+
 function renderPlatformMapSection(surface, model, ctx) {
   const topNodes = (model.nodes ?? []).slice(0, surfaceRowLimit(surface, 12));
   const rows = topNodes.map(node => ({
@@ -1550,101 +1579,6 @@ function renderProfileComparisonSection(surface, model) {
       <td>${esc((profile.capabilities ?? []).length)}</td>
     </tr>
   `)));
-}
-
-function renderWorkflowListSection(surface, model, ctx) {
-  const items = workflowItems(model);
-  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
-  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
-  return renderSurfaceFrame(surface, `
-    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
-      <tr>
-        <td>${esc(item.pageKind)}</td>
-        <td>${esc(item.status || "")}</td>
-        <td>${renderConceptLink(ctx, item.id, item.title)}</td>
-        <td>${item.scope ? renderValue(ctx, item.scope) : ""}</td>
-        <td>${esc(item.summary || "")}</td>
-      </tr>
-    `))}
-    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
-  `);
-}
-
-function renderVerificationListSection(surface, model, ctx) {
-  const items = verificationItems(model);
-  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
-  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
-  return renderSurfaceFrame(surface, `
-    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
-      <tr>
-        <td>${esc(item.pageKind)}</td>
-        <td>${esc(item.status || "")}</td>
-        <td>${renderConceptLink(ctx, item.id, item.title)}</td>
-        <td>${item.scope ? renderValue(ctx, item.scope) : ""}</td>
-        <td>${esc(item.summary || "")}</td>
-      </tr>
-    `))}
-    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
-  `);
-}
-
-function renderKnowledgeListSection(surface, model, ctx) {
-  const items = knowledgeItems(model);
-  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
-  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
-  return renderSurfaceFrame(surface, `
-    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
-      <tr>
-        <td>${esc(item.pageKind)}</td>
-        <td>${esc(item.status || "")}</td>
-        <td>${renderConceptLink(ctx, item.id, item.title)}</td>
-        <td>${item.scope ? renderValue(ctx, item.scope) : ""}</td>
-        <td>${esc(item.summary || "")}</td>
-      </tr>
-    `))}
-    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
-  `);
-}
-
-function renderSignalsListSection(surface, model, ctx) {
-  const items = signalItems(model);
-  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
-  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
-  return renderSurfaceFrame(surface, `
-    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
-      <tr>
-        <td>${esc(item.pageKind)}</td>
-        <td>${esc(item.status || "")}</td>
-        <td>${renderConceptLink(ctx, item.id, item.title)}</td>
-        <td>${item.scope ? renderValue(ctx, item.scope) : ""}</td>
-        <td>${esc(item.summary || "")}</td>
-      </tr>
-    `))}
-    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
-  `);
-}
-
-function renderModelListSection(surface, model, ctx) {
-  const items = modelItems(model);
-  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
-  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
-  return renderSurfaceFrame(surface, `
-    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
-      <tr>
-        <td>${esc(item.pageKind)}</td>
-        <td>${esc(item.status || "")}</td>
-        <td>${renderConceptLink(ctx, item.id, item.title)}</td>
-        <td>${esc(item.scope || "")}</td>
-        <td>${esc(item.summary || "")}</td>
-      </tr>
-    `))}
-    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
-  `);
 }
 
 function renderGapListSection(surface, model, ctx) {
@@ -2100,6 +2034,9 @@ function renderAuthoringClientScript() {
 }
 
 function renderSurfaceSection(surface, model, ctx, consoleLayout) {
+  if (surface?.props?.listSource) {
+    return renderAuthoredListSection(surface, model, ctx);
+  }
   switch (surface?.name) {
     case "PlatformConsoleSummary": {
       const sourcePageId = surfacePropText(surface, "summaryPageId", "overview");
@@ -2115,8 +2052,6 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
       return renderPlatformMapSection(surface, model, ctx);
     case "PlatformProfileComparison":
       return renderProfileComparisonSection(surface, model);
-    case "PlatformWorkflowList":
-      return renderWorkflowListSection(surface, model, ctx);
     case "PlatformWorkflowDetail":
       return renderSurfaceFrame(surface, renderWorkflowDetail(surface, findWorkflowDetail(model, ctx.id), model, ctx));
     case "PlatformProposalPanel":
@@ -2135,8 +2070,6 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
       return renderChangeSetApplyPanelSection(surface, model);
     case "PlatformChangeSetLifecyclePanel":
       return renderChangeSetLifecyclePanelSection(surface, model);
-    case "PlatformVerificationList":
-      return renderVerificationListSection(surface, model, ctx);
     case "PlatformVerificationDetail":
       return renderSurfaceFrame(surface, renderVerificationDetail(surface, findVerificationDetail(model, ctx.id), model, ctx));
     case "PlatformVerificationStreams":
@@ -2149,18 +2082,12 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
       return renderTestRunPanelSection(surface, model);
     case "PlatformSelectedTestRunPanel":
       return renderSelectedTestRunPanelSection(surface);
-    case "PlatformKnowledgeList":
-      return renderKnowledgeListSection(surface, model, ctx);
     case "PlatformKnowledgeDetail":
       return renderSurfaceFrame(surface, renderKnowledgeDetail(surface, findKnowledgeDetail(model, ctx.id), model, ctx));
     case "PlatformGapList":
       return renderGapListSection(surface, model, ctx);
-    case "PlatformSignalList":
-      return renderSignalsListSection(surface, model, ctx);
     case "PlatformSignalDetail":
       return renderSurfaceFrame(surface, renderSignalDetail(surface, findSignalDetail(model, ctx.id), model, ctx));
-    case "PlatformModelList":
-      return renderModelListSection(surface, model, ctx);
     case "PlatformModelDetail":
       return renderSurfaceFrame(surface, renderModelDetail(surface, findModelDetail(model, ctx.id), model, ctx));
     case "PlatformCoverageMatrix":
