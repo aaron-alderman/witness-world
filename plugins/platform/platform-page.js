@@ -499,6 +499,18 @@ function surfaceVariantEmptyState(surface, key, fallback = "No rows.") {
   return surfacePropText(surface, key, surfaceEmptyState(surface, fallback));
 }
 
+function renderSurfaceEmptyCard(surface, {
+  title = "Detail",
+  message = "No rows are projected yet."
+} = {}) {
+  return `
+    <div class="card">
+      <h2>${esc(surfacePropText(surface, "emptyTitle", title))}</h2>
+      <div class="muted">${esc(surfaceEmptyState(surface, message))}</div>
+    </div>
+  `;
+}
+
 function renderDataTable(title, headers, rows, emptyMessage = "No rows.") {
   return `
     <section>
@@ -1050,7 +1062,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     summary: "Staged overlay edits for the selected change set when available.",
     surfaceKind: "table"
   });
-  if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No workflow rows are projected yet.</div></div>`;
+  if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No workflow rows are projected yet." });
   if (detail.id?.startsWith?.("branch:")) {
     const branch = detail;
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.branchId === branch.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
@@ -1190,7 +1202,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     summary: "Build errors for the selected runtime revision when available.",
     surfaceKind: "table"
   });
-  if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No verification rows are projected yet.</div></div>`;
+  if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No verification rows are projected yet." });
   if (detail.id?.startsWith?.("gate:")) {
     const gate = detail;
     const runRows = (model.testRuns ?? []).filter(run => run.gateId === gate.id).slice(0, surfaceRowLimit(runHistorySurface, 12));
@@ -1351,7 +1363,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     summary: "Document or roadmap tasks for the selected knowledge object when available.",
     surfaceKind: "table"
   });
-  if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No knowledge rows are projected yet.</div></div>`;
+  if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No knowledge rows are projected yet." });
   if (detail.path) {
     const doc = detail;
     const sections = (model.docSections ?? []).filter(section => section.doc === doc.path).slice(0, surfaceRowLimit(sectionsSurface, 20));
@@ -1483,7 +1495,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
     summary: "Linked graph relationships for the selected signal when available.",
     surfaceKind: "table"
   });
-  if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No signal rows are projected yet.</div></div>`;
+  if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
   if (detail.kind) {
     const gap = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gapCardTitle", "gapFields", ctx, gap, "Gap Detail");
@@ -1548,7 +1560,7 @@ function renderModelDetail(surface, node, model, ctx) {
     summary: "Linked graph relationships for the selected platform object when available.",
     surfaceKind: "table"
   });
-  if (!node) return `<div class="card"><h2>Detail</h2><div class="muted">No platform objects are projected yet.</div></div>`;
+  if (!node) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No platform objects are projected yet." });
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "objectCardTitle", "objectFields", ctx, node, "Platform Object Detail");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "objectFields").length

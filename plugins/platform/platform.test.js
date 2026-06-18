@@ -380,6 +380,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   const workflowDetailSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowDetail");
   assert.ok(workflowDetailSurface);
+  assert.equal(workflowDetailSurface.props.emptyTitle, "Detail");
+  assert.equal(workflowDetailSurface.props.emptyState, "No workflow rows are projected yet.");
   assert.deepEqual(workflowDetailSurface.children, [
     "PlatformWorkflowPrimaryPanel",
     "PlatformWorkflowRelatedPanel",
@@ -460,6 +462,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   const verificationDetailSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
   assert.ok(verificationDetailSurface);
+  assert.equal(verificationDetailSurface.props.emptyTitle, "Detail");
+  assert.equal(verificationDetailSurface.props.emptyState, "No verification rows are projected yet.");
   assert.deepEqual(verificationDetailSurface.children, [
     "PlatformVerificationPrimaryPanel",
     "PlatformVerificationRelatedPanel",
@@ -525,6 +529,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   const signalDetailSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformSignalDetail");
   assert.ok(signalDetailSurface);
+  assert.equal(signalDetailSurface.props.emptyTitle, "Detail");
+  assert.equal(signalDetailSurface.props.emptyState, "No signal rows are projected yet.");
   assert.deepEqual(signalDetailSurface.children, [
     "PlatformSignalPrimaryPanel",
     "PlatformSignalRelatedPanel",
@@ -547,6 +553,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.match(knowledgePage.props.summaryCards, /Governed Docs=docs@count/);
   const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
   assert.ok(knowledgeDetailSurface);
+  assert.equal(knowledgeDetailSurface.props.emptyTitle, "Detail");
+  assert.equal(knowledgeDetailSurface.props.emptyState, "No knowledge rows are projected yet.");
   assert.deepEqual(knowledgeDetailSurface.children, [
     "PlatformKnowledgePrimaryPanel",
     "PlatformKnowledgeRelatedPanel",
@@ -623,6 +631,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(coverageSurface.props.rowFields, "Gate=gateId@concept|Target=targetId||targetLabel@concept|Kind=coverageKind");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
+  assert.equal(modelDetailSurface.props.emptyTitle, "Detail");
+  assert.equal(modelDetailSurface.props.emptyState, "No platform objects are projected yet.");
   assert.deepEqual(modelDetailSurface.children, [
     "PlatformModelPrimaryPanel",
     "PlatformModelRelationships"
@@ -5430,6 +5440,55 @@ test("platform page uses authored change-set snapshot empty state", () => {
 
   assert.match(html, /No candidate snapshots for this change set\./);
   assert.doesNotMatch(html, /No candidate snapshots for this branch\./);
+});
+
+test("platform page uses authored empty-detail states", () => {
+  const emptyModel = {
+    lifecycleVocabulary: [],
+    lifecycleBoard: [],
+    branchLifecycleVocabulary: [],
+    branchBoard: [],
+    nodes: [],
+    edges: [],
+    docs: [],
+    gaps: [],
+    profiles: [],
+    changeSets: [],
+    branches: [],
+    changeSetEdits: [],
+    candidateSnapshots: [],
+    proposals: [],
+    proposalActions: [],
+    testGates: [],
+    testRuns: [],
+    runtimeRevisions: [],
+    activeRuntimeRevision: null,
+    snapshotBuilds: [],
+    snapshotBuildErrors: [],
+    snapshotDiagnostics: {},
+    branchTestRedGreen: [],
+    changeSetTestRedGreen: [],
+    latestTestResultsByGate: {},
+    docSections: [],
+    docTasks: [],
+    roadmapTasks: [],
+    epics: [],
+    features: [],
+    coverageEdges: [],
+    summaries: {}
+  };
+
+  const workflowHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:missing") });
+  const verificationHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=verification&id=gate:missing") });
+  const knowledgeHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=doc:missing") });
+  const signalsHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.missing") });
+  const modelHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:missing") });
+
+  assert.match(workflowHtml, /No workflow rows are projected yet\./);
+  assert.match(verificationHtml, /No verification rows are projected yet\./);
+  assert.match(knowledgeHtml, /No knowledge rows are projected yet\./);
+  assert.match(signalsHtml, /No signal rows are projected yet\./);
+  assert.match(modelHtml, /No platform objects are projected yet\./);
 });
 
 test("platform page applies authored list sort semantics and preserves them through pagination links", async () => {
