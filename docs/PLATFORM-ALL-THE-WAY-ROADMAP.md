@@ -1187,7 +1187,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 ### 12.2 RVM/WCSS Dogfooding
 
 - [~] Move more Platform Console structure into `platform-console.rvm`.
-- [ ] Move all Platform Console styles into `platform-console.wcss`.
+- [X] Move all Platform Console styles into `platform-console.wcss`.
 - [~] Build a renderer that can consume RVM surface declarations for internal platform pages.
 - [~] Replace hand-authored HTML sections with rendered RVM surface tree.
 - [X] Keep tests proving RVM identity and WCSS lowering.
@@ -1197,9 +1197,10 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] Current RVM dogfooding is partial but real: `plugins/platform/platform-console.rvm` now authors the platform page split itself through `PlatformOverviewPage`, `PlatformWorkflowPage`, `PlatformVerificationPage`, `PlatformKnowledgePage`, `PlatformSignalsPage`, and `PlatformModelPage`, each with authored `pageId`, `title`, `summary`, and child-surface membership.
 - [L] The authored page tree now also owns more of the visible section split instead of just top-level tabs. Overview includes authored summary/tree/map/profile sections, workflow includes authored branch/proposal/change-set command panels, verification includes authored stream/red-green/test-run panels, and model includes authored profile/coverage sections.
 - [L] `plugins/platform/platform-console-layout.js` now compiles that authored page tree into a stable read model, and `plugins/platform/platform-page.js` walks the authored `childSurfaces` when choosing `/platform` navigation, page titles/subtitles, section ordering, and whether authored operator forms need client behavior. Section body HTML, pagination behavior, and most detailed table rendering are still JS-backed by surface name, so this is still not full generic rendered-RVM replacement.
-- [L] Current WCSS proof is bridge-backed rather than fully file-driven: `platform-page.js` renders CSS from `platform-style.js`, and `platform-style.js` currently constructs the stylesheet in JS before rendering it. That is enough to keep identity/lowering coverage honest, but it does not mean all console styles have already been moved into authored `platform-console.wcss` or that generated-CSS parity with the file is solved.
+- [L] Platform console styling is now file-backed for the current supported subset: `plugins/platform/platform-style.js` reads `plugins/platform/platform-console.wcss`, lowers authored tokens/style selectors/media blocks through `plugins/platform/wcss-source.js`, and renders CSS from that authored file instead of constructing the console stylesheet in JS.
 - [L] The current gap is intentionally narrow: it applies to modeled platform surfaces with ids beginning `surface:platform` and checks for attached `rvmSource` and `wcssSource` graph edges (`authoredBy` / `styledBy`). It catches platform pages that drift away from authored source ownership without claiming the later rendered-RVM or generated-CSS parity work is done.
-- [L] The current generated-CSS drift gap is selector-coverage-backed: it compares selectors declared in `plugins/platform/platform-console.wcss` against selectors emitted by the current `platform-style.js` bridge and emits a `platform-css-drift` gap when they differ. It truthfully catches the current bridge/file mismatch, but declaration/value parity and file-driven lowering remain later work.
+- [L] The current generated-CSS drift gap is selector-coverage-backed: it compares selectors declared in `plugins/platform/platform-console.wcss` against selectors emitted by the current file-backed lowering path and emits a `platform-css-drift` gap when they differ. The live console no longer carries the earlier selector drift, but the check remains in place to catch future authored/rendered divergence.
+- [L] The current WCSS lowering path is intentionally narrow rather than a full generic compiler: `plugins/platform/wcss-source.js` supports the subset the platform console now uses (`theme`, `tokens`, flat `style` declarations, and `media` blocks with nested styles). If wider WCSS language features land later, that parser will need to expand or be replaced by a shared compiler.
 
 ### 12.3 MCP Parity
 

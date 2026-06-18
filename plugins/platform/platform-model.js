@@ -1154,6 +1154,7 @@ function extractAuthoredPlatformWcssSelectors(source = "") {
   let sawTheme = false;
   let section = null;
   let inStyle = false;
+  let sawTokens = false;
   for (const rawLine of String(source || "").split(/\r?\n/)) {
     const trimmed = rawLine.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -1171,15 +1172,24 @@ function extractAuthoredPlatformWcssSelectors(source = "") {
       }
       continue;
     }
+    if (section === "tokens" && indent === 2) {
+      sawTokens = true;
+      continue;
+    }
     if (section !== "styles") continue;
     if (indent === 2 && /^style\s+\S+/.test(trimmed)) {
       inStyle = true;
       continue;
     }
     if (indent === 4 && /^selector\s*=\s*.+$/.test(trimmed) && inStyle) {
-      selectors.push(trimmed.replace(/^selector\s*=\s*/, "").trim());
+      const selectorText = trimmed.replace(/^selector\s*=\s*/, "").trim();
+      for (const selector of selectorText.split(",")) {
+        const splitSelector = selector.trim();
+        if (splitSelector) selectors.push(splitSelector);
+      }
     }
   }
+  if (sawTokens) selectors.push(":root");
   return unique(selectors);
 }
 
@@ -1190,7 +1200,7 @@ function extractRenderedCssSelectors(cssText = "") {
   let match = null;
   while ((match = pattern.exec(stripped))) {
     const selectorText = String(match[2] || "").trim();
-    if (!selectorText) continue;
+    if (!selectorText || selectorText.startsWith("@")) continue;
     for (const selector of selectorText.split(",")) {
       const trimmed = selector.trim();
       if (trimmed) selectors.push(trimmed);
