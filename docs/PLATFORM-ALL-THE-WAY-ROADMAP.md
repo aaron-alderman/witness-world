@@ -1168,7 +1168,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add Test Gates view.
 - [X] Add Test Runs view.
 - [ ] Add Dependency Graph view.
-- [ ] Add Coverage Matrix view.
+- [X] Add Coverage Matrix view.
 - [ ] Add Defects view.
 - [ ] Add Defect Clusters view.
 - [ ] Add Telemetry view.
@@ -1176,7 +1176,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add Roadmap/Epics view.
 - [X] Add Boundaries view.
 - [X] Add Meta-System view.
-- [L] `/platform` now renders section-based human views for branches, change sets, candidate snapshots, runtime revisions, governed docs, test gates, test runs, roadmap tasks, epic detail, boundary nodes/relationships, and meta-system gaps on the main console page. Dependency graph, coverage, defect, telemetry, and session views remain later work.
+- [L] `/platform` now renders section-based human views for branches, change sets, candidate snapshots, runtime revisions, governed docs, test gates, test runs, roadmap tasks, epic detail, boundary nodes/relationships, coverage edges, and meta-system gaps on the main console page. Dependency graph, defect, telemetry, and session views remain later work.
 
 ### 12.2 RVM/WCSS Dogfooding
 

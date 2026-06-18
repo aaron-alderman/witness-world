@@ -101,6 +101,8 @@ export function renderPlatformPage(model) {
   const proposalActions = model.proposalActions ?? [];
   const proposals = model.proposals ?? [];
   const branchBoard = model.branchBoard ?? [];
+  const protectedCoverageEdges = coverageEdges.filter(row => row.coverageKind === "protectedObject");
+  const sourceCoverageEdges = coverageEdges.filter(row => row.coverageKind === "sourceDependency");
   const openProposals = proposals.filter(row => row.status === "open");
   const initialBranch = branches[0] ?? null;
   const initialRuntimeRevision = runtimeRevisions[0] ?? null;
@@ -684,6 +686,42 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Boundary Relationships</h2>
         <pre>${esc(JSON.stringify(boundaryEdges.slice(0, 80), null, 2))}</pre>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Coverage Matrix</h2>
+        <div class="platform-branch-summary">
+          <div class="card">
+            <h3>Coverage edges</h3>
+            <div>${esc(coverageEdges.length)}</div>
+            <div class="muted">All modeled gate-to-target coverage rows</div>
+          </div>
+          <div class="card">
+            <h3>Protected objects</h3>
+            <div>${esc(protectedCoverageEdges.length)}</div>
+            <div class="muted">Direct guarded platform objects</div>
+          </div>
+          <div class="card">
+            <h3>Source dependencies</h3>
+            <div>${esc(sourceCoverageEdges.length)}</div>
+            <div class="muted">File and source dependency coverage</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Gate</th><th>Coverage Kind</th><th>Target</th><th>Source Path</th></tr></thead>
+          <tbody>${tableRows(coverageEdges.slice(0, 120), [
+            row => row.gateTitle || row.gateId,
+            row => row.coverageKind,
+            row => row.targetLabel || row.targetId,
+            row => row.sourcePath || ""
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Coverage Matrix Detail</h2>
+        <pre>${esc(JSON.stringify(coverageEdges.slice(0, 120), null, 2))}</pre>
       </div>
     </section>
 

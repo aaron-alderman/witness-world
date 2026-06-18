@@ -4584,6 +4584,11 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Meta categories/);
   assert.match(html, /Boundaries/);
   assert.match(html, /Boundary Relationships/);
+  assert.match(html, /Coverage Matrix/);
+  assert.match(html, /Coverage Matrix Detail/);
+  assert.match(html, /Coverage edges/);
+  assert.match(html, /Protected objects/);
+  assert.match(html, /Source dependencies/);
   assert.match(html, /Governed Docs/);
   assert.match(html, /Doc Structure/);
   assert.match(html, /Doc Tasks/);
