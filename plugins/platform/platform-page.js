@@ -322,11 +322,16 @@ function renderPropertyCard(card) {
 
 function renderLongTailProperties(surface, ctx, record, usedKeys = [], fallbackTitle = "Properties") {
   const used = new Set(usedKeys);
+  const allowedKinds = new Set(surfaceKeyList(surface, "longTailValueKinds", ["string", "number", "boolean", "scalarList"]));
   const entries = Object.entries(record ?? {})
     .filter(([key, value]) => !used.has(key) && value !== undefined && value !== null && value !== "")
     .filter(([, value]) => {
-      if (Array.isArray(value)) return value.length > 0 && value.every(item => item === null || ["string", "number", "boolean"].includes(typeof item));
-      return ["string", "number", "boolean"].includes(typeof value);
+      if (Array.isArray(value)) {
+        return allowedKinds.has("scalarList")
+          && value.length > 0
+          && value.every(item => item === null || allowedKinds.has(typeof item));
+      }
+      return allowedKinds.has(typeof value);
     })
     .map(([key, value]) => ({
       label: humanizeKey(key),
