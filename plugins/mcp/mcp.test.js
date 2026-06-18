@@ -7,6 +7,111 @@ import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js"
 import { bundleId, handlerCatalog, providers, routes } from "./runtime.js";
 import { createMcpBundleSupportServices } from "./mcp-support-services.js";
 import { MCP_PROTOCOL_VERSION, executeMcpTool, listSupportedMcpTools, mcpToolNames, resolveMcpToolScope } from "./mcp-tools.js";
+import { createHandlers as createPlatformHandlers, providers as platformProviders } from "../platform/runtime.js";
+
+function buildRequestUrl(path, query = {}) {
+  const url = new URL(`http://localhost${path}`);
+  for (const [key, value] of Object.entries(query || {})) {
+    if (value == null) continue;
+    url.searchParams.set(key, String(value));
+  }
+  return url;
+}
+
+function normalizePlatformParity(value) {
+  if (Array.isArray(value)) return value.map(normalizePlatformParity);
+  if (!value || typeof value !== "object") return value;
+  const normalized = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (
+      key === "witness"
+      || key === "startWitness"
+      || key === "finishWitness"
+      || key === "createdAt"
+      || key === "updatedAt"
+      || key === "capturedAt"
+      || key === "producedAt"
+      || key === "startedAt"
+      || key === "finishedAt"
+      || key === "latestActivityAt"
+    ) {
+      continue;
+    }
+    normalized[key] = normalizePlatformParity(entry);
+  }
+  return normalized;
+}
+
+function createPlatformParityHarness({
+  world = createWorld(),
+  appContext = null
+} = {}) {
+  const handlers = createPlatformHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    platformTestRunner: async ({ command, timeoutMs }) => ({
+      startedAt: "2026-06-18T00:00:00.000Z",
+      finishedAt: "2026-06-18T00:00:01.000Z",
+      durationMs: 1000,
+      exitCode: 0,
+      signal: null,
+      status: "passed",
+      stdout: `TAP version 13\n1..1\nok 1 - ran ${command}\n`,
+      stderr: `<?xml version="1.0" encoding="UTF-8"?><testsuite name="platform" tests="1" failures="0" errors="0" skipped="0"></testsuite>`,
+      timedOut: false,
+      error: null,
+      timeoutMs
+    }),
+    sendGateFailure: (res, gate) => {
+      res.status = gate.status;
+      res.body = { error: gate.reason };
+    },
+    send: (res, status, contentType, body) => {
+      res.status = status;
+      res.body = body;
+      res.contentType = contentType;
+    },
+    sendJson: (res, status, body) => {
+      res.status = status;
+      res.body = body;
+      res.contentType = "application/json";
+    }
+  });
+  const resolvedAppContext = appContext ?? {
+    runtimeProfile: "full",
+    project: projector => world.project(projector)
+  };
+  return {
+    world,
+    async callHandler(request) {
+      const res = {};
+      await handlers[request.handler]({
+        req: {
+          body: request.body ?? {},
+          headers: request.headers ?? {},
+          on: () => {}
+        },
+        res,
+        params: request.params ?? {},
+        requestUrl: buildRequestUrl(request.path, request.query ?? {}),
+        requestActor: "aaron",
+        requestSession: { id: "session.platform" },
+        appContext: resolvedAppContext
+      });
+      return {
+        status: res.status ?? 500,
+        body: res.body,
+        contentType: res.contentType ?? "application/json",
+        buffer: Buffer.from(typeof res.body === "string" ? res.body : JSON.stringify(res.body ?? {}))
+      };
+    }
+  };
+}
 
 test("mcp plugin exposes MCP HTTP route ownership", () => {
   assert.equal(bundleId, "bundle-mcp");
@@ -494,6 +599,186 @@ test("platform MCP test tool routes through platform test-run handlers", async (
   assert.equal(calls.at(-1).path, "/api/platform-test-runs/testRun.platform.demo");
   assert.equal(calls.at(-1).params.id, "testRun.platform.demo");
 });
+
+test("implemented platform MCP tools stay in parity with direct platform handler responses", async () => withRegisteredPluginProjectors(platformProviders, async () => {
+  const direct = createPlatformParityHarness();
+  const viaMcp = createPlatformParityHarness();
+
+  const directDocs = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "docs" }
+  });
+  const mcpDocs = await executeMcpTool("platform.docs", {
+    args: { operation: "list" },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpDocs.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpDocs.structuredContent), normalizePlatformParity(directDocs.body));
+
+  const directRoadmap = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "roadmap", id: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }
+  });
+  const mcpRoadmap = await executeMcpTool("platform.roadmap", {
+    args: { operation: "read", id: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpRoadmap.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpRoadmap.structuredContent), normalizePlatformParity(directRoadmap.body));
+
+  const branchBody = {
+    id: "branch.parity.demo",
+    title: "Parity branch",
+    parentBranchId: null,
+    epic: "platform",
+    feature: "parity",
+    defect: null
+  };
+  const directBranchCreate = await direct.callHandler({
+    handler: "platform.branch.create",
+    method: "POST",
+    path: "/api/platform-branches",
+    body: branchBody
+  });
+  const mcpBranchCreate = await executeMcpTool("platform.branch", {
+    args: {
+      operation: "create",
+      id: branchBody.id,
+      title: branchBody.title,
+      epic: branchBody.epic,
+      feature: branchBody.feature
+    },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpBranchCreate.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpBranchCreate.structuredContent), normalizePlatformParity(directBranchCreate.body));
+
+  const directBranchRead = await direct.callHandler({
+    handler: "platform.branch.read",
+    method: "GET",
+    path: `/api/platform-branches/${encodeURIComponent(branchBody.id)}`,
+    params: { id: branchBody.id }
+  });
+  const mcpBranchRead = await executeMcpTool("platform.branch", {
+    args: { operation: "read", id: branchBody.id },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpBranchRead.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpBranchRead.structuredContent), normalizePlatformParity(directBranchRead.body));
+
+  const changeSetBody = {
+    id: "changeset.parity.demo",
+    branchId: branchBody.id,
+    title: "Parity change set",
+    reason: "Parity test"
+  };
+  const directChangeSetCreate = await direct.callHandler({
+    handler: "platform.changeSet.create",
+    method: "POST",
+    path: "/api/platform-change-sets",
+    body: changeSetBody
+  });
+  const mcpChangeSetCreate = await executeMcpTool("platform.changeSet", {
+    args: {
+      operation: "create",
+      id: changeSetBody.id,
+      branchId: changeSetBody.branchId,
+      title: changeSetBody.title,
+      reason: changeSetBody.reason
+    },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpChangeSetCreate.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpChangeSetCreate.structuredContent), normalizePlatformParity(directChangeSetCreate.body));
+
+  const directChangeSetRead = await direct.callHandler({
+    handler: "platform.changeSet.read",
+    method: "GET",
+    path: `/api/platform-change-sets/${encodeURIComponent(changeSetBody.id)}`,
+    params: { id: changeSetBody.id }
+  });
+  const mcpChangeSetRead = await executeMcpTool("platform.changeSet", {
+    args: { operation: "read", changeSetId: changeSetBody.id },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpChangeSetRead.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpChangeSetRead.structuredContent), normalizePlatformParity(directChangeSetRead.body));
+
+  const proposalBody = {
+    id: "proposal.platform.parity",
+    action: "branch.create",
+    body: {
+      id: "branch.platform.proposal.parity",
+      title: "Proposal parity branch"
+    },
+    reason: "Parity proposal"
+  };
+  const directProposalCreate = await direct.callHandler({
+    handler: "platform.proposal.create",
+    method: "POST",
+    path: "/api/platform-proposals",
+    body: proposalBody
+  });
+  const mcpProposalCreate = await executeMcpTool("platform.proposal", {
+    args: proposalBody,
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpProposalCreate.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpProposalCreate.structuredContent), normalizePlatformParity(directProposalCreate.body));
+
+  const directTestList = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "testRuns", id: branchBody.id }
+  });
+  const mcpTestList = await executeMcpTool("platform.test", {
+    args: { operation: "list", id: branchBody.id },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpTestList.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpTestList.structuredContent), normalizePlatformParity(directTestList.body));
+
+  const testRunBody = {
+    id: "testRun.parity.demo",
+    gateId: "gate:plugins/platform/platform.test.js",
+    branchId: branchBody.id
+  };
+  const directTestRun = await direct.callHandler({
+    handler: "platform.testRun.create",
+    method: "POST",
+    path: "/api/platform-test-runs",
+    body: testRunBody
+  });
+  const mcpTestRun = await executeMcpTool("platform.test", {
+    args: {
+      operation: "run",
+      id: testRunBody.id,
+      gateId: testRunBody.gateId,
+      branchId: testRunBody.branchId
+    },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpTestRun.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpTestRun.structuredContent), normalizePlatformParity(directTestRun.body));
+
+  const directTestRead = await direct.callHandler({
+    handler: "platform.testRun.read",
+    method: "GET",
+    path: `/api/platform-test-runs/${encodeURIComponent(testRunBody.id)}`,
+    params: { id: testRunBody.id }
+  });
+  const mcpTestRead = await executeMcpTool("platform.test", {
+    args: { operation: "read", id: testRunBody.id },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpTestRead.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpTestRead.structuredContent), normalizePlatformParity(directTestRead.body));
+}));
 
 test("mcp runtime ownership is not implemented in core compatibility files", async () => {
   const routeHandlersSource = await readFile(new URL("../../src/runtime-route-handlers.js", import.meta.url), "utf8");

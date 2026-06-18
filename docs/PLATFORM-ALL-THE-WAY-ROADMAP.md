@@ -1197,9 +1197,10 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] `platform.telemetry`
   - [ ] `platform.defects`
   - [X] `platform.roadmap`
-- [ ] Add tests for human/MCP parity.
+- [X] Add tests for human/MCP parity.
 - [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated telemetry, defect, and roadmap MCP lanes remain later work.
 - [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, and checkbox task rows. This is not yet the broader Phase 10 planning model with first-class epics, milestones, features, or evidence-backed task status.
+- [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, branch, change-set, proposal-create, and test-run/list/read flows. Future telemetry, defect, and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
 
 ## Phase 13: Policy, Authority, And Safety
 
