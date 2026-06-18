@@ -745,12 +745,13 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add tests that one RVM file edit runs only relevant RVM/snapshot gates.
 - [X] Add tests that plugin route edit runs plugin ownership/profile route gates.
 - [X] Add tests that WCSS-only edit does not run backend-only gates.
-- [ ] Add tests that dependency graph misses are logged as meta-defects.
+- [X] Add tests that dependency graph misses are logged as meta-defects.
 - [L] Current V1 now exposes `changedPaths`, affected system summaries, docs freshness, and telemetry impact summaries on both branches and change sets, and the platform model derives affected test gates for both scopes by matching declared source dependencies and protected objects. It still does not compute the smallest meaningful gate set, attach formal selection explanations per gate, or automatically run the selected set.
 - [L] Affected gate rows now carry explicit `selectionReasons` for direct file dependency, imported source dependency, and plugin ownership dependency. Route ownership, doc freshness, telemetry regression, and prior defect cluster explanations still need dedicated affected-object modeling instead of the current broad target/path matching.
 - [L] Current route-aware gate selection is still heuristic rather than a general dependency graph. It now infers broad platform plugin/capability/profile targets from `plugins/platform/runtime.js`, `plugins/platform/handlers.js`, `plugins/mcp/*`, and `store/seeds/runtime-profiles.json`, while authored platform page sources such as `plugins/platform/platform-page.js`, `plugins/platform/platform-console.rvm`, `plugins/platform/platform-console.wcss`, and `plugins/platform/platform-style.js` are classified as a narrower `surface.platform` system and infer the `/platform` surface, route, and page-handler targets instead of the whole plugin.
 - [L] The current WCSS-only backend exclusion proof is anchored on runtime-core gate selection: a `plugins/platform/platform-console.wcss` change continues to select platform-facing gates while leaving `gate:test/runtime-server.test.js` unselected.
 - [L] Current RVM-only proof is limited to backend exclusion: a `plugins/platform/platform-console.rvm` change selects `gate:plugins/platform/platform.test.js` and leaves `gate:test/runtime-server.test.js` unselected, but `gate:test/runtime-profile.test.js` still participates because that profile-exposure test directly stages and exercises `/platform` authored sources.
+- [L] Current dependency-graph miss detection is gap-backed rather than full defect-backed: when a change set changes non-doc, non-test sources and the current gate model selects no verification gates, `platform-model` emits a `meta-defect` gap with `category = "dependency-graph-miss"` until the dedicated defect/meta-defect projectors land later.
 
 ## Phase 6: Pure Dependency Analysis And Coverage
 

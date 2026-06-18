@@ -390,7 +390,42 @@ function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], test
   }
 }
 
-function buildGaps(nodes, edges) {
+function buildDependencyGraphMissGaps(_branches = [], changeSets = [], testGateProjection = null) {
+  const gaps = [];
+  const changeSetGateIds = testGateProjection?.byChangeSet ?? Object.create(null);
+
+  function coverageRelevantPaths(changedPaths = []) {
+    return (Array.isArray(changedPaths) ? changedPaths : [])
+      .map(String)
+      .filter(Boolean)
+      .filter(changedPath => !changedPath.startsWith("docs/"))
+      .filter(changedPath => !(changedPath.startsWith("test/") || changedPath.endsWith(".test.js")));
+  }
+
+  for (const changeSet of Array.isArray(changeSets) ? changeSets : []) {
+    const relevantPaths = coverageRelevantPaths(changeSet.changedPaths);
+    if (!relevantPaths.length) continue;
+    const selectedGateIds = changeSetGateIds[String(changeSet.id)] ?? [];
+    if (selectedGateIds.length) continue;
+    gaps.push({
+      id: `gap.meta-defect.dependency-graph.changeSet.${String(changeSet.id)}`,
+      severity: "medium",
+      kind: "meta-defect",
+      category: "dependency-graph-miss",
+      scopeKind: "changeSet",
+      target: `changeSet:${String(changeSet.id)}`,
+      branchId: changeSet.branchId ? String(changeSet.branchId) : null,
+      changeSetId: String(changeSet.id),
+      changedPaths: relevantPaths,
+      reason: `Dependency graph selected no verification gates for changed non-doc sources in ${String(changeSet.id)}.`,
+      recommendedProposal: null
+    });
+  }
+
+  return gaps;
+}
+
+function buildGaps(nodes, edges, { branches = [], changeSets = [], testGateProjection = null } = {}) {
   const incoming = new Map();
   const outgoing = new Map();
   for (const edge of edges.values()) {
@@ -456,6 +491,7 @@ function buildGaps(nodes, edges) {
       });
     }
   }
+  gaps.push(...buildDependencyGraphMissGaps(branches, changeSets, testGateProjection));
   return gaps.sort((a, b) => a.severity.localeCompare(b.severity) || a.id.localeCompare(b.id));
 }
 
@@ -1595,7 +1631,7 @@ export async function buildPlatformModel({
 
   const testGateProjection = buildTestGateRows(nodes, edges, branches, changeSets, latestTestResultsProjection.byGate ?? Object.create(null));
   addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts);
-  const gaps = buildGaps(nodes, edges);
+  const gaps = buildGaps(nodes, edges, { branches, changeSets, testGateProjection });
   const docs = parsedDocs.map(doc => ({
     id: doc.id,
     path: doc.path,

@@ -752,6 +752,84 @@ test("platform RVM-only edits select platform snapshot gates without runtime-cor
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-rvm"].includes("gate:test/runtime-server.test.js"), false);
 });
 
+test("dependency graph misses are logged as meta-defect gaps when no gates cover changed sources", async () => {
+  const uncoveredPath = ["src", "unmodeled", "dependency-gap.js"].join("/");
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.dependency.miss", title: "Dependency Miss", status: "open" }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeSet:dependency-miss", branchId: "branch.dependency.miss", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          {
+            id: "changeSetEdit:dependency-miss:store",
+            changeSetId: "changeSet:dependency-miss",
+            path: uncoveredPath
+          }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const changeSetGap = model.gaps.find(gap => gap.id === "gap.meta-defect.dependency-graph.changeSet.changeSet:dependency-miss");
+
+  assert.ok(changeSetGap);
+  assert.equal(changeSetGap.kind, "meta-defect");
+  assert.equal(changeSetGap.category, "dependency-graph-miss");
+  assert.equal(changeSetGap.scopeKind, "changeSet");
+  assert.equal(changeSetGap.target, "changeSet:changeSet:dependency-miss");
+  assert.equal(changeSetGap.branchId, "branch.dependency.miss");
+  assert.equal(changeSetGap.changeSetId, "changeSet:dependency-miss");
+  assert.deepEqual(changeSetGap.changedPaths, [uncoveredPath]);
+
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:dependency-miss"], undefined);
+});
+
+test("doc-only changes do not emit dependency graph miss meta-defects", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.docs.only", title: "Docs Only", status: "open" }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeSet:docs-only", branchId: "branch.docs.only", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          {
+            id: "changeSetEdit:docs-only:roadmap",
+            changeSetId: "changeSet:docs-only",
+            path: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"
+          }
+        ];
+      }
+      return [];
+    }
+  });
+
+  assert.equal(model.gaps.some(gap => gap.category === "dependency-graph-miss" && gap.target === "changeSet:changeSet:docs-only"), false);
+});
+
 test("platform roadmap task parser preserves extended status markers", () => {
   const tasks = parseRoadmapTasks("docs/demo.md", `
 # Demo
