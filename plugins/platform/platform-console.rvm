@@ -69,6 +69,9 @@ view PlatformConsolePage {
     PlatformOverviewPage
     PlatformWorkflowPage
     PlatformVerificationPage
+    PlatformVerificationStatusPage
+    PlatformVerificationRunsPage
+    PlatformVerificationRuntimePage
     PlatformKnowledgePage
     PlatformSignalsPage
     PlatformModelPage
@@ -125,19 +128,61 @@ view PlatformVerificationPage {
   kind page
   class platform-verification
   prop pageId = "verification"
-  prop modelView = "verification"
-  prop summaryCards = "Policies=verificationPolicies@count|Queue=verificationQueue@count|Executions=verificationExecutions@count|Test Gates=testGates@count|Test Runs=testRuns@count|Runtime Revisions=runtimeRevisions@count|Snapshot Builds=snapshotBuilds@count"
+  prop modelView = "verificationOverview"
+  prop summaryCards = "Fresh=verificationFreshness@countWhere:status=fresh|Stale=verificationFreshness@countWhere:status=stale|Missing=verificationFreshness@countWhere:status=missing|Running=testRuns@countWhere:status=running|Regressed=testReports@countWhere:status=regressed|Queued=verificationQueue@count"
   prop title = "Verification"
-  prop summary = "Live test runs, RVM-authored reports, candidate snapshots, failures, regressions, and runtime revisions."
+  prop summary = "Verification landing page for live health, red/green state, and links into narrower authored verification pages."
   children {
     PlatformVerificationStatusBanner
-    PlatformVerificationList
-    PlatformVerificationDetail
     PlatformVerificationStreams
     PlatformBranchRedGreenList
     PlatformChangeSetRedGreenList
+  }
+}
+
+view PlatformVerificationStatusPage {
+  kind page
+  class platform-verification
+  prop pageId = "verificationStatus"
+  prop modelView = "verificationStatus"
+  prop summaryCards = "Policies=verificationPolicies@count|Fresh=verificationFreshness@countWhere:status=fresh|Stale=verificationFreshness@countWhere:status=stale|Missing=verificationFreshness@countWhere:status=missing|Executions=verificationExecutions@count|Gates=testGates@count"
+  prop title = "Verification Status"
+  prop summary = "Policies, freshness, invalidations, queue state, and test-gate detail."
+  children {
+    PlatformVerificationStatusBanner
+    PlatformVerificationStatusList
+    PlatformVerificationDetail
+  }
+}
+
+view PlatformVerificationRunsPage {
+  kind page
+  class platform-verification
+  prop pageId = "verificationRuns"
+  prop modelView = "verificationRuns"
+  prop summaryCards = "Runs=testRuns@count|Reports=testReports@count|Artifacts=testArtifacts@count|Suites=testSuites@count|Failed Cases=testCases@countWhere:status=failed|Errored Cases=testCases@countWhere:status=error"
+  prop title = "Verification Runs"
+  prop summary = "Test runs, authored reports, artifacts, suites, failures, and run execution commands."
+  children {
+    PlatformVerificationRunsList
+    PlatformVerificationDetail
     PlatformTestRunPanel
     PlatformSelectedTestRunPanel
+  }
+}
+
+view PlatformVerificationRuntimePage {
+  kind page
+  class platform-verification
+  prop pageId = "verificationRuntime"
+  prop modelView = "verificationRuntime"
+  prop summaryCards = "Runtime Revisions=runtimeRevisions@count|Candidate Snapshots=candidateSnapshots@count|Snapshot Builds=snapshotBuilds@count|Build Errors=snapshotBuildErrors@count"
+  prop title = "Verification Runtime"
+  prop summary = "Candidate snapshots, runtime revisions, snapshot builds, and runtime rebuild diagnostics."
+  children {
+    PlatformVerificationRuntimeList
+    PlatformVerificationDetail
+    PlatformVerificationStreams
   }
 }
 
@@ -801,14 +846,67 @@ view PlatformVerificationList {
   }
 }
 
+view PlatformVerificationStatusList {
+  kind table
+  class platform-verification-list
+  prop title = "Verification Status Items"
+  prop summary = "Paginated list of policies, freshness rows, invalidations, queue rows, executions, and gates."
+  prop listSource = "verificationItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No verification status rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformVerificationRunsList {
+  kind table
+  class platform-verification-list
+  prop title = "Verification Run Items"
+  prop summary = "Paginated list of projected test runs and their authored report resources."
+  prop listSource = "verificationItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No verification run rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformVerificationRuntimeList {
+  kind table
+  class platform-verification-list
+  prop title = "Verification Runtime Items"
+  prop summary = "Paginated list of candidate snapshots and runtime revision rows."
+  prop listSource = "verificationItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No verification runtime rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
 view PlatformVerificationDetail {
   kind region
   class platform-verification-detail
   prop title = "Verification Detail"
   prop summary = "Properties and linked resources for the selected verification object."
   prop detailSource = "verification"
-  prop detailSelectionSources = "verificationPolicies|verificationQueue|verificationExecutions|testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots"
+  prop detailSelectionSources = "verificationPolicies|verificationFreshness|verificationInvalidations|verificationQueue|verificationExecutions|testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots"
   prop verificationPolicyIdPrefixes = "verificationPolicy:"
+  prop verificationFreshnessIdPrefixes = "verificationFreshness:"
+  prop verificationInvalidationIdPrefixes = "verificationInvalidation:"
   prop verificationQueueIdPrefixes = "verificationQueue:"
   prop verificationExecutionIdPrefixes = "verificationExecution:"
   prop gateIdPrefixes = "gate:"
@@ -824,6 +922,8 @@ view PlatformVerificationDetail {
     PlatformVerificationRunHistory
     PlatformVerificationBuildHistory
     PlatformVerificationBuildErrors
+    PlatformVerificationFreshnessSummary
+    PlatformVerificationInvalidationReasons
     PlatformVerificationReportSummary
     PlatformVerificationArtifactsReport
     PlatformVerificationSuiteSummary
@@ -842,7 +942,7 @@ view PlatformVerificationStatusBanner {
   prop summary = "Current verification health, active execution, and first-pass regression signals."
   prop propertyRecordSource = "verificationStatus"
   prop propertyCardTitle = "Current Verification State"
-  prop propertyFields = "Status=status|Summary=summary|Running runs=runningCount|Failing gates=failingGateCount|Regressed runs=regressedRunCount|Queued items=queueCount|Policy source=policySource|Persistence source=persistenceSource|Ledger backend=ledgerBackend|Artifact backend=artifactBackend|Cache backend=cacheBackend|Latest completed run=latestCompletedRunId@concept|Latest completion=latestCompletedAt|Active runtime revision=activeRuntimeRevision@concept"
+  prop propertyFields = "Status=status|Summary=summary|Fresh gates=freshGateCount|Stale gates=staleGateCount|Missing gates=missingGateCount|Running runs=runningCount|Failing gates=failingGateCount|Regressed runs=regressedRunCount|Queued items=queueCount|Policy source=policySource|Persistence source=persistenceSource|Ledger backend=ledgerBackend|Artifact backend=artifactBackend|Cache backend=cacheBackend|Latest completed run=latestCompletedRunId@concept|Latest completion=latestCompletedAt|Active runtime revision=activeRuntimeRevision@concept"
   projections {
     PlatformModelRead
   }
@@ -852,7 +952,7 @@ view PlatformVerificationPrimaryPanel {
   kind region
   class platform-verification-primary
   prop detailPanelRole = "primary"
-  prop detailKinds = "verificationPolicy|verificationExecution|gate|runtimeRevision|candidateSnapshot|testRun|testReport"
+  prop detailKinds = "verificationPolicy|verificationFreshness|verificationInvalidation|verificationExecution|gate|runtimeRevision|candidateSnapshot|testRun|testReport"
   prop title = "Primary Detail"
   prop summary = "Selected verification object properties and long-tail fields."
   prop longTailCardTitle = "Properties"
@@ -868,10 +968,14 @@ view PlatformVerificationPrimaryPanel {
   prop candidateSnapshotFields = "Snapshot=id@concept|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Revision=revision|API resource=id@api"
   prop verificationPolicyCardTitle = "Verification Policy Detail"
   prop verificationPolicyFields = "Policy=id@concept|Status=status|Source=policySource|Gate=gateId@concept|Execution class=executionClass|Enabled=enabled|Startup=startup|Watch=watch|Change set=onChangeSet|Exclusive=exclusive|Clean workspace=requiresCleanWorkspace|Priority=priority|Timeout=timeoutMs"
+  prop verificationFreshnessCardTitle = "Verification Freshness"
+  prop verificationFreshnessFields = "Freshness=id@concept|Status=status|Gate=gateId@concept|Latest run=latestRunId@concept|Latest passed=latestPassedRunId@concept|Reasons=reasonKinds@value|Summary=reasonSummary|Blocking=blocking|Stale since=staleSince"
+  prop verificationInvalidationCardTitle = "Verification Invalidation"
+  prop verificationInvalidationFields = "Invalidation=id@concept|Gate=gateId@concept|Reason=reasonKind|Summary=reasonSummary|Previous run=previousRunId@concept|Paths=changedPaths@value|Targets=targetIds@value|Produced=producedAt"
   prop verificationExecutionCardTitle = "Verification Execution Detail"
   prop verificationExecutionFields = "Execution=id@concept|Status=status|Gate=gateId@concept|Run=runId@concept|Trigger=triggerKind|Execution class=executionClass|Exclusive=exclusive|Started=startedAt|Finished=finishedAt"
   prop testRunCardTitle = "Test Run Detail"
-  prop testRunFields = "Run=id@concept|Status=status|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Cache=cacheStatus|Cache hit run=cacheHitRunId@concept|Duration=durationMs|Exit=exitCode|API resource=id@api"
+  prop testRunFields = "Run=id@concept|Status=status|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Cache=cacheStatus|Cache hit run=cacheHitRunId@concept|Freshness=freshnessAtReadStatus|Freshness summary=freshnessAtReadSummary|Invalidations=invalidationReasonKinds@value|Duration=durationMs|Exit=exitCode|API resource=id@api"
 }
 
 view PlatformVerificationRelatedPanel {
@@ -900,13 +1004,37 @@ view PlatformVerificationRunHistory {
   kind table
   class platform-verification-runs
   prop detailPanelRole = "runHistory"
-  prop detailKinds = "gate"
+  prop detailKinds = "gate|verificationFreshness|verificationInvalidation"
   prop title = "Recent Test Runs"
   prop summary = "Recent test-run history for the selected verification object when available."
   prop columns = "Status|Run|Branch|Duration|Exit"
   prop rowFields = "Status=status|Run=id@concept|Branch=branchId@concept|Duration=durationMs|Exit=exitCode"
   prop emptyState = "No runs for this gate yet."
   prop rowLimit = "12"
+}
+
+view PlatformVerificationFreshnessSummary {
+  kind region
+  class platform-verification-freshness
+  prop detailPanelRole = "freshnessSummary"
+  prop detailKinds = "gate|verificationFreshness|verificationInvalidation|testRun|testReport"
+  prop title = "Gate Freshness Summary"
+  prop summary = "Current durable freshness state for the selected gate or run."
+  prop propertyCardTitle = "Freshness"
+  prop propertyFields = "Freshness=id@concept|Status=status|Gate=gateId@concept|Latest run=latestRunId@concept|Latest passed=latestPassedRunId@concept|Reasons=reasonKinds@value|Summary=reasonSummary|Changed paths=changedPaths@value|Targets=targetIds@value|Blocking=blocking|Stale since=staleSince|Produced=producedAt"
+}
+
+view PlatformVerificationInvalidationReasons {
+  kind table
+  class platform-verification-invalidations
+  prop detailPanelRole = "invalidationReasons"
+  prop detailKinds = "gate|verificationFreshness|verificationInvalidation|testRun|testReport"
+  prop title = "Invalidation Reasons"
+  prop summary = "Durable invalidation history for the selected gate or run."
+  prop columns = "Reason|Summary|Changed Paths|Targets"
+  prop rowFields = "Reason=reasonKind|Summary=reasonSummary|Changed Paths=changedPaths@value|Targets=targetIds@value"
+  prop emptyState = "No invalidation reasons are recorded for this gate."
+  prop rowLimit = "20"
 }
 
 view PlatformVerificationBuildHistory {

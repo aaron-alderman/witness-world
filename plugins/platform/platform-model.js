@@ -1405,6 +1405,16 @@ function matchesPackageApplyPreviewRow(row, id) {
     || (row.relatedConvergencePatchIds ?? []).includes(target);
 }
 
+function matchesCapabilityRevisionHistoryRow(row, id) {
+  const target = typeof id === "string" && id.trim() ? id.trim() : "";
+  if (!target) return true;
+  return row.capabilityId === target
+    || row.witnessId === target
+    || row.version === target
+    || row.previousVersion === target
+    || row.rollbackFromVersion === target;
+}
+
 function slugify(value) {
   return String(value || "")
     .trim()
@@ -2621,6 +2631,7 @@ export async function buildPlatformModel({
     ...projectRows(project, moduleProjectors.capabilityCatalog)
   ];
   const capabilityInstalls = projectRows(project, moduleProjectors.capabilityInstalls);
+  const capabilityRevisionHistory = projectRows(project, moduleProjectors.capabilityRevisionHistory);
   const compatibilityBridges = buildCompatibilityBridgeLedger({
     capabilities: capabilityDefinitions,
     capabilityInstalls
@@ -2880,6 +2891,20 @@ export async function buildPlatformModel({
       status: "active",
       source: "runtime.diagnostics"
     });
+  }
+
+  for (const row of capabilityRevisionHistory) {
+    const nodeId = `capabilityRevision:${row.capabilityId}:${row.witnessId}`;
+    addNode(nodes, {
+      id: nodeId,
+      kind: "capabilityRevision",
+      title: row.version ? `${row.capabilityId} ${row.version}` : row.capabilityId,
+      lifecycle: ["author", "steward"],
+      owner: row.actor ?? row.capabilityId,
+      status: row.action,
+      source: row.witnessId || "witnesses"
+    });
+    addEdge(edges, nodeId, "tracks", `capability:${row.capabilityId}`, "witnesses");
   }
 
   for (const row of packageCoexistence) {
@@ -3767,6 +3792,7 @@ export async function buildPlatformModel({
     packagePatches,
     packageTransformers,
     packageDependencies,
+    capabilityRevisionHistory,
     packageCoexistence,
     packageConvergence,
     packageApplyPreviews,
@@ -3891,6 +3917,64 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       branchTestRedGreen: model.branchTestRedGreen,
       changeSetTestRedGreen: model.changeSetTestRedGreen,
       latestTestResultsByGate: model.latestTestResultsByGate,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verificationOverview") {
+    return {
+      testRuns: model.testRuns,
+      testReports: model.testReports,
+      verificationFreshness: model.verificationFreshness,
+      verificationQueue: model.verificationQueue,
+      branchTestRedGreen: model.branchTestRedGreen,
+      changeSetTestRedGreen: model.changeSetTestRedGreen,
+      latestTestResultsByGate: model.latestTestResultsByGate,
+      activeRuntimeRevision: model.activeRuntimeRevision,
+      testMonitorDiagnostics: model.testMonitorDiagnostics,
+      verificationPersistence: model.verificationPersistence,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verificationStatus") {
+    return {
+      testGates: model.testGates,
+      testRuns: model.testRuns,
+      testReports: model.testReports,
+      verificationPolicies: model.verificationPolicies,
+      verificationFreshness: model.verificationFreshness,
+      verificationInvalidations: model.verificationInvalidations,
+      verificationQueue: model.verificationQueue,
+      verificationExecutions: model.verificationExecutions,
+      latestTestResultsByGate: model.latestTestResultsByGate,
+      activeRuntimeRevision: model.activeRuntimeRevision,
+      testMonitorDiagnostics: model.testMonitorDiagnostics,
+      verificationPersistence: model.verificationPersistence,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verificationRuns") {
+    return {
+      testGates: model.testGates,
+      testRuns: model.testRuns,
+      testArtifacts: model.testArtifacts,
+      testSuites: model.testSuites,
+      testCases: model.testCases,
+      testReports: model.testReports,
+      verificationFreshness: model.verificationFreshness,
+      verificationInvalidations: model.verificationInvalidations,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verificationRuntime") {
+    return {
+      runtimeRevisions: model.runtimeRevisions,
+      activeRuntimeRevision: model.activeRuntimeRevision,
+      candidateSnapshots: model.candidateSnapshots,
+      snapshotBuilds: model.snapshotBuilds,
+      snapshotBuildErrors: model.snapshotBuildErrors,
+      snapshotDiagnostics: model.snapshotDiagnostics,
+      testMonitorDiagnostics: model.testMonitorDiagnostics,
+      verificationPersistence: model.verificationPersistence,
       summaries: model.summaries
     };
   }
@@ -4286,6 +4370,12 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       ? (model.packageApplyPreviews ?? []).filter(row => matchesPackageApplyPreviewRow(row, id))
       : (model.packageApplyPreviews ?? []);
     return { packageApplyPreviews, summaries: model.summaries };
+  }
+  if (view === "capabilityRevisionHistory") {
+    const capabilityRevisionHistory = id
+      ? (model.capabilityRevisionHistory ?? []).filter(row => matchesCapabilityRevisionHistoryRow(row, id))
+      : (model.capabilityRevisionHistory ?? []);
+    return { capabilityRevisionHistory, summaries: model.summaries };
   }
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;

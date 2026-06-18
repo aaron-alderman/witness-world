@@ -5,7 +5,10 @@ import { filterPlatformModel } from "./platform-model.js";
 const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
   Object.freeze({ id: "overview", title: "Overview", subtitle: "Counts, authored surfaces, lifecycle, and quick links.", modelView: "overview" }),
   Object.freeze({ id: "workflow", title: "Workflow", subtitle: "Branches, change sets, proposals, and authoring commands.", modelView: "workflow" }),
-  Object.freeze({ id: "verification", title: "Verification", subtitle: "Live test runs, RVM-authored reports, candidate snapshots, failures, regressions, and runtime revisions.", modelView: "verification" }),
+  Object.freeze({ id: "verification", title: "Verification", subtitle: "Verification landing page for live health, red/green state, and links into narrower authored verification pages.", modelView: "verificationOverview" }),
+  Object.freeze({ id: "verificationStatus", title: "Verification Status", subtitle: "Policies, freshness, invalidations, queue state, and test-gate detail.", modelView: "verificationStatus" }),
+  Object.freeze({ id: "verificationRuns", title: "Verification Runs", subtitle: "Test runs, authored reports, artifacts, suites, failures, and run execution commands.", modelView: "verificationRuns" }),
+  Object.freeze({ id: "verificationRuntime", title: "Verification Runtime", subtitle: "Candidate snapshots, runtime revisions, snapshot builds, and runtime rebuild diagnostics.", modelView: "verificationRuntime" }),
   Object.freeze({ id: "knowledge", title: "Knowledge", subtitle: "Governed docs, roadmap tasks, epics, features, and intent-linked knowledge.", modelView: "knowledge" }),
   Object.freeze({ id: "signals", title: "Signals", subtitle: "Gaps, telemetry, defect clusters, and boundaries.", modelView: "signals" }),
   Object.freeze({ id: "model", title: "Model", subtitle: "Platform objects, relationships, profiles, and dependency evidence.", modelView: "model" }),
@@ -225,12 +228,17 @@ function conceptDestination(value) {
   if (raw.startsWith("branch:")) return { view: "workflow", id: raw };
   if (raw.startsWith("changeSet:") || raw.startsWith("changeset.")) return { view: "workflow", id: raw };
   if (raw.startsWith("proposal:")) return { view: "workflow", id: raw };
-  if (raw.startsWith("candidateSnapshot:")) return { view: "verification", id: raw };
+  if (raw.startsWith("candidateSnapshot:")) return { view: "verificationRuntime", id: raw };
   if (raw.startsWith("runtimeRevision:") || raw.startsWith("backendRevision:") || raw.startsWith("frontendRevision:") || raw.startsWith("snapshotBuild:") || raw.startsWith("snapshotBuildError:")) {
-    return { view: "verification", id: raw };
+    return { view: "verificationRuntime", id: raw };
   }
   if (raw.startsWith("gate:") || raw.startsWith("testRun:") || raw.startsWith("testResult:") || raw.startsWith("testArtifact:") || raw.startsWith("testSuite:") || raw.startsWith("testCase:") || raw.startsWith("testReport:")) {
-    return { view: "verification", id: raw };
+    return raw.startsWith("gate:")
+      ? { view: "verificationStatus", id: raw }
+      : { view: "verificationRuns", id: raw };
+  }
+  if (raw.startsWith("verificationPolicy:") || raw.startsWith("verificationFreshness:") || raw.startsWith("verificationInvalidation:") || raw.startsWith("verificationQueue:") || raw.startsWith("verificationExecution:")) {
+    return { view: "verificationStatus", id: raw };
   }
   if (raw.startsWith("roadmap:") || raw.startsWith("epic:") || raw.startsWith("feature:") || raw.startsWith("roadmapTask:") || raw.startsWith("docTask:")) {
     return { view: "knowledge", id: raw };
@@ -1232,6 +1240,22 @@ function verificationItems(model) {
     scope: policy.runtimeProfile || policy.policySource || "",
     summary: `${policy.executionClass || "defaults"}, ${policy.policySource || "synthesized"}`
   }));
+  const freshnessRows = (model.verificationFreshness ?? []).map(row => ({
+    pageKind: "verificationFreshness",
+    id: row.id,
+    title: row.gateId ? `Freshness ${row.gateId}` : row.id,
+    status: row.status,
+    scope: row.runtimeProfile || "",
+    summary: row.reasonSummary || "Verification freshness"
+  }));
+  const invalidationRows = (model.verificationInvalidations ?? []).map(row => ({
+    pageKind: "verificationInvalidation",
+    id: row.id,
+    title: row.gateId ? `Invalidation ${row.gateId}` : row.id,
+    status: row.reasonKind,
+    scope: row.runtimeProfile || "",
+    summary: row.reasonSummary || ""
+  }));
   const queueRows = (model.verificationQueue ?? []).map(row => ({
     pageKind: "verificationQueue",
     id: row.id,
@@ -1280,7 +1304,7 @@ function verificationItems(model) {
     scope: snapshot.branchId || "",
     summary: `revision ${snapshot.revision ?? "n/a"}, ${snapshot.errorCount ?? snapshot.errors?.length ?? 0} errors`
   }));
-  return [...policies, ...queueRows, ...executions, ...gates, ...runs, ...revisions, ...snapshots].sort((left, right) =>
+  return [...policies, ...freshnessRows, ...invalidationRows, ...queueRows, ...executions, ...gates, ...runs, ...revisions, ...snapshots].sort((left, right) =>
     left.pageKind.localeCompare(right.pageKind)
     || left.id.localeCompare(right.id)
   );
@@ -1420,6 +1444,10 @@ function detailRecordsForSource(source, model) {
       return model.testGates ?? [];
     case "verificationPolicies":
       return model.verificationPolicies ?? [];
+    case "verificationFreshness":
+      return model.verificationFreshness ?? [];
+    case "verificationInvalidations":
+      return model.verificationInvalidations ?? [];
     case "verificationQueue":
       return model.verificationQueue ?? [];
     case "verificationExecutions":
@@ -1739,7 +1767,11 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const suiteSummarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "suiteSummary", "PlatformVerificationSuiteSummary");
   const failingCasesSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "failingCases", "PlatformVerificationFailingCases");
   const regressionSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "regressionSummary", "PlatformVerificationRegressionSummary");
+  const freshnessSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "freshnessSummary", "PlatformVerificationFreshnessSummary");
+  const invalidationSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "invalidationReasons", "PlatformVerificationInvalidationReasons");
   const verificationPolicyIdPrefixes = surfaceIdPrefixes(surface, "verificationPolicyIdPrefixes");
+  const verificationFreshnessIdPrefixes = surfaceIdPrefixes(surface, "verificationFreshnessIdPrefixes");
+  const verificationInvalidationIdPrefixes = surfaceIdPrefixes(surface, "verificationInvalidationIdPrefixes");
   const verificationQueueIdPrefixes = surfaceIdPrefixes(surface, "verificationQueueIdPrefixes");
   const verificationExecutionIdPrefixes = surfaceIdPrefixes(surface, "verificationExecutionIdPrefixes");
   const gateIdPrefixes = surfaceIdPrefixes(surface, "gateIdPrefixes");
@@ -1784,10 +1816,69 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     `);
     return renderAuthoredDetailLayout(surface, sections);
   }
+  if (recordMatchesIdPrefixes(detail, verificationFreshnessIdPrefixes) || recordMatchesIdPrefixes(detail, verificationInvalidationIdPrefixes)) {
+    const detailKind = recordMatchesIdPrefixes(detail, verificationFreshnessIdPrefixes) ? "verificationFreshness" : "verificationInvalidation";
+    const freshness = recordMatchesIdPrefixes(detail, verificationFreshnessIdPrefixes)
+      ? detail
+      : ((model.verificationFreshness ?? []).find(row =>
+          String(row?.gateId || "") === String(detail?.gateId || "")
+          && String(row?.serverRunnerId || "") === String(detail?.serverRunnerId || "")
+          && String(row?.runtimeProfile || "") === String(detail?.runtimeProfile || "")
+        ) ?? null);
+    const invalidationRows = (model.verificationInvalidations ?? [])
+      .filter(row =>
+        String(row?.gateId || "") === String(detail?.gateId || freshness?.gateId || "")
+        && String(row?.serverRunnerId || "") === String(detail?.serverRunnerId || freshness?.serverRunnerId || "")
+        && String(row?.runtimeProfile || "") === String(detail?.runtimeProfile || freshness?.runtimeProfile || "")
+      )
+      .sort((left, right) => String(right?.producedAt || "").localeCompare(String(left?.producedAt || "")))
+      .slice(0, surfaceRowLimit(invalidationSurface, 20));
+    const runRows = (model.testRuns ?? [])
+      .filter(run => String(run?.gateId || "") === String(detail?.gateId || freshness?.gateId || ""))
+      .slice(0, surfaceRowLimit(runHistorySurface, 12));
+    const primaryRecord = detailKind === "verificationFreshness"
+      ? freshness
+      : detail;
+    const primaryCard = detailKind === "verificationFreshness"
+      ? propertyRowsFromSurfaceSchema(primarySurface, "verificationFreshnessCardTitle", "verificationFreshnessFields", ctx, primaryRecord, "Verification Freshness")
+      : propertyRowsFromSurfaceSchema(primarySurface, "verificationInvalidationCardTitle", "verificationInvalidationFields", ctx, primaryRecord, "Verification Invalidation");
+    const sections = new Map();
+    setAuthoredDetailSection(sections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, primaryRecord, rootKeysFromSurfaceSchema(primarySurface, detailKind === "verificationFreshness" ? "verificationFreshnessFields" : "verificationInvalidationFields"))}
+    `);
+    if (freshness) {
+      const freshnessCard = propertyRowsFromSurfaceSchema(freshnessSurface, "propertyCardTitle", "propertyFields", ctx, freshness, "Gate Freshness");
+      setAuthoredDetailSection(sections, freshnessSurface, detailKind, renderPropertyCard(freshnessCard));
+    }
+    setAuthoredDetailSection(sections, invalidationSurface, detailKind, renderAuthoredSurfaceTable(invalidationSurface, renderRowsFromSurfaceSchema(invalidationSurface, "rowFields", invalidationRows, ctx, row => `
+      <tr>
+        <td>${esc(row.reasonKind || "")}</td>
+        <td>${esc(row.reasonSummary || "")}</td>
+        <td>${esc((row.changedPaths ?? []).join(", "))}</td>
+        <td>${renderValue(ctx, row.targetIds ?? [])}</td>
+      </tr>
+    `)));
+    setAuthoredDetailSection(sections, runHistorySurface, detailKind, renderAuthoredSurfaceTable(runHistorySurface, renderRowsFromSurfaceSchema(runHistorySurface, "rowFields", runRows, ctx, run => `
+      <tr>
+        <td>${esc(run.status || "")}</td>
+        <td>${renderConceptLink(ctx, run.id)}</td>
+        <td>${run.branchId ? renderConceptLink(ctx, run.branchId) : ""}</td>
+        <td>${esc(run.durationMs ?? "")}</td>
+        <td>${esc(run.exitCode ?? "")}</td>
+      </tr>
+    `)));
+    return renderAuthoredDetailLayout(surface, sections);
+  }
   if (recordMatchesIdPrefixes(detail, gateIdPrefixes)) {
     const detailKind = "gate";
     const gate = detail;
     const runRows = (model.testRuns ?? []).filter(run => run.gateId === gate.id).slice(0, surfaceRowLimit(runHistorySurface, 12));
+    const gateFreshness = (model.verificationFreshness ?? []).find(row => String(row?.gateId || "") === String(gate.id || "")) ?? null;
+    const gateInvalidations = (model.verificationInvalidations ?? [])
+      .filter(row => String(row?.gateId || "") === String(gate.id || ""))
+      .sort((left, right) => String(right?.producedAt || "").localeCompare(String(left?.producedAt || "")))
+      .slice(0, surfaceRowLimit(invalidationSurface, 20));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gateCardTitle", "gateFields", ctx, gate, "Test Gate Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "gateFields").length
@@ -1803,6 +1894,18 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     setAuthoredDetailSection(sections, relatedSurface, detailKind, `
       ${renderCardSpecs(relatedSurface, "gateLinkCards", "gateLinkCardEmptyStates", ctx, gate, "links")}
     `);
+    if (gateFreshness) {
+      const freshnessCard = propertyRowsFromSurfaceSchema(freshnessSurface, "propertyCardTitle", "propertyFields", ctx, gateFreshness, "Gate Freshness");
+      setAuthoredDetailSection(sections, freshnessSurface, detailKind, renderPropertyCard(freshnessCard));
+    }
+    setAuthoredDetailSection(sections, invalidationSurface, detailKind, renderAuthoredSurfaceTable(invalidationSurface, renderRowsFromSurfaceSchema(invalidationSurface, "rowFields", gateInvalidations, ctx, row => `
+      <tr>
+        <td>${esc(row.reasonKind || "")}</td>
+        <td>${esc(row.reasonSummary || "")}</td>
+        <td>${esc((row.changedPaths ?? []).join(", "))}</td>
+        <td>${renderValue(ctx, row.targetIds ?? [])}</td>
+      </tr>
+    `)));
     setAuthoredDetailSection(sections, runHistorySurface, detailKind, renderAuthoredSurfaceTable(runHistorySurface, renderRowsFromSurfaceSchema(runHistorySurface, "rowFields", runRows, ctx, run => `
       <tr>
         <td>${esc(run.status || "")}</td>
@@ -1891,9 +1994,36 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   if (!run || (!recordMatchesIdPrefixes(run, testRunIdPrefixes) && detail.id)) {
     return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No verification rows are projected yet." });
   }
+  const gateFreshness = (model.verificationFreshness ?? []).find(row =>
+    String(row?.gateId || "") === String(run?.gateId || "")
+    && String(row?.serverRunnerId || "") === String(run?.serverRunnerId || "")
+    && String(row?.runtimeProfile || "") === String(run?.runtimeProfile || "")
+  ) ?? null;
+  const freshnessAtRead = gateFreshness
+    ? {
+        ...gateFreshness,
+        status: gateFreshness.latestRunId === run.id || gateFreshness.latestPassedRunId === run.id
+          ? gateFreshness.status
+          : "stale",
+        reasonSummary: gateFreshness.latestRunId === run.id || gateFreshness.latestPassedRunId === run.id
+          ? gateFreshness.reasonSummary
+          : (gateFreshness.reasonSummary || "Newer verification evidence exists for this gate.")
+      }
+    : null;
+  const invalidationRows = (model.verificationInvalidations ?? [])
+    .filter(row =>
+      String(row?.gateId || "") === String(run?.gateId || "")
+      && String(row?.serverRunnerId || "") === String(run?.serverRunnerId || "")
+      && String(row?.runtimeProfile || "") === String(run?.runtimeProfile || "")
+    )
+    .sort((left, right) => String(right?.producedAt || "").localeCompare(String(left?.producedAt || "")))
+    .slice(0, surfaceRowLimit(invalidationSurface, 20));
   const runRecord = {
     ...run,
     cacheHitRunId: run.cacheHit?.runId ?? null,
+    freshnessAtReadStatus: freshnessAtRead?.status ?? null,
+    freshnessAtReadSummary: freshnessAtRead?.reasonSummary ?? null,
+    invalidationReasonKinds: invalidationRows.map(row => row.reasonKind),
     testRunEventsHref: "/api/platform-test-runs/events",
     backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
   };
@@ -1929,6 +2059,21 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   setAuthoredDetailSection(sections, relatedSurface, detailKind, `
     ${renderPropertyCard(streamsCard)}
   `);
+  if (freshnessAtRead) {
+    const freshnessCard = propertyRowsFromSurfaceSchema(freshnessSurface, "propertyCardTitle", "propertyFields", ctx, freshnessAtRead, "Gate Freshness");
+    setAuthoredDetailSection(sections, freshnessSurface, detailKind, renderPropertyCard(freshnessCard));
+  }
+  setAuthoredDetailSection(sections, invalidationSurface, detailKind, renderAuthoredSurfaceTable(
+    invalidationSurface,
+    renderRowsFromSurfaceSchema(invalidationSurface, "rowFields", invalidationRows, ctx, row => `
+      <tr>
+        <td>${esc(row.reasonKind || "")}</td>
+        <td>${esc(row.reasonSummary || "")}</td>
+        <td>${esc((row.changedPaths ?? []).join(", "))}</td>
+        <td>${renderValue(ctx, row.targetIds ?? [])}</td>
+      </tr>
+    `)
+  ));
   if (summaryReport) {
     const summaryRecord = {
       reportId: summaryReport.id,
@@ -2675,7 +2820,11 @@ function surfaceNeedsClientScript(surface) {
 }
 
 function pageNeedsClientScript(pageSurface, ctx) {
-  return surfaceNeedsClientScript(pageSurface) || ctx?.view === "verification";
+  return surfaceNeedsClientScript(pageSurface) || isVerificationLivePage(ctx?.view);
+}
+
+function isVerificationLivePage(view) {
+  return ["verification", "verificationRuns", "verificationRuntime"].includes(String(view || ""));
 }
 
 function renderPageFromSurface(pageSurface, model, ctx, consoleLayout) {
@@ -2683,7 +2832,7 @@ function renderPageFromSurface(pageSurface, model, ctx, consoleLayout) {
   return `
     ${renderSummaryCardsFromSurface(pageSurface, model)}
     ${sections}
-    ${pageNeedsClientScript(pageSurface, ctx) ? renderAuthoringClientScript().replace("__ENABLE_VERIFICATION__", ctx.view === "verification" ? "true" : "false") : ""}
+    ${pageNeedsClientScript(pageSurface, ctx) ? renderAuthoringClientScript().replace("__ENABLE_VERIFICATION__", isVerificationLivePage(ctx.view) ? "true" : "false") : ""}
   `;
 }
 

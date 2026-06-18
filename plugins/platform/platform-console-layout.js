@@ -17,6 +17,9 @@ const FALLBACK_LAYOUT = Object.freeze({
       "PlatformOverviewPage",
       "PlatformWorkflowPage",
       "PlatformVerificationPage",
+      "PlatformVerificationStatusPage",
+      "PlatformVerificationRunsPage",
+      "PlatformVerificationRuntimePage",
       "PlatformKnowledgePage",
       "PlatformSignalsPage",
       "PlatformModelPage",
@@ -65,19 +68,65 @@ const FALLBACK_LAYOUT = Object.freeze({
       className: "platform-verification",
       pageId: "verification",
       props: Object.freeze({
-        modelView: "verification",
-        summaryCards: "Test Gates=testGates@count|Test Runs=testRuns@count|Runtime Revisions=runtimeRevisions@count|Snapshot Builds=snapshotBuilds@count"
+        modelView: "verificationOverview",
+        summaryCards: "Fresh=verificationFreshness@countWhere:status=fresh|Stale=verificationFreshness@countWhere:status=stale|Missing=verificationFreshness@countWhere:status=missing|Running=testRuns@countWhere:status=running|Regressed=testReports@countWhere:status=regressed|Queued=verificationQueue@count"
       }),
       title: "Verification",
-      summary: "Test gates, test runs, candidate snapshots, and runtime revisions.",
+      summary: "Verification landing page for live health, red/green state, and links into narrower authored verification pages.",
       children: [
-        "PlatformVerificationList",
-        "PlatformVerificationDetail",
+        "PlatformVerificationStatusBanner",
         "PlatformVerificationStreams",
         "PlatformBranchRedGreenList",
-        "PlatformChangeSetRedGreenList",
+        "PlatformChangeSetRedGreenList"
+      ]
+    }),
+    fallbackSurface("PlatformVerificationStatusPage", {
+      surfaceKind: "page",
+      className: "platform-verification",
+      pageId: "verificationStatus",
+      props: Object.freeze({
+        modelView: "verificationStatus",
+        summaryCards: "Policies=verificationPolicies@count|Fresh=verificationFreshness@countWhere:status=fresh|Stale=verificationFreshness@countWhere:status=stale|Missing=verificationFreshness@countWhere:status=missing|Executions=verificationExecutions@count|Gates=testGates@count"
+      }),
+      title: "Verification Status",
+      summary: "Policies, freshness, invalidations, queue state, and test-gate detail.",
+      children: [
+        "PlatformVerificationStatusBanner",
+        "PlatformVerificationStatusList",
+        "PlatformVerificationDetail"
+      ]
+    }),
+    fallbackSurface("PlatformVerificationRunsPage", {
+      surfaceKind: "page",
+      className: "platform-verification",
+      pageId: "verificationRuns",
+      props: Object.freeze({
+        modelView: "verificationRuns",
+        summaryCards: "Runs=testRuns@count|Reports=testReports@count|Artifacts=testArtifacts@count|Suites=testSuites@count|Failed Cases=testCases@countWhere:status=failed|Errored Cases=testCases@countWhere:status=error"
+      }),
+      title: "Verification Runs",
+      summary: "Test runs, authored reports, artifacts, suites, failures, and run execution commands.",
+      children: [
+        "PlatformVerificationRunsList",
+        "PlatformVerificationDetail",
         "PlatformTestRunPanel",
         "PlatformSelectedTestRunPanel"
+      ]
+    }),
+    fallbackSurface("PlatformVerificationRuntimePage", {
+      surfaceKind: "page",
+      className: "platform-verification",
+      pageId: "verificationRuntime",
+      props: Object.freeze({
+        modelView: "verificationRuntime",
+        summaryCards: "Runtime Revisions=runtimeRevisions@count|Candidate Snapshots=candidateSnapshots@count|Snapshot Builds=snapshotBuilds@count|Build Errors=snapshotBuildErrors@count"
+      }),
+      title: "Verification Runtime",
+      summary: "Candidate snapshots, runtime revisions, snapshot builds, and runtime rebuild diagnostics.",
+      children: [
+        "PlatformVerificationRuntimeList",
+        "PlatformVerificationDetail",
+        "PlatformVerificationStreams"
       ]
     }),
     fallbackSurface("PlatformKnowledgePage", {

@@ -5,7 +5,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createWorld } from "../../src/kernel.js";
 import { applyWitnessToml } from "../../src/dsl.js";
-import { bindContextName, moduleProjectors } from "../../src/modules.js";
+import { bindContextName, moduleProjectors, updateCapability } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { compileRvmToDesirePlus } from "../../src/desire/index.js";
 import { bundleId, capabilities, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
@@ -324,6 +324,51 @@ body = { export = "migrated" }
   assert.deepEqual(applyPreviewView.packageApplyPreviews[0].relatedTransformerIds, ["packageTransformer.inspect.v1-to-v2"]);
 });
 
+test("platform model surfaces capability revision history as a first-class review slice", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+version = "1.0.0"
+placement = ["context"]
+`);
+  updateCapability(world, {
+    actor: "system",
+    id: "notes.sidebar",
+    label: "Notes Sidebar",
+    version: "2.0.0",
+    placement: ["context", "serverRunner"],
+    previousDefinition: world.project(moduleProjectors.capabilityIndex).byId["notes.sidebar"],
+    previousVersion: "1.0.0"
+  });
+
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: {
+        activePluginIds: [],
+        effectivePluginIds: [],
+        rejectedPlugins: []
+      }
+    },
+    project: projector => world.project(projector)
+  });
+
+  assert.equal(model.nodes.some(node =>
+    node.id.startsWith("capabilityRevision:notes.sidebar:")
+    && node.kind === "capabilityRevision"
+  ), true);
+  const historyView = filterPlatformModel(model, "capabilityRevisionHistory", "notes.sidebar");
+  assert.deepEqual(historyView.capabilityRevisionHistory.map(row => row.action), ["define", "update"]);
+  assert.equal(historyView.capabilityRevisionHistory[1].previousVersion, "1.0.0");
+});
+
 test("platform context naming view surfaces resolution and visibility explanations", async () => {
   const world = createWorld();
   applyWitnessToml(world, `
@@ -604,6 +649,9 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformOverviewPage",
     "PlatformWorkflowPage",
     "PlatformVerificationPage",
+    "PlatformVerificationStatusPage",
+    "PlatformVerificationRunsPage",
+    "PlatformVerificationRuntimePage",
     "PlatformKnowledgePage",
     "PlatformSignalsPage",
     "PlatformModelPage",
@@ -617,6 +665,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   const overviewPage = layout.children.find(surface => surface.name === "PlatformOverviewPage");
   const workflowPage = layout.children.find(surface => surface.name === "PlatformWorkflowPage");
   const verificationPage = layout.children.find(surface => surface.name === "PlatformVerificationPage");
+  const verificationStatusPage = layout.children.find(surface => surface.name === "PlatformVerificationStatusPage");
+  const verificationRunsPage = layout.children.find(surface => surface.name === "PlatformVerificationRunsPage");
+  const verificationRuntimePage = layout.children.find(surface => surface.name === "PlatformVerificationRuntimePage");
   const signalsPage = layout.children.find(surface => surface.name === "PlatformSignalsPage");
   const bridgesPage = layout.children.find(surface => surface.name === "PlatformBridgesPage");
   const governancePage = layout.children.find(surface => surface.name === "PlatformGovernancePage");
@@ -811,23 +862,49 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(changeSetLifecycleSurface.props.lifecycleActionsOptions, "Reject=reject|Abandon=abandon");
   assert.ok(verificationPage);
   assert.equal(verificationPage.pageId, "verification");
-  assert.equal(verificationPage.props.modelView, "verification");
-  assert.match(verificationPage.props.summaryCards, /Snapshot Builds=snapshotBuilds@count/);
+  assert.equal(verificationPage.props.modelView, "verificationOverview");
+  assert.match(verificationPage.props.summaryCards, /Queued=verificationQueue@count/);
   assert.deepEqual(verificationPage.children, [
     "PlatformVerificationStatusBanner",
-    "PlatformVerificationList",
-    "PlatformVerificationDetail",
     "PlatformVerificationStreams",
     "PlatformBranchRedGreenList",
-    "PlatformChangeSetRedGreenList",
+    "PlatformChangeSetRedGreenList"
+  ]);
+  assert.ok(verificationStatusPage);
+  assert.equal(verificationStatusPage.pageId, "verificationStatus");
+  assert.equal(verificationStatusPage.props.modelView, "verificationStatus");
+  assert.match(verificationStatusPage.props.summaryCards, /Policies=verificationPolicies@count/);
+  assert.deepEqual(verificationStatusPage.children, [
+    "PlatformVerificationStatusBanner",
+    "PlatformVerificationStatusList",
+    "PlatformVerificationDetail"
+  ]);
+  assert.ok(verificationRunsPage);
+  assert.equal(verificationRunsPage.pageId, "verificationRuns");
+  assert.equal(verificationRunsPage.props.modelView, "verificationRuns");
+  assert.match(verificationRunsPage.props.summaryCards, /Artifacts=testArtifacts@count/);
+  assert.deepEqual(verificationRunsPage.children, [
+    "PlatformVerificationRunsList",
+    "PlatformVerificationDetail",
     "PlatformTestRunPanel",
     "PlatformSelectedTestRunPanel"
   ]);
-  const verificationDetailSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
+  assert.ok(verificationRuntimePage);
+  assert.equal(verificationRuntimePage.pageId, "verificationRuntime");
+  assert.equal(verificationRuntimePage.props.modelView, "verificationRuntime");
+  assert.match(verificationRuntimePage.props.summaryCards, /Build Errors=snapshotBuildErrors@count/);
+  assert.deepEqual(verificationRuntimePage.children, [
+    "PlatformVerificationRuntimeList",
+    "PlatformVerificationDetail",
+    "PlatformVerificationStreams"
+  ]);
+  const verificationDetailSurface = verificationStatusPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
   assert.ok(verificationDetailSurface);
   assert.equal(verificationDetailSurface.props.detailSource, "verification");
-  assert.equal(verificationDetailSurface.props.detailSelectionSources, "verificationPolicies|verificationQueue|verificationExecutions|testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots");
+  assert.equal(verificationDetailSurface.props.detailSelectionSources, "verificationPolicies|verificationFreshness|verificationInvalidations|verificationQueue|verificationExecutions|testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots");
   assert.equal(verificationDetailSurface.props.verificationPolicyIdPrefixes, "verificationPolicy:");
+  assert.equal(verificationDetailSurface.props.verificationFreshnessIdPrefixes, "verificationFreshness:");
+  assert.equal(verificationDetailSurface.props.verificationInvalidationIdPrefixes, "verificationInvalidation:");
   assert.equal(verificationDetailSurface.props.verificationQueueIdPrefixes, "verificationQueue:");
   assert.equal(verificationDetailSurface.props.verificationExecutionIdPrefixes, "verificationExecution:");
   assert.equal(verificationDetailSurface.props.gateIdPrefixes, "gate:");
@@ -843,6 +920,8 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationRunHistory",
     "PlatformVerificationBuildHistory",
     "PlatformVerificationBuildErrors",
+    "PlatformVerificationFreshnessSummary",
+    "PlatformVerificationInvalidationReasons",
     "PlatformVerificationReportSummary",
     "PlatformVerificationArtifactsReport",
     "PlatformVerificationSuiteSummary",
@@ -855,6 +934,8 @@ test("platform console layout compiles authored top-level surface metadata from 
     "runHistory",
     "buildHistory",
     "buildErrors",
+    "freshnessSummary",
+    "invalidationReasons",
     "reportSummary",
     "artifacts",
     "suiteSummary",
@@ -862,11 +943,13 @@ test("platform console layout compiles authored top-level surface metadata from 
     "regressionSummary"
   ]);
   assert.deepEqual(verificationDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
-    "verificationPolicy|verificationExecution|gate|runtimeRevision|candidateSnapshot|testRun|testReport",
+    "verificationPolicy|verificationFreshness|verificationInvalidation|verificationExecution|gate|runtimeRevision|candidateSnapshot|testRun|testReport",
     "verificationPolicy|gate|runtimeRevision|candidateSnapshot|testRun|testReport",
-    "gate",
+    "gate|verificationFreshness|verificationInvalidation",
     "runtimeRevision",
     "runtimeRevision",
+    "gate|verificationFreshness|verificationInvalidation|testRun|testReport",
+    "gate|verificationFreshness|verificationInvalidation|testRun|testReport",
     "testRun|testReport",
     "testRun|testReport",
     "testRun|testReport",
@@ -894,9 +977,15 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationPrimarySurface.props.candidateSnapshotLongTailExcludedFields, "files|errors");
   assert.equal(verificationPrimarySurface.props.gateCardTitle, "Test Gate Detail");
   assert.match(verificationPrimarySurface.props.gateFields, /Gate=id@concept/);
+  assert.equal(verificationPrimarySurface.props.verificationFreshnessCardTitle, "Verification Freshness");
+  assert.match(verificationPrimarySurface.props.verificationFreshnessFields, /Latest run=latestRunId@concept/);
+  assert.equal(verificationPrimarySurface.props.verificationInvalidationCardTitle, "Verification Invalidation");
+  assert.match(verificationPrimarySurface.props.verificationInvalidationFields, /Previous run=previousRunId@concept/);
   assert.match(verificationPrimarySurface.props.runtimeRevisionFields, /Revision=id@concept/);
   assert.match(verificationPrimarySurface.props.candidateSnapshotFields, /Snapshot=id@concept/);
   assert.match(verificationPrimarySurface.props.testRunFields, /Gate=gateId@concept/);
+  assert.match(verificationPrimarySurface.props.testRunFields, /Freshness=freshnessAtReadStatus/);
+  assert.match(verificationPrimarySurface.props.testRunFields, /Invalidations=invalidationReasonKinds@value/);
   const verificationRelatedSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRelatedPanel");
   assert.ok(verificationRelatedSurface);
   assert.equal(verificationRelatedSurface.props.cardItemLimit, "12");
@@ -910,14 +999,29 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCardEmptyStates, "Files=No files captured in this candidate snapshot.|Errors=No build or validation errors.");
   assert.equal(verificationRelatedSurface.props.testRunPropertyCardTitle, "Verification Streams");
   assert.equal(verificationRelatedSurface.props.testRunPropertyFields, "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href");
+  const verificationFreshnessSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationFreshnessSummary");
+  assert.ok(verificationFreshnessSurface);
+  assert.equal(verificationFreshnessSurface.props.detailPanelRole, "freshnessSummary");
+  assert.equal(verificationFreshnessSurface.props.detailKinds, "gate|verificationFreshness|verificationInvalidation|testRun|testReport");
+  assert.equal(verificationFreshnessSurface.props.propertyCardTitle, "Freshness");
+  assert.match(verificationFreshnessSurface.props.propertyFields, /Changed paths=changedPaths@value/);
+  const verificationInvalidationSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationInvalidationReasons");
+  assert.ok(verificationInvalidationSurface);
+  assert.equal(verificationInvalidationSurface.props.detailPanelRole, "invalidationReasons");
+  assert.equal(verificationInvalidationSurface.props.detailKinds, "gate|verificationFreshness|verificationInvalidation|testRun|testReport");
+  assert.equal(verificationInvalidationSurface.props.columns, "Reason|Summary|Changed Paths|Targets");
+  assert.equal(verificationInvalidationSurface.props.rowFields, "Reason=reasonKind|Summary=reasonSummary|Changed Paths=changedPaths@value|Targets=targetIds@value");
   const verificationStreamsSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStreams");
   assert.ok(verificationStreamsSurface);
   assert.equal(verificationStreamsSurface.props.propertyCardTitle, "Event Streams");
   assert.equal(verificationStreamsSurface.props.propertyFields, "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href");
   assert.equal(verificationStreamsSurface.props.propertyValues, "testRunEventsHref=/api/platform-test-runs/events|backendRevisionEventsHref=/api/runtime/backend-revisions/events");
-  const verificationStatusSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStatusBanner");
+  const verificationStatusSurface = verificationStatusPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStatusBanner");
   assert.ok(verificationStatusSurface);
   assert.equal(verificationStatusSurface.props.propertyRecordSource, "verificationStatus");
+  assert.match(verificationStatusSurface.props.propertyFields, /Fresh gates=freshGateCount/);
+  assert.match(verificationStatusSurface.props.propertyFields, /Stale gates=staleGateCount/);
+  assert.match(verificationStatusSurface.props.propertyFields, /Missing gates=missingGateCount/);
   assert.match(verificationStatusSurface.props.propertyFields, /Running runs=runningCount/);
   const verificationReportSummarySurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationReportSummary");
   assert.ok(verificationReportSummarySurface);
@@ -934,7 +1038,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const verificationRegressionSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRegressionSummary");
   assert.ok(verificationRegressionSurface);
   assert.match(verificationRegressionSurface.props.propertyFields, /Baseline run=baselineRunId@concept/);
-  const testRunPanelSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformTestRunPanel");
+  const testRunPanelSurface = verificationRunsPage.childSurfaces.find(surface => surface.name === "PlatformTestRunPanel");
   assert.ok(testRunPanelSurface);
   assert.equal(testRunPanelSurface.props.formId, "platform-test-run-form");
   assert.equal(testRunPanelSurface.props.formFields, "Test gate=gateId@select:testGateOptions|Branch id=branchId@text|Change set id=changeSetId@text|Candidate snapshot id=candidateSnapshotId@text");
@@ -944,7 +1048,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(testRunPanelSurface.props.testGateOptionsSource, "testGates");
   assert.equal(testRunPanelSurface.props.testGateOptionsValuePath, "id");
   assert.equal(testRunPanelSurface.props.testGateOptionsLabelPath, "title||id");
-  const selectedTestRunPanelSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformSelectedTestRunPanel");
+  const selectedTestRunPanelSurface = verificationRunsPage.childSurfaces.find(surface => surface.name === "PlatformSelectedTestRunPanel");
   assert.ok(selectedTestRunPanelSurface);
   assert.equal(selectedTestRunPanelSurface.props.formId, "platform-selected-test-run-form");
   assert.equal(selectedTestRunPanelSurface.props.formFields, "Branch id=branchId@text|Change set id=changeSetId@text|Candidate snapshot id=candidateSnapshotId@text");
@@ -965,9 +1069,15 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(changeSetRedGreenSurface.props.sortOptions, "status=status|changeSet=changeSetId|selected=totalSelectedGates|passed=passedCount|failed=failedCount|summary=summary");
   assert.equal(changeSetRedGreenSurface.props.defaultSort, "changeSet:asc");
   assert.equal(changeSetRedGreenSurface.props.pageSize, "12");
-  const verificationListSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationList");
-  assert.ok(verificationListSurface);
-  assert.equal(verificationListSurface.props.listSource, "verificationItems");
+  const verificationStatusListSurface = verificationStatusPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStatusList");
+  assert.ok(verificationStatusListSurface);
+  assert.equal(verificationStatusListSurface.props.listSource, "verificationItems");
+  const verificationRunsListSurface = verificationRunsPage.childSurfaces.find(surface => surface.name === "PlatformVerificationRunsList");
+  assert.ok(verificationRunsListSurface);
+  assert.equal(verificationRunsListSurface.props.listSource, "verificationItems");
+  const verificationRuntimeListSurface = verificationRuntimePage.childSurfaces.find(surface => surface.name === "PlatformVerificationRuntimeList");
+  assert.ok(verificationRuntimeListSurface);
+  assert.equal(verificationRuntimeListSurface.props.listSource, "verificationItems");
   assert.ok(signalsPage);
   assert.equal(signalsPage.pageId, "signals");
   assert.equal(signalsPage.props.modelView, "signals");
@@ -6161,11 +6271,12 @@ test("platform page renders required operating views", async () => {
   const overviewHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform") });
   const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0") });
   const workflowSortedHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0&sort=kind&dir=desc&limit=5") });
-  const verificationHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=gate:demo") });
-  const verificationPolicyHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=verificationPolicy:demo") });
-  const verificationExecutionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=verificationExecution:demo") });
-  const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=runtimeRevision:demo") });
-  const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=testRun:demo") });
+  const verificationLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification") });
+  const verificationStatusHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=gate:demo") });
+  const verificationPolicyHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=verificationPolicy:demo") });
+  const verificationExecutionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=verificationExecution:demo") });
+  const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuntime&id=runtimeRevision:demo") });
+  const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:demo") });
   const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
   const signalsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.demo") });
   const modelHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
@@ -6227,50 +6338,54 @@ test("platform page renders required operating views", async () => {
   assert.doesNotMatch(workflowHtml, /platform-initial-state/);
   assert.doesNotMatch(workflowHtml, /<pre/);
 
-  assert.match(verificationHtml, /Platform Console - Verification/);
-  assert.match(verificationHtml, /Live Verification Status/);
-  assert.match(verificationHtml, /Current Verification State/);
-  assert.match(verificationHtml, /Queued items/);
-  assert.match(verificationHtml, /Policy source/);
-  assert.match(verificationHtml, /Persistence source/);
-  assert.match(verificationHtml, /Ledger backend/);
-  assert.match(verificationHtml, /Verification Items/);
-  assert.match(verificationHtml, /Policies/);
-  assert.match(verificationHtml, /Queue/);
-  assert.match(verificationHtml, /Executions/);
-  assert.match(verificationHtml, /Properties and linked resources for the selected verification object\./);
-  assert.match(verificationHtml, /Primary Detail/);
-  assert.match(verificationHtml, /Selected verification object properties and long-tail fields\./);
-  assert.match(verificationHtml, /Related Resources/);
-  assert.match(verificationHtml, /Linked verification resources, streams, and supporting context\./);
-  assert.match(verificationHtml, /Protected Objects/);
-  assert.match(verificationHtml, /Recent Test Runs/);
-  assert.match(verificationHtml, /Recent test-run history for the selected verification object when available\./);
-  assert.match(verificationHtml, /Test Gate Detail/);
-  assert.match(verificationHtml, /Links to live test-run and backend-revision event streams\./);
-  assert.match(verificationHtml, /Event Streams/);
-  assert.match(verificationHtml, />Test run event stream</);
-  assert.match(verificationHtml, />Backend revision event stream</);
-  assert.match(verificationHtml, /<form id="platform-test-run-form" data-platform-client-action="testRun.single" data-platform-submit-spec=/);
-  assert.match(verificationHtml, /<option value="gate:demo">Demo gate<\/option>/);
-  assert.match(verificationHtml, /<form id="platform-selected-test-run-form" data-platform-client-action="testRun.selected" data-platform-submit-spec=/);
-  assert.match(verificationHtml, /\/api\/platform-test-runs\/events/);
-  assert.match(verificationHtml, /\/api\/runtime\/backend-revisions\/events/);
-  assert.match(verificationHtml, /Branch Red \/ Green/);
-  assert.match(verificationHtml, /Change Set Red \/ Green/);
-  assert.match(verificationHtml, /sort=branch&amp;dir=desc/);
-  assert.match(verificationHtml, /sort=changeSet&amp;dir=desc/);
-  assert.doesNotMatch(verificationHtml, /<pre/);
+  assert.match(verificationLandingHtml, /Platform Console - Verification/);
+  assert.match(verificationLandingHtml, /Live Verification Status/);
+  assert.match(verificationLandingHtml, /Current Verification State/);
+  assert.match(verificationLandingHtml, /Queued items/);
+  assert.match(verificationLandingHtml, /Policy source/);
+  assert.match(verificationLandingHtml, /Persistence source/);
+  assert.match(verificationLandingHtml, /Ledger backend/);
+  assert.match(verificationLandingHtml, /Links to live test-run and backend-revision event streams\./);
+  assert.match(verificationLandingHtml, /Event Streams/);
+  assert.match(verificationLandingHtml, /Branch Red \/ Green/);
+  assert.match(verificationLandingHtml, /Change Set Red \/ Green/);
+  assert.match(verificationLandingHtml, /sort=branch&amp;dir=desc/);
+  assert.match(verificationLandingHtml, /sort=changeSet&amp;dir=desc/);
+  assert.doesNotMatch(verificationLandingHtml, /Verification Items/);
+  assert.doesNotMatch(verificationLandingHtml, /<pre/);
+  assert.match(verificationStatusHtml, /Platform Console - Verification Status/);
+  assert.match(verificationStatusHtml, /Verification Status Items/);
+  assert.match(verificationStatusHtml, /Policies/);
+  assert.match(verificationStatusHtml, /Queue/);
+  assert.match(verificationStatusHtml, /Executions/);
+  assert.match(verificationStatusHtml, /Properties and linked resources for the selected verification object\./);
+  assert.match(verificationStatusHtml, /Primary Detail/);
+  assert.match(verificationStatusHtml, /Selected verification object properties and long-tail fields\./);
+  assert.match(verificationStatusHtml, /Related Resources/);
+  assert.match(verificationStatusHtml, /Linked verification resources, streams, and supporting context\./);
+  assert.match(verificationStatusHtml, /Protected Objects/);
+  assert.match(verificationStatusHtml, /Recent Test Runs/);
+  assert.match(verificationStatusHtml, /Test Gate Detail/);
+  assert.match(verificationStatusHtml, /\?view=verificationRuns&amp;id=testRun%3Ademo/);
+  assert.doesNotMatch(verificationStatusHtml, /<form id="platform-test-run-form"/);
   assert.match(verificationPolicyHtml, /Verification Policy Detail/);
   assert.match(verificationPolicyHtml, /Verification Persistence/);
   assert.match(verificationPolicyHtml, /workspace/);
   assert.match(verificationExecutionHtml, /Verification Execution Detail/);
   assert.match(verificationExecutionHtml, /change-set/);
+  assert.match(verificationRevisionHtml, /Platform Console - Verification Runtime/);
   assert.match(verificationRevisionHtml, />Backend revision event stream</);
   assert.match(verificationRevisionHtml, /Verification status/);
   assert.match(verificationRevisionHtml, /Persistence source/);
+  assert.match(verificationRunHtml, /Platform Console - Verification Runs/);
   assert.match(verificationRunHtml, />Test run event stream</);
   assert.match(verificationRunHtml, />Backend revision event stream</);
+  assert.match(verificationRunHtml, /Verification Run Items/);
+  assert.match(verificationRunHtml, /\?view=verificationStatus&amp;id=gate%3Ademo/);
+  assert.match(verificationRunHtml, /\?view=verificationRuntime&amp;id=candidateSnapshot%3Ademo-0/);
+  assert.match(verificationRunHtml, /<form id="platform-test-run-form" data-platform-client-action="testRun.single" data-platform-submit-spec=/);
+  assert.match(verificationRunHtml, /<option value="gate:demo">Demo gate<\/option>/);
+  assert.match(verificationRunHtml, /<form id="platform-selected-test-run-form" data-platform-client-action="testRun.selected" data-platform-submit-spec=/);
   assert.match(verificationRunHtml, /Run Report Summary/);
   assert.match(verificationRunHtml, /Cache hit run/);
   assert.match(verificationRunHtml, /testRun:baseline/);
@@ -6617,7 +6732,7 @@ test("platform workflow detail follows authored child-surface order", () => {
 test("platform detail sections render authored child-surface metadata", () => {
   const consoleLayout = readPlatformConsoleLayout();
   const workflowPage = consoleLayout.children.find(surface => surface.props?.pageId === "workflow");
-  const verificationPage = consoleLayout.children.find(surface => surface.props?.pageId === "verification");
+  const verificationPage = consoleLayout.children.find(surface => surface.props?.pageId === "verificationStatus");
   const knowledgePage = consoleLayout.children.find(surface => surface.props?.pageId === "knowledge");
   const signalsPage = consoleLayout.children.find(surface => surface.props?.pageId === "signals");
   const modelPage = consoleLayout.children.find(surface => surface.props?.pageId === "model");
@@ -6692,6 +6807,20 @@ test("platform detail sections render authored child-surface metadata", () => {
       durationMs: 25,
       exitCode: 0
     }],
+    verificationFreshness: [{
+      id: "verificationFreshness:gate:demo",
+      gateId: "gate:demo",
+      status: "fresh",
+      latestRunId: "testRun:demo",
+      latestPassedRunId: "testRun:demo",
+      reasonKinds: ["clean"],
+      reasonSummary: "Verification evidence is current.",
+      changedPaths: [],
+      targetIds: [],
+      blocking: false,
+      producedAt: "2026-06-19T00:00:00Z"
+    }],
+    verificationInvalidations: [],
     testReports: [{
       id: "testReport:testRun:demo:summary",
       runId: "testRun:demo",
@@ -6795,9 +6924,9 @@ test("platform detail sections render authored child-surface metadata", () => {
   };
 
   const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=changeSet:demo") });
-  const verificationGateHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=gate:demo") });
-  const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=runtimeRevision:demo") });
-  const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=testRun:demo") });
+  const verificationGateHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=gate:demo") });
+  const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuntime&id=runtimeRevision:demo") });
+  const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:demo") });
   const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
   const signalHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.demo") });
   const modelHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
@@ -6897,7 +7026,7 @@ test("platform verification run detail respects authored empty states for report
     summaries: {}
   };
 
-  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=testRun:empty") });
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:empty") });
 
   assert.match(html, /No artifacts or report streams were captured for this run\./);
   assert.match(html, /No structured suites were derived for this run\./);
@@ -6945,7 +7074,7 @@ test("platform page uses authored empty-detail states", () => {
   };
 
   const workflowHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:missing") });
-  const verificationHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=verification&id=gate:missing") });
+  const verificationHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=gate:missing") });
   const knowledgeHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=doc:missing") });
   const signalsHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.missing") });
   const modelHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:missing") });
