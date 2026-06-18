@@ -1638,7 +1638,12 @@ function summaryCardsForPage(pageId, model) {
 
 function renderPlatformMapSection(surface, model, ctx) {
   const topNodes = (model.nodes ?? []).slice(0, surfaceRowLimit(surface, 12));
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Kind", "Resource", "Lifecycle", "Status", "Source"], topNodes.map(node => `
+  const rows = topNodes.map(node => ({
+    ...node,
+    resourceLink: { id: node.id, title: node.title || node.id },
+    lifecycleText: (node.lifecycle ?? []).join(", ")
+  }));
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Kind", "Resource", "Lifecycle", "Status", "Source"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, node => `
     <tr>
       <td>${esc(node.kind || "")}</td>
       <td>${renderConceptLink(ctx, node.id, node.title || node.id)}</td>
@@ -1650,7 +1655,12 @@ function renderPlatformMapSection(surface, model, ctx) {
 }
 
 function renderProfileComparisonSection(surface, model) {
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Profile", "Status", "Plugins", "Capabilities"], (model.profiles ?? []).slice(0, surfaceRowLimit(surface, 12)).map(profile => `
+  const rows = (model.profiles ?? []).slice(0, surfaceRowLimit(surface, 12)).map(profile => ({
+    ...profile,
+    pluginCount: (profile.pluginIds ?? []).length,
+    capabilityCount: (profile.capabilities ?? []).length
+  }));
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Profile", "Status", "Plugins", "Capabilities"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, null, profile => `
     <tr>
       <td>${esc(profile.id || "")}</td>
       <td>${esc(profile.status || "")}</td>
@@ -1756,7 +1766,8 @@ function renderModelListSection(surface, model, ctx) {
 }
 
 function renderGapListSection(surface, model, ctx) {
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Severity", "Kind", "Target", "Reason"], (model.gaps ?? []).slice(0, surfaceRowLimit(surface, 12)).map(gap => `
+  const rows = (model.gaps ?? []).slice(0, surfaceRowLimit(surface, 12));
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Severity", "Kind", "Target", "Reason"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, gap => `
     <tr>
       <td>${esc(gap.severity || "")}</td>
       <td>${esc(gap.kind || "")}</td>
@@ -1767,7 +1778,12 @@ function renderGapListSection(surface, model, ctx) {
 }
 
 function renderCoverageMatrixSection(surface, model, ctx) {
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Gate", "Target", "Kind"], (model.coverageEdges ?? []).slice(0, surfaceRowLimit(surface, 12)).map(edge => `
+  const rows = (model.coverageEdges ?? []).slice(0, surfaceRowLimit(surface, 12)).map(edge => ({
+    ...edge,
+    gateLink: { id: edge.gateId, title: edge.gateId },
+    targetLink: edge.targetId ? { id: edge.targetId, title: edge.targetLabel || edge.targetId } : { id: edge.targetLabel || "", title: edge.targetLabel || "" }
+  }));
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Gate", "Target", "Kind"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, edge => `
     <tr>
       <td>${renderConceptLink(ctx, edge.gateId)}</td>
       <td>${edge.targetId ? renderConceptLink(ctx, edge.targetId, edge.targetLabel || edge.targetId) : esc(edge.targetLabel || "")}</td>
@@ -1921,8 +1937,13 @@ function renderVerificationStreamsSection(surface) {
 }
 
 function renderBranchRedGreenSection(surface, model, ctx) {
-  const branchRedGreen = (model.branchTestRedGreen ?? []).slice(0, surfaceRowLimit(surface, 12));
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Status", "Branch", "Selected", "Passed", "Failed", "Summary"], branchRedGreen.map(row => `
+  const branchRedGreen = (model.branchTestRedGreen ?? []).slice(0, surfaceRowLimit(surface, 12)).map(row => ({
+    ...row,
+    branchLink: { id: row.branchId, title: row.branchId },
+    passedCount: (row.passedGateIds ?? []).length,
+    failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
+  }));
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Status", "Branch", "Selected", "Passed", "Failed", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", branchRedGreen, ctx, row => `
     <tr>
       <td>${esc(row.status || "")}</td>
       <td>${renderConceptLink(ctx, row.branchId)}</td>
@@ -1935,8 +1956,13 @@ function renderBranchRedGreenSection(surface, model, ctx) {
 }
 
 function renderChangeSetRedGreenSection(surface, model, ctx) {
-  const changeSetRedGreen = (model.changeSetTestRedGreen ?? []).slice(0, surfaceRowLimit(surface, 12));
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Status", "Change Set", "Selected", "Passed", "Failed", "Summary"], changeSetRedGreen.map(row => `
+  const changeSetRedGreen = (model.changeSetTestRedGreen ?? []).slice(0, surfaceRowLimit(surface, 12)).map(row => ({
+    ...row,
+    changeSetLink: { id: row.changeSetId, title: row.changeSetId },
+    passedCount: (row.passedGateIds ?? []).length,
+    failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
+  }));
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Status", "Change Set", "Selected", "Passed", "Failed", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", changeSetRedGreen, ctx, row => `
     <tr>
       <td>${esc(row.status || "")}</td>
       <td>${renderConceptLink(ctx, row.changeSetId)}</td>

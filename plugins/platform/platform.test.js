@@ -405,6 +405,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(workflowListSurface.props.defaultSort, "kind:asc");
   assert.equal(workflowListSurface.props.emptyState, "No workflow rows.");
   assert.equal(workflowListSurface.props.pageSize, "20");
+  const overviewMapSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformMap");
+  assert.ok(overviewMapSurface);
+  assert.equal(overviewMapSurface.props.rowFields, "Kind=kind|Resource=resourceLink@concept|Lifecycle=lifecycleText|Status=status|Source=source");
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformChangeSetEditPanel"), true);
   assert.ok(verificationPage);
@@ -446,6 +449,12 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyCardTitle, "Snapshot Diagnostics");
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCards, "Files=files@path|Errors=errors@errorMessage");
   assert.equal(verificationRelatedSurface.props.testRunPropertyCardTitle, "Verification Streams");
+  const branchRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformBranchRedGreenList");
+  assert.ok(branchRedGreenSurface);
+  assert.equal(branchRedGreenSurface.props.rowFields, "Status=status|Branch=branchLink@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
+  const changeSetRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetRedGreenList");
+  assert.ok(changeSetRedGreenSurface);
+  assert.equal(changeSetRedGreenSurface.props.rowFields, "Status=status|Change Set=changeSetLink@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
   assert.ok(signalsPage);
   assert.equal(signalsPage.pageId, "signals");
   assert.deepEqual(signalsPage.children, [
@@ -465,6 +474,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const gapListSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformGapList");
   assert.ok(gapListSurface);
   assert.equal(gapListSurface.props.columns, "Severity|Kind|Target|Reason");
+  assert.equal(gapListSurface.props.rowFields, "Severity=severity|Kind=kind|Target=target@concept|Reason=reason");
   assert.equal(gapListSurface.props.emptyState, "No gaps.");
   assert.equal(gapListSurface.props.rowLimit, "12");
   const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
@@ -509,12 +519,16 @@ test("platform console layout compiles authored top-level surface metadata from 
   const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
   assert.ok(profileSurface);
   assert.equal(profileSurface.props.columns, "Profile|Status|Plugins|Capabilities");
+  assert.equal(profileSurface.props.rowFields, "Profile=id|Status=status|Plugins=pluginCount|Capabilities=capabilityCount");
   assert.equal(profileSurface.props.rowLimit, "12");
   const modelListSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelList");
   assert.ok(modelListSurface);
   assert.equal(modelListSurface.props.rowFields, "Kind=pageKind|Status=status|Resource=resourceLink@concept|Source=scope|Owner=summary");
   assert.equal(modelListSurface.props.sortOptions, "kind=pageKind|status=status|resource=title|source=scope|owner=summary");
   assert.equal(modelListSurface.props.defaultSort, "kind:asc");
+  const coverageSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformCoverageMatrix");
+  assert.ok(coverageSurface);
+  assert.equal(coverageSurface.props.rowFields, "Gate=gateLink@concept|Target=targetLink@concept|Kind=coverageKind");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
   assert.deepEqual(modelDetailSurface.children, [

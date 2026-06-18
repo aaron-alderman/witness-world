@@ -210,6 +210,7 @@ view PlatformMap {
   prop title = "Platform Map"
   prop summary = "Primary platform objects projected from the live model."
   prop columns = "Kind|Resource|Lifecycle|Status|Source"
+  prop rowFields = "Kind=kind|Resource=resourceLink@concept|Lifecycle=lifecycleText|Status=status|Source=source"
   prop emptyState = "No platform objects."
   prop rowLimit = "12"
   projections {
@@ -462,6 +463,7 @@ view PlatformBranchRedGreenList {
   prop title = "Branch Red / Green"
   prop summary = "Selected-gate status for branches."
   prop columns = "Status|Branch|Selected|Passed|Failed|Summary"
+  prop rowFields = "Status=status|Branch=branchLink@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
   prop emptyState = "No branch red/green summaries."
   prop rowLimit = "12"
   projections {
@@ -475,6 +477,7 @@ view PlatformChangeSetRedGreenList {
   prop title = "Change Set Red / Green"
   prop summary = "Selected-gate status for change sets."
   prop columns = "Status|Change Set|Selected|Passed|Failed|Summary"
+  prop rowFields = "Status=status|Change Set=changeSetLink@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
   prop emptyState = "No change-set red/green summaries."
   prop rowLimit = "12"
   projections {
@@ -502,6 +505,7 @@ view PlatformGapList {
   prop title = "Platform Gaps"
   prop summary = "Projected platform gaps and meta-defects."
   prop columns = "Severity|Kind|Target|Reason"
+  prop rowFields = "Severity=severity|Kind=kind|Target=target@concept|Reason=reason"
   prop emptyState = "No gaps."
   prop rowLimit = "12"
   projections {
@@ -515,6 +519,7 @@ view PlatformCoverageMatrix {
   prop title = "Coverage Matrix"
   prop summary = "Gate-to-target coverage rows for the current modeled platform."
   prop columns = "Gate|Target|Kind"
+  prop rowFields = "Gate=gateLink@concept|Target=targetLink@concept|Kind=coverageKind"
   prop emptyState = "No coverage edges."
   prop rowLimit = "12"
   projections {
@@ -589,6 +594,7 @@ view PlatformProfileComparison {
   prop title = "Runtime Profiles"
   prop summary = "Profile exposure and plugin composition differences."
   prop columns = "Profile|Status|Plugins|Capabilities"
+  prop rowFields = "Profile=id|Status=status|Plugins=pluginCount|Capabilities=capabilityCount"
   prop emptyState = "No runtime profiles."
   prop rowLimit = "12"
   projections {
