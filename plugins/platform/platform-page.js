@@ -74,6 +74,10 @@ export function renderPlatformPage(model) {
   const docs = model.docs ?? [];
   const docSections = model.docSections ?? [];
   const docTasks = model.docTasks ?? [];
+  const defectClusters = model.nodes.filter(node => node.kind === "defectCluster").slice(0, 80);
+  const defectClusterEdges = model.edges.filter(edge =>
+    defectClusters.some(cluster => cluster.id === edge.from || cluster.id === edge.to)
+  ).slice(0, 120);
   const boundaries = model.nodes.filter(node => node.kind === "boundary").slice(0, 80);
   const boundaryEdges = model.edges.filter(edge =>
     edge.rel === "usesBoundary"
@@ -761,6 +765,37 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Dependency Graph Detail</h2>
         <pre>${esc(JSON.stringify({ nodes: graphNodes, edges: graphEdges }, null, 2))}</pre>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Defect Clusters</h2>
+        <div class="platform-branch-summary">
+          <div class="card">
+            <h3>Clusters</h3>
+            <div>${esc(defectClusters.length)}</div>
+            <div class="muted">Modeled recurring or known defect clusters</div>
+          </div>
+          <div class="card">
+            <h3>Cluster edges</h3>
+            <div>${esc(defectClusterEdges.length)}</div>
+            <div class="muted">Relationships from clusters to tracked targets</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Status</th><th>Cluster</th><th>Lifecycle</th><th>Source</th></tr></thead>
+          <tbody>${tableRows(defectClusters, [
+            row => row.status,
+            row => row.title,
+            row => row.lifecycle.join(", "),
+            row => row.source || ""
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Defect Cluster Detail</h2>
+        <pre>${esc(JSON.stringify({ clusters: defectClusters, edges: defectClusterEdges }, null, 2))}</pre>
       </div>
     </section>
 
