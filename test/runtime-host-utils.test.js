@@ -7,8 +7,10 @@ import {
   declareFrontendHost,
   hostCapabilities,
   resolveServerRunner,
+  resolveRunnerForHost,
   resolveStartupRunner,
-  resolveStorageConfig
+  resolveStorageConfig,
+  normalizeHostHeader
 } from "../src/runtime-host-utils.js";
 import { moduleProjectors } from "../src/modules.js";
 
@@ -103,6 +105,41 @@ test("runtime host utils resolve server runners and bootstrap fallback", () => {
     reason: "multiple server runners defined",
     body: { serverRunners: ["runner-1", "runner-2"] }
   });
+});
+
+test("normalizeHostHeader lowercases, strips port, and keeps IPv6 literals", () => {
+  assert.equal(normalizeHostHeader("Engentus.LocalHost:3000"), "engentus.localhost");
+  assert.equal(normalizeHostHeader("platform.localhost"), "platform.localhost");
+  assert.equal(normalizeHostHeader("[::1]:3000"), "[::1]");
+  assert.equal(normalizeHostHeader(" a.test , b.test "), "a.test");
+  assert.equal(normalizeHostHeader(null), "");
+});
+
+test("resolveRunnerForHost matches by host, falls back to default, then single", () => {
+  const multiHostWorld = createHostWorld({
+    serverRunners: [
+      { id: "engentus", hosts: ["engentus.localhost"], default: false },
+      { id: "platform", hosts: ["platform.localhost"], default: true }
+    ]
+  });
+  assert.equal(resolveRunnerForHost(multiHostWorld, "engentus.localhost:8080").runner.id, "engentus");
+  assert.equal(resolveRunnerForHost(multiHostWorld, "platform.localhost").runner.id, "platform");
+  // Unknown host falls back to the default runner.
+  assert.equal(resolveRunnerForHost(multiHostWorld, "unknown.localhost").runner.id, "platform");
+
+  // No default + no host match across multiple runners → not resolvable.
+  const noDefaultWorld = createHostWorld({
+    serverRunners: [
+      { id: "a", hosts: ["a.localhost"] },
+      { id: "b", hosts: ["b.localhost"] }
+    ]
+  });
+  const unresolved = resolveRunnerForHost(noDefaultWorld, "c.localhost");
+  assert.equal(unresolved.ok, false);
+
+  // Single runner with no host config still resolves (back-compat).
+  const singleWorld = createHostWorld({ serverRunners: [{ id: "solo" }] });
+  assert.equal(resolveRunnerForHost(singleWorld, "anything.localhost").runner.id, "solo");
 });
 
 test("runtime host utils resolve relative storage roots", () => {

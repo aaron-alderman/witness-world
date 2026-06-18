@@ -513,7 +513,11 @@ export function runtimeSurfaceEntriesForProfile(profileName = DEFAULT_RUNTIME_PR
 }
 
 export function runtimeRouteEntriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
-  return selectedComposition(profileName, options).bundles.flatMap(bundle => bundle.contributes.routes);
+  // Tag each route with its originating bundle id so callers can gate generic-endpoint availability
+  // per server runner (multi-host: a bundle endpoint is only reachable on hosts that activate it).
+  return selectedComposition(profileName, options).bundles.flatMap(bundle =>
+    bundle.contributes.routes.map(route => ({ ...route, bundleId: bundle.id }))
+  );
 }
 
 export function matchRuntimeBundleRoute(profileName = DEFAULT_RUNTIME_PROFILE, method, pathname, options = {}) {
@@ -524,7 +528,7 @@ export function matchRuntimeBundleRoute(profileName = DEFAULT_RUNTIME_PROFILE, m
     const routeKind = route.kind ?? (typeof route.path === "string" ? "exact" : (route.pattern ? "pattern" : null));
     if (routeKind === "exact") {
       if (route.path !== targetPath) continue;
-      return { handler: route.handler, params: { ...(route.params ?? {}) } };
+      return { handler: route.handler, params: { ...(route.params ?? {}) }, bundleId: route.bundleId ?? null };
     }
     if (routeKind === "pattern") {
       const match = targetPath.match(route.pattern);
@@ -533,7 +537,7 @@ export function matchRuntimeBundleRoute(profileName = DEFAULT_RUNTIME_PROFILE, m
       for (let index = 0; index < route.paramNames.length; index += 1) {
         params[route.paramNames[index]] = decodeURIComponent(match[index + 1] || "");
       }
-      return { handler: route.handler, params };
+      return { handler: route.handler, params, bundleId: route.bundleId ?? null };
     }
   }
   return null;

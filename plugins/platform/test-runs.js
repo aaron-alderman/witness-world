@@ -57,8 +57,13 @@ function defaultShellCommand(command) {
   };
 }
 
-function resolvePlatformTestEnvironment(gate, candidateSnapshotId = null) {
-  if (optionalText(candidateSnapshotId)) return "platform-candidate-snapshot";
+function resolvePlatformTestEnvironment(gate, {
+  candidateSnapshotId = null,
+  executionClass = null,
+  requiresCleanWorkspace = false
+} = {}) {
+  if (optionalText(candidateSnapshotId) && String(executionClass || "") === "candidate_snapshot") return "platform-candidate-snapshot";
+  if (String(executionClass || "") === "candidate_snapshot" || requiresCleanWorkspace === true) return "isolated-temp-workspace";
   const environment = optionalText(gate?.environment);
   if (environment) return environment;
   if (String(gate?.runner || "") === "cargo-test") return "local-rust-cargo";
@@ -133,6 +138,7 @@ function buildPlatformTestEnvironmentInputs({
   env = {},
   runner = "node-test",
   environment = "local-node",
+  executionClass = "child_process",
   runtimeProfile = null,
   workspaceMode = "live-workspace",
   workspaceSource = "workspace",
@@ -149,6 +155,7 @@ function buildPlatformTestEnvironmentInputs({
     envOverrideKeys: Object.keys(env || {}).sort(),
     runner: String(runner || "node-test"),
     environment: String(environment || "local-node"),
+    executionClass: String(executionClass || "child_process"),
     workspaceMode: String(workspaceMode || "live-workspace"),
     workspaceSource: String(workspaceSource || "workspace"),
     overlayFileCount: Number(overlayFileCount || 0),
@@ -512,10 +519,16 @@ function emitPlatformTestRunStart(world, {
   sourceRevision = null,
   cacheIdentity = null,
   cacheStatus = "miss",
-  cacheHit = null
+  cacheHit = null,
+  serverRunnerId = null,
+  verification = null
 }) {
   ensureThing(world, actor, id);
-  const environment = resolvePlatformTestEnvironment(gate, candidateSnapshotId);
+  const environment = resolvePlatformTestEnvironment(gate, {
+    candidateSnapshotId,
+    executionClass: verification?.executionClass ?? null,
+    requiresCleanWorkspace: verification?.requiresCleanWorkspace === true
+  });
   return world.emit({
     process: "platform.test.run.start",
     actor,
@@ -538,6 +551,8 @@ function emitPlatformTestRunStart(world, {
       cacheIdentity: cacheIdentity && typeof cacheIdentity === "object" ? { ...cacheIdentity } : null,
       cacheStatus: String(cacheStatus || "miss"),
       cacheHit: cacheHit && typeof cacheHit === "object" ? { ...cacheHit } : null,
+      serverRunnerId: serverRunnerId ? String(serverRunnerId) : null,
+      verification: verification && typeof verification === "object" ? { ...verification } : null,
       actor,
       session: session?.id ?? null,
       runtimeProfile: runtimeProfile ? String(runtimeProfile) : null,
@@ -560,7 +575,9 @@ function emitPlatformTestRunFinish(world, {
   sourceRevision = null,
   cacheIdentity = null,
   cacheStatus = "miss",
-  cacheHit = null
+  cacheHit = null,
+  serverRunnerId = null,
+  verification = null
 }) {
   const resultId = `testResult:${run.id}:1`;
   ensureThing(world, actor, resultId);
@@ -586,6 +603,8 @@ function emitPlatformTestRunFinish(world, {
     cacheIdentity: cacheIdentity && typeof cacheIdentity === "object" ? { ...cacheIdentity } : null,
     cacheStatus: String(cacheStatus || "miss"),
     cacheHit: cacheHit && typeof cacheHit === "object" ? { ...cacheHit } : null,
+    serverRunnerId: serverRunnerId ? String(serverRunnerId) : null,
+    verification: verification && typeof verification === "object" ? { ...verification } : null,
     producedAt: execution.finishedAt
   };
   return world.emit({
@@ -613,6 +632,8 @@ function emitPlatformTestRunFinish(world, {
       cacheIdentity: cacheIdentity && typeof cacheIdentity === "object" ? { ...cacheIdentity } : null,
       cacheStatus: String(cacheStatus || "miss"),
       cacheHit: cacheHit && typeof cacheHit === "object" ? { ...cacheHit } : null,
+      serverRunnerId: serverRunnerId ? String(serverRunnerId) : null,
+      verification: verification && typeof verification === "object" ? { ...verification } : null,
       actor,
       session: session?.id ?? null,
       runtimeProfile: runtimeProfile ? String(runtimeProfile) : null,
@@ -669,7 +690,12 @@ export async function runPlatformTestGate(world, {
   session = null,
   runtimeProfile = null,
   runCommand = runPlatformTestCommand,
-  resolveRunnerVersion = resolvePlatformTestRunnerVersion
+  resolveRunnerVersion = resolvePlatformTestRunnerVersion,
+  timeoutMs = null,
+  executionClass = "child_process",
+  requiresCleanWorkspace = false,
+  serverRunnerId = null,
+  verification = null
 }) {
   if (!gate?.id) return { ok: false, status: 400, error: "test gate is required" };
   const runId = String(id || defaultTestRunId(gate.id)).trim();
@@ -678,19 +704,28 @@ export async function runPlatformTestGate(world, {
   const normalizedBranchId = optionalText(branchId);
   const normalizedChangeSetId = optionalText(changeSetId);
   const normalizedCandidateSnapshotId = optionalText(candidateSnapshotId);
-  const environment = resolvePlatformTestEnvironment(gate, normalizedCandidateSnapshotId);
+  const effectiveTimeoutMs = timeoutMs == null ? gate.timeoutMs : timeoutMs;
+  const effectiveVerification = verification && typeof verification === "object"
+    ? { ...verification, executionClass: verification.executionClass ?? executionClass, requiresCleanWorkspace: verification.requiresCleanWorkspace ?? requiresCleanWorkspace }
+    : { executionClass, requiresCleanWorkspace };
+  const environment = resolvePlatformTestEnvironment(gate, {
+    candidateSnapshotId: normalizedCandidateSnapshotId,
+    executionClass,
+    requiresCleanWorkspace
+  });
   const workspaceDescriptor = resolvePlatformTestWorkspaceDescriptor(world, {
     environment,
-    candidateSnapshotId: normalizedCandidateSnapshotId
+    candidateSnapshotId: String(environment) === "platform-candidate-snapshot" ? normalizedCandidateSnapshotId : null
   });
   if (!workspaceDescriptor.ok) return workspaceDescriptor;
   const environmentInputs = buildPlatformTestEnvironmentInputs({
     command: gate.command,
     cwd: repoRoot,
-    timeoutMs: gate.timeoutMs,
+    timeoutMs: effectiveTimeoutMs,
     env: {},
     runner: gate.runner,
     environment,
+    executionClass,
     runtimeProfile,
     workspaceMode: workspaceDescriptor.workspaceMode,
     workspaceSource: workspaceDescriptor.workspaceSource,
@@ -731,7 +766,9 @@ export async function runPlatformTestGate(world, {
     sourceRevision,
     cacheIdentity,
     cacheStatus,
-    cacheHit
+    cacheHit,
+    serverRunnerId,
+    verification: effectiveVerification
   });
   const execution = reusableResult
     ? cachedExecutionFromResult(reusableResult)
@@ -739,7 +776,7 @@ export async function runPlatformTestGate(world, {
         if (workspaceDescriptor.workspaceMode !== "isolated-temp-workspace") {
           return runCommand({
             command: gate.command,
-            timeoutMs: gate.timeoutMs,
+            timeoutMs: effectiveTimeoutMs,
             cwd: repoRoot
           });
         }
@@ -749,7 +786,7 @@ export async function runPlatformTestGate(world, {
         try {
           return await runCommand({
             command: gate.command,
-            timeoutMs: gate.timeoutMs,
+            timeoutMs: effectiveTimeoutMs,
             cwd: workspace.cwd
           });
         } finally {
@@ -765,7 +802,7 @@ export async function runPlatformTestGate(world, {
       command: String(gate.command || ""),
       runner: String(gate.runner || "node-test"),
       environment,
-      timeoutMs: Number(gate.timeoutMs || 0),
+      timeoutMs: Number(effectiveTimeoutMs || 0),
       sourceDependencies: Array.isArray(gate.sourceDependencies) ? gate.sourceDependencies.map(String) : [],
       protectedObjects: Array.isArray(gate.protectedObjects) ? gate.protectedObjects.map(String) : []
     },
@@ -779,7 +816,9 @@ export async function runPlatformTestGate(world, {
     sourceRevision,
     cacheIdentity,
     cacheStatus,
-    cacheHit
+    cacheHit,
+    serverRunnerId,
+    verification: effectiveVerification
   });
   const readback = readPlatformTestRun(world, runId);
   return {

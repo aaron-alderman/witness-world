@@ -60,6 +60,7 @@ import {
 import { collectActiveRuntimeContributions } from "./runtime-active-contributions.js";
 import { buildRuntimeOperatorContract } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService } from "./runtime-operator-service.js";
+import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.js";
 
 export async function startRuntimeServer(world, {
   actor,
@@ -82,6 +83,7 @@ export async function startRuntimeServer(world, {
     hostCapabilities,
     resolveRuntimeConfig,
     resolveServerRunner,
+    resolveRunnerForHost,
     resolveStartupRunner,
     resolveStorageConfig,
     httpModule = http,
@@ -191,8 +193,12 @@ export async function startRuntimeServer(world, {
 
   const serverRunner = resolved.runner;
   const runtimePluginInstallIndex = world.project(moduleProjectors.runtimePluginInstallIndex);
-  const authoredRuntimePluginIds = (runtimePluginInstallIndex?.byServerRunner?.[serverRunner.id] ?? [])
-    .map(row => row.plugin);
+  // Load plugin modules authored for ANY runner, not just the primary: a multi-host instance must
+  // have every host's handlers available. Per-runner route filtering (servedRoutes) still scopes
+  // which routes each host actually exposes, so loading extra handler code is inert for other hosts.
+  const authoredRuntimePluginIds = [...new Set(
+    (runtimePluginInstallIndex?.rows ?? []).map(row => row.plugin)
+  )];
   const runtimePluginCatalog = await readRuntimePluginCatalogImpl({
     pluginRoot: runtimePluginRoot,
     runtimeProfile,
@@ -271,6 +277,31 @@ export async function startRuntimeServer(world, {
   }
   const activeRuntimeProfile = resolvedRuntime.profile;
   const compositionOptions = { additionalBundleIds, bundleOverrides };
+  // Per-runner bundle gating (multi-host): plugin-contributed bundles are loaded process-wide so
+  // every host's handlers exist, but a bundle's generic endpoints must only answer on runners that
+  // actually install the plugin. Map each plugin id to the bundle(s) it owns, and treat the set of
+  // plugin-added bundle ids as "opt-in" (base profile bundles stay available to all runners).
+  const pluginBundleIdsByPlugin = new Map();
+  for (const pluginPackage of effectiveRuntimePluginCatalog.packages ?? []) {
+    const ids = pluginPackage?.runtimeModule?.bundleIds ?? [];
+    if (ids.length) pluginBundleIdsByPlugin.set(pluginPackage.id, new Set(ids));
+  }
+  const optInBundleIds = new Set(additionalBundleIds);
+  const activeAddedBundlesForRunner = runnerId => {
+    const active = new Set();
+    const installs = world.project(moduleProjectors.runtimePluginInstallIndex)?.byServerRunner?.[runnerId] ?? [];
+    for (const row of installs) {
+      const owned = pluginBundleIdsByPlugin.get(row.plugin);
+      if (owned) for (const bundleId of owned) active.add(bundleId);
+    }
+    return active;
+  };
+  // True when a matched generic endpoint belongs to an opt-in bundle this runner does not activate.
+  const genericEndpointGatedForRunner = (endpoint, runnerId) => {
+    const bundleId = endpoint?.bundleId ?? null;
+    if (!bundleId || !optInBundleIds.has(bundleId)) return false;
+    return !activeAddedBundlesForRunner(runnerId).has(bundleId);
+  };
   const runtimeSurfaceEntries = runtimeSurfaceEntriesForProfileImpl(activeRuntimeProfile, null, compositionOptions);
   const activeDispatchHandlers = new Set(resolvedRuntime.dispatchHandlers ?? dispatchHandlerIdsForProfileImpl(activeRuntimeProfile, compositionOptions));
   const handlerSetFactories = handlerSetFactoriesForProfileImpl(activeRuntimeProfile, compositionOptions);
@@ -391,6 +422,15 @@ export async function startRuntimeServer(world, {
   appContext.operatorRuntimePluginIds = effectiveRuntimePluginCatalog.operatorPluginIds;
   appContext.effectiveRuntimePluginIds = effectiveRuntimePluginCatalog.effectivePluginIds;
   appContext.activeRuntimePluginIds = effectiveRuntimePluginCatalog.activePluginIds;
+  const verificationPolicy = resolveRunnerVerificationPolicy({
+    serverRunner,
+    runtimeProfile: activeRuntimeProfile,
+    runtimeConfig: appContext.runtimeConfig
+  });
+  appContext.verificationPolicy = verificationPolicy;
+  appContext.verificationPolicySource = verificationPolicy.source;
+  appContext.verificationPolicyDiagnostics = verificationPolicy.diagnostics ?? [];
+  await appContext.providerRuntimes?.["platform.testMonitor"]?.initialize?.();
   const currentWitnessCount = () => typeof world?.witnessCount === "function"
     ? Number(world.witnessCount() || 0)
     : Number(world?.allWitnesses?.().length || 0);
@@ -503,7 +543,11 @@ export async function startRuntimeServer(world, {
     createRuntimeAppContext: createRuntimeAppContextImpl,
     createUnavailableRuntimeAppContext: createUnavailableRuntimeAppContextImpl,
     createRuntimeContextResolver: createRuntimeContextResolverImpl,
-    resolveLiveRunner: () => resolveServerRunner(world, null)
+    resolveLiveRunner: requestHost => (
+      typeof resolveRunnerForHost === "function"
+        ? resolveRunnerForHost(world, requestHost ?? null)
+        : resolveServerRunner(world, null)
+    )
   });
   const { runtimeContexts, resolveActiveRuntime } = runtimeResolver;
   const staticPluginFiles = runtimeContributions.staticAssetFiles ?? new Map();
@@ -603,7 +647,7 @@ export async function startRuntimeServer(world, {
   const server = httpModule.createServer(async (req, res) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const runtime = await resolveActiveRuntime();
+    const runtime = await resolveActiveRuntime(req.headers?.host ?? null);
     if (appContext.appSnapshotManager && runtime.context && !runtime.context.appSnapshotManager) {
       runtime.context.appSnapshotManager = appContext.appSnapshotManager;
       runtime.context.devMode = activeDevMode === true;
@@ -684,6 +728,11 @@ export async function startRuntimeServer(world, {
 
       if (!matched) {
         const genericEndpoint = matchGenericEndpoint(req.method || "GET", requestUrl.pathname, activeRuntimeProfile, compositionOptions);
+        if (genericEndpoint && genericEndpointGatedForRunner(genericEndpoint, runtime.runner.id)) {
+          // Endpoint belongs to a plugin bundle this host does not activate — behave as not-mounted.
+          await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
+          return;
+        }
         if (genericEndpoint) {
           const routeHandlers = {
             ...genericHandlers,

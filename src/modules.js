@@ -502,6 +502,18 @@ export function compileDescription(world, { actor, compiler, description, output
   });
 }
 
+// Hosts a runner answers to, normalized for Host-header matching: lowercased, port stripped,
+// de-duplicated. A null/empty list means the runner is not host-bound (legacy single-runner case).
+export function normalizeRunnerHosts(hosts) {
+  if (!Array.isArray(hosts)) return null;
+  const normalized = [...new Set(
+    hosts
+      .map(value => (typeof value === "string" ? value.trim().toLowerCase().replace(/:\d+$/, "") : ""))
+      .filter(Boolean)
+  )];
+  return normalized.length ? normalized : null;
+}
+
 export function createServerRunner(world, {
   actor,
   id,
@@ -513,7 +525,10 @@ export function createServerRunner(world, {
   storage = null,
   runtimeConfig = null,
   allowActorHeader = false,
-  context = null
+  hosts = null,
+  default: isDefault = false,
+  context = null,
+  values = null
 }) {
   createThing(world, { actor, id, owner });
   return world.emit({
@@ -536,7 +551,10 @@ export function createServerRunner(world, {
       storage: storage && typeof storage === "object" ? { ...storage } : null,
       runtimeConfig: runtimeConfig && typeof runtimeConfig === "object" ? { ...runtimeConfig } : null,
       allowActorHeader: allowActorHeader === true,
-      context: context ? String(context) : null
+      hosts: normalizeRunnerHosts(hosts),
+      default: isDefault === true,
+      context: context ? String(context) : null,
+      values: values && typeof values === "object" ? structuredClone(values) : null
     }
   });
 }
@@ -2142,6 +2160,12 @@ export const moduleProjectors = {
     byGate: Object.create(null)
   })),
 
+  verificationPolicies: delegatedModuleProjector("verificationPolicies", emptyRows),
+
+  verificationQueue: delegatedModuleProjector("verificationQueue", emptyRows),
+
+  verificationExecutions: delegatedModuleProjector("verificationExecutions", emptyRows),
+
   coverageEdges: delegatedModuleProjector("coverageEdges", emptyRows),
 
   latestTestResultsByGate: delegatedModuleProjector("latestTestResultsByGate", () => ({
@@ -2236,7 +2260,10 @@ export const moduleProjectors = {
         storage: w.body.storage && typeof w.body.storage === "object" ? { ...w.body.storage } : null,
         runtimeConfig: w.body.runtimeConfig && typeof w.body.runtimeConfig === "object" ? { ...w.body.runtimeConfig } : null,
         allowActorHeader: w.body.allowActorHeader === true,
-        context: contexts.get(w.body.id) ?? (w.body.context ? String(w.body.context) : null)
+        hosts: normalizeRunnerHosts(w.body.hosts),
+        default: w.body.default === true,
+        context: contexts.get(w.body.id) ?? (w.body.context ? String(w.body.context) : null),
+        values: w.body.values && typeof w.body.values === "object" ? structuredClone(w.body.values) : null
       });
     }
     return [...runnerMap.values()];

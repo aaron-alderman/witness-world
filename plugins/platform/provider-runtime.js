@@ -1,11 +1,14 @@
 import path from "node:path";
 import fsWatch from "node:fs";
-import { nonNegativeInteger, positiveInteger, runtimeConfigLookup } from "../../src/runtime-config-utils.js";
 import { moduleProjectors } from "../../src/modules.js";
 import { buildPlatformModel } from "./platform-model.js";
 import { diagnosticsFromPlatformAppContext } from "./app-context-diagnostics.js";
 import { runPlatformTestCommand, runPlatformTestGate } from "./test-runs.js";
 import { selectContinuousTestGates } from "./test-gate-catalog.js";
+import {
+  resolveRunnerVerificationPolicy,
+  resolveVerificationGatePolicy
+} from "../../src/runtime-verification-policy.js";
 
 const WATCH_DIRS = Object.freeze(["src", "plugins", "test", "docs", "examples", "examples_rvm", "scripts", "store"]);
 const WATCH_FILES = Object.freeze(["package.json"]);
@@ -18,40 +21,36 @@ function unique(values = []) {
   return [...new Set(values.map(String).filter(Boolean))];
 }
 
-function parseBoolean(value, fallback) {
-  if (value === true || value === false) return value;
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  return fallback;
-}
-
 function nowIso() {
   return new Date().toISOString();
 }
 
-function normalizePlatformTestMonitorConfig(runtimeConfig) {
-  return {
-    enabled: parseBoolean(runtimeConfigLookup(runtimeConfig, "platform.testMonitor.enabled"), true),
-    watchFs: parseBoolean(runtimeConfigLookup(runtimeConfig, "platform.testMonitor.watchFs"), true),
-    maxAutoRunsPerCycle: positiveInteger(runtimeConfigLookup(runtimeConfig, "platform.testMonitor.maxAutoRunsPerCycle"), 6),
-    watchDebounceMs: nonNegativeInteger(runtimeConfigLookup(runtimeConfig, "platform.testMonitor.watchDebounceMs"), 150)
-  };
+function comparePolicyPriority(left, right) {
+  return Number(right?.priority || 0) - Number(left?.priority || 0)
+    || String(left?.gateId || "").localeCompare(String(right?.gateId || ""));
 }
 
-function normalizeRepoRelativeSource(repoRoot, sourceId, appRoot = null) {
-  const value = String(sourceId || "").trim();
-  if (!value) return null;
-  if (path.isAbsolute(value)) return slash(path.relative(repoRoot, value));
-  if (!appRoot) return slash(value);
-  return slash(path.relative(repoRoot, path.resolve(appRoot, value)));
-}
-
-function emitPlatformTestMonitorEvent(world, process, actor, body) {
+function emitVerificationEvent(world, process, actor, body) {
   const event = { process, actor, claims: [], body };
   if (typeof world?.observe === "function") return world.observe(event);
   if (typeof world?.emit === "function") return world.emit(event);
   return null;
+}
+
+function executionClassForEntry(entry = null) {
+  return String(entry?.executionClass || "child_process");
+}
+
+function isolationCandidateSnapshotId(entry = null) {
+  const executionClass = executionClassForEntry(entry);
+  if (executionClass === "candidate_snapshot") return entry?.candidateSnapshotId ?? null;
+  return null;
+}
+
+function shouldUseIsolatedWorkspace(entry = null) {
+  const executionClass = executionClassForEntry(entry);
+  return executionClass === "candidate_snapshot"
+    || entry?.requiresCleanWorkspace === true;
 }
 
 export function createPlatformTestMonitorRuntime({
@@ -66,180 +65,277 @@ export function createPlatformTestMonitorRuntime({
   runPlatformTestCommandImpl = runPlatformTestCommand,
   runPlatformTestGateImpl = runPlatformTestGate
 } = {}) {
-  const config = normalizePlatformTestMonitorConfig(runtimeConfig);
   const repoRoot = process.cwd();
   const watcherEntries = [];
   const pendingSources = new Set();
-  const pendingChangeSets = new Map();
+  const pendingChangeSets = [];
+  const queue = [];
+  const completedExecutions = [];
+  let queueSequence = 0;
   let closed = false;
   let processing = false;
   let debounceTimer = null;
+  let initialized = false;
+  let activeExecution = null;
+  let emittedPolicyIds = new Set();
 
-  const queueSourcePaths = (paths = [], meta = {}) => {
-    for (const sourcePath of unique(paths)) pendingSources.add(sourcePath);
-    if (!pendingSources.size) return;
-    emitPlatformTestMonitorEvent(world, "platform.test.autorun.enqueued", serverRunnerId, {
-      kind: "source",
-      sourcePaths: [...pendingSources],
-      trigger: meta.trigger ?? "workspace-watch",
-      queuedAt: nowIso()
+  const resolvedState = () => {
+    const appContext = getAppContext?.() ?? null;
+    const policy = appContext?.verificationPolicy ?? resolveRunnerVerificationPolicy({
+      serverRunner: {
+        id: serverRunnerId,
+        runtimeConfig
+      },
+      runtimeProfile: appContext?.runtimeProfile ?? null,
+      runtimeConfig: appContext?.runtimeConfig ?? runtimeConfig
     });
+    const gates = appContext?.project?.(moduleProjectors.testGates) ?? project(moduleProjectors.testGates) ?? [];
+    const gatePolicies = gates
+      .map(gate => resolveVerificationGatePolicy(policy, gate))
+      .filter(Boolean)
+      .sort(comparePolicyPriority);
+    return {
+      appContext,
+      policy,
+      gatePolicies,
+      gatePolicyById: Object.fromEntries(gatePolicies.map(row => [row.gateId, row]))
+    };
+  };
+
+  const emitResolvedPolicies = () => {
+    const { policy, gatePolicies } = resolvedState();
+    const defaultsRow = {
+      id: `verificationPolicy:${serverRunnerId}:${policy.runtimeProfile || "profile"}:defaults`,
+      serverRunnerId,
+      runtimeProfile: policy.runtimeProfile ?? null,
+      policySource: policy.source,
+      policyKind: "defaults",
+      enabled: policy.enabled === true,
+      ...policy.defaults,
+      diagnostics: Array.isArray(policy.diagnostics) ? policy.diagnostics.map(row => ({ ...row })) : [],
+      producedAt: nowIso()
+    };
+    const policyRows = [
+      defaultsRow,
+      ...gatePolicies.map(row => ({
+        ...row,
+        policySource: policy.source,
+        policyKind: "gate",
+        status: row.diagnostics?.length ? "invalid" : "resolved",
+        gateTitle: gatesById().get(row.gateId)?.title ?? row.gateId,
+        producedAt: nowIso()
+      }))
+    ];
+    for (const row of policyRows) {
+      emitVerificationEvent(world, "platform.verification.policy.resolved", serverRunnerId, row);
+      emittedPolicyIds.add(row.id);
+    }
+  };
+
+  const gatesById = () => {
+    const appContext = getAppContext?.() ?? null;
+    const gates = appContext?.project?.(moduleProjectors.testGates) ?? project(moduleProjectors.testGates) ?? [];
+    return new Map(gates.map(gate => [String(gate.id || ""), gate]));
+  };
+
+  const createQueueEntry = (gate, gatePolicy, meta = {}) => ({
+    id: `verificationQueue:${serverRunnerId}:${(++queueSequence).toString(36)}`,
+    serverRunnerId,
+    runtimeProfile: meta.runtimeProfile ?? null,
+    gateId: String(gate.id || gatePolicy.gateId || ""),
+    gateTitle: String(gate.title || gate.id || gatePolicy.gateId || ""),
+    executionClass: gatePolicy.executionClass,
+    exclusive: gatePolicy.exclusive === true,
+    requiresCleanWorkspace: gatePolicy.requiresCleanWorkspace === true,
+    priority: Number(gatePolicy.priority || 0),
+    triggerKind: String(meta.triggerKind || "manual"),
+    trigger: String(meta.trigger || meta.triggerKind || "manual"),
+    branchId: meta.branchId ? String(meta.branchId) : null,
+    changeSetId: meta.changeSetId ? String(meta.changeSetId) : null,
+    candidateSnapshotId: meta.candidateSnapshotId ? String(meta.candidateSnapshotId) : null,
+    sourcePaths: Array.isArray(meta.sourcePaths) ? meta.sourcePaths.map(String) : [],
+    status: "queued",
+    queuedAt: nowIso()
+  });
+
+  const enqueueEntries = (entries = []) => {
+    const nextEntries = entries.filter(Boolean).sort(comparePolicyPriority);
+    if (!nextEntries.length) return;
+    for (const entry of nextEntries) {
+      queue.push(entry);
+      emitVerificationEvent(world, "platform.verification.queue.enqueued", serverRunnerId, { ...entry });
+    }
+    queue.sort(comparePolicyPriority);
     void drain();
   };
 
-  const queueChangeSetValidation = ({
-    branchId = null,
-    changeSetId = null,
-    candidateSnapshotId = null,
-    status = null
-  } = {}) => {
-    if (String(status || "") !== "valid" || !changeSetId) return;
-    pendingChangeSets.set(String(changeSetId), {
-      branchId: branchId ? String(branchId) : null,
-      changeSetId: String(changeSetId),
-      candidateSnapshotId: candidateSnapshotId ? String(candidateSnapshotId) : null,
-      queuedAt: nowIso()
-    });
-    emitPlatformTestMonitorEvent(world, "platform.test.autorun.enqueued", serverRunnerId, {
-      kind: "changeSet",
-      branchId: branchId ? String(branchId) : null,
-      changeSetId: String(changeSetId),
-      candidateSnapshotId: candidateSnapshotId ? String(candidateSnapshotId) : null,
-      trigger: "platform.changeSet.validate",
-      queuedAt: nowIso()
-    });
-    void drain();
+  const enqueueStartupGates = () => {
+    const state = resolvedState();
+    if (!state.policy.enabled) return;
+    const gateMap = gatesById();
+    const entries = state.gatePolicies
+      .filter(row => row.enabled && row.startup)
+      .map(row => createQueueEntry(gateMap.get(row.gateId) ?? { id: row.gateId, title: row.gateId }, row, {
+        runtimeProfile: state.policy.runtimeProfile,
+        triggerKind: "startup",
+        trigger: "server-startup"
+      }));
+    enqueueEntries(entries);
   };
 
-  const runGateBatch = async (gates = [], baseContext = {}) => {
-    const appContext = getAppContext?.() ?? null;
-    const results = [];
-    for (const gate of gates) {
-      const gateCandidateSnapshotId = baseContext.candidateSnapshotId && (gate.protectedObjects ?? []).includes("testEnvironment:platform-candidate-snapshot")
-        ? baseContext.candidateSnapshotId
-        : null;
-      const result = await runPlatformTestGateImpl(world, {
-        actor: serverRunnerId,
-        gate,
-        branchId: baseContext.branchId ?? null,
-        changeSetId: baseContext.changeSetId ?? null,
-        candidateSnapshotId: gateCandidateSnapshotId,
-        runtimeProfile: appContext?.runtimeProfile ?? null,
-        runCommand: runPlatformTestCommandImpl
-      });
-      results.push({
-        gateId: String(gate.id || ""),
-        ok: result.ok === true,
-        testRunId: result.testRun?.id ?? null,
-        status: result.latestResult?.status ?? null,
-        error: result.ok ? null : result.error
-      });
-    }
-    return results;
-  };
-
-  const runSelectedSourceTests = async sourcePaths => {
-    const appContext = getAppContext?.() ?? null;
-    if (!appContext || !config.enabled) return null;
-    const testGates = appContext.project?.(moduleProjectors.testGates) ?? project(moduleProjectors.testGates);
-    const selectedGates = selectContinuousTestGates(testGates, sourcePaths, {
-      maxGateCount: config.maxAutoRunsPerCycle
-    });
-    if (!selectedGates.length) {
-      emitPlatformTestMonitorEvent(world, "platform.test.autorun.skipped", serverRunnerId, {
-        kind: "source",
-        sourcePaths,
-        reason: "no matching test gates",
-        finishedAt: nowIso()
-      });
-      return [];
-    }
-    emitPlatformTestMonitorEvent(world, "platform.test.autorun.start", serverRunnerId, {
-      kind: "source",
+  const enqueueSourceEntries = (sourcePaths = [], meta = {}) => {
+    const state = resolvedState();
+    if (!state.policy.enabled) return;
+    const gateMap = gatesById();
+    const selected = selectContinuousTestGates(
+      [...gateMap.values()],
       sourcePaths,
-      selectedGateIds: selectedGates.map(gate => gate.id),
-      startedAt: nowIso()
-    });
-    const results = await runGateBatch(selectedGates, {});
-    emitPlatformTestMonitorEvent(world, "platform.test.autorun.finish", serverRunnerId, {
-      kind: "source",
-      sourcePaths,
-      selectedGateIds: selectedGates.map(gate => gate.id),
-      results,
-      finishedAt: nowIso()
-    });
-    return results;
+      { maxGateCount: state.policy.compatibility?.maxAutoRunsPerCycle ?? 6 }
+    );
+    const entries = selected
+      .map(gate => ({ gate, gatePolicy: state.gatePolicyById[gate.id] ?? null }))
+      .filter(row => row.gatePolicy?.enabled && row.gatePolicy.watch)
+      .map(({ gate, gatePolicy }) => createQueueEntry(gate, gatePolicy, {
+        runtimeProfile: state.policy.runtimeProfile,
+        triggerKind: "watch",
+        trigger: meta.trigger ?? "workspace-watch",
+        sourcePaths
+      }));
+    enqueueEntries(entries);
   };
 
-  const runSelectedChangeSetTests = async queued => {
-    const appContext = getAppContext?.() ?? null;
-    if (!appContext || !config.enabled) return null;
+  const enqueueChangeSetEntries = async queued => {
+    const state = resolvedState();
+    if (!state.policy.enabled) return;
+    const appContext = state.appContext;
+    if (!appContext || String(queued?.status || "") !== "valid" || !queued?.changeSetId) return;
     const model = await buildPlatformModelImpl({
       appContext,
       diagnostics: diagnosticsFromPlatformAppContext(appContext),
       project: appContext.project ?? project
     });
     const selectedGateIds = [...(model.selectedTestGatesByChangeSet?.[queued.changeSetId] ?? [])];
-    const gateById = Object.fromEntries((model.testGates ?? []).map(gate => [String(gate.id || ""), gate]));
-    const selectedGates = selectedGateIds.map(gateId => gateById[gateId]).filter(Boolean);
-    if (!selectedGates.length) {
-      emitPlatformTestMonitorEvent(world, "platform.test.autorun.skipped", serverRunnerId, {
-        kind: "changeSet",
-        branchId: queued.branchId,
-        changeSetId: queued.changeSetId,
-        candidateSnapshotId: queued.candidateSnapshotId,
-        reason: "no selected test gates",
+    const gateMap = gatesById();
+    const entries = selectedGateIds
+      .map(gateId => {
+        const gate = gateMap.get(gateId) ?? null;
+        const gatePolicy = gate ? state.gatePolicyById[gateId] ?? null : null;
+        if (!gate || !gatePolicy?.enabled || !gatePolicy.onChangeSet) return null;
+        return createQueueEntry(gate, gatePolicy, {
+          runtimeProfile: state.policy.runtimeProfile,
+          triggerKind: "changeSet",
+          trigger: "platform.changeSet.validate",
+          branchId: queued.branchId ?? null,
+          changeSetId: queued.changeSetId ?? null,
+          candidateSnapshotId: queued.candidateSnapshotId ?? null
+        });
+      })
+      .filter(Boolean);
+    enqueueEntries(entries);
+  };
+
+  const runEntry = async entry => {
+    const state = resolvedState();
+    const gate = gatesById().get(entry.gateId) ?? null;
+    const gatePolicy = gate ? (state.gatePolicyById[gate.id] ?? null) : null;
+    if (!gate || !gatePolicy) {
+      emitVerificationEvent(world, "platform.verification.queue.skipped", serverRunnerId, {
+        ...entry,
+        status: "skipped",
+        reason: "test gate not found",
         finishedAt: nowIso()
       });
-      return [];
+      return;
     }
-    emitPlatformTestMonitorEvent(world, "platform.test.autorun.start", serverRunnerId, {
-      kind: "changeSet",
-      branchId: queued.branchId,
-      changeSetId: queued.changeSetId,
-      candidateSnapshotId: queued.candidateSnapshotId,
-      selectedGateIds,
+    if (!gatePolicy.enabled) {
+      emitVerificationEvent(world, "platform.verification.queue.skipped", serverRunnerId, {
+        ...entry,
+        status: "skipped",
+        reason: gatePolicy.diagnostics?.[0]?.message ?? "verification gate disabled by policy",
+        diagnostics: gatePolicy.diagnostics ?? [],
+        finishedAt: nowIso()
+      });
+      return;
+    }
+    activeExecution = {
+      id: `verificationExecution:${entry.id}`,
+      queueEntryId: entry.id,
+      serverRunnerId,
+      runtimeProfile: entry.runtimeProfile,
+      gateId: entry.gateId,
+      gateTitle: entry.gateTitle,
+      executionClass: entry.executionClass,
+      exclusive: entry.exclusive,
+      requiresCleanWorkspace: entry.requiresCleanWorkspace,
+      triggerKind: entry.triggerKind,
+      branchId: entry.branchId,
+      changeSetId: entry.changeSetId,
+      candidateSnapshotId: entry.candidateSnapshotId,
+      status: "running",
       startedAt: nowIso()
+    };
+    emitVerificationEvent(world, "platform.verification.queue.started", serverRunnerId, {
+      ...entry,
+      status: "running",
+      startedAt: activeExecution.startedAt
     });
-    const results = await runGateBatch(selectedGates, queued);
-    emitPlatformTestMonitorEvent(world, "platform.test.autorun.finish", serverRunnerId, {
-      kind: "changeSet",
-      branchId: queued.branchId,
-      changeSetId: queued.changeSetId,
-      candidateSnapshotId: queued.candidateSnapshotId,
-      selectedGateIds,
-      results,
-      finishedAt: nowIso()
+    const result = await runPlatformTestGateImpl(world, {
+      actor: serverRunnerId,
+      gate,
+      branchId: entry.branchId ?? null,
+      changeSetId: entry.changeSetId ?? null,
+      candidateSnapshotId: isolationCandidateSnapshotId(entry),
+      runtimeProfile: state.appContext?.runtimeProfile ?? null,
+      runCommand: runPlatformTestCommandImpl,
+      timeoutMs: gatePolicy.timeoutMs,
+      executionClass: entry.executionClass,
+      requiresCleanWorkspace: shouldUseIsolatedWorkspace(entry),
+      serverRunnerId,
+      verification: {
+        triggerKind: entry.triggerKind,
+        executionClass: entry.executionClass,
+        exclusive: entry.exclusive,
+        requiresCleanWorkspace: shouldUseIsolatedWorkspace(entry),
+        regressionMinDeltaMs: gatePolicy.regressionMinDeltaMs,
+        regressionMinDeltaPct: gatePolicy.regressionMinDeltaPct,
+        baselineScope: gatePolicy.baselineScope
+      }
     });
-    return results;
+    const finishedAt = nowIso();
+    const executionRow = {
+      ...activeExecution,
+      status: result.ok ? String(result.latestResult?.status || "finished") : "error",
+      runId: result.testRun?.id ?? null,
+      resultStatus: result.latestResult?.status ?? null,
+      error: result.ok ? null : result.error,
+      finishedAt
+    };
+    completedExecutions.push(executionRow);
+    if (completedExecutions.length > 50) completedExecutions.shift();
+    emitVerificationEvent(world, "platform.verification.queue.finished", serverRunnerId, {
+      ...entry,
+      status: executionRow.status,
+      runId: result.testRun?.id ?? null,
+      resultStatus: result.latestResult?.status ?? null,
+      timedOut: result.latestResult?.timedOut === true,
+      error: result.ok ? null : result.error,
+      finishedAt
+    });
+    activeExecution = null;
   };
 
   const drain = async () => {
     if (closed || processing) return;
     processing = true;
     try {
-      while (!closed && (pendingChangeSets.size || pendingSources.size)) {
-        if (pendingChangeSets.size) {
-          const [changeSetId, queued] = pendingChangeSets.entries().next().value;
-          pendingChangeSets.delete(changeSetId);
-          await runSelectedChangeSetTests(queued);
-          continue;
-        }
-        const sourcePaths = [...pendingSources];
-        pendingSources.clear();
-        await runSelectedSourceTests(sourcePaths);
+      while (!closed && queue.length) {
+        const entry = queue.shift();
+        if (!entry) continue;
+        await runEntry(entry);
       }
     } finally {
       processing = false;
     }
-  };
-
-  const scheduleSourceChanges = (paths = [], meta = {}) => {
-    queueSourcePaths(paths, meta);
-  };
-
-  const scheduleChangeSetValidation = queued => {
-    queueChangeSetValidation(queued);
   };
 
   const watchDirectory = absoluteRoot => {
@@ -251,10 +347,13 @@ export function createPlatformTestMonitorRuntime({
         if (!relativePath || relativePath.startsWith("node_modules/") || relativePath.startsWith(".git/")) return;
         pendingSources.add(relativePath);
         if (debounceTimer) clearTimeout(debounceTimer);
+        const debounceMs = resolvedState().policy.compatibility?.watchDebounceMs ?? 150;
         debounceTimer = setTimeout(() => {
           debounceTimer = null;
-          queueSourcePaths([...pendingSources], { trigger: "workspace-watch" });
-        }, config.watchDebounceMs);
+          const sourcePaths = [...pendingSources];
+          pendingSources.clear();
+          enqueueSourceEntries(sourcePaths, { trigger: "workspace-watch" });
+        }, debounceMs);
         debounceTimer.unref?.();
       });
       watcherEntries.push(watcher);
@@ -262,36 +361,62 @@ export function createPlatformTestMonitorRuntime({
   };
 
   const startWatchers = () => {
-    if (!config.enabled || !config.watchFs) return;
+    const state = resolvedState();
+    if (!state.policy.enabled || !state.gatePolicies.some(row => row.enabled && row.watch)) return;
+    if (watcherEntries.length) return;
     for (const relativePath of WATCH_DIRS) watchDirectory(path.join(repoRoot, relativePath));
     for (const filePath of WATCH_FILES) watchDirectory(path.dirname(path.join(repoRoot, filePath)));
   };
 
-  startWatchers();
-
   return {
-    config,
-    scheduleSourceChanges,
-    scheduleChangeSetValidation,
+    async initialize() {
+      if (initialized || closed) return;
+      initialized = true;
+      emitResolvedPolicies();
+      startWatchers();
+      enqueueStartupGates();
+    },
+    scheduleSourceChanges(paths = [], meta = {}) {
+      if (!unique(paths).length) return;
+      enqueueSourceEntries(unique(paths), meta);
+    },
+    scheduleChangeSetValidation(queued) {
+      pendingChangeSets.push({
+        branchId: queued?.branchId ? String(queued.branchId) : null,
+        changeSetId: queued?.changeSetId ? String(queued.changeSetId) : null,
+        candidateSnapshotId: queued?.candidateSnapshotId ? String(queued.candidateSnapshotId) : null,
+        status: queued?.status ? String(queued.status) : null,
+        queuedAt: nowIso()
+      });
+      const current = pendingChangeSets.shift();
+      if (!current) return;
+      void enqueueChangeSetEntries(current);
+    },
     inspect() {
-      const pendingSourcePaths = [...pendingSources];
-      const queuedChangeSets = [...pendingChangeSets.values()].map(row => ({ ...row }));
-      const status = !config.enabled
+      const state = resolvedState();
+      const status = !state.policy.enabled
         ? "disabled"
         : (processing
             ? "running"
-            : ((pendingSourcePaths.length || queuedChangeSets.length) ? "queued" : "idle"));
+            : (queue.length ? "queued" : "idle"));
       return {
-        enabled: config.enabled,
-        watchFs: config.watchFs,
-        maxAutoRunsPerCycle: config.maxAutoRunsPerCycle,
-        watchDebounceMs: config.watchDebounceMs,
+        enabled: state.policy.enabled === true,
+        policySource: state.policy.source,
+        defaults: { ...state.policy.defaults },
+        compatibility: { ...(state.policy.compatibility ?? {}) },
+        diagnostics: Array.isArray(state.policy.diagnostics) ? state.policy.diagnostics.map(row => ({ ...row })) : [],
         status,
         processing,
-        pendingSourcePaths,
-        pendingSourceCount: pendingSourcePaths.length,
-        pendingChangeSets: queuedChangeSets,
-        pendingChangeSetCount: queuedChangeSets.length
+        watchFs: state.gatePolicies.some(row => row.enabled && row.watch),
+        watchDebounceMs: state.policy.compatibility?.watchDebounceMs ?? 150,
+        pendingSourcePaths: [...pendingSources],
+        pendingSourceCount: pendingSources.size,
+        pendingChangeSets: pendingChangeSets.map(row => ({ ...row })),
+        pendingChangeSetCount: pendingChangeSets.length,
+        queue: queue.map(row => ({ ...row })),
+        queueCount: queue.length,
+        activeExecution: activeExecution ? { ...activeExecution } : null,
+        recentExecutions: completedExecutions.map(row => ({ ...row }))
       };
     },
     close() {

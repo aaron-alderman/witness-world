@@ -69,7 +69,10 @@ function formatCountSummary({ suiteCount = 0, caseCount = 0, failedCount = 0, er
   return parts.join(", ");
 }
 
-function inferRegressionStatus(currentDurationMs, baselineDurationMs) {
+function inferRegressionStatus(currentDurationMs, baselineDurationMs, {
+  minDeltaMs = 500,
+  minDeltaPct = 25
+} = {}) {
   if (!Number.isFinite(currentDurationMs) || !Number.isFinite(baselineDurationMs) || baselineDurationMs <= 0) {
     return {
       status: "unknown",
@@ -79,7 +82,7 @@ function inferRegressionStatus(currentDurationMs, baselineDurationMs) {
   }
   const deltaMs = currentDurationMs - baselineDurationMs;
   const deltaPercent = baselineDurationMs === 0 ? null : (deltaMs / baselineDurationMs) * 100;
-  const meaningful = Math.abs(deltaMs) >= 500 && Math.abs(deltaPercent ?? 0) >= 25;
+  const meaningful = Math.abs(deltaMs) >= Number(minDeltaMs || 0) && Math.abs(deltaPercent ?? 0) >= Number(minDeltaPct || 0);
   if (meaningful && deltaMs > 0) {
     return { status: "regressed", deltaMs, deltaPercent };
   }
@@ -105,7 +108,10 @@ function regressionSummaryByRun(runs = []) {
     for (const run of group) {
       const baselineDurationMs = numberOrNull(latestPassedBaseline?.durationMs);
       const currentDurationMs = numberOrNull(run?.durationMs);
-      const heuristic = inferRegressionStatus(currentDurationMs, baselineDurationMs);
+      const heuristic = inferRegressionStatus(currentDurationMs, baselineDurationMs, {
+        minDeltaMs: Number(run?.verification?.regressionMinDeltaMs || 500),
+        minDeltaPct: Number(run?.verification?.regressionMinDeltaPct || 25)
+      });
       summaries[run.id] = {
         id: `regressionSummary:${run.id}`,
         runId: String(run.id),
@@ -115,7 +121,10 @@ function regressionSummaryByRun(runs = []) {
         baselineDurationMs,
         currentDurationMs,
         deltaMs: heuristic.deltaMs,
-        deltaPercent: heuristic.deltaPercent
+        deltaPercent: heuristic.deltaPercent,
+        regressionMinDeltaMs: Number(run?.verification?.regressionMinDeltaMs || 500),
+        regressionMinDeltaPct: Number(run?.verification?.regressionMinDeltaPct || 25),
+        baselineScope: String(run?.verification?.baselineScope || "gate+environment+runtimeProfile")
       };
       if (run.status === "passed" && run.cacheStatus !== "hit") latestPassedBaseline = run;
     }
@@ -267,6 +276,10 @@ function testRunRows(witnesses) {
         cacheHit: body.cacheHit && typeof body.cacheHit === "object"
           ? { ...body.cacheHit }
           : null,
+        serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
+        verification: body.verification && typeof body.verification === "object"
+          ? { ...body.verification }
+          : null,
         actor: body.actor ? String(body.actor) : null,
         session: body.session ? String(body.session) : null,
         runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
@@ -320,6 +333,10 @@ function testRunRows(witnesses) {
         cacheStatus: body.cacheStatus ? String(body.cacheStatus) : "miss",
         cacheHit: body.cacheHit && typeof body.cacheHit === "object"
           ? { ...body.cacheHit }
+          : null,
+        serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
+        verification: body.verification && typeof body.verification === "object"
+          ? { ...body.verification }
           : null,
         actor: body.actor ? String(body.actor) : null,
         session: body.session ? String(body.session) : null,
@@ -388,9 +405,115 @@ function testResultRows(witnesses) {
         cacheHit: result.cacheHit && typeof result.cacheHit === "object"
           ? { ...result.cacheHit }
           : null,
+        serverRunnerId: result.serverRunnerId ? String(result.serverRunnerId) : (witness.body.serverRunnerId ? String(witness.body.serverRunnerId) : null),
+        verification: result.verification && typeof result.verification === "object"
+          ? { ...result.verification }
+          : (witness.body.verification && typeof witness.body.verification === "object" ? { ...witness.body.verification } : null),
         producedAt: result.producedAt ?? witness.body.finishedAt ?? null
       });
     }
+  }
+  return sortRows(rows, ["gateId", "id"]);
+}
+
+function verificationPolicyRows(witnesses) {
+  return sortRows(
+    [...latestBodiesByProcess(witnesses, "platform.verification.policy.resolved").values()].map(body => ({
+      id: String(body.id || ""),
+      serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
+      runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
+      policySource: body.policySource ? String(body.policySource) : null,
+      policyKind: body.policyKind ? String(body.policyKind) : "gate",
+      gateId: body.gateId ? String(body.gateId) : null,
+      gateTitle: body.gateTitle ? String(body.gateTitle) : null,
+      enabled: body.enabled === true,
+      startup: body.startup === true,
+      watch: body.watch === true,
+      onChangeSet: body.onChangeSet === true,
+      priority: Number(body.priority || 0),
+      maxConcurrency: Number(body.maxConcurrency || 0),
+      cpuBudget: Number(body.cpuBudget || 0),
+      regressionMinDeltaMs: Number(body.regressionMinDeltaMs || 0),
+      regressionMinDeltaPct: Number(body.regressionMinDeltaPct || 0),
+      baselineScope: body.baselineScope ? String(body.baselineScope) : null,
+      executionClass: body.executionClass ? String(body.executionClass) : null,
+      exclusive: body.exclusive === true,
+      requiresCleanWorkspace: body.requiresCleanWorkspace === true,
+      timeoutMs: typeof body.timeoutMs === "number" ? body.timeoutMs : null,
+      status: body.status ? String(body.status) : "resolved",
+      diagnostics: Array.isArray(body.diagnostics) ? body.diagnostics.map(row => ({ ...row })) : [],
+      producedAt: body.producedAt ?? null
+    })),
+    ["serverRunnerId", "runtimeProfile", "policyKind", "gateId", "id"]
+  );
+}
+
+function verificationQueueRows(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (![
+      "platform.verification.queue.enqueued",
+      "platform.verification.queue.started",
+      "platform.verification.queue.skipped",
+      "platform.verification.queue.finished"
+    ].includes(String(witness.process || "")) || !witness.body?.id) continue;
+    const body = witness.body;
+    const previous = rows.get(String(body.id)) ?? {};
+    rows.set(String(body.id), {
+      ...previous,
+      id: String(body.id),
+      serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : previous.serverRunnerId ?? null,
+      runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : previous.runtimeProfile ?? null,
+      gateId: body.gateId ? String(body.gateId) : previous.gateId ?? null,
+      gateTitle: body.gateTitle ? String(body.gateTitle) : previous.gateTitle ?? null,
+      executionClass: body.executionClass ? String(body.executionClass) : previous.executionClass ?? null,
+      exclusive: body.exclusive === true || previous.exclusive === true,
+      requiresCleanWorkspace: body.requiresCleanWorkspace === true || previous.requiresCleanWorkspace === true,
+      priority: Number(body.priority ?? previous.priority ?? 0),
+      triggerKind: body.triggerKind ? String(body.triggerKind) : previous.triggerKind ?? null,
+      trigger: body.trigger ? String(body.trigger) : previous.trigger ?? null,
+      branchId: body.branchId ? String(body.branchId) : previous.branchId ?? null,
+      changeSetId: body.changeSetId ? String(body.changeSetId) : previous.changeSetId ?? null,
+      candidateSnapshotId: body.candidateSnapshotId ? String(body.candidateSnapshotId) : previous.candidateSnapshotId ?? null,
+      sourcePaths: Array.isArray(body.sourcePaths) ? body.sourcePaths.map(String) : (previous.sourcePaths ?? []),
+      status: body.status ? String(body.status) : previous.status ?? "queued",
+      reason: body.reason ? String(body.reason) : previous.reason ?? null,
+      runId: body.runId ? String(body.runId) : previous.runId ?? null,
+      resultStatus: body.resultStatus ? String(body.resultStatus) : previous.resultStatus ?? null,
+      error: body.error ? String(body.error) : previous.error ?? null,
+      queuedAt: body.queuedAt ?? previous.queuedAt ?? null,
+      startedAt: body.startedAt ?? previous.startedAt ?? null,
+      finishedAt: body.finishedAt ?? previous.finishedAt ?? null
+    });
+  }
+  return sortRows([...rows.values()], ["status", "priority", "gateId", "id"]);
+}
+
+function verificationExecutionRows(witnesses) {
+  const rows = [];
+  for (const queueRow of verificationQueueRows(witnesses)) {
+    if (!queueRow.startedAt && queueRow.status !== "running") continue;
+    rows.push({
+      id: `verificationExecution:${queueRow.id}`,
+      queueEntryId: queueRow.id,
+      serverRunnerId: queueRow.serverRunnerId,
+      runtimeProfile: queueRow.runtimeProfile,
+      gateId: queueRow.gateId,
+      gateTitle: queueRow.gateTitle,
+      executionClass: queueRow.executionClass,
+      exclusive: queueRow.exclusive === true,
+      requiresCleanWorkspace: queueRow.requiresCleanWorkspace === true,
+      triggerKind: queueRow.triggerKind,
+      branchId: queueRow.branchId,
+      changeSetId: queueRow.changeSetId,
+      candidateSnapshotId: queueRow.candidateSnapshotId,
+      runId: queueRow.runId ?? null,
+      resultStatus: queueRow.resultStatus ?? null,
+      status: queueRow.status,
+      startedAt: queueRow.startedAt ?? null,
+      finishedAt: queueRow.finishedAt ?? null,
+      error: queueRow.error ?? null
+    });
   }
   return sortRows(rows, ["gateId", "id"]);
 }
@@ -997,6 +1120,18 @@ export const platformModuleProjectors = {
       pushByKey(byGate, row.gateId, row);
     }
     return { rows, byId, byRun, byGate };
+  },
+
+  verificationPolicies(witnesses) {
+    return verificationPolicyRows(witnesses);
+  },
+
+  verificationQueue(witnesses) {
+    return verificationQueueRows(witnesses);
+  },
+
+  verificationExecutions(witnesses) {
+    return verificationExecutionRows(witnesses);
   },
 
   testGates(witnesses) {

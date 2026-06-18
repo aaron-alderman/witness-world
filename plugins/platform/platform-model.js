@@ -512,11 +512,9 @@ function normalizeSnapshotDiagnostics(appSnapshot = null) {
   };
 }
 
-function normalizeTestMonitorDiagnostics(testMonitor = null) {
+function normalizeVerificationDiagnostics(testMonitor = null) {
   if (!testMonitor || typeof testMonitor !== "object") return null;
-  const pendingSourcePaths = Array.isArray(testMonitor.pendingSourcePaths)
-    ? testMonitor.pendingSourcePaths.map(String)
-    : [];
+  const pendingSourcePaths = Array.isArray(testMonitor.pendingSourcePaths) ? testMonitor.pendingSourcePaths.map(String) : [];
   const pendingChangeSets = Array.isArray(testMonitor.pendingChangeSets)
     ? testMonitor.pendingChangeSets.map(row => ({
         branchId: row?.branchId ? String(row.branchId) : null,
@@ -525,20 +523,35 @@ function normalizeTestMonitorDiagnostics(testMonitor = null) {
         queuedAt: row?.queuedAt ? String(row.queuedAt) : null
       }))
     : [];
-  const status = testMonitor.status
-    ? String(testMonitor.status)
-    : (!testMonitor.enabled ? "disabled" : ((testMonitor.processing || pendingSourcePaths.length || pendingChangeSets.length) ? "queued" : "idle"));
+  const queue = Array.isArray(testMonitor.queue)
+    ? testMonitor.queue.map(row => ({
+        id: row?.id ? String(row.id) : null,
+        gateId: row?.gateId ? String(row.gateId) : null,
+        executionClass: row?.executionClass ? String(row.executionClass) : null,
+        exclusive: row?.exclusive === true,
+        priority: Number(row?.priority || 0),
+        status: row?.status ? String(row.status) : "queued"
+      }))
+    : [];
   return {
     enabled: testMonitor.enabled === true,
-    watchFs: testMonitor.watchFs === true,
-    maxAutoRunsPerCycle: Number(testMonitor.maxAutoRunsPerCycle || 0),
-    watchDebounceMs: Number(testMonitor.watchDebounceMs || 0),
-    status,
+    policySource: testMonitor.policySource ? String(testMonitor.policySource) : null,
+    defaults: testMonitor.defaults && typeof testMonitor.defaults === "object" ? { ...testMonitor.defaults } : null,
+    compatibility: testMonitor.compatibility && typeof testMonitor.compatibility === "object" ? { ...testMonitor.compatibility } : null,
+    diagnostics: Array.isArray(testMonitor.diagnostics) ? testMonitor.diagnostics.map(row => ({ ...row })) : [],
+    status: testMonitor.status ? String(testMonitor.status) : "idle",
     processing: testMonitor.processing === true,
+    watchFs: testMonitor.watchFs === true,
+    watchDebounceMs: Number(testMonitor.watchDebounceMs || 0),
     pendingSourcePaths,
     pendingSourceCount: Number(testMonitor.pendingSourceCount || pendingSourcePaths.length),
     pendingChangeSets,
-    pendingChangeSetCount: Number(testMonitor.pendingChangeSetCount || pendingChangeSets.length)
+    pendingChangeSetCount: Number(testMonitor.pendingChangeSetCount || pendingChangeSets.length),
+    queue,
+    queueCount: Number(testMonitor.queueCount || queue.length),
+    activeExecution: testMonitor.activeExecution && typeof testMonitor.activeExecution === "object"
+      ? { ...testMonitor.activeExecution }
+      : null
   };
 }
 
@@ -2462,13 +2475,16 @@ export async function buildPlatformModel({
   const testSuites = projectRows(project, moduleProjectors.testSuites);
   const testCases = projectRows(project, moduleProjectors.testCases);
   const testReports = projectRows(project, moduleProjectors.testReports);
+  const verificationPolicies = projectRows(project, moduleProjectors.verificationPolicies);
+  const verificationQueue = projectRows(project, moduleProjectors.verificationQueue);
+  const verificationExecutions = projectRows(project, moduleProjectors.verificationExecutions);
   const projectedTestGates = projectRows(project, moduleProjectors.testGates);
   const projectedCoverageEdges = projectRows(project, moduleProjectors.coverageEdges);
   const flakeScoresByGate = buildFlakeScoreByGate(testResults);
   const latestTestResultsProjection = projectValue(project, moduleProjectors.latestTestResultsByGate, { rows: [], byGate: Object.create(null) });
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
-  const testMonitorDiagnostics = normalizeTestMonitorDiagnostics(diagnostics?.testMonitor ?? null);
+  const testMonitorDiagnostics = normalizeVerificationDiagnostics(diagnostics?.testMonitor ?? null);
   const governanceRoutes = normalizeGovernanceRoutes(
     diagnostics?.governanceRoutes
     ?? buildGovernanceRouteInventory(diagnostics?.routes ?? [])
@@ -3347,6 +3363,9 @@ export async function buildPlatformModel({
     testSuites: testSuites.map(row => ({ ...row })),
     testCases: testCases.map(row => ({ ...row })),
     testReports: testReports.map(row => ({ ...row })),
+    verificationPolicies: verificationPolicies.map(row => ({ ...row })),
+    verificationQueue: verificationQueue.map(row => ({ ...row })),
+    verificationExecutions: verificationExecutions.map(row => ({ ...row })),
     latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
     branchTestRedGreen,
     changeSetTestRedGreen,
@@ -3408,6 +3427,9 @@ export function filterPlatformModel(model, view, id = null) {
       testSuites: model.testSuites,
       testCases: model.testCases,
       testReports: model.testReports,
+      verificationPolicies: model.verificationPolicies,
+      verificationQueue: model.verificationQueue,
+      verificationExecutions: model.verificationExecutions,
       runtimeRevisions: model.runtimeRevisions,
       activeRuntimeRevision: model.activeRuntimeRevision,
       candidateSnapshots: model.candidateSnapshots,

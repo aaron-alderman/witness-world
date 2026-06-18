@@ -1274,8 +1274,11 @@ function applyCoreRuntimeDeclaration(world, doc) {
             storage: values.storage ?? null,
             runtimeConfig: values.runtimeConfig ?? null,
             allowActorHeader: values.allowActorHeader === true,
+            hosts: values.hosts ?? null,
+            default: values.default === true,
             context: values.context ?? null,
-            owner: values.owner ?? values.actor
+            owner: values.owner ?? values.actor,
+            values
           })
         ]);
       }
