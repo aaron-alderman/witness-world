@@ -1712,11 +1712,14 @@ function renderAuthoredFormSection(surface, model) {
   const defaultsMap = parseSurfaceLabelMap(surface?.props?.fieldDefaults);
   const placeholdersMap = parseSurfaceLabelMap(surface?.props?.fieldPlaceholders);
   const rowMap = parseSurfaceLabelMap(surface?.props?.fieldRows);
+  const formId = surfacePropText(surface, "formId", `${surface?.name || "platform-form"}`);
+  const statusId = surfacePropText(surface, "statusId", `${surface?.name || "platform-status"}`);
+  const clientAction = optionalText(surface?.props?.clientAction);
   return renderSurfaceFrame(surface, `
-      <form id="${esc(surfacePropText(surface, "formId", `${surface?.name || "platform-form"}`))}">
+      <form id="${esc(formId)}"${clientAction ? ` data-platform-client-action="${esc(clientAction)}"` : ""} data-platform-status-id="${esc(statusId)}">
         ${fields.map(field => renderAuthoredFormField(field, model, defaultsMap, placeholdersMap, rowMap)).join("")}
         ${renderFormActionButtons(surface)}
-        <div id="${esc(surfacePropText(surface, "statusId", `${surface?.name || "platform-status"}`))}"></div>
+        <div id="${esc(statusId)}"></div>
       </form>
   `);
 }
@@ -1744,203 +1747,239 @@ function renderAuthoringClientScript() {
   return `
     <script>
       (function () {
-        const proposalForm = document.getElementById("platform-proposal-form");
-        if (proposalForm) {
-          const actionSelect = proposalForm.elements.action;
+        function formStatus(form) {
+          const statusId = form && form.getAttribute("data-platform-status-id");
+          return statusId ? document.getElementById(statusId) : null;
+        }
+        function setFormStatus(form, message) {
+          const status = formStatus(form);
+          if (status) status.textContent = message;
+        }
+        async function readResponseJson(response) {
+          return response.json().catch(() => ({}));
+        }
+        function bindProposalCreate(form) {
+          const actionSelect = form.elements.action;
+          if (!actionSelect) return;
           function syncProposalBody() {
             const option = actionSelect.options[actionSelect.selectedIndex];
             if (!option) return;
             const sample = option.getAttribute("data-sample-body") || "{}";
             try {
-              proposalForm.elements.bodyJson.value = JSON.stringify(JSON.parse(sample), null, 2);
+              form.elements.bodyJson.value = JSON.stringify(JSON.parse(sample), null, 2);
             } catch {}
           }
           actionSelect.addEventListener("change", syncProposalBody);
           syncProposalBody();
-          proposalForm.addEventListener("submit", async event => {
+          form.addEventListener("submit", async event => {
             event.preventDefault();
-            const status = document.getElementById("proposal-status");
             let body = {};
             try {
-              body = JSON.parse(proposalForm.elements.bodyJson.value || "{}");
+              body = JSON.parse(form.elements.bodyJson.value || "{}");
             } catch {
-              status.textContent = "Body JSON is invalid.";
+              setFormStatus(form, "Body JSON is invalid.");
               return;
             }
             const response = await fetch("/api/platform-proposals", {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
-                id: proposalForm.elements.id.value || null,
-                action: proposalForm.elements.action.value || null,
-                targetKind: proposalForm.elements.targetKind.value || null,
-                targetId: proposalForm.elements.targetId.value || null,
+                id: form.elements.id.value || null,
+                action: form.elements.action.value || null,
+                targetKind: form.elements.targetKind.value || null,
+                targetId: form.elements.targetId.value || null,
                 body,
-                reason: proposalForm.elements.reason.value || null
+                reason: form.elements.reason.value || null
               })
             });
-            const json = await response.json().catch(() => ({}));
-            status.textContent = response.ok ? "Proposal created." : (json.error || "Proposal creation failed.");
+            const json = await readResponseJson(response);
+            setFormStatus(form, response.ok ? "Proposal created." : (json.error || "Proposal creation failed."));
           });
         }
-        document.getElementById("platform-review-form")?.addEventListener("submit", async event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const status = document.getElementById("review-status");
-          const submitter = event.submitter;
-          const action = submitter && submitter.value === "reject" ? "reject" : "approve";
-          const id = form.elements.id.value;
-          if (!id) {
-            status.textContent = "No open proposal selected.";
-            return;
-          }
-          const response = await fetch("/api/platform-proposals/" + encodeURIComponent(id) + "/" + action, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(action === "reject" ? { reason: form.elements.reason.value || null } : {})
+        function bindProposalReview(form) {
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const submitter = event.submitter;
+            const action = submitter && submitter.value === "reject" ? "reject" : "approve";
+            const id = form.elements.id.value;
+            if (!id) {
+              setFormStatus(form, "No open proposal selected.");
+              return;
+            }
+            const response = await fetch("/api/platform-proposals/" + encodeURIComponent(id) + "/" + action, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(action === "reject" ? { reason: form.elements.reason.value || null } : {})
+            });
+            const json = await readResponseJson(response);
+            setFormStatus(form, response.ok ? (action === "approve" ? "Proposal approved." : "Proposal rejected.") : (json.error || "Review failed."));
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok ? (action === "approve" ? "Proposal approved." : "Proposal rejected.") : (json.error || "Review failed.");
-        });
-        document.getElementById("platform-branch-create-form")?.addEventListener("submit", async event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const status = document.getElementById("branch-create-status");
-          const response = await fetch("/api/platform-branches", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              id: form.elements.id.value || null,
-              title: form.elements.title.value || null,
-              parentBranchId: form.elements.parentBranchId.value || null,
-              epic: form.elements.epic.value || null,
-              feature: form.elements.feature.value || null,
-              defect: form.elements.defect.value || null
-            })
+        }
+        function bindBranchCreate(form) {
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const response = await fetch("/api/platform-branches", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                id: form.elements.id.value || null,
+                title: form.elements.title.value || null,
+                parentBranchId: form.elements.parentBranchId.value || null,
+                epic: form.elements.epic.value || null,
+                feature: form.elements.feature.value || null,
+                defect: form.elements.defect.value || null
+              })
+            });
+            const json = await readResponseJson(response);
+            setFormStatus(form, response.ok ? "Branch created." : (json.error || "Branch creation failed."));
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok ? "Branch created." : (json.error || "Branch creation failed.");
-        });
-        document.getElementById("platform-change-set-create-form")?.addEventListener("submit", async event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const status = document.getElementById("change-set-create-status");
-          const response = await fetch("/api/platform-change-sets", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              id: form.elements.id.value || null,
-              branchId: form.elements.branchId.value || null,
-              title: form.elements.title.value || null,
-              reason: form.elements.reason.value || null
-            })
+        }
+        function bindChangeSetCreate(form) {
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const response = await fetch("/api/platform-change-sets", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                id: form.elements.id.value || null,
+                branchId: form.elements.branchId.value || null,
+                title: form.elements.title.value || null,
+                reason: form.elements.reason.value || null
+              })
+            });
+            const json = await readResponseJson(response);
+            setFormStatus(form, response.ok ? "Change set created." : (json.error || "Change set creation failed."));
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok ? "Change set created." : (json.error || "Change set creation failed.");
-        });
-        document.getElementById("platform-change-set-edit-form")?.addEventListener("submit", async event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const status = document.getElementById("change-set-edit-status");
-          const changeSetId = form.elements.changeSetId.value;
-          if (!changeSetId) {
-            status.textContent = "Select a change set first.";
-            return;
-          }
-          const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/edits", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              edits: [{ path: form.elements.path.value, content: form.elements.content.value }]
-            })
+        }
+        function bindChangeSetEdit(form) {
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const changeSetId = form.elements.changeSetId.value;
+            if (!changeSetId) {
+              setFormStatus(form, "Select a change set first.");
+              return;
+            }
+            const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/edits", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                edits: [{ path: form.elements.path.value, content: form.elements.content.value }]
+              })
+            });
+            const json = await readResponseJson(response);
+            setFormStatus(form, response.ok ? "Edit staged." : (json.error || "Edit staging failed."));
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok ? "Edit staged." : (json.error || "Edit staging failed.");
-        });
-        document.getElementById("platform-change-set-validate-form")?.addEventListener("submit", async event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const status = document.getElementById("change-set-validate-status");
-          const changeSetId = form.elements.changeSetId.value;
-          if (!changeSetId) {
-            status.textContent = "Select a change set first.";
-            return;
-          }
-          const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/validate", {
-            method: "POST",
-            headers: { "content-type": "application/json" }
+        }
+        function bindChangeSetValidate(form) {
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const changeSetId = form.elements.changeSetId.value;
+            if (!changeSetId) {
+              setFormStatus(form, "Select a change set first.");
+              return;
+            }
+            const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/validate", {
+              method: "POST",
+              headers: { "content-type": "application/json" }
+            });
+            const json = await readResponseJson(response);
+            setFormStatus(
+              form,
+              response.ok
+                ? (json.candidateSnapshot?.status === "valid" ? "Change set valid." : "Change set invalid.")
+                : (json.error || "Validation failed.")
+            );
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok
-            ? (json.candidateSnapshot?.status === "valid" ? "Change set valid." : "Change set invalid.")
-            : (json.error || "Validation failed.");
-        });
-        document.getElementById("platform-change-set-apply-form")?.addEventListener("submit", async event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const status = document.getElementById("change-set-apply-status");
-          const changeSetId = form.elements.changeSetId.value;
-          if (!changeSetId) {
-            status.textContent = "Select a change set first.";
-            return;
-          }
-          const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/apply", {
-            method: "POST",
-            headers: { "content-type": "application/json" }
+        }
+        function bindChangeSetApply(form) {
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const changeSetId = form.elements.changeSetId.value;
+            if (!changeSetId) {
+              setFormStatus(form, "Select a change set first.");
+              return;
+            }
+            const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/apply", {
+              method: "POST",
+              headers: { "content-type": "application/json" }
+            });
+            const json = await readResponseJson(response);
+            setFormStatus(form, response.ok ? "Change set applied." : (json.error || "Apply failed."));
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok ? "Change set applied." : (json.error || "Apply failed.");
-        });
-        document.getElementById("platform-change-set-lifecycle-form")?.addEventListener("submit", async event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const status = document.getElementById("change-set-lifecycle-status");
-          const changeSetId = form.elements.changeSetId.value;
-          const action = form.elements.action.value || "reject";
-          const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/" + action, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ reason: form.elements.reason.value || null })
+        }
+        function bindChangeSetLifecycle(form) {
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const changeSetId = form.elements.changeSetId.value;
+            const action = form.elements.action.value || "reject";
+            const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/" + action, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ reason: form.elements.reason.value || null })
+            });
+            const json = await readResponseJson(response);
+            setFormStatus(form, response.ok ? ("Change set " + action + "ed.") : (json.error || "Lifecycle update failed."));
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok ? ("Change set " + action + "ed.") : (json.error || "Lifecycle update failed.");
-        });
-        document.getElementById("platform-test-run-form")?.addEventListener("submit", async event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const status = document.getElementById("test-run-status");
-          const response = await fetch("/api/platform-test-runs", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              gateId: form.elements.gateId.value || null,
-              branchId: form.elements.branchId.value || null,
-              changeSetId: form.elements.changeSetId.value || null,
-              candidateSnapshotId: form.elements.candidateSnapshotId.value || null
-            })
+        }
+        function bindTestRunSingle(form) {
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const response = await fetch("/api/platform-test-runs", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                gateId: form.elements.gateId.value || null,
+                branchId: form.elements.branchId.value || null,
+                changeSetId: form.elements.changeSetId.value || null,
+                candidateSnapshotId: form.elements.candidateSnapshotId.value || null
+              })
+            });
+            const json = await readResponseJson(response);
+            setFormStatus(
+              form,
+              response.ok
+                ? ("Test run finished: " + String(json.latestResult?.status || json.testRun?.status || "unknown"))
+                : (json.error || "Test run failed.")
+            );
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok
-            ? ("Test run finished: " + String(json.latestResult?.status || json.testRun?.status || "unknown"))
-            : (json.error || "Test run failed.");
-        });
-        document.getElementById("platform-selected-test-run-form")?.addEventListener("submit", async event => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const status = document.getElementById("selected-test-run-status");
-          const response = await fetch("/api/platform-test-runs", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              branchId: form.elements.branchId.value || null,
-              changeSetId: form.elements.changeSetId.value || null,
-              candidateSnapshotId: form.elements.candidateSnapshotId.value || null
-            })
+        }
+        function bindTestRunSelected(form) {
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            const response = await fetch("/api/platform-test-runs", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                branchId: form.elements.branchId.value || null,
+                changeSetId: form.elements.changeSetId.value || null,
+                candidateSnapshotId: form.elements.candidateSnapshotId.value || null
+              })
+            });
+            const json = await readResponseJson(response);
+            setFormStatus(
+              form,
+              response.ok
+                ? ("Selected gates finished: " + String(json.summaries?.passed ?? 0) + "/" + String(json.summaries?.totalRuns ?? 0) + " passed")
+                : (json.error || "Selected gate run failed.")
+            );
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok
-            ? ("Selected gates finished: " + String(json.summaries?.passed ?? 0) + "/" + String(json.summaries?.totalRuns ?? 0) + " passed")
-            : (json.error || "Selected gate run failed.");
+        }
+        const handlers = {
+          "proposal.create": bindProposalCreate,
+          "proposal.review": bindProposalReview,
+          "branch.create": bindBranchCreate,
+          "changeSet.create": bindChangeSetCreate,
+          "changeSet.edit": bindChangeSetEdit,
+          "changeSet.validate": bindChangeSetValidate,
+          "changeSet.apply": bindChangeSetApply,
+          "changeSet.lifecycle": bindChangeSetLifecycle,
+          "testRun.single": bindTestRunSingle,
+          "testRun.selected": bindTestRunSelected
+        };
+        document.querySelectorAll("form[data-platform-client-action]").forEach(form => {
+          const action = form.getAttribute("data-platform-client-action") || "";
+          const handler = handlers[action];
+          if (handler) handler(form);
         });
       }());
     </script>
@@ -1990,22 +2029,9 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   }
 }
 
-const CLIENT_SCRIPT_SURFACE_NAMES = new Set([
-  "PlatformProposalPanel",
-  "PlatformProposalReviewList",
-  "PlatformBranchCreatePanel",
-  "PlatformChangeSetCreatePanel",
-  "PlatformChangeSetEditPanel",
-  "PlatformChangeSetValidatePanel",
-  "PlatformChangeSetApplyPanel",
-  "PlatformChangeSetLifecyclePanel",
-  "PlatformTestRunPanel",
-  "PlatformSelectedTestRunPanel"
-]);
-
 function surfaceNeedsClientScript(surface) {
   if (!surface) return false;
-  if (CLIENT_SCRIPT_SURFACE_NAMES.has(surface.name)) return true;
+  if (optionalText(surface?.props?.clientAction)) return true;
   return (surface.childSurfaces ?? []).some(child => surfaceNeedsClientScript(child));
 }
 
