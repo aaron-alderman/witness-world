@@ -748,9 +748,52 @@ function authoredStaticFormFieldOptions(surface, source) {
   }));
 }
 
+function recordsForAuthoredFormOptionSource(source, model) {
+  if (source === "proposalActions") return model.proposalActions ?? [];
+  return detailRecordsForSource(source, model);
+}
+
+function authoredFormOptionWhereMatches(record, rawWhere) {
+  const clause = optionalText(rawWhere);
+  if (!clause) return true;
+  const separator = clause.indexOf("=");
+  if (separator < 1) return false;
+  const path = clause.slice(0, separator).trim();
+  const expected = clause.slice(separator + 1).trim();
+  if (!path) return false;
+  return optionalText(resolveSchemaPath(record, path)) === expected;
+}
+
+function optionAttrValue(record, path, mode = "text") {
+  const value = resolveSchemaPath(record, path);
+  if (mode === "json") return JSON.stringify(value ?? null);
+  if (value === undefined || value === null) return "";
+  if (Array.isArray(value)) return value.join(", ");
+  return String(value);
+}
+
+function authoredDynamicFormFieldOptions(surface, source, model) {
+  const sourceKey = optionalText(surface?.props?.[`${source}Source`]);
+  if (!sourceKey) return [];
+  const valuePath = optionalText(surface?.props?.[`${source}ValuePath`]) || "id";
+  const labelPath = optionalText(surface?.props?.[`${source}LabelPath`]) || valuePath;
+  const where = optionalText(surface?.props?.[`${source}Where`]);
+  const attrEntries = parseSurfaceSchemaEntries(surface?.props?.[`${source}AttrFields`]);
+  return recordsForAuthoredFormOptionSource(sourceKey, model)
+    .filter(record => authoredFormOptionWhereMatches(record, where))
+    .map(record => ({
+      value: optionalText(resolveSchemaPath(record, valuePath)),
+      label: optionalText(resolveSchemaPath(record, labelPath)) || optionalText(resolveSchemaPath(record, valuePath)),
+      attrs: Object.fromEntries(attrEntries.map(entry => [entry.label, optionAttrValue(record, entry.path, entry.mode)]))
+    }))
+    .filter(option => option.value);
+}
+
 function formFieldOptions(surface, source, model) {
   const authored = authoredStaticFormFieldOptions(surface, source);
   if (authored.length) return authored;
+  const dynamic = authoredDynamicFormFieldOptions(surface, source, model);
+  if (dynamic.length) return dynamic;
   switch (source) {
     case "proposalActionOptions":
       return (model.proposalActions ?? []).map(action => ({

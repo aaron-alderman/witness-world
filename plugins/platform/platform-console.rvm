@@ -384,6 +384,9 @@ view PlatformChangeSetEditPanel {
   prop statusId = "change-set-edit-status"
   prop submitLabel = "Stage Edit"
   prop formFields = "Change set=changeSetId@select:changeSetOptions|Path=path@text|Content=content@textarea"
+  prop changeSetOptionsSource = "changeSets"
+  prop changeSetOptionsValuePath = "id"
+  prop changeSetOptionsLabelPath = "id"
   prop fieldDefaults = "path=plugins/platform/platform-console.rvm"
   prop fieldRows = "content=8"
 }
@@ -398,6 +401,9 @@ view PlatformChangeSetValidatePanel {
   prop statusId = "change-set-validate-status"
   prop submitLabel = "Validate Change Set"
   prop formFields = "Change set=changeSetId@select:changeSetOptions"
+  prop changeSetOptionsSource = "changeSets"
+  prop changeSetOptionsValuePath = "id"
+  prop changeSetOptionsLabelPath = "id"
 }
 
 view PlatformChangeSetApplyPanel {
@@ -410,6 +416,9 @@ view PlatformChangeSetApplyPanel {
   prop statusId = "change-set-apply-status"
   prop submitLabel = "Apply Change Set"
   prop formFields = "Change set=changeSetId@select:changeSetOptions"
+  prop changeSetOptionsSource = "changeSets"
+  prop changeSetOptionsValuePath = "id"
+  prop changeSetOptionsLabelPath = "id"
 }
 
 view PlatformChangeSetLifecyclePanel {
@@ -422,6 +431,9 @@ view PlatformChangeSetLifecyclePanel {
   prop statusId = "change-set-lifecycle-status"
   prop submitLabel = "Update Change Set"
   prop formFields = "Change set=changeSetId@select:changeSetOptions|Action=action@select:lifecycleActions|Reason=reason@text"
+  prop changeSetOptionsSource = "changeSets"
+  prop changeSetOptionsValuePath = "id"
+  prop changeSetOptionsLabelPath = "id"
   prop lifecycleActionsOptions = "Reject=reject|Abandon=abandon"
   prop fieldDefaults = "action=reject"
   prop fieldPlaceholders = "reason=Optional lifecycle reason"
@@ -438,6 +450,10 @@ view PlatformProposalPanel {
   prop statusId = "proposal-status"
   prop submitLabel = "Create Proposal"
   prop formFields = "Action=action@select:proposalActionOptions|Proposal id=id@text|Target kind override=targetKind@text|Target id override=targetId@text|Reason=reason@text|Body JSON=bodyJson@textarea"
+  prop proposalActionOptionsSource = "proposalActions"
+  prop proposalActionOptionsValuePath = "action"
+  prop proposalActionOptionsLabelPath = "action"
+  prop proposalActionOptionsAttrFields = "data-sample-body=sampleBody@json"
   prop fieldDefaults = "id=proposal.platform.{generatedId}|reason=Platform stewardship change|bodyJson={}"
   prop fieldPlaceholders = "targetKind=derived from body|targetId=derived from body"
   prop fieldRows = "bodyJson=8"
@@ -456,6 +472,10 @@ view PlatformProposalReviewList {
   prop clientAction = "proposal.review"
   prop statusId = "review-status"
   prop formFields = "Open proposal=id@select:openProposalOptions|Reject reason=reason@text"
+  prop openProposalOptionsSource = "proposals"
+  prop openProposalOptionsValuePath = "id"
+  prop openProposalOptionsLabelPath = "id"
+  prop openProposalOptionsWhere = "status=open"
   prop fieldPlaceholders = "reason=Only used when rejecting"
   prop actionButtons = "Approve=approve|Reject=reject"
   prop actionButtonName = "reviewAction"
@@ -627,6 +647,9 @@ view PlatformTestRunPanel {
   prop statusId = "test-run-status"
   prop submitLabel = "Run Test Gate"
   prop formFields = "Test gate=gateId@select:testGateOptions|Branch id=branchId@text|Change set id=changeSetId@text|Candidate snapshot id=candidateSnapshotId@text"
+  prop testGateOptionsSource = "testGates"
+  prop testGateOptionsValuePath = "id"
+  prop testGateOptionsLabelPath = "title||id"
   prop fieldPlaceholders = "branchId=Optional branch id|changeSetId=Optional change set id|candidateSnapshotId=Optional candidate snapshot id"
 }
 
