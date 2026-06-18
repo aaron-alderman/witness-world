@@ -448,6 +448,48 @@ function verificationPolicyRows(witnesses) {
   );
 }
 
+function verificationFreshnessRows(witnesses) {
+  return sortRows(
+    [...latestBodiesByProcess(witnesses, "platform.verification.freshness.computed").values()].map(body => ({
+      id: String(body.id || ""),
+      gateId: body.gateId ? String(body.gateId) : null,
+      serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
+      runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
+      status: body.status ? String(body.status) : "missing",
+      latestRunId: body.latestRunId ? String(body.latestRunId) : null,
+      latestPassedRunId: body.latestPassedRunId ? String(body.latestPassedRunId) : null,
+      latestUsableCacheKey: body.latestUsableCacheKey ? String(body.latestUsableCacheKey) : null,
+      reasonKinds: uniqueStrings(body.reasonKinds),
+      reasonSummary: body.reasonSummary ? String(body.reasonSummary) : null,
+      changedPaths: uniqueStrings(body.changedPaths),
+      targetIds: uniqueStrings(body.targetIds),
+      blocking: body.blocking === true,
+      staleSince: body.staleSince ?? null,
+      producedAt: body.producedAt ?? null
+    })),
+    ["serverRunnerId", "runtimeProfile", "gateId", "id"]
+  );
+}
+
+function verificationInvalidationRows(witnesses) {
+  return [...witnesses]
+    .filter(witness => witness.process === "platform.verification.invalidated" && witness.body?.id)
+    .map(witness => ({
+      id: String(witness.body.id || ""),
+      gateId: witness.body.gateId ? String(witness.body.gateId) : null,
+      serverRunnerId: witness.body.serverRunnerId ? String(witness.body.serverRunnerId) : null,
+      runtimeProfile: witness.body.runtimeProfile ? String(witness.body.runtimeProfile) : null,
+      reasonKind: witness.body.reasonKind ? String(witness.body.reasonKind) : "missing_evidence",
+      reasonSummary: witness.body.reasonSummary ? String(witness.body.reasonSummary) : null,
+      changedPaths: uniqueStrings(witness.body.changedPaths),
+      targetIds: uniqueStrings(witness.body.targetIds),
+      previousRunId: witness.body.previousRunId ? String(witness.body.previousRunId) : null,
+      previousCacheKey: witness.body.previousCacheKey ? String(witness.body.previousCacheKey) : null,
+      producedAt: witness.body.producedAt ?? null
+    }))
+    .sort(compareActivityRows);
+}
+
 function verificationQueueRows(witnesses) {
   const rows = new Map();
   for (const witness of witnesses) {
@@ -1124,6 +1166,14 @@ export const platformModuleProjectors = {
 
   verificationPolicies(witnesses) {
     return verificationPolicyRows(witnesses);
+  },
+
+  verificationFreshness(witnesses) {
+    return verificationFreshnessRows(witnesses);
+  },
+
+  verificationInvalidations(witnesses) {
+    return verificationInvalidationRows(witnesses);
   },
 
   verificationQueue(witnesses) {

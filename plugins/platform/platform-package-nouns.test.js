@@ -105,10 +105,12 @@ test("platform model surfaces remaining authored package nouns as first-class no
   assert.equal(patchNode.title, "plugins/inspect/runtime.js");
   assert.equal(model.nodes.some(node => node.id === "packageDependency:packageRevision.plugin.inspect.v2:capability:dom.render" && node.kind === "packageDependency"), true);
   assert.equal(model.nodes.some(node => node.id === "packageConvergence:package.plugin.inspect" && node.kind === "packageConvergence"), true);
+  assert.equal(model.nodes.some(node => node.id === "packageApplyPreview:packageRevision.plugin.inspect.v2" && node.kind === "packageApplyPreview"), true);
   assert.equal(model.edges.some(edge => edge.from === "packageRevision.plugin.inspect.v2" && edge.rel === "contains" && edge.to === patchNode.id), true);
   assert.equal(model.edges.some(edge => edge.from === patchNode.id && edge.rel === "convergesVia" && edge.to === "packageTransformer.inspect.v1-to-v2"), true);
   assert.equal(model.edges.some(edge => edge.from === "packageDependency:packageRevision.plugin.inspect.v2:capability:dom.render" && edge.rel === "targets" && edge.to === "dom.render"), true);
   assert.equal(model.edges.some(edge => edge.from === "packageConvergence:package.plugin.inspect" && edge.rel === "includes" && edge.to === patchNode.id), true);
+  assert.equal(model.edges.some(edge => edge.from === "packageApplyPreview:packageRevision.plugin.inspect.v2" && edge.rel === "tracks" && edge.to === "packageRevision.plugin.inspect.v2"), true);
 });
 
 test("platform page routes bridge, governance, semantics, and package nouns to dedicated platform views", async () => {
@@ -146,6 +148,7 @@ test("platform page routes bridge, governance, semantics, and package nouns to d
   const semanticsId = "mutableSurface:demo.privateNotes";
   const packageId = "package.plugin.inspect";
   const revisionId = "packageRevision.plugin.inspect.v1";
+  const applyPreviewId = "packageApplyPreview:packageRevision.plugin.inspect.v2";
   const transformerId = "packageTransformer.inspect.v1-to-v2";
   const patchId = model.nodes.find(node => node.kind === "packagePatch")?.id;
 
@@ -169,6 +172,9 @@ test("platform page routes bridge, governance, semantics, and package nouns to d
   });
   const transformerHtml = renderPlatformPage(model, {
     requestUrl: new URL(`http://platform.local/platform?view=packageConvergence&id=${encodeURIComponent(transformerId)}`)
+  });
+  const applyPreviewHtml = renderPlatformPage(model, {
+    requestUrl: new URL(`http://platform.local/platform?view=packageApplyPreview&id=${encodeURIComponent(applyPreviewId)}`)
   });
   const patchHtml = renderPlatformPage(model, {
     requestUrl: new URL(`http://platform.local/platform?view=packageConvergence&id=${encodeURIComponent(patchId)}`)
@@ -200,7 +206,40 @@ test("platform page routes bridge, governance, semantics, and package nouns to d
   assert.match(transformerHtml, /glue-required/);
   assert.match(transformerHtml, /\/platform\?view=packageConvergence&amp;id=packageTransformer\.inspect\.v1-to-v2/);
   assert.match(transformerHtml, /\/api\/platform-model\?view=packageConvergence&amp;id=packageTransformer\.inspect\.v1-to-v2/);
+  assert.match(applyPreviewHtml, /Platform Console - Package Apply Preview/);
+  assert.match(applyPreviewHtml, /packageApplyPreview:packageRevision\.plugin\.inspect\.v2/);
+  assert.match(applyPreviewHtml, /\/platform\?view=packageApplyPreview&amp;id=packageApplyPreview%3ApackageRevision\.plugin\.inspect\.v2/);
+  assert.match(applyPreviewHtml, /\/api\/platform-model\?view=packageApplyPreview&amp;id=packageApplyPreview%3ApackageRevision\.plugin\.inspect\.v2/);
   assert.match(patchHtml, /packagePatch:[0-9a-f]{64}/);
   assert.match(patchHtml, /\/platform\?view=packageConvergence&amp;id=packagePatch%3A[0-9a-f]{64}/);
   assert.match(patchHtml, /\/api\/platform-model\?view=packageConvergence&amp;id=packagePatch%3A[0-9a-f]{64}/);
+});
+
+test("platform page renders package apply preview through its dedicated review surface", async () => {
+  const world = packageWorld();
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: {
+        activePluginIds: [],
+        effectivePluginIds: [],
+        rejectedPlugins: []
+      }
+    },
+    project: projector => world.project(projector)
+  });
+
+  const html = renderPlatformPage(model, {
+    requestUrl: new URL("http://platform.local/platform?view=packageApplyPreview&id=packageRevision.plugin.inspect.v2")
+  });
+
+  assert.match(html, /Platform Console - Package Apply Preview/);
+  assert.match(html, /Package Apply Preview Rows/);
+  assert.match(html, /Package Apply Preview Detail/);
+  assert.match(html, /glue-required/);
+  assert.match(html, /packageApplyPreview:packageRevision\.plugin\.inspect\.v2/);
 });

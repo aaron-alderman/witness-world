@@ -119,6 +119,12 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
       "bundle-tutorial"
     ].sort());
     assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
+    assert.equal(diagnostics.composition.storyId, "synthetic-runner-profile-driven");
+    assert.equal(diagnostics.composition.activeRunnerSource, "synthetic-startup-runner");
+    assert.equal(diagnostics.composition.activePluginSource, "profile-or-operator-defaults");
+    assert.equal(diagnostics.composition.usesAuthoredServerRunner, false);
+    assert.equal(diagnostics.composition.usesAuthoredRuntimePluginInstalls, false);
+    assert.match(diagnostics.composition.explanation, /synthetic startup runner __bootstrap__/);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), false);
   } finally {
     await server.close();

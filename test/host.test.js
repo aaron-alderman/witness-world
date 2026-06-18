@@ -1334,6 +1334,39 @@ test("simulate network error route runs through authored backend programs and pr
   }
 });
 
+test("maintained demo backend source defines simulate network error through authored witness.emit steps", async () => {
+  const backendSource = await fs.readFile(path.join(process.cwd(), "examples", "_lib", "demo-todo", "backend.wtoml"), "utf8");
+
+  assert.equal(backendSource.includes('version = "todo.network.simulateError.v1"\nevent = "request"\nop = "witness.emit"'), true);
+  assert.equal(backendSource.includes('version = "todo.network.simulateError.v2"\nevent = "request"\nop = "witness.emit"'), true);
+  assert.equal(backendSource.includes('handler = "network.simulateModel"'), false);
+});
+
+test("maintained demo backend source defines inspect-backed reads through project.read", async () => {
+  const backendSource = await fs.readFile(path.join(process.cwd(), "examples", "_lib", "demo-todo", "backend.wtoml"), "utf8");
+
+  assert.equal(backendSource.includes('version = "todo.witnesses.list.v1"\nevent = "request"\nop = "project.read"'), true);
+  assert.equal(backendSource.includes('projector = "inspect.witnessesReadModel"'), true);
+  assert.equal(backendSource.includes('version = "todo.worldGraph.read.v1"\nevent = "request"\nop = "project.read"'), true);
+  assert.equal(backendSource.includes('projector = "inspect.worldGraphReadModel"'), true);
+  assert.equal(backendSource.includes('version = "todo.processView.read.v1"\nevent = "request"\nop = "project.read"'), true);
+  assert.equal(backendSource.includes('projector = "inspect.processViewReadModel"'), true);
+  assert.equal(backendSource.includes('version = "todo.processRun.read.v1"\nevent = "request"\nop = "project.read"'), true);
+  assert.equal(backendSource.includes('projector = "inspect.processRunReadModel"'), true);
+  assert.equal(backendSource.includes('handler = "witnesses.list"'), false);
+  assert.equal(backendSource.includes('handler = "worldGraph.read"'), false);
+  assert.equal(backendSource.includes('handler = "processView.read"'), false);
+  assert.equal(backendSource.includes('handler = "processRun.read"'), false);
+});
+
+test("maintained demo backend source defines trace recording through inspect-owned process.request", async () => {
+  const backendSource = await fs.readFile(path.join(process.cwd(), "examples", "_lib", "demo-todo", "backend.wtoml"), "utf8");
+
+  assert.equal(backendSource.includes('version = "todo.processEvents.record.v1"\nevent = "request"\nop = "process.request"'), true);
+  assert.equal(backendSource.includes('process = "inspect.processEventRecord"'), true);
+  assert.equal(backendSource.includes('handler = "processEvents.record"'), false);
+});
+
 test("world graph route runs through authored backend programs and preserves the projected graph contract live", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });

@@ -27,6 +27,7 @@ import {
   shouldServeBootstrapFallback
 } from "./runtime-routing.js";
 import { ensureRuntimeBuiltins } from "./runtime-builtins.js";
+import { createRuntimeVerificationPersistence } from "./runtime-verification-persistence.js";
 import {
   DEFAULT_RUNTIME_PROFILE,
   defaultHostCapabilitiesForProfile,
@@ -313,6 +314,27 @@ export async function startRuntimeServer(world, {
     if (!bundleId || !optInBundleIds.has(bundleId)) return false;
     return !activeAddedBundlesForRunner(runnerId).has(bundleId);
   };
+  // Universal auth gate (opt-in per runner via `requireAuth`). On a gated runner every endpoint
+  // requires an authenticated session except an allowlist: the auth/session endpoints needed to sign
+  // in, MCP (which carries its own industry-standard auth — see plugins/mcp), and any route that
+  // explicitly opts out with `params.auth.public = true`. Routes that declare their own auth policy
+  // (params.auth.featureId / login pages) are left to the existing per-route flow (evaluateRouteAccess),
+  // which the gate must not pre-empt. Runners without requireAuth are unchanged (dev/bootstrap/demo).
+  const authGateExemptPath = (pathname, method) => {
+    if (pathname === "/api/session") return true; // sign-in / sign-out / read current session
+    if (pathname.startsWith("/mcp/")) return true; // MCP resource servers authenticate themselves
+    if (method === "POST" && pathname === "/api/oauth/start") return true;
+    if (pathname.startsWith("/api/oauth/callback/")) return true;
+    return false;
+  };
+  const requestDeniedByAuthGate = (runner, requestContext, { pathname, method, matchedRoute }) => {
+    if (runner?.requireAuth !== true) return false;
+    if (requestContext?.authenticatedActor) return false; // a real authenticated session
+    if (authGateExemptPath(pathname, method)) return false;
+    if (matchedRoute?.params?.auth?.public === true) return false;
+    if (matchedRoute?.params?.auth) return false; // route owns its auth flow (login/forbidden pages)
+    return true;
+  };
   const runtimeSurfaceEntries = runtimeSurfaceEntriesForProfileImpl(activeRuntimeProfile, null, compositionOptions);
   const activeDispatchHandlers = new Set(resolvedRuntime.dispatchHandlers ?? dispatchHandlerIdsForProfileImpl(activeRuntimeProfile, compositionOptions));
   const handlerSetFactories = handlerSetFactoriesForProfileImpl(activeRuntimeProfile, compositionOptions);
@@ -441,6 +463,29 @@ export async function startRuntimeServer(world, {
   appContext.verificationPolicy = verificationPolicy;
   appContext.verificationPolicySource = verificationPolicy.source;
   appContext.verificationPolicyDiagnostics = verificationPolicy.diagnostics ?? [];
+  appContext.verificationPersistence = await createRuntimeVerificationPersistence({
+    serverRunner,
+    appProject,
+    runtimeRoot,
+    runtimeOperatorContract,
+    runtimeProfile: activeRuntimeProfile
+  });
+  appContext.verificationPersistenceDiagnostics = appContext.verificationPersistence?.inspect?.().diagnostics ?? [];
+  const closeVerificationPersistence = () => {
+    try {
+      appContext.verificationPersistence?.close?.();
+    } catch {}
+  };
+  if (typeof appContext.close === "function") {
+    const priorClose = appContext.close.bind(appContext);
+    appContext.close = async () => {
+      try {
+        await priorClose();
+      } finally {
+        closeVerificationPersistence();
+      }
+    };
+  }
   await appContext.providerRuntimes?.["platform.testMonitor"]?.initialize?.();
   const currentWitnessCount = () => typeof world?.witnessCount === "function"
     ? Number(world.witnessCount() || 0)
@@ -714,6 +759,21 @@ export async function startRuntimeServer(world, {
 
       const mountedRouteTable = mountedRoutesFor(runtime.runner.id, activeAppContext);
       const matched = matchDeclaredRoute(mountedRouteTable, req.method || "GET", requestUrl.pathname);
+
+      if (requestDeniedByAuthGate(runtime.runner, requestContext, {
+        pathname: requestUrl.pathname,
+        method: req.method || "GET",
+        matchedRoute: matched?.route ?? null
+      })) {
+        world.observe({
+          process: "backend.authGate.denied",
+          actor: backendHost,
+          claims: [],
+          body: { serverRunner: runtime.runner.id, method: req.method || "GET", path: requestUrl.pathname }
+        });
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
 
       if (shouldServeBootstrapFallback({
         world,

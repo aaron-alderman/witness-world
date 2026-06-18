@@ -361,6 +361,7 @@ export function createAuthoringProposalExecutor({
       case "capability.define":
       case "capability.install":
       case "capability.remove":
+      case "capability.migrateLegacy":
         return executeCapabilityAuthoringProposalTarget({
           world,
           actor,

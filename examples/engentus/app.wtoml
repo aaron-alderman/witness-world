@@ -197,6 +197,20 @@ route = "engentus_wcss_document_route"
 
 [[route]]
 actor = "aaron"
+id = "engentus_wcss_schema_route"
+method = "GET"
+path = "/engentus/__generated/wcss/schema"
+serves = "engentusWcssSchema"
+handler = "wcss.schema.read"
+params = { adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "loadEngentusWcssAuthoringAdapter" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_wcss_schema_route"
+
+[[route]]
+actor = "aaron"
 id = "engentus_wcss_preview_session_create_route"
 method = "POST"
 path = "/engentus/__generated/wcss/preview-session"
@@ -215,7 +229,7 @@ id = "engentus_wcss_preview_tokens_patch_route"
 method = "PATCH"
 path = "/engentus/__generated/wcss/preview-session"
 serves = "engentusWcssPreviewTokensPatch"
-handler = "wcss.preview.tokens.patch"
+handler = "wcss.preview.document.patch"
 params = { adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "loadEngentusWcssAuthoringAdapter" }
 
 [[serve]]

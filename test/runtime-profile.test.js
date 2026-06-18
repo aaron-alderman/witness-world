@@ -1146,6 +1146,11 @@ test("runtime diagnostics endpoint exposes truthful minimal composition", async 
     assert.equal(body.shells.shells.some(shell => shell.id === "browser" && shell.active === true), true);
     assert.equal(body.shells.shells.find(shell => shell.id === "browser")?.ownerClass, "shell");
     assert.equal(body.shells.shells.some(shell => shell.id === "desktop" && shell.status === "present"), true);
+    assert.equal(body.composition.storyId, "authored-runner-driven");
+    assert.equal(body.composition.activeRunnerSource, "authored-server-runner");
+    assert.equal(body.composition.activePluginSource, "core-profile-only");
+    assert.equal(body.composition.usesAuthoredServerRunner, true);
+    assert.equal(body.composition.usesAuthoredRuntimePluginInstalls, false);
     assert.equal(body.mountedRoutes.find(route => route.id === "home_route")?.ownerClass, "generic-host");
     assert.deepEqual(body.mountedRoutes.find(route => route.id === "home_route")?.ownerChain, [
       {

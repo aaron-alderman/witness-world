@@ -1,9 +1,11 @@
 import {
+  requestBootstrapCapabilityMigrateLegacy,
   resolveCapabilityTargetInput,
   requestBootstrapCapabilityDefine,
   requestBootstrapCapabilityInstall,
   requestBootstrapCapabilityRemove
 } from "./capability-processes.js";
+import { previewLegacyCapabilityMigration } from "../../src/capability-legacy-migration.js";
 import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
 
 export function createCapabilityAuthoringBundleHandlers({
@@ -49,6 +51,21 @@ export function createCapabilityAuthoringBundleHandlers({
       reason
     }
   });
+  const migrationAuthorityTargets = () => {
+    const preview = previewLegacyCapabilityMigration(world);
+    const targets = new Set();
+    for (const row of preview.pending ?? []) {
+      for (const target of row.installTargets ?? []) targets.add(target);
+      if (row.targetKind && row.target) targets.add(`${row.targetKind}:${row.target}`);
+    }
+    return {
+      preview,
+      targets: [...targets].map(entry => {
+        const [targetKind, ...targetParts] = String(entry).split(":");
+        return { targetKind, target: targetParts.join(":") };
+      }).filter(entry => entry.targetKind && entry.target)
+    };
+  };
   return {
     "capability.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
@@ -193,6 +210,64 @@ export function createCapabilityAuthoringBundleHandlers({
         return;
       }
       sendJson(res, result.status, { capabilityInstall: result.capabilityInstall, witness: result.witness });
+    },
+
+    "capability.migrateLegacy": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const migration = migrationAuthorityTargets();
+      let denied = null;
+      for (const entry of migration.targets) {
+        const auth = ensureTargetAuthority(gate.actor, entry.target);
+        if (auth.ok) continue;
+        if (auth.status === 403) {
+          denied = entry;
+          break;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      if (denied) {
+        const proposal = requestCapabilityProposalCreate({
+          actor: gate.actor,
+          targetProcess: "capability.migrateLegacy",
+          targetKind: denied.targetKind,
+          targetId: denied.target,
+          body,
+          reason: "Migrate legacy capability bridges through witnessed proposal"
+        });
+        if (!proposal.ok) {
+          sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+          return;
+        }
+        sendJson(res, 202, {
+          ok: true,
+          status: "proposed",
+          proposal: proposal.proposal,
+          witness: proposal.witness,
+          preview: migration.preview
+        });
+        return;
+      }
+      const result = requestBootstrapCapabilityMigrateLegacy(world, {
+        actor: gate.actor,
+        backendHost
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, {
+        ok: true,
+        actions: result.actions,
+        previewBefore: result.previewBefore,
+        previewAfter: result.previewAfter,
+        witness: result.witness
+      });
     }
   };
 }

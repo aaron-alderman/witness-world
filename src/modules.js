@@ -2662,14 +2662,22 @@ export const moduleProjectors = {
   },
 
   capabilityInstalls(witnesses) {
-    const rows = [];
-    const seen = new Set();
+    const rows = new Map();
     const rels = currentRelations(witnesses);
+    const sourcePriority = new Map([
+      ["explicit", 3],
+      ["legacy-context", 2],
+      ["legacy-host", 1]
+    ]);
     const add = row => {
       const key = `${row.targetKind}\u0000${row.target}\u0000${row.capability}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      rows.push(row);
+      const existing = rows.get(key) ?? null;
+      if (existing) {
+        const existingPriority = sourcePriority.get(existing.source) ?? 0;
+        const nextPriority = sourcePriority.get(row.source) ?? 0;
+        if (existingPriority >= nextPriority) return;
+      }
+      rows.set(key, row);
     };
 
     for (const r of rels) {
@@ -2704,7 +2712,7 @@ export const moduleProjectors = {
         });
       }
     }
-    return rows.sort((a, b) =>
+    return [...rows.values()].sort((a, b) =>
       String(a.targetKind).localeCompare(String(b.targetKind))
       || String(a.target).localeCompare(String(b.target))
       || String(a.capability).localeCompare(String(b.capability))
@@ -3210,6 +3218,10 @@ export const moduleProjectors = {
 
   verificationPolicies: delegatedModuleProjector("verificationPolicies", emptyRows),
 
+  verificationFreshness: delegatedModuleProjector("verificationFreshness", emptyRows),
+
+  verificationInvalidations: delegatedModuleProjector("verificationInvalidations", emptyRows),
+
   verificationQueue: delegatedModuleProjector("verificationQueue", emptyRows),
 
   verificationExecutions: delegatedModuleProjector("verificationExecutions", emptyRows),
@@ -3310,6 +3322,7 @@ export const moduleProjectors = {
         allowActorHeader: w.body.allowActorHeader === true,
         hosts: normalizeRunnerHosts(w.body.hosts),
         default: w.body.default === true,
+        requireAuth: w.body.requireAuth === true,
         context: contexts.get(w.body.id) ?? (w.body.context ? String(w.body.context) : null),
         values: w.body.values && typeof w.body.values === "object" ? structuredClone(w.body.values) : null
       });

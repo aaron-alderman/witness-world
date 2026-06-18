@@ -108,20 +108,47 @@ export function normalizeWcssAuthoringAdapter(result) {
     };
   }
   if (
-    typeof result.applyTokenPatch !== "function"
+    typeof result.applyPatch !== "function"
     || typeof result.buildStylesheets !== "function"
+    || !result.schema
     || !result.document
   ) {
-    throw new Error("WCSS authoring adapter must expose document, applyTokenPatch, and buildStylesheets");
+    throw new Error("WCSS authoring adapter must expose document, schema, applyPatch, and buildStylesheets");
   }
   const tokenCatalog = result.tokenCatalog && typeof result.tokenCatalog === "object"
     ? structuredClone(result.tokenCatalog)
     : { tokens: [] };
+  const applyPatch = result.applyPatch;
+  const applyTokenPatch = typeof result.applyTokenPatch === "function"
+    ? result.applyTokenPatch
+    : ({ ops }) => applyPatch({
+      ops: Array.isArray(ops)
+        ? ops.map(op => {
+          const kind = typeof op?.kind === "string" ? op.kind.trim() : "";
+          if (kind === "set") {
+            return {
+              kind: "token.set",
+              token: op.token,
+              value: op.value
+            };
+          }
+          if (kind === "reset") {
+            return {
+              kind: "token.reset",
+              token: op.token
+            };
+          }
+          throw new Error(`Unsupported compatibility token patch op ${kind || "<empty>"}`);
+        })
+        : ops
+    });
   return {
     kind: "authoring",
     document: structuredClone(result.document),
+    schema: structuredClone(result.schema),
     tokenCatalog,
-    applyTokenPatch: result.applyTokenPatch,
+    applyPatch,
+    applyTokenPatch,
     buildStylesheets: result.buildStylesheets
   };
 }

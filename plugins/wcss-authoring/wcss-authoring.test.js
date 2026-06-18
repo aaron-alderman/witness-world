@@ -34,10 +34,20 @@ test("wcss authoring plugin exposes the standalone JSON handler contract", () =>
     responseKind: "json",
     methods: ["GET"]
   });
+  assert.deepEqual(handlerCatalog.handlerMetadata["wcss.schema.read"], {
+    routeKind: "json",
+    responseKind: "json",
+    methods: ["GET"]
+  });
+  assert.deepEqual(handlerCatalog.handlerMetadata["wcss.preview.document.patch"], {
+    routeKind: "json",
+    responseKind: "json",
+    methods: ["PATCH"]
+  });
   assert.equal(providers[0]?.id, "wcss.previewSessions");
 });
 
-test("wcss authoring plugin reads a document and manages snapshot-scoped preview sessions", async () => {
+test("wcss authoring plugin reads schema and manages snapshot-scoped structured preview sessions", async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wcss-authoring-plugin-"));
   const appRoot = path.join(tempRoot, "sample");
   try {
@@ -48,15 +58,26 @@ test("wcss authoring plugin reads a document and manages snapshot-scoped preview
           theme: "sample",
           tokens: [{ name: "color.chrome.bg", value: "#112233" }]
         };
+        const schema = {
+          supportedOperations: ["token.set", "style.field.set"],
+          tokens: [{ name: "color.chrome.bg", domain: "color", currentValue: "#112233", canonicalValue: "#112233", previewable: true }],
+          styles: [{ name: "chrome.toolbar", fields: [{ field: "layout.height", value: "44px", previewable: true }] }],
+          slices: [],
+          views: [{ name: "desktop", readOnly: true }]
+        };
         return {
           document,
+          schema,
           tokenCatalog: {
             tokens: [{ name: "color.chrome.bg", value: "#112233", domain: "color" }]
           },
-          applyTokenPatch({ ops }) {
+          applyPatch({ ops }) {
             const next = JSON.parse(JSON.stringify(document));
             for (const op of ops) {
-              if (op.kind === "set") next.tokens[0].value = op.value;
+              if (op.kind === "token.set") next.tokens[0].value = op.value;
+              if (op.kind === "style.field.set" && op.field !== "layout.height") {
+                throw new Error("unknown field");
+              }
             }
             return next;
           },
@@ -100,6 +121,13 @@ test("wcss authoring plugin reads a document and manages snapshot-scoped preview
     assert.equal(readBody.document.theme, "sample");
     assert.equal(readBody.tokenCatalog.tokens[0].name, "color.chrome.bg");
 
+    const schemaRes = createResponse();
+    await handlers["wcss.schema.read"]({ res: schemaRes, route, appContext });
+    assert.equal(schemaRes.statusCode, 200);
+    const schemaBody = JSON.parse(schemaRes.body);
+    assert.equal(schemaBody.documentModel, "wcss");
+    assert.equal(schemaBody.schema.styles[0].name, "chrome.toolbar");
+
     const createRes = createResponse();
     await handlers["wcss.preview.session.create"]({
       res: createRes,
@@ -111,11 +139,11 @@ test("wcss authoring plugin reads a document and manages snapshot-scoped preview
     assert.equal(created.version, 0);
 
     const patchRes = createResponse();
-    await handlers["wcss.preview.tokens.patch"]({
+    await handlers["wcss.preview.document.patch"]({
       req: {
         body: {
           previewSessionId: created.previewSessionId,
-          ops: [{ kind: "set", token: "color.chrome.bg", value: "#abcdef" }]
+          ops: [{ kind: "style.field.set", style: "chrome.toolbar", field: "layout.height", value: "60px" }]
         }
       },
       res: patchRes,
@@ -125,7 +153,27 @@ test("wcss authoring plugin reads a document and manages snapshot-scoped preview
     const patched = JSON.parse(patchRes.body);
     assert.equal(patched.ok, true);
     assert.equal(patched.version, 1);
-    assert.deepEqual(patched.ops, [{ kind: "set", token: "color.chrome.bg", value: "#abcdef" }]);
+    assert.deepEqual(patched.ops, [{ kind: "style.field.set", style: "chrome.toolbar", field: "layout.height", value: "60px" }]);
+
+    const compatibilityPatchRes = createResponse();
+    await handlers["wcss.preview.tokens.patch"]({
+      req: {
+        body: {
+          previewSessionId: created.previewSessionId,
+          ops: [{ kind: "set", token: "color.chrome.bg", value: "#abcdef" }]
+        }
+      },
+      res: compatibilityPatchRes,
+      route,
+      appContext
+    });
+    const compatibilityPatched = JSON.parse(compatibilityPatchRes.body);
+    assert.equal(compatibilityPatched.ok, true);
+    assert.equal(compatibilityPatched.version, 2);
+    assert.deepEqual(compatibilityPatched.ops, [
+      { kind: "style.field.set", style: "chrome.toolbar", field: "layout.height", value: "60px" },
+      { kind: "token.set", token: "color.chrome.bg", value: "#abcdef" }
+    ]);
 
     const resolved = previewRuntime.resolveSession({
       previewSessionId: created.previewSessionId,
@@ -133,14 +181,14 @@ test("wcss authoring plugin reads a document and manages snapshot-scoped preview
       adapterKey: `${path.join(appRoot, "app/authoring-adapter.js")}\u0000loadAuthoringAdapter`,
       requestSnapshot: { appRevision: 7 }
     });
-    assert.equal(resolved.version, 1);
+    assert.equal(resolved.version, 2);
 
     const mismatchRes = createResponse();
-    await handlers["wcss.preview.tokens.patch"]({
+    await handlers["wcss.preview.document.patch"]({
       req: {
         body: {
           previewSessionId: created.previewSessionId,
-          ops: [{ kind: "set", token: "color.chrome.bg", value: "#123456" }]
+          ops: [{ kind: "style.field.set", style: "chrome.toolbar", field: "layout.height", value: "64px" }]
         }
       },
       res: mismatchRes,
@@ -152,6 +200,21 @@ test("wcss authoring plugin reads a document and manages snapshot-scoped preview
     });
     assert.equal(mismatchRes.statusCode, 500);
     assert.match(mismatchRes.body, /no longer matches the active app snapshot/i);
+
+    const invalidRes = createResponse();
+    await handlers["wcss.preview.document.patch"]({
+      req: {
+        body: {
+          previewSessionId: created.previewSessionId,
+          ops: [{ kind: "style.field.set", style: "chrome.toolbar", field: "paint.missing", value: "red" }]
+        }
+      },
+      res: invalidRes,
+      route,
+      appContext
+    });
+    assert.equal(invalidRes.statusCode, 500);
+    assert.match(invalidRes.body, /unknown field/i);
 
     const clearRes = createResponse();
     await handlers["wcss.preview.session.clear"]({

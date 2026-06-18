@@ -47,6 +47,47 @@ test("runtime auth oauth support services normalize config, callback base URL, a
   );
 });
 
+test("runtime auth oauth config supports a multi-provider allowlist for one runner", () => {
+  const services = createRuntimeAuthOAuthSupportServices({
+    world: createWorld(),
+    backendHost: "backendHost",
+    randomUUID: () => "uuid-mp",
+    runtimeConfigLookup: (runtimeConfig, key) => runtimeConfig?.[key],
+    headerValue: value => Array.isArray(value) ? String(value[0] ?? "") : String(value ?? "")
+  });
+  const runtimeConfig = {
+    "auth.oauth.providers": ["google", "github"],
+    "auth.oauth.google.clientId": "g-id",
+    "auth.oauth.google.clientSecret": "g-secret",
+    "auth.oauth.github.clientId": "h-id",
+    "auth.oauth.github.clientSecret": "h-secret"
+  };
+
+  // Either enabled provider resolves to its preset (endpoints come from the vendor preset).
+  const google = services.normalizeAuthOAuthConfig({ runtimeConfig, requestedProvider: "google" });
+  assert.equal(google.ok, true);
+  assert.equal(google.provider, "google");
+  assert.equal(google.oidc.tokenUrl, "https://oauth2.googleapis.com/token");
+  const github = services.normalizeAuthOAuthConfig({ runtimeConfig, requestedProvider: "github" });
+  assert.equal(github.ok, true);
+  assert.equal(github.provider, "github");
+  assert.equal(github.oidc.userinfoUrl, "https://api.github.com/user");
+
+  // A provider that is not on the allowlist is rejected (409), not silently served.
+  const denied = services.normalizeAuthOAuthConfig({ runtimeConfig, requestedProvider: "stub" });
+  assert.equal(denied.ok, false);
+  assert.equal(denied.status, 409);
+
+  // With several providers enabled and none requested, the caller must choose one (400).
+  const ambiguous = services.normalizeAuthOAuthConfig({ runtimeConfig });
+  assert.equal(ambiguous.ok, false);
+  assert.equal(ambiguous.status, 400);
+
+  // Back-compat: a single configured provider needs no explicit request.
+  const single = services.normalizeAuthOAuthConfig({ runtimeConfig: { "auth.oauth.provider": "stub" } });
+  assert.deepEqual(single, { ok: true, status: 200, provider: "stub", autoCreate: true });
+});
+
 test("runtime auth oauth support services emit flow, link, and session witnesses with bundle-owned metadata", () => {
   const world = createWorld();
   const services = createRuntimeAuthOAuthSupportServices({

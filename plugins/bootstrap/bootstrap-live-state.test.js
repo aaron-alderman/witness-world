@@ -8,6 +8,8 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
       identities: [],
       contexts: [{ id: "ctx.one" }],
       perspectives: [{ id: "perspective.one" }],
+      legacyCapabilityCompatibilityMode: { mode: "bridge-active", pendingCount: 1, bridgeSources: ["legacy-context"] },
+      legacyCapabilityMigration: { pending: [{ id: "legacyCapabilityMigration:definition:cap.one", action: "definition.update", capabilityId: "cap.one" }] },
       compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget", bridgeClass: "canonical-id-sugar" }],
       governanceRoutes: [{ id: "governanceRoute:POST /api/widgets", handler: "widgets.create", governanceMode: "proposal-fallback" }],
       proposalTargetGovernance: [{ id: "governanceProposalTarget:widget.define", targetProcess: "widget.define", governanceMode: "proposal-fallback" }],
@@ -45,6 +47,8 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
     identities: [{ id: "identity.aaron" }],
     contexts: [{ id: "ctx.two" }],
     perspectives: [{ id: "perspective.two" }],
+    legacyCapabilityCompatibilityMode: { mode: "first-class-only", pendingCount: 0, bridgeSources: [] },
+    legacyCapabilityMigration: { pending: [] },
     compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.importedVisibleTarget", bridgeClass: "canonical-id-sugar" }],
     governanceRoutes: [{ id: "governanceRoute:POST /api/widgets", handler: "widgets.create", governanceMode: "proposal-fallback" }],
     proposalTargetGovernance: [{ id: "governanceProposalTarget:widget.define", targetProcess: "widget.define", governanceMode: "proposal-fallback" }],
@@ -75,6 +79,8 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
   assert.equal(readers.runtimeProfile(), "full");
   assert.deepEqual(readers.supportedMcpActingModes(), ["delegated", "service"]);
   assert.deepEqual(readers.contextRows(), [{ id: "ctx.two" }]);
+  assert.deepEqual(readers.legacyCapabilityCompatibilityMode(), { mode: "first-class-only", pendingCount: 0, bridgeSources: [] });
+  assert.deepEqual(readers.legacyCapabilityMigrationRows(), []);
   assert.deepEqual(readers.compatibilityBridgeRows(), [{ id: "compatibilityBridge:canonicalIdSugar.importedVisibleTarget", bridgeClass: "canonical-id-sugar" }]);
   assert.deepEqual(readers.governanceRouteRows(), [{ id: "governanceRoute:POST /api/widgets", handler: "widgets.create", governanceMode: "proposal-fallback" }]);
   assert.deepEqual(readers.proposalTargetGovernanceRows(), [{ id: "governanceProposalTarget:widget.define", targetProcess: "widget.define", governanceMode: "proposal-fallback" }]);

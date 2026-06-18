@@ -4,7 +4,11 @@ import { createWorld } from "../src/kernel.js";
 import { applyWitnessDocs, applyWitnessToml, parseWitnessToml } from "../src/dsl.js";
 import { moduleProjectors, publishPackageRevision } from "../src/modules.js";
 import { materializeCanonicalPackageBundle } from "../src/package-authorship.js";
-import { materializeCanonicalPackageBundleFromProject, packageConvergenceFromProject } from "../src/package-authorship-world.js";
+import {
+  materializeCanonicalPackageBundleFromProject,
+  packageConvergenceFromProject,
+  previewPackageRevisionApplyFromProject
+} from "../src/package-authorship-world.js";
 
 test("WTOML package authorship declarations produce first-class package nouns in world state", () => {
   const world = createWorld();
@@ -250,6 +254,245 @@ targetId = "dom.render"
   ]);
 });
 
+test("package bundle projection helper includes namespace-scoped transformers that touch the selected revision namespace", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.alpha:inspectA"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.namespace-only"
+package = "package.plugin.inspect"
+sourceNamespace = "packageNamespace:ctx.alpha:inspectA"
+targetNamespace = "packageNamespace:ctx.alpha:inspectA"
+strategy = "namespace-alias"
+status = "active"
+mappings = [{ kind = "alias", from = "ctx.alpha:inspectA", to = "ctx.alpha:inspectA" }]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+transformer = "packageTransformer.inspect.namespace-only"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "namespaced" }
+`);
+
+  const bundle = materializeCanonicalPackageBundleFromProject(projector => world.project(projector), {
+    revisionId: "packageRevision.plugin.inspect.v1"
+  });
+
+  assert.equal(bundle.transformers.length, 1);
+  assert.equal(bundle.transformers[0].id, "packageTransformer.inspect.namespace-only");
+  assert.equal(bundle.files.some(file => file.path === "transformers/0001-packagetransformer-inspect-namespace-only.wtoml"), true);
+});
+
+test("package revision apply preview helper exposes coexistence and convergence impact for the selected revision", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+status = "review"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.alpha:inspectA"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.beta:inspectB"
+context = "ctx.beta"
+name = "inspectB"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1-to-v2"
+package = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+sourceNamespace = "packageNamespace:ctx.alpha:inspectA"
+targetRevision = "packageRevision.plugin.inspect.v2"
+targetNamespace = "packageNamespace:ctx.beta:inspectB"
+strategy = "follow-up-revision"
+status = "active"
+remainingGlue = ["rename remaining runtimePlugin installs"]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+transformer = "packageTransformer.inspect.v1-to-v2"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "migrated" }
+`);
+
+  const preview = previewPackageRevisionApplyFromProject(projector => world.project(projector), {
+    revisionId: "packageRevision.plugin.inspect.v2"
+  });
+
+  assert.equal(preview.kind, "packageRevisionApplyPreview");
+  assert.equal(preview.status, "glue-required");
+  assert.equal(preview.bundle.revisionRecord.id, "packageRevision.plugin.inspect.v2");
+  assert.equal(preview.selectedRevision?.id, "packageRevision.plugin.inspect.v2");
+  assert.deepEqual(
+    preview.selectedNamespaces.map(row => row.id),
+    ["packageNamespace:ctx.beta:inspectB"]
+  );
+  assert.deepEqual(
+    preview.manifestPluginConflicts.map(row => row.id),
+    ["packageManifestConflict:package.plugin.inspect:plugin.inspect"]
+  );
+  assert.deepEqual(
+    preview.relatedTransformers.map(row => row.id),
+    ["packageTransformer.inspect.v1-to-v2"]
+  );
+  assert.deepEqual(preview.remainingGlue, [{
+    kind: "explicit-glue",
+    transformerId: "packageTransformer.inspect.v1-to-v2",
+    message: "rename remaining runtimePlugin installs"
+  }]);
+});
+
+test("package revision apply preview helper marks unresolved manifest collisions as blocked", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+status = "review"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "blocked" }
+`);
+
+  const preview = previewPackageRevisionApplyFromProject(projector => world.project(projector), {
+    revisionId: "packageRevision.plugin.inspect.v2"
+  });
+
+  assert.equal(preview.status, "blocked");
+  assert.equal(preview.manifestPluginConflicts.length, 1);
+  assert.equal(preview.manifestPluginConflicts[0].blocked, true);
+  assert.match(preview.explanation, /manifest identity/i);
+});
+
+test("package revision apply preview helper keeps missing transformer work unplanned", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+status = "review"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.alpha:inspectA"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.beta:inspectB"
+context = "ctx.beta"
+name = "inspectB"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+`);
+
+  const preview = previewPackageRevisionApplyFromProject(projector => world.project(projector), {
+    revisionId: "packageRevision.plugin.inspect.v2"
+  });
+
+  assert.equal(preview.status, "unplanned");
+  assert.match(preview.explanation, /no authored transformer contract explains convergence yet/i);
+});
+
 test("package revision projection derives published state from publish witnesses", () => {
   const world = createWorld();
   applyWitnessToml(world, `
@@ -396,7 +639,9 @@ actor = "system"
 id = "packageTransformer.inspect.v1-to-v2"
 package = "package.plugin.inspect"
 sourceRevision = "packageRevision.plugin.inspect.v1"
+sourceNamespace = "packageNamespace:ctx.alpha:inspectA"
 targetRevision = "packageRevision.plugin.inspect.v2"
+targetNamespace = "packageNamespace:ctx.beta:inspectB"
 strategy = "follow-up-revision"
 status = "active"
 mappings = [{ kind = "alias", from = "ctx.alpha:inspectA", to = "ctx.beta:inspectB" }]
@@ -432,5 +677,14 @@ body = { export = "migrated" }
   });
   assert.equal(bundle.transformers.length, 1);
   assert.equal(bundle.transformers[0].id, "packageTransformer.inspect.v1-to-v2");
+  assert.deepEqual(
+    bundle.namespaces.map(row => row.id),
+    [
+      "packageNamespace:ctx.alpha:inspectA",
+      "packageNamespace:ctx.beta:inspectB"
+    ]
+  );
   assert.equal(bundle.files.some(file => file.path === "transformers/0001-packagetransformer-inspect-v1-to-v2.wtoml"), true);
+  assert.equal(bundle.files.some(file => file.path === "namespaces/0001-ctx-alpha-inspecta.wtoml"), true);
+  assert.equal(bundle.files.some(file => file.path === "namespaces/0002-ctx-beta-inspectb.wtoml"), true);
 });

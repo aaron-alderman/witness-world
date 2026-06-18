@@ -508,6 +508,7 @@ export function createCoreRuntimeBundleHandlers({
         if (!Object.prototype.hasOwnProperty.call(projectionOptions, "requestIdentity")) projectionOptions.requestIdentity = requestIdentity ?? null;
         if (!Object.prototype.hasOwnProperty.call(projectionOptions, "requestSession")) projectionOptions.requestSession = requestSession ?? null;
         if (!Object.prototype.hasOwnProperty.call(projectionOptions, "appContext")) projectionOptions.appContext = appContext ?? null;
+        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "observations")) projectionOptions.observations = world.allObservations();
         const requestId = `${runId}:${step.id}:${projectorName}`;
         try {
           const value = world.project(projector, projectionOptions);

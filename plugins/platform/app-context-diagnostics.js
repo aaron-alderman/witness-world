@@ -6,6 +6,7 @@ export function diagnosticsFromPlatformAppContext(appContext) {
   const lastRevisionEvent = snapshotManager?.getLastRevisionEvent?.() ?? null;
   const lastGoodSnapshot = snapshotManager?.lastGoodSnapshot ?? activeSnapshot ?? null;
   const testMonitor = appContext?.providerRuntimes?.["platform.testMonitor"]?.inspect?.() ?? null;
+  const verificationPersistence = appContext?.verificationPersistence?.inspect?.() ?? null;
   return {
     activeProfile: appContext?.runtimeProfile ?? summary.profile ?? null,
     activeBundles: (summary.bundles ?? []).map(bundle => ({
@@ -25,8 +26,17 @@ export function diagnosticsFromPlatformAppContext(appContext) {
     testMonitor: testMonitor
       ? {
           enabled: testMonitor.enabled === true,
+          policySource: testMonitor.policySource ? String(testMonitor.policySource) : null,
+          defaults: testMonitor.defaults && typeof testMonitor.defaults === "object"
+            ? { ...testMonitor.defaults }
+            : null,
+          compatibility: testMonitor.compatibility && typeof testMonitor.compatibility === "object"
+            ? { ...testMonitor.compatibility }
+            : null,
+          diagnostics: Array.isArray(testMonitor.diagnostics)
+            ? testMonitor.diagnostics.map(row => ({ ...row }))
+            : [],
           watchFs: testMonitor.watchFs === true,
-          maxAutoRunsPerCycle: Number(testMonitor.maxAutoRunsPerCycle || 0),
           watchDebounceMs: Number(testMonitor.watchDebounceMs || 0),
           status: testMonitor.status ? String(testMonitor.status) : "idle",
           processing: testMonitor.processing === true,
@@ -42,7 +52,36 @@ export function diagnosticsFromPlatformAppContext(appContext) {
                 queuedAt: row?.queuedAt ? String(row.queuedAt) : null
               }))
             : [],
-          pendingChangeSetCount: Number(testMonitor.pendingChangeSetCount || 0)
+          pendingChangeSetCount: Number(testMonitor.pendingChangeSetCount || 0),
+          queue: Array.isArray(testMonitor.queue) ? testMonitor.queue.map(row => ({ ...row })) : [],
+          queueCount: Number(testMonitor.queueCount || 0),
+          activeExecution: testMonitor.activeExecution && typeof testMonitor.activeExecution === "object"
+            ? { ...testMonitor.activeExecution }
+            : null,
+          recentExecutions: Array.isArray(testMonitor.recentExecutions)
+            ? testMonitor.recentExecutions.map(row => ({ ...row }))
+            : []
+        }
+      : null,
+    verificationPersistence: verificationPersistence
+      ? {
+          source: verificationPersistence.source ? String(verificationPersistence.source) : "synthesized",
+          verificationRoot: verificationPersistence.verificationRoot ? String(verificationPersistence.verificationRoot) : null,
+          ledgerBackend: verificationPersistence.ledgerBackend && typeof verificationPersistence.ledgerBackend === "object"
+            ? { ...verificationPersistence.ledgerBackend }
+            : null,
+          artifactBackend: verificationPersistence.artifactBackend && typeof verificationPersistence.artifactBackend === "object"
+            ? { ...verificationPersistence.artifactBackend }
+            : null,
+          cacheBackend: verificationPersistence.cacheBackend && typeof verificationPersistence.cacheBackend === "object"
+            ? { ...verificationPersistence.cacheBackend }
+            : null,
+          retention: verificationPersistence.retention && typeof verificationPersistence.retention === "object"
+            ? { ...verificationPersistence.retention }
+            : null,
+          diagnostics: Array.isArray(verificationPersistence.diagnostics)
+            ? verificationPersistence.diagnostics.map(row => ({ ...row }))
+            : []
         }
       : null,
     appSnapshot: snapshotDiagnostics

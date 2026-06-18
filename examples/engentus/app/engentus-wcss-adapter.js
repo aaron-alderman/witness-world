@@ -1,6 +1,8 @@
 import {
+  applyEngentusDocumentPatch,
+  applyEngentusStyleFieldBindingsToCssBundle,
   applyEngentusTokenBindingsToCssBundle,
-  applyEngentusTokenPatch,
+  buildEngentusAuthoringSchema,
   buildEngentusTokenCatalog,
   createEngentusAppliedWcssFromDocument,
   loadEngentusCanonicalWcss,
@@ -17,16 +19,20 @@ async function buildFilesForDocument(document) {
     authoredPlan,
     switchManifest
   });
-  return applyEngentusTokenBindingsToCssBundle(bundle.files, document);
+  return applyEngentusStyleFieldBindingsToCssBundle(
+    applyEngentusTokenBindingsToCssBundle(bundle.files, document),
+    document
+  );
 }
 
 export async function loadEngentusWcssAuthoringAdapter(_context = {}) {
   const document = await loadEngentusCanonicalWcss();
   return {
     document,
+    schema: buildEngentusAuthoringSchema(document),
     tokenCatalog: buildEngentusTokenCatalog(document),
-    applyTokenPatch({ ops }) {
-      return applyEngentusTokenPatch(document, { ops });
+    applyPatch({ ops }) {
+      return applyEngentusDocumentPatch(document, { ops });
     },
     async buildStylesheets({ document: targetDocument }) {
       const files = await buildFilesForDocument(targetDocument);

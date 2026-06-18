@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createWorld } from "../../src/kernel.js";
+import { createWorld, relation } from "../../src/kernel.js";
 import { applyWitnessToml } from "../../src/dsl.js";
 import { moduleProjectors } from "../../src/modules.js";
 import {
   requestBootstrapCapabilityDefine,
   requestBootstrapCapabilityInstall,
+  requestBootstrapCapabilityMigrateLegacy,
   resolveCapabilityTargetInput
 } from "./capability-processes.js";
 import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
@@ -88,11 +89,13 @@ test("capability-authoring plugin owns capability authoring routes and handlers"
   assert.deepEqual(handlerCatalog.dispatchHandlers, [
     "capability.create",
     "capability.install",
-    "capability.remove"
+    "capability.remove",
+    "capability.migrateLegacy"
   ]);
   assert.equal(routes.some(route => route.path === "/api/capabilities" && route.handler === "capability.create"), true);
   assert.equal(routes.some(route => route.path === "/api/capability-installs" && route.handler === "capability.install"), true);
   assert.equal(routes.some(route => route.method === "DELETE" && route.handler === "capability.remove"), true);
+  assert.equal(routes.some(route => route.path === "/api/capability-migrations/legacy" && route.handler === "capability.migrateLegacy"), true);
 
   const handlers = createHandlers({
     world: createWorld(),
@@ -109,6 +112,7 @@ test("capability-authoring plugin owns capability authoring routes and handlers"
   assert.equal(typeof handlers["capability.create"], "function");
   assert.equal(typeof handlers["capability.install"], "function");
   assert.equal(typeof handlers["capability.remove"], "function");
+  assert.equal(typeof handlers["capability.migrateLegacy"], "function");
 });
 
 test("capability-authoring plugin owns process helpers and proposal targets", async () => {
@@ -119,9 +123,11 @@ test("capability-authoring plugin owns process helpers and proposal targets", as
   assert.equal(processesSource.includes("export function requestBootstrapCapabilityDefine"), true);
   assert.equal(processesSource.includes("export function requestBootstrapCapabilityInstall"), true);
   assert.equal(processesSource.includes("export function requestBootstrapCapabilityRemove"), true);
+  assert.equal(processesSource.includes("export function requestBootstrapCapabilityMigrateLegacy"), true);
   assert.equal(proposalTargetSource.includes("case \"capability.define\""), true);
   assert.equal(proposalTargetSource.includes("case \"capability.install\""), true);
   assert.equal(proposalTargetSource.includes("case \"capability.remove\""), true);
+  assert.equal(proposalTargetSource.includes("case \"capability.migrateLegacy\""), true);
   await assert.rejects(readFile(new URL("../../src/bootstrap-authoring.js", import.meta.url), "utf8"));
   assert.equal(authoringMeta.runtime, undefined);
   assert.equal(authoringMeta.activatesBundles, undefined);
@@ -320,6 +326,109 @@ test("capability authoring handlers create proposals instead of dead-end 403s fo
   );
 });
 
+test("capability legacy migration writes explicit authored state through the shared handler", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.shared"
+`);
+  world.emit({
+    process: "legacy.contextCapability",
+    actor: "system",
+    claims: [relation("ctx.shared", "contextCapability", "cap.search")],
+    body: {}
+  });
+
+  const seenTargets = [];
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    readJson: async () => ({}),
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureContextAuthority: () => ({ ok: true }),
+      ensureTargetAuthority: (_actor, target) => {
+        seenTargets.push(target);
+        return { ok: true };
+      }
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ kind: "gate", gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ kind: "json", status, body });
+    }
+  });
+
+  await handlers["capability.migrateLegacy"]({ req: {}, res: {}, requestActor: "callan" });
+
+  assert.deepEqual(seenTargets, ["ctx.shared"]);
+  assert.equal(sent.some(entry => entry.kind === "gate"), false);
+  assert.equal(sent[0]?.status, 200);
+  assert.equal(sent[0]?.body.previewBefore.pending.some(row =>
+    row.action === "install.explicit"
+    && row.capabilityId === "cap.search"
+    && row.target === "ctx.shared"
+  ), true);
+  assert.deepEqual(sent[0]?.body.previewAfter.pending, []);
+  assert.equal(sent[0]?.body.witness.process, "capability.migrateLegacy");
+  assert.equal(world.project(moduleProjectors.capabilityIndex).byId["cap.search"]?.provenance?.source, "migration.legacyCapabilityBridge");
+  assert.equal(world.project(moduleProjectors.capabilityInstalls).some(row =>
+    row.capability === "cap.search"
+    && row.target === "ctx.shared"
+    && row.targetKind === "context"
+    && row.source === "explicit"
+  ), true);
+});
+
+test("capability legacy migration creates a governed proposal on denied target authority", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.shared"
+`);
+  world.emit({
+    process: "legacy.contextCapability",
+    actor: "system",
+    claims: [relation("ctx.shared", "contextCapability", "cap.search")],
+    body: {}
+  });
+
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    readJson: async () => ({ requestedBy: "callan" }),
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureContextAuthority: () => ({ ok: true }),
+      ensureTargetAuthority: () => ({ ok: false, status: 403, reason: "forbidden target" })
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ kind: "gate", gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ kind: "json", status, body });
+    }
+  });
+
+  await handlers["capability.migrateLegacy"]({ req: {}, res: {}, requestActor: "callan" });
+
+  assert.equal(sent.some(entry => entry.kind === "gate"), false);
+  assert.equal(sent[0]?.status, 202);
+  assert.equal(sent[0]?.body.proposal.targetProcess, "capability.migrateLegacy");
+  assert.equal(sent[0]?.body.proposal.targetKind, "context");
+  assert.equal(sent[0]?.body.proposal.targetId, "ctx.shared");
+  assert.equal(sent[0]?.body.preview.pending.some(row =>
+    row.action === "install.explicit"
+    && row.capabilityId === "cap.search"
+    && row.target === "ctx.shared"
+  ), true);
+});
+
 test("capability authoring proposal targets lower target refs before authority checks", () => {
   const world = createWorld();
   applyWitnessToml(world, `
@@ -473,6 +582,71 @@ placement = ["context"]
     && witness.body?.capability === "notes.sidebar"
     && witness.body?.target === "ctx.shared"
   ), true);
+});
+
+test("capability proposal targets execute legacy migration through the shared helper", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.shared"
+`);
+  world.emit({
+    process: "legacy.contextCapability",
+    actor: "system",
+    claims: [relation("ctx.shared", "contextCapability", "cap.search")],
+    body: {}
+  });
+
+  const seenTargets = [];
+  const result = executeCapabilityAuthoringProposalTarget({
+    world,
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: { targetProcess: "capability.migrateLegacy", targetId: "ctx.shared" },
+    body: {},
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: (_actor, target) => {
+      seenTargets.push(target);
+      return { ok: true };
+    }
+  });
+
+  assert.deepEqual(seenTargets, ["ctx.shared"]);
+  assert.equal(result?.ok, true);
+  assert.equal(result?.witnessIds.length, 1);
+  assert.equal(world.project(moduleProjectors.capabilityIndex).byId["cap.search"]?.provenance?.source, "migration.legacyCapabilityBridge");
+  assert.equal(world.project(moduleProjectors.capabilityInstalls).some(row =>
+    row.capability === "cap.search"
+    && row.target === "ctx.shared"
+    && row.targetKind === "context"
+    && row.source === "explicit"
+  ), true);
+});
+
+test("capability legacy migration process helper exposes before and after previews", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.shared"
+`);
+  world.emit({
+    process: "legacy.contextCapability",
+    actor: "system",
+    claims: [relation("ctx.shared", "contextCapability", "cap.search")],
+    body: {}
+  });
+
+  const result = requestBootstrapCapabilityMigrateLegacy(world, {
+    actor: "callan",
+    backendHost: "backendHost"
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.previewBefore.pending.length > 0, true);
+  assert.deepEqual(result.previewAfter.pending, []);
+  assert.equal(result.witness.process, "capability.migrateLegacy");
 });
 
 test("capability define accepts compatibility JSON and persists the normalized contract", () => {

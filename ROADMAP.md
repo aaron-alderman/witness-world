@@ -481,8 +481,8 @@ Current first authored backend-runtime slice now exists:
 
 Honest caveats / rollback watch:
 
-- Backend orchestration is now authored, but practical leaf behavior still bottoms out in JS handlers such as `todos.readModel`, `todos.createModel`, `todos.updateModel`, `todos.deleteModel`, `privateNotes.readModel`, and `privateNotes.createModel`.
-  That is intentional for this slice, but it is still orchestration-over-leaf-capabilities rather than fully authored backend behavior.
+- Backend orchestration is now authored, and the maintained demo no longer keeps duplicate route wrappers in the demo handler set.
+  Practical leaf behavior still bottoms out in demo-owned JS projectors and process handlers such as `demo.todosReadModel`, `demo.privateNotesReadModel`, `todo.create`, `todo.update`, `todo.delete`, `privateNote.create`, and `widget.define`, so this is still orchestration-over-plugin-owned leaf behavior rather than fully authored backend execution.
 - `serverRunner.handlerSet` is now bundle-provided instead of host-hardcoded, but its long-term role is still unresolved.
   The system still exposes handler-set selection on runners, preserves handler-set produced services in runtime startup, and reports handler-set composition in diagnostics, so this is no longer hidden glue; what remains open is whether it stays a first-class execution boundary or collapses as authored/bundle execution coverage expands.
 - Generic bundle endpoints still exist as fallback routes even though mounted authored routes now win first.
@@ -688,12 +688,12 @@ Honest caveats / rollback watch:
   Provenance, trust state, compatibility, and execution-boundary reasoning are surfaced now, but remote store mechanics, signature enforcement, review workflows, and update channels still remain future work.
 - Runtime-plugin intent is now real world state and has a first useful product surface, but runtime operations are still incomplete.
   Bootstrap now exposes install/remove/proposal forms plus runner-scoped availability, installed-state, blocked/installable reason badges, and authored-composition review/detail panels for `runtimePlugin.install` / `runtimePlugin.remove`, yet reconcile/repair flows, store/update lifecycle, and broader trust operations still remain future work.
-- The maintained demo project is now pluginized, but blank-world bootstrap is still a separate runtime path.
-  The served example app proves authored plugin composition on `minimal`; bootstrap/tutorial continuity still depends on runtime-owned bundles and remains intentionally outside that migration slice for now.
+- The maintained demo project is now pluginized, and blank-world bootstrap now starts through an explicit bootstrap launcher/profile/plugin path rather than an implicit `full` fallback.
+  The served example app proves authored plugin composition on `minimal`, while blank bootstrap now comes up on the explicit `authoring` profile with `plugin.authoring` plus its first-party dependencies; what still differs is that bootstrap startup is startup-mode/profile driven rather than an authored `serverRunner` + runtime-plugin-install composition story inside the world.
 - The maintained demo no longer depends on the `handlerSet = "demo"` bundle-activation compatibility seam.
   `plugin.demo` is now authored on `demo_server`; a runner that names `handlerSet = "demo"` without activating `plugin.demo` fails startup instead of silently adding `bundle-demo`.
-- The maintained demo still keeps demo-owned executable behavior inside `plugin.demo`, but the old handler-set mutation shims are gone.
-  Shipped backend-program versions now lower through `process.request` into demo-owned backend process handlers, and the legacy `todos.*Model`, `privateNotes.createModel`, and `widgets.createModel` handler exports have been removed from `plugins/demo/handler-set.js`.
+- The maintained demo still keeps demo-owned executable behavior inside `plugin.demo`, but the old demo route wrappers are gone from the handler set.
+  Shipped backend-program versions now lower through `project.read`, `process.request`, and `witness.emit`, and `plugins/demo/handler-set.js` is reduced to visible-witness filtering plus demo job handlers instead of carrying duplicate Todo/private-note/widget/network route behavior.
 
 ---
 

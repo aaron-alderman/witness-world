@@ -660,6 +660,11 @@ function renderAuthoredDetailLayout(surface, sectionsByName = new Map()) {
   `;
 }
 
+function setAuthoredDetailSection(sectionsByName, surface, detailKind, bodyHtml) {
+  if (!surface || !surfaceAppliesToDetailKinds(surface, detailKind) || !bodyHtml) return;
+  sectionsByName.set(surface.name, renderSurfaceFrame(surface, bodyHtml));
+}
+
 function surfaceAppliesToDetailKinds(surface, detailKind = null) {
   const kinds = surfaceValueList(surface, "detailKinds", []);
   if (!kinds.length || !detailKind) return !kinds.length || Boolean(detailKind);
@@ -1518,6 +1523,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
   const proposalIdPrefixes = surfaceIdPrefixes(surface, "proposalIdPrefixes");
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No workflow rows are projected yet." });
   if (recordMatchesIdPrefixes(detail, branchIdPrefixes)) {
+    const detailKind = "branch";
     const branch = detail;
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.branchId === branch.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
     const snapshotRows = snapshots.map(snapshot => ({
@@ -1531,27 +1537,28 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
         : ["id", "title", "status", "lifecycleLane", "owner", "parentBranchId", "epic", "feature", "defect", "runtimeProfile", "latestCandidateSnapshotId", "docsFreshness", "testRedGreen"]),
       ...surfaceKeyList(primarySurface, "branchLongTailExcludedFields", ["changeSetIds", "affectedSystemSummaries", "telemetryImpactSummaries"])
     ];
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, branch, usedKeys)}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderCardSpecs(relatedSurface, "branchLinkCards", "branchLinkCardEmptyStates", ctx, branch, "links")}
-        ${renderCardSpecs(relatedSurface, "branchTextCards", "branchTextCardEmptyStates", ctx, branch, "text")}
-      `)],
-      [snapshotSurface.name, renderSurfaceFrame(snapshotSurface, renderAuthoredSurfaceTable(snapshotSurface, renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
-        <tr>
-          <td>${esc(snapshot.status || "")}</td>
-          <td>${renderConceptLink(ctx, snapshot.id)}</td>
-          <td>${esc(snapshot.revision ?? "")}</td>
-          <td>${renderConceptLink(ctx, snapshot.changeSetId)}</td>
-          <td>${esc(Array.isArray(snapshot.errors) ? snapshot.errors.length : 0)}</td>
-        </tr>
-      `)))]
-    ]));
+    const sections = new Map();
+    setAuthoredDetailSection(sections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, branch, usedKeys)}
+    `);
+    setAuthoredDetailSection(sections, relatedSurface, detailKind, `
+      ${renderCardSpecs(relatedSurface, "branchLinkCards", "branchLinkCardEmptyStates", ctx, branch, "links")}
+      ${renderCardSpecs(relatedSurface, "branchTextCards", "branchTextCardEmptyStates", ctx, branch, "text")}
+    `);
+    setAuthoredDetailSection(sections, snapshotSurface, detailKind, renderAuthoredSurfaceTable(snapshotSurface, renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
+      <tr>
+        <td>${esc(snapshot.status || "")}</td>
+        <td>${renderConceptLink(ctx, snapshot.id)}</td>
+        <td>${esc(snapshot.revision ?? "")}</td>
+        <td>${renderConceptLink(ctx, snapshot.changeSetId)}</td>
+        <td>${esc(Array.isArray(snapshot.errors) ? snapshot.errors.length : 0)}</td>
+      </tr>
+    `)));
+    return renderAuthoredDetailLayout(surface, sections);
   }
   if (recordMatchesIdPrefixes(detail, changeSetIdPrefixes)) {
+    const detailKind = "changeSet";
     const changeSet = detail;
     const edits = (model.changeSetEdits ?? []).filter(edit => edit.changeSetId === changeSet.id).slice(0, surfaceRowLimit(editSurface, 20));
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.changeSetId === changeSet.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
@@ -1571,33 +1578,34 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
         : ["id", "title", "status", "branchId", "owner", "reason", "editCount", "latestCandidateSnapshotId", "testRedGreen"]),
       ...surfaceKeyList(primarySurface, "changeSetLongTailExcludedFields", ["changedPaths"])
     ];
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, changeSet, usedKeys)}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderCardSpecs(relatedSurface, "changeSetLinkCards", "changeSetLinkCardEmptyStates", ctx, changeSet, "links")}
-      `)],
-      [editSurface.name, renderSurfaceFrame(editSurface, renderAuthoredSurfaceTable(editSurface, renderRowsFromSurfaceSchema(editSurface, "rowFields", editRows, ctx, edit => `
-        <tr>
-          <td>${esc(edit.path || "")}</td>
-          <td>${esc(edit.sourceLanguage || "")}</td>
-          <td>${esc(edit.previousHash ? String(edit.previousHash).slice(0, 12) : "")}</td>
-          <td>${esc(edit.nextHash ? String(edit.nextHash).slice(0, 12) : "")}</td>
-        </tr>
-      `)))],
-      [snapshotSurface.name, renderSurfaceFrame(snapshotSurface, renderTable(surfaceColumnLabels(snapshotSurface, []), renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
-        <tr>
-          <td>${esc(snapshot.status || "")}</td>
-          <td>${renderConceptLink(ctx, snapshot.id)}</td>
-          <td>${esc(snapshot.revision ?? "")}</td>
-          <td>${renderConceptLink(ctx, snapshot.changeSetId)}</td>
-          <td>${esc(Array.isArray(snapshot.errors) ? snapshot.errors.length : 0)}</td>
-        </tr>
-      `), surfaceVariantEmptyState(snapshotSurface, "changeSetEmptyState", "No candidate snapshots for this change set.")))]
-    ]));
+    const sections = new Map();
+    setAuthoredDetailSection(sections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, changeSet, usedKeys)}
+    `);
+    setAuthoredDetailSection(sections, relatedSurface, detailKind, `
+      ${renderCardSpecs(relatedSurface, "changeSetLinkCards", "changeSetLinkCardEmptyStates", ctx, changeSet, "links")}
+    `);
+    setAuthoredDetailSection(sections, editSurface, detailKind, renderAuthoredSurfaceTable(editSurface, renderRowsFromSurfaceSchema(editSurface, "rowFields", editRows, ctx, edit => `
+      <tr>
+        <td>${esc(edit.path || "")}</td>
+        <td>${esc(edit.sourceLanguage || "")}</td>
+        <td>${esc(edit.previousHash ? String(edit.previousHash).slice(0, 12) : "")}</td>
+        <td>${esc(edit.nextHash ? String(edit.nextHash).slice(0, 12) : "")}</td>
+      </tr>
+    `)));
+    setAuthoredDetailSection(sections, snapshotSurface, detailKind, renderTable(surfaceColumnLabels(snapshotSurface, []), renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
+      <tr>
+        <td>${esc(snapshot.status || "")}</td>
+        <td>${renderConceptLink(ctx, snapshot.id)}</td>
+        <td>${esc(snapshot.revision ?? "")}</td>
+        <td>${renderConceptLink(ctx, snapshot.changeSetId)}</td>
+        <td>${esc(Array.isArray(snapshot.errors) ? snapshot.errors.length : 0)}</td>
+      </tr>
+    `), surfaceVariantEmptyState(snapshotSurface, "changeSetEmptyState", "No candidate snapshots for this change set.")));
+    return renderAuthoredDetailLayout(surface, sections);
   }
+  const detailKind = "proposal";
   const proposal = detail;
   if (!recordMatchesIdPrefixes(proposal, proposalIdPrefixes) && detail.id) {
     return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No workflow rows are projected yet." });
@@ -1606,15 +1614,15 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "proposalFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "proposalFields")
     : ["id", "status", "targetProcess", "targetId", "reason", "action"];
-  return renderAuthoredDetailLayout(surface, new Map([
-    [primarySurface.name, renderSurfaceFrame(primarySurface, `
-      ${renderPropertyCard(primaryCard)}
-      ${renderLongTailProperties(primarySurface, ctx, proposal, usedKeys)}
-    `)],
-    [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-      ${renderCardSpecs(relatedSurface, "proposalLinkCards", "proposalLinkCardEmptyStates", ctx, proposal, "links")}
-    `)]
-  ]));
+  const sections = new Map();
+  setAuthoredDetailSection(sections, primarySurface, detailKind, `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, proposal, usedKeys)}
+  `);
+  setAuthoredDetailSection(sections, relatedSurface, detailKind, `
+    ${renderCardSpecs(relatedSurface, "proposalLinkCards", "proposalLinkCardEmptyStates", ctx, proposal, "links")}
+  `);
+  return renderAuthoredDetailLayout(surface, sections);
 }
 
 function reportRunId(reportId) {
@@ -1726,6 +1734,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const testReportIdPrefixes = surfaceIdPrefixes(surface, "testReportIdPrefixes");
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No verification rows are projected yet." });
   if (recordMatchesIdPrefixes(detail, verificationPolicyIdPrefixes)) {
+    const detailKind = "verificationPolicy";
     const policy = detail;
     const policyRecord = {
       ...policy,
@@ -1739,27 +1748,29 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       cacheBackendLabel: model.verificationPersistence?.cacheBackend?.provider ?? null
     };
     const persistenceCard = propertyRowsFromSurfaceSchema(relatedSurface, "verificationPersistenceCardTitle", "verificationPersistenceFields", ctx, persistenceRecord, "Verification Persistence");
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, policy, rootKeysFromSurfaceSchema(primarySurface, "verificationPolicyFields"))}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderPropertyCard(persistenceCard)}
-      `)]
-    ]));
+    const sections = new Map();
+    setAuthoredDetailSection(sections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, policy, rootKeysFromSurfaceSchema(primarySurface, "verificationPolicyFields"))}
+    `);
+    setAuthoredDetailSection(sections, relatedSurface, detailKind, `
+      ${renderPropertyCard(persistenceCard)}
+    `);
+    return renderAuthoredDetailLayout(surface, sections);
   }
   if (recordMatchesIdPrefixes(detail, verificationQueueIdPrefixes) || recordMatchesIdPrefixes(detail, verificationExecutionIdPrefixes)) {
+    const detailKind = "verificationExecution";
     const execution = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "verificationExecutionCardTitle", "verificationExecutionFields", ctx, execution, "Verification Execution Detail");
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, execution, rootKeysFromSurfaceSchema(primarySurface, "verificationExecutionFields"))}
-      `)]
-    ]));
+    const sections = new Map();
+    setAuthoredDetailSection(sections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, execution, rootKeysFromSurfaceSchema(primarySurface, "verificationExecutionFields"))}
+    `);
+    return renderAuthoredDetailLayout(surface, sections);
   }
   if (recordMatchesIdPrefixes(detail, gateIdPrefixes)) {
+    const detailKind = "gate";
     const gate = detail;
     const runRows = (model.testRuns ?? []).filter(run => run.gateId === gate.id).slice(0, surfaceRowLimit(runHistorySurface, 12));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gateCardTitle", "gateFields", ctx, gate, "Test Gate Detail");
@@ -1769,26 +1780,27 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         : ["id", "title", "runner", "environment", "timeoutMs", "costEstimate", "command", "lastResult"]),
       ...surfaceKeyList(primarySurface, "gateLongTailExcludedFields", ["protectedObjects", "selectedByBranches", "selectedByChangeSets"])
     ];
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, gate, usedKeys)}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderCardSpecs(relatedSurface, "gateLinkCards", "gateLinkCardEmptyStates", ctx, gate, "links")}
-      `)],
-      [runHistorySurface.name, renderSurfaceFrame(runHistorySurface, renderAuthoredSurfaceTable(runHistorySurface, renderRowsFromSurfaceSchema(runHistorySurface, "rowFields", runRows, ctx, run => `
-        <tr>
-          <td>${esc(run.status || "")}</td>
-          <td>${renderConceptLink(ctx, run.id)}</td>
-          <td>${run.branchId ? renderConceptLink(ctx, run.branchId) : ""}</td>
-          <td>${esc(run.durationMs ?? "")}</td>
-          <td>${esc(run.exitCode ?? "")}</td>
-        </tr>
-      `)))]
-    ]));
+    const sections = new Map();
+    setAuthoredDetailSection(sections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, gate, usedKeys)}
+    `);
+    setAuthoredDetailSection(sections, relatedSurface, detailKind, `
+      ${renderCardSpecs(relatedSurface, "gateLinkCards", "gateLinkCardEmptyStates", ctx, gate, "links")}
+    `);
+    setAuthoredDetailSection(sections, runHistorySurface, detailKind, renderAuthoredSurfaceTable(runHistorySurface, renderRowsFromSurfaceSchema(runHistorySurface, "rowFields", runRows, ctx, run => `
+      <tr>
+        <td>${esc(run.status || "")}</td>
+        <td>${renderConceptLink(ctx, run.id)}</td>
+        <td>${run.branchId ? renderConceptLink(ctx, run.branchId) : ""}</td>
+        <td>${esc(run.durationMs ?? "")}</td>
+        <td>${esc(run.exitCode ?? "")}</td>
+      </tr>
+    `)));
+    return renderAuthoredDetailLayout(surface, sections);
   }
   if (recordMatchesIdPrefixes(detail, runtimeRevisionIdPrefixes)) {
+    const detailKind = "runtimeRevision";
     const revision = detail;
     const builds = (model.snapshotBuilds ?? []).filter(build => Number(build.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildHistorySurface, 12));
     const errors = (model.snapshotBuildErrors ?? []).filter(error => Number(error.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildErrorsSurface, 12));
@@ -1809,35 +1821,36 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         : ["id", "revision", "status", "trigger", "branchId", "changeSetId", "changedSources", "buildErrorCount"]),
       ...surfaceKeyList(primarySurface, "runtimeRevisionLongTailExcludedFields", ["candidateBranchCount"])
     ];
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, revision, usedKeys)}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderCardSpecs(relatedSurface, "runtimeRevisionLinkCards", "runtimeRevisionLinkCardEmptyStates", ctx, revision, "links")}
-        ${renderPropertyCard(diagnosticsCard)}
-      `)],
-      [buildHistorySurface.name, renderSurfaceFrame(buildHistorySurface, renderAuthoredSurfaceTable(buildHistorySurface, renderRowsFromSurfaceSchema(buildHistorySurface, "rowFields", buildRows, ctx, build => `
-        <tr>
-          <td>${esc(build.status || "")}</td>
-          <td>${esc(build.id || "")}</td>
-          <td>${build.candidateSnapshotId ? renderConceptLink(ctx, build.candidateSnapshotId) : ""}</td>
-          <td>${build.branchId ? renderConceptLink(ctx, build.branchId) : ""}</td>
-          <td>${esc(build.errorCount ?? 0)}</td>
-        </tr>
-      `)))],
-      [buildErrorsSurface.name, renderSurfaceFrame(buildErrorsSurface, renderAuthoredSurfaceTable(buildErrorsSurface, renderRowsFromSurfaceSchema(buildErrorsSurface, "rowFields", errorRows, ctx, error => `
-        <tr>
-          <td>${esc(error.snapshotBuildId || "")}</td>
-          <td>${esc(error.path || "")}</td>
-          <td>${esc(error.kind || "")}</td>
-          <td>${esc(error.message || "")}</td>
-        </tr>
-      `)))]
-    ]));
+    const sections = new Map();
+    setAuthoredDetailSection(sections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, revision, usedKeys)}
+    `);
+    setAuthoredDetailSection(sections, relatedSurface, detailKind, `
+      ${renderCardSpecs(relatedSurface, "runtimeRevisionLinkCards", "runtimeRevisionLinkCardEmptyStates", ctx, revision, "links")}
+      ${renderPropertyCard(diagnosticsCard)}
+    `);
+    setAuthoredDetailSection(sections, buildHistorySurface, detailKind, renderAuthoredSurfaceTable(buildHistorySurface, renderRowsFromSurfaceSchema(buildHistorySurface, "rowFields", buildRows, ctx, build => `
+      <tr>
+        <td>${esc(build.status || "")}</td>
+        <td>${esc(build.id || "")}</td>
+        <td>${build.candidateSnapshotId ? renderConceptLink(ctx, build.candidateSnapshotId) : ""}</td>
+        <td>${build.branchId ? renderConceptLink(ctx, build.branchId) : ""}</td>
+        <td>${esc(build.errorCount ?? 0)}</td>
+      </tr>
+    `)));
+    setAuthoredDetailSection(sections, buildErrorsSurface, detailKind, renderAuthoredSurfaceTable(buildErrorsSurface, renderRowsFromSurfaceSchema(buildErrorsSurface, "rowFields", errorRows, ctx, error => `
+      <tr>
+        <td>${esc(error.snapshotBuildId || "")}</td>
+        <td>${esc(error.path || "")}</td>
+        <td>${esc(error.kind || "")}</td>
+        <td>${esc(error.message || "")}</td>
+      </tr>
+    `)));
+    return renderAuthoredDetailLayout(surface, sections);
   }
   if (recordMatchesIdPrefixes(detail, candidateSnapshotIdPrefixes)) {
+    const detailKind = "candidateSnapshot";
     const snapshot = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "candidateSnapshotCardTitle", "candidateSnapshotFields", ctx, snapshot, "Candidate Snapshot Detail");
     const usedKeys = [
@@ -1846,15 +1859,15 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         : ["id", "status", "branchId", "changeSetId", "revision"]),
       ...surfaceKeyList(primarySurface, "candidateSnapshotLongTailExcludedFields", ["files", "errors"])
     ];
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, snapshot, usedKeys)}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderCardSpecs(relatedSurface, "candidateSnapshotTextCards", "candidateSnapshotTextCardEmptyStates", ctx, snapshot, "text")}
-      `)]
-    ]));
+    const sections = new Map();
+    setAuthoredDetailSection(sections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, snapshot, usedKeys)}
+    `);
+    setAuthoredDetailSection(sections, relatedSurface, detailKind, `
+      ${renderCardSpecs(relatedSurface, "candidateSnapshotTextCards", "candidateSnapshotTextCardEmptyStates", ctx, snapshot, "text")}
+    `);
+    return renderAuthoredDetailLayout(surface, sections);
   }
   const selectedReport = recordMatchesIdPrefixes(detail, testReportIdPrefixes) ? detail : null;
   const run = selectedReport
@@ -1892,15 +1905,15 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "testRunFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "testRunFields")
     : ["id", "title", "status", "gateId", "branchId", "changeSetId", "candidateSnapshotId", "durationMs", "exitCode", "startedAt", "finishedAt"];
-  const sections = new Map([
-    [primarySurface.name, renderSurfaceFrame(primarySurface, `
-      ${renderPropertyCard(primaryCard)}
-      ${renderLongTailProperties(primarySurface, ctx, run, usedKeys)}
-    `)],
-    [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-      ${renderPropertyCard(streamsCard)}
-    `)]
-  ]);
+  const detailKind = selectedReport ? "testReport" : "testRun";
+  const sections = new Map();
+  setAuthoredDetailSection(sections, primarySurface, detailKind, `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, run, usedKeys)}
+  `);
+  setAuthoredDetailSection(sections, relatedSurface, detailKind, `
+    ${renderPropertyCard(streamsCard)}
+  `);
   if (summaryReport) {
     const summaryRecord = {
       reportId: summaryReport.id,
@@ -1917,9 +1930,9 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       producedAt: summaryReport.producedAt ?? null
     };
     const card = propertyRowsFromSurfaceSchema(reportSummarySurface, "propertyCardTitle", "propertyFields", ctx, summaryRecord, "Report Summary");
-    sections.set(reportSummarySurface.name, renderSurfaceFrame(reportSummarySurface, renderPropertyCard(card)));
+    setAuthoredDetailSection(sections, reportSummarySurface, detailKind, renderPropertyCard(card));
   }
-  sections.set(artifactsSurface.name, renderSurfaceFrame(artifactsSurface, renderAuthoredSurfaceTable(
+  setAuthoredDetailSection(sections, artifactsSurface, detailKind, renderAuthoredSurfaceTable(
     artifactsSurface,
     renderRowsFromSurfaceSchema(artifactsSurface, "rowFields", artifactRows.slice(0, surfaceRowLimit(artifactsSurface, 12)), ctx, artifact => `
       <tr>
@@ -1931,7 +1944,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       </tr>
     `)
   )));
-  sections.set(suiteSummarySurface.name, renderSurfaceFrame(suiteSummarySurface, renderAuthoredSurfaceTable(
+  setAuthoredDetailSection(sections, suiteSummarySurface, detailKind, renderAuthoredSurfaceTable(
     suiteSummarySurface,
     renderRowsFromSurfaceSchema(suiteSummarySurface, "rowFields", suiteRows.slice(0, surfaceRowLimit(suiteSummarySurface, 12)), ctx, suite => `
       <tr>
@@ -1943,7 +1956,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       </tr>
     `)
   )));
-  sections.set(failingCasesSurface.name, renderSurfaceFrame(failingCasesSurface, renderAuthoredSurfaceTable(
+  setAuthoredDetailSection(sections, failingCasesSurface, detailKind, renderAuthoredSurfaceTable(
     failingCasesSurface,
     renderRowsFromSurfaceSchema(failingCasesSurface, "rowFields", failureRows.slice(0, surfaceRowLimit(failingCasesSurface, 20)), ctx, testCase => `
       <tr>
@@ -1968,7 +1981,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       deltaPercent: regression.deltaPercent == null ? null : `${regression.deltaPercent >= 0 ? "+" : ""}${Math.round(regression.deltaPercent)}%`
     };
     const card = propertyRowsFromSurfaceSchema(regressionSurface, "propertyCardTitle", "propertyFields", ctx, regressionRecord, "Regression Summary");
-    sections.set(regressionSurface.name, renderSurfaceFrame(regressionSurface, renderPropertyCard(card)));
+    setAuthoredDetailSection(sections, regressionSurface, detailKind, renderPropertyCard(card));
   }
   return renderAuthoredDetailLayout(surface, sections);
 }
@@ -1985,6 +1998,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
   const featureIdPrefixes = surfaceIdPrefixes(surface, "featureIdPrefixes");
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No knowledge rows are projected yet." });
   if (resolveFieldPath(detail, documentPathField)) {
+    const detailKind = "document";
     const doc = detail;
     const sections = (model.docSections ?? []).filter(section => section.doc === doc.path).slice(0, surfaceRowLimit(sectionsSurface, 20));
     const tasks = (model.docTasks ?? []).filter(task => task.doc === doc.path).slice(0, surfaceRowLimit(tasksSurface, 20));
@@ -1995,32 +2009,33 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         : ["id", "path", "role", "owner", "status", "freshness", "sectionCount", "taskCount"]),
       ...surfaceKeyList(primarySurface, "documentLongTailExcludedFields", ["references"])
     ];
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, doc, usedKeys)}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderAuthoredCardSpecChildren(relatedSurface, "document", ctx, doc)}
-      `)],
-      [sectionsSurface.name, renderSurfaceFrame(sectionsSurface, renderAuthoredSurfaceTable(sectionsSurface, renderRowsFromSurfaceSchema(sectionsSurface, "rowFields", sections, ctx, section => `
-        <tr>
-          <td>${esc(section.title || "")}</td>
-          <td>${esc(section.line ?? "")}</td>
-          <td>${esc(section.depth ?? "")}</td>
-        </tr>
-      `)))],
-      [tasksSurface.name, renderSurfaceFrame(tasksSurface, renderAuthoredSurfaceTable(tasksSurface, renderRowsFromSurfaceSchema(tasksSurface, "rowFields", tasks, ctx, task => `
-        <tr>
-          <td>${esc(task.status || "")}</td>
-          <td>${task.id ? renderConceptLink(ctx, task.id, task.title || task.id) : esc(task.title || "")}</td>
-          <td>${esc(task.line ?? "")}</td>
-          <td>${esc(task.section || "")}</td>
-        </tr>
-      `)))]
-    ]));
+    const detailSections = new Map();
+    setAuthoredDetailSection(detailSections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, doc, usedKeys)}
+    `);
+    setAuthoredDetailSection(detailSections, relatedSurface, detailKind, `
+      ${renderAuthoredCardSpecChildren(relatedSurface, detailKind, ctx, doc)}
+    `);
+    setAuthoredDetailSection(detailSections, sectionsSurface, detailKind, renderAuthoredSurfaceTable(sectionsSurface, renderRowsFromSurfaceSchema(sectionsSurface, "rowFields", sections, ctx, section => `
+      <tr>
+        <td>${esc(section.title || "")}</td>
+        <td>${esc(section.line ?? "")}</td>
+        <td>${esc(section.depth ?? "")}</td>
+      </tr>
+    `)));
+    setAuthoredDetailSection(detailSections, tasksSurface, detailKind, renderAuthoredSurfaceTable(tasksSurface, renderRowsFromSurfaceSchema(tasksSurface, "rowFields", tasks, ctx, task => `
+      <tr>
+        <td>${esc(task.status || "")}</td>
+        <td>${task.id ? renderConceptLink(ctx, task.id, task.title || task.id) : esc(task.title || "")}</td>
+        <td>${esc(task.line ?? "")}</td>
+        <td>${esc(task.section || "")}</td>
+      </tr>
+    `)));
+    return renderAuthoredDetailLayout(surface, detailSections);
   }
   if (recordMatchesIdPrefixes(detail, roadmapTaskIdPrefixes) || resolveFieldPath(detail, roadmapTaskFallbackField)) {
+    const detailKind = "roadmapTask";
     const task = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "roadmapTaskCardTitle", "roadmapTaskFields", ctx, task, "Roadmap Task Detail");
     const usedKeys = [
@@ -2029,17 +2044,18 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         : ["id", "title", "status", "derivedStatus", "section", "doc", "line"]),
       ...surfaceKeyList(primarySurface, "roadmapTaskLongTailExcludedFields", ["targets", "derivedSummary", "evidence"])
     ];
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, task, usedKeys)}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderAuthoredCardSpecChildren(relatedSurface, "roadmapTask", ctx, task)}
-      `)]
-    ]));
+    const detailSections = new Map();
+    setAuthoredDetailSection(detailSections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, task, usedKeys)}
+    `);
+    setAuthoredDetailSection(detailSections, relatedSurface, detailKind, `
+      ${renderAuthoredCardSpecChildren(relatedSurface, detailKind, ctx, task)}
+    `);
+    return renderAuthoredDetailLayout(surface, detailSections);
   }
   if (recordMatchesIdPrefixes(detail, epicIdPrefixes)) {
+    const detailKind = "epic";
     const epic = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "epicCardTitle", "epicFields", ctx, epic, "Epic Detail");
     const usedKeys = [
@@ -2048,16 +2064,17 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         : ["id", "title", "status", "roadmapId", "branchIds", "featureIds", "gateIds", "docIds"]),
       ...surfaceKeyList(primarySurface, "epicLongTailExcludedFields", ["defectClusterIds"])
     ];
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, epic, usedKeys)}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderAuthoredCardSpecChildren(relatedSurface, "epic", ctx, epic)}
-      `)]
-    ]));
+    const detailSections = new Map();
+    setAuthoredDetailSection(detailSections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, epic, usedKeys)}
+    `);
+    setAuthoredDetailSection(detailSections, relatedSurface, detailKind, `
+      ${renderAuthoredCardSpecChildren(relatedSurface, detailKind, ctx, epic)}
+    `);
+    return renderAuthoredDetailLayout(surface, detailSections);
   }
+  const detailKind = "feature";
   const feature = detail;
   if (!recordMatchesIdPrefixes(feature, featureIdPrefixes) && detail.id) {
     return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No knowledge rows are projected yet." });
@@ -2069,15 +2086,15 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       : ["id", "title", "status", "epicId", "branchIds", "gateIds", "docIds"]),
     ...surfaceKeyList(primarySurface, "featureLongTailExcludedFields", ["defectClusterIds"])
   ];
-  return renderAuthoredDetailLayout(surface, new Map([
-    [primarySurface.name, renderSurfaceFrame(primarySurface, `
-      ${renderPropertyCard(primaryCard)}
-      ${renderLongTailProperties(primarySurface, ctx, feature, usedKeys)}
-    `)],
-    [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-      ${renderAuthoredCardSpecChildren(relatedSurface, "feature", ctx, feature)}
-    `)]
-  ]));
+  const detailSections = new Map();
+  setAuthoredDetailSection(detailSections, primarySurface, detailKind, `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, feature, usedKeys)}
+  `);
+  setAuthoredDetailSection(detailSections, relatedSurface, detailKind, `
+    ${renderAuthoredCardSpecChildren(relatedSurface, detailKind, ctx, feature)}
+  `);
+  return renderAuthoredDetailLayout(surface, detailSections);
 }
 
 function renderSignalDetail(surface, detail, model, ctx) {
@@ -2088,6 +2105,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
   const signalNodeKinds = surfaceValueList(surface, "signalNodeKinds");
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
   if (recordMatchesIdPrefixes(detail, gapIdPrefixes)) {
+    const detailKind = "gap";
     const gap = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gapCardTitle", "gapFields", ctx, gap, "Gap Detail");
     const usedKeys = [
@@ -2096,18 +2114,19 @@ function renderSignalDetail(surface, detail, model, ctx) {
         : ["id", "severity", "kind", "target", "reason"]),
       ...surfaceKeyList(primarySurface, "gapLongTailExcludedFields", ["recommendedProposal", "missingInGenerated", "extraInGenerated"])
     ];
-    return renderAuthoredDetailLayout(surface, new Map([
-      [primarySurface.name, renderSurfaceFrame(primarySurface, `
-        ${renderPropertyCard(primaryCard)}
-        ${renderLongTailProperties(primarySurface, ctx, gap, usedKeys)}
-      `)],
-      [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderCardSpecs(relatedSurface, "gapLinkCards", "gapLinkCardEmptyStates", ctx, gap, "links")}
-        ${renderCardSpecs(relatedSurface, "gapTextCards", "gapTextCardEmptyStates", ctx, gap, "text")}
-      `)],
-      [relationshipsSurface.name, renderSurfaceFrame(relationshipsSurface, renderAuthoredSurfaceTable(relationshipsSurface, []))]
-    ]));
+    const sections = new Map();
+    setAuthoredDetailSection(sections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, gap, usedKeys)}
+    `);
+    setAuthoredDetailSection(sections, relatedSurface, detailKind, `
+      ${renderCardSpecs(relatedSurface, "gapLinkCards", "gapLinkCardEmptyStates", ctx, gap, "links")}
+      ${renderCardSpecs(relatedSurface, "gapTextCards", "gapTextCardEmptyStates", ctx, gap, "text")}
+    `);
+    setAuthoredDetailSection(sections, relationshipsSurface, detailKind, renderAuthoredSurfaceTable(relationshipsSurface, []));
+    return renderAuthoredDetailLayout(surface, sections);
   }
+  const detailKind = "signal";
   const node = detail;
   if (!recordMatchesKinds(node, signalNodeKinds) && detail.id) {
     return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
@@ -2117,22 +2136,23 @@ function renderSignalDetail(surface, detail, model, ctx) {
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "signalFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "signalFields")
     : ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
-  return renderAuthoredDetailLayout(surface, new Map([
-    [primarySurface.name, renderSurfaceFrame(primarySurface, `
-      ${renderPropertyCard(primaryCard)}
-      ${renderLongTailProperties(primarySurface, ctx, node, usedKeys)}
-    `)],
-    [relationshipsSurface.name, renderSurfaceFrame(relationshipsSurface, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
-          <tr>
-            <td>${renderConceptLink(ctx, edge.from)}</td>
-            <td>${esc(edge.rel || "")}</td>
-            <td>${renderConceptLink(ctx, edge.to)}</td>
-          </tr>
-        `)))]
-  ]));
+  const sections = new Map();
+  setAuthoredDetailSection(sections, primarySurface, detailKind, `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, node, usedKeys)}
+  `);
+  setAuthoredDetailSection(sections, relationshipsSurface, detailKind, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+        <tr>
+          <td>${renderConceptLink(ctx, edge.from)}</td>
+          <td>${esc(edge.rel || "")}</td>
+          <td>${renderConceptLink(ctx, edge.to)}</td>
+        </tr>
+      `)));
+  return renderAuthoredDetailLayout(surface, sections);
 }
 
 function renderModelDetail(surface, node, model, ctx) {
+  const detailKind = "object";
   const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformModelPrimaryPanel");
   const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships", "PlatformModelRelationships");
   if (!node) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No platform objects are projected yet." });
@@ -2141,19 +2161,19 @@ function renderModelDetail(surface, node, model, ctx) {
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "objectFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "objectFields")
     : ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
-  return renderAuthoredDetailLayout(surface, new Map([
-    [primarySurface.name, renderSurfaceFrame(primarySurface, `
-      ${renderPropertyCard(primaryCard)}
-      ${renderLongTailProperties(primarySurface, ctx, node, usedKeys)}
-    `)],
-    [relationshipsSurface.name, renderSurfaceFrame(relationshipsSurface, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
-          <tr>
-            <td>${renderConceptLink(ctx, edge.from)}</td>
-            <td>${esc(edge.rel || "")}</td>
-            <td>${renderConceptLink(ctx, edge.to)}</td>
-          </tr>
-        `)))]
-  ]));
+  const sections = new Map();
+  setAuthoredDetailSection(sections, primarySurface, detailKind, `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, node, usedKeys)}
+  `);
+  setAuthoredDetailSection(sections, relationshipsSurface, detailKind, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+        <tr>
+          <td>${renderConceptLink(ctx, edge.from)}</td>
+          <td>${esc(edge.rel || "")}</td>
+          <td>${renderConceptLink(ctx, edge.to)}</td>
+        </tr>
+      `)));
+  return renderAuthoredDetailLayout(surface, sections);
 }
 
 function recordsForAuthoredListSource(source, model) {

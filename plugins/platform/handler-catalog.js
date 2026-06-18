@@ -2,6 +2,18 @@ function freezeStrings(values = []) {
   return Object.freeze(values.map(value => String(value)));
 }
 
+const PLATFORM_RUNTIME_OWNER_NOTE = "Behavior is owned by the Platform Self Model runtime plugin.";
+
+function platformHandlerMetadata({ routeKind, responseKind, methods = [] }) {
+  return Object.freeze({
+    routeKind,
+    responseKind,
+    methods: freezeStrings(methods),
+    ownerClass: "runtime-plugin",
+    ownerNote: PLATFORM_RUNTIME_OWNER_NOTE
+  });
+}
+
 export const handlerCatalog = Object.freeze({
   authorableHandlers: freezeStrings([
     "platform.model.read",
@@ -21,6 +33,7 @@ export const handlerCatalog = Object.freeze({
     "platform.testRun.create",
     "platform.testRun.events",
     "platform.testRun.read",
+    "platform.testArtifact.content",
     "platform.proposal.create",
     "platform.proposal.approve",
     "platform.proposal.reject",
@@ -45,32 +58,34 @@ export const handlerCatalog = Object.freeze({
     "platform.testRun.create",
     "platform.testRun.events",
     "platform.testRun.read",
+    "platform.testArtifact.content",
     "platform.proposal.create",
     "platform.proposal.approve",
     "platform.proposal.reject",
     "page.platform"
   ]),
   handlerMetadata: Object.freeze({
-    "platform.model.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
-    "platform.gaps.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
-    "platform.branch.list": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
-    "platform.branch.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
-    "platform.branch.create": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.changeSet.list": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
-    "platform.changeSet.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
-    "platform.changeSet.create": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.changeSet.edit": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.changeSet.removeEdit": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["DELETE"]) }),
-    "platform.changeSet.validate": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.changeSet.apply": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.changeSet.reject": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.changeSet.abandon": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.testRun.create": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.testRun.events": Object.freeze({ routeKind: "stream", responseKind: "stream", methods: Object.freeze(["GET"]) }),
-    "platform.testRun.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
-    "platform.proposal.create": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.proposal.approve": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "platform.proposal.reject": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
-    "page.platform": Object.freeze({ routeKind: "page", responseKind: "page", methods: Object.freeze(["GET"]) })
+    "platform.model.read": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "platform.gaps.read": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "platform.branch.list": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "platform.branch.read": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "platform.branch.create": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.changeSet.list": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "platform.changeSet.read": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "platform.changeSet.create": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.changeSet.edit": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.changeSet.removeEdit": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["DELETE"] }),
+    "platform.changeSet.validate": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.changeSet.apply": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.changeSet.reject": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.changeSet.abandon": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.testRun.create": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.testRun.events": platformHandlerMetadata({ routeKind: "stream", responseKind: "stream", methods: ["GET"] }),
+    "platform.testRun.read": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "platform.testArtifact.content": platformHandlerMetadata({ routeKind: "content", responseKind: "content", methods: ["GET"] }),
+    "platform.proposal.create": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.proposal.approve": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "platform.proposal.reject": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "page.platform": platformHandlerMetadata({ routeKind: "page", responseKind: "page", methods: ["GET"] })
   })
 });

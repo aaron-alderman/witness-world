@@ -61,12 +61,34 @@ export function createRuntimeAuthOAuthSupportServices({
     return `http://${host}/api/oauth/callback`;
   };
   const normalizeAuthOAuthConfig = ({ runtimeConfig, requestedProvider = null }) => {
+    // A runner may enable several providers at once via `auth.oauth.providers = ["google","github"]`
+    // (so a host can offer both Gmail and GitHub sign-in). The legacy single `auth.oauth.provider`
+    // key still works and defines a one-entry allowlist. `providers` takes precedence when present.
     const configuredProviderRaw = runtimeConfigLookup(runtimeConfig ?? {}, "auth.oauth.provider");
     const configuredProvider = typeof configuredProviderRaw === "string" ? configuredProviderRaw.trim() : "";
-    const provider = requestedProvider || configuredProvider;
-    if (!provider) return { ok: false, status: 503, reason: "auth.oauth.provider not configured" };
-    if (configuredProvider && requestedProvider && configuredProvider !== requestedProvider) {
-      return { ok: false, status: 409, reason: `auth.oauth provider mismatch: configured ${configuredProvider}, requested ${requestedProvider}` };
+    // `providers` may be an array (when set programmatically) or a comma/space-delimited string —
+    // the latter because the runtime-config seam only carries scalar values, not arrays.
+    const configuredProvidersRaw = runtimeConfigLookup(runtimeConfig ?? {}, "auth.oauth.providers");
+    const configuredProvidersList = Array.isArray(configuredProvidersRaw)
+      ? configuredProvidersRaw
+      : (typeof configuredProvidersRaw === "string" ? configuredProvidersRaw.split(/[\s,]+/) : []);
+    const configuredProviders = [...new Set(
+      configuredProvidersList.map(value => (typeof value === "string" ? value.trim() : "")).filter(Boolean)
+    )];
+    const enabledProviders = configuredProviders.length
+      ? configuredProviders
+      : (configuredProvider ? [configuredProvider] : []);
+    if (!enabledProviders.length) return { ok: false, status: 503, reason: "auth.oauth.provider not configured" };
+    let provider;
+    if (requestedProvider) {
+      if (!enabledProviders.includes(requestedProvider)) {
+        return { ok: false, status: 409, reason: `auth.oauth provider not enabled: requested ${requestedProvider}, enabled ${enabledProviders.join(", ")}` };
+      }
+      provider = requestedProvider;
+    } else if (enabledProviders.length === 1) {
+      provider = enabledProviders[0];
+    } else {
+      return { ok: false, status: 400, reason: `auth.oauth provider required: choose one of ${enabledProviders.join(", ")}` };
     }
     if (provider !== "stub" && !OIDC_FAMILY_PROVIDERS.has(provider)) {
       return { ok: false, status: 501, reason: `${provider} oauth adapter not implemented` };

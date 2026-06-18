@@ -7,6 +7,10 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createThing, projectors, relation } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
+import {
+  resolveRunnerVerificationPolicy,
+  resolveVerificationGatePolicy
+} from "../../src/runtime-verification-policy.js";
 
 const pluginDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(pluginDir, "..", "..");
@@ -57,7 +61,7 @@ function defaultShellCommand(command) {
   };
 }
 
-function resolvePlatformTestEnvironment(gate, {
+export function resolvePlatformTestEnvironment(gate, {
   candidateSnapshotId = null,
   executionClass = null,
   requiresCleanWorkspace = false
@@ -68,6 +72,20 @@ function resolvePlatformTestEnvironment(gate, {
   if (environment) return environment;
   if (String(gate?.runner || "") === "cargo-test") return "local-rust-cargo";
   return "local-node";
+}
+
+export function inferPlatformTestExecutionClass(gate, {
+  candidateSnapshotId = null,
+  executionClass = null
+} = {}) {
+  const explicit = optionalText(executionClass);
+  if (explicit) return explicit;
+  if (optionalText(candidateSnapshotId)) return "candidate_snapshot";
+  const protectedObjects = Array.isArray(gate?.protectedObjects) ? gate.protectedObjects.map(String) : [];
+  if (protectedObjects.includes("testEnvironment:platform-candidate-snapshot")) return "candidate_snapshot";
+  const environment = optionalText(gate?.environment);
+  if (environment === "local-browser") return "browser_session";
+  return "child_process";
 }
 
 function hashBuffer(buffer) {
@@ -122,7 +140,7 @@ async function resolveCargoTestRunnerVersion() {
   return cachedCargoVersionPromise;
 }
 
-async function resolvePlatformTestRunnerVersion(runner = "node-test") {
+export async function resolvePlatformTestRunnerVersion(runner = "node-test") {
   const normalizedRunner = String(runner || "node-test");
   if (normalizedRunner === "cargo-test") {
     const cargoVersion = await resolveCargoTestRunnerVersion();
@@ -131,7 +149,7 @@ async function resolvePlatformTestRunnerVersion(runner = "node-test") {
   return `${normalizedRunner}:node-${process.versions?.node || process.version || "unknown"}`;
 }
 
-function buildPlatformTestEnvironmentInputs({
+export function buildPlatformTestEnvironmentInputs({
   command,
   cwd = repoRoot,
   timeoutMs = 120000,
@@ -257,7 +275,7 @@ async function materializePlatformTestWorkspace({
   }
 }
 
-async function capturePlatformTestSourceRevision(world, {
+export async function capturePlatformTestSourceRevision(world, {
   gate,
   branchId = null,
   changeSetId = null,
@@ -420,11 +438,87 @@ function buildPlatformTestDependencyGraphVersion(gate) {
   });
 }
 
-function buildPlatformTestCacheIdentity({
+export function buildPlatformRuntimeCompositionFingerprint({
+  appContext = null,
+  serverRunnerId = null,
+  runtimeProfile = null
+} = {}) {
+  return hashJson({
+    serverRunnerId: optionalText(serverRunnerId),
+    runtimeProfile: optionalText(runtimeProfile ?? appContext?.runtimeProfile),
+    activeRuntimePluginIds: Array.isArray(appContext?.activeRuntimePluginIds)
+      ? appContext.activeRuntimePluginIds.map(String).sort(compareStable)
+      : [],
+    effectiveRuntimePluginIds: Array.isArray(appContext?.effectiveRuntimePluginIds)
+      ? appContext.effectiveRuntimePluginIds.map(String).sort(compareStable)
+      : [],
+    activeBundleIds: Array.isArray(appContext?.runtimeBundleSummary?.bundleIds)
+      ? appContext.runtimeBundleSummary.bundleIds.map(String).sort(compareStable)
+      : [],
+    activeBundleSources: Array.isArray(appContext?.runtimeBundleSummary?.bundles)
+      ? appContext.runtimeBundleSummary.bundles
+        .map(bundle => String(bundle?.id || bundle?.plugin || ""))
+        .filter(Boolean)
+        .sort(compareStable)
+      : [],
+    providedCapabilities: Array.isArray(appContext?.runtimeBundleSummary?.capabilities)
+      ? appContext.runtimeBundleSummary.capabilities.map(String).sort(compareStable)
+      : []
+  });
+}
+
+export function buildPlatformVerificationPolicyFingerprint({
+  appContext = null,
+  gate = null,
+  gatePolicy = null,
+  verification = null,
+  serverRunnerId = null,
+  runtimeProfile = null
+} = {}) {
+  const resolvedPolicy = gatePolicy ?? (() => {
+    if (appContext?.verificationPolicy && gate?.id) {
+      return resolveVerificationGatePolicy(appContext.verificationPolicy, gate);
+    }
+    if (appContext?.verificationPolicy) {
+      const synthesized = resolveRunnerVerificationPolicy({
+        serverRunner: { id: serverRunnerId, runtimeConfig: appContext.runtimeConfig },
+        runtimeProfile: runtimeProfile ?? appContext.runtimeProfile ?? null,
+        runtimeConfig: appContext.runtimeConfig
+      });
+      return gate?.id ? resolveVerificationGatePolicy(synthesized, gate) : synthesized.defaults;
+    }
+    return null;
+  })();
+  return hashJson({
+    serverRunnerId: optionalText(serverRunnerId),
+    runtimeProfile: optionalText(runtimeProfile ?? appContext?.runtimeProfile),
+    policySource: optionalText(appContext?.verificationPolicySource ?? appContext?.verificationPolicy?.source),
+    gateId: optionalText(gate?.id),
+    enabled: resolvedPolicy?.enabled ?? null,
+    startup: resolvedPolicy?.startup ?? null,
+    watch: resolvedPolicy?.watch ?? null,
+    onChangeSet: resolvedPolicy?.onChangeSet ?? null,
+    priority: resolvedPolicy?.priority ?? null,
+    maxConcurrency: resolvedPolicy?.maxConcurrency ?? null,
+    cpuBudget: resolvedPolicy?.cpuBudget ?? null,
+    executionClass: optionalText(resolvedPolicy?.executionClass ?? verification?.executionClass),
+    exclusive: resolvedPolicy?.exclusive ?? verification?.exclusive ?? null,
+    requiresCleanWorkspace: resolvedPolicy?.requiresCleanWorkspace ?? verification?.requiresCleanWorkspace ?? null,
+    timeoutMs: resolvedPolicy?.timeoutMs ?? verification?.timeoutMs ?? null,
+    regressionMinDeltaMs: resolvedPolicy?.regressionMinDeltaMs ?? verification?.regressionMinDeltaMs ?? null,
+    regressionMinDeltaPct: resolvedPolicy?.regressionMinDeltaPct ?? verification?.regressionMinDeltaPct ?? null,
+    baselineScope: optionalText(resolvedPolicy?.baselineScope ?? verification?.baselineScope)
+  });
+}
+
+export function buildPlatformTestCacheIdentity({
   gate,
   environmentInputs,
   sourceRevision,
-  testRunnerVersion
+  testRunnerVersion,
+  serverRunnerId = null,
+  runtimeCompositionFingerprint = null,
+  verificationPolicyFingerprint = null
 }) {
   const sourceHashSetHash = hashJson(
     (Array.isArray(sourceRevision?.dependencyHashes) ? sourceRevision.dependencyHashes : [])
@@ -460,7 +554,10 @@ function buildPlatformTestCacheIdentity({
     candidateSnapshotHash,
     environmentIdentityHash,
     testRunnerVersion: String(testRunnerVersion || "unknown"),
-    dependencyGraphVersion
+    dependencyGraphVersion,
+    serverRunnerId: optionalText(serverRunnerId),
+    runtimeCompositionFingerprint: optionalText(runtimeCompositionFingerprint),
+    verificationPolicyFingerprint: optionalText(verificationPolicyFingerprint)
   });
   return {
     sourceHashSetHash,
@@ -468,6 +565,9 @@ function buildPlatformTestCacheIdentity({
     environmentIdentityHash,
     testRunnerVersion: String(testRunnerVersion || "unknown"),
     dependencyGraphVersion,
+    serverRunnerId: optionalText(serverRunnerId),
+    runtimeCompositionFingerprint: optionalText(runtimeCompositionFingerprint),
+    verificationPolicyFingerprint: optionalText(verificationPolicyFingerprint),
     cacheKey
   };
 }
@@ -479,8 +579,8 @@ function compareProducedAt(left, right) {
   return compareStable(left?.id, right?.id);
 }
 
-function findReusablePlatformTestResult(world, gateId, cacheKey) {
-  return world.project(moduleProjectors.testResults)
+async function findReusablePlatformTestResult(world, gateId, cacheKey, verificationPersistence = null) {
+  const projected = world.project(moduleProjectors.testResults)
     .filter(row =>
       String(row?.gateId || "") === String(gateId || "")
       && String(row?.status || "") === "passed"
@@ -488,6 +588,8 @@ function findReusablePlatformTestResult(world, gateId, cacheKey) {
     )
     .sort(compareProducedAt)
     .at(-1) ?? null;
+  if (projected) return projected;
+  return await verificationPersistence?.findReusablePassedResult?.(cacheKey) ?? null;
 }
 
 function cachedExecutionFromResult(result) {
@@ -656,15 +758,81 @@ export function listPlatformTestRuns(world) {
   return world.project(moduleProjectors.testRuns);
 }
 
-export function readPlatformTestRun(world, testRunId) {
+function mergeRowsById(durableRows = [], liveRows = []) {
+  const byId = new Map();
+  for (const row of durableRows) {
+    if (!row?.id) continue;
+    const id = String(row.id);
+    byId.set(id, { ...(byId.get(id) ?? {}), ...row });
+  }
+  for (const row of liveRows) {
+    if (!row?.id) continue;
+    const id = String(row.id);
+    byId.set(id, { ...(byId.get(id) ?? {}), ...row });
+  }
+  return [...byId.values()];
+}
+
+export async function readPlatformTestRun(world, testRunId, { verificationPersistence = null } = {}) {
   const runId = String(testRunId || "").trim();
-  const run = world.project(moduleProjectors.testRunIndex).byId?.[runId] ?? null;
+  const durableRows = verificationPersistence?.readModelRows?.() ?? {};
+  const run = world.project(moduleProjectors.testRunIndex).byId?.[runId]
+    ?? (durableRows.testRuns ?? []).find(row => String(row?.id || "") === runId)
+    ?? null;
   if (!run) return { ok: false, status: 404, error: "test run not found" };
-  const results = world.project(moduleProjectors.testResults).filter(row => row.runId === runId);
-  const artifacts = world.project(moduleProjectors.testArtifacts).filter(row => row.runId === runId);
-  const suites = world.project(moduleProjectors.testSuites).filter(row => row.runId === runId);
-  const cases = world.project(moduleProjectors.testCases).filter(row => row.runId === runId);
-  const reports = world.project(moduleProjectors.testReports).filter(row => row.runId === runId);
+  const results = mergeRowsById(
+    (durableRows.testResults ?? []).filter(row => row.runId === runId),
+    world.project(moduleProjectors.testResults).filter(row => row.runId === runId)
+  );
+  const artifacts = mergeRowsById(
+    (durableRows.testArtifacts ?? []).filter(row => row.runId === runId),
+    world.project(moduleProjectors.testArtifacts).filter(row => row.runId === runId)
+  );
+  const suites = mergeRowsById(
+    (durableRows.testSuites ?? []).filter(row => row.runId === runId),
+    world.project(moduleProjectors.testSuites).filter(row => row.runId === runId)
+  );
+  const cases = mergeRowsById(
+    (durableRows.testCases ?? []).filter(row => row.runId === runId),
+    world.project(moduleProjectors.testCases).filter(row => row.runId === runId)
+  );
+  const reports = mergeRowsById(
+    (durableRows.testReports ?? []).filter(row => row.runId === runId),
+    world.project(moduleProjectors.testReports).filter(row => row.runId === runId)
+  );
+  const freshnessRows = mergeRowsById(
+    durableRows.verificationFreshness ?? [],
+    world.project(moduleProjectors.verificationFreshness)
+  );
+  const invalidationRows = mergeRowsById(
+    durableRows.verificationInvalidations ?? [],
+    world.project(moduleProjectors.verificationInvalidations)
+  )
+    .filter(row =>
+      String(row?.gateId || "") === String(run?.gateId || "")
+      && String(row?.serverRunnerId || "") === String(run?.serverRunnerId || "")
+      && String(row?.runtimeProfile || "") === String(run?.runtimeProfile || "")
+    )
+    .sort((left, right) =>
+      String(right?.producedAt || "").localeCompare(String(left?.producedAt || ""))
+      || compareStable(right?.id, left?.id)
+    );
+  const freshness = freshnessRows.find(row =>
+    String(row?.gateId || "") === String(run?.gateId || "")
+    && String(row?.serverRunnerId || "") === String(run?.serverRunnerId || "")
+    && String(row?.runtimeProfile || "") === String(run?.runtimeProfile || "")
+  ) ?? null;
+  const freshnessAtRead = freshness
+    ? {
+        ...freshness,
+        status: freshness.latestRunId === runId || freshness.latestPassedRunId === runId
+          ? freshness.status
+          : "stale",
+        reasonSummary: freshness.latestRunId === runId || freshness.latestPassedRunId === runId
+          ? freshness.reasonSummary
+          : (freshness.reasonSummary || "Newer verification evidence exists for this gate.")
+      }
+    : null;
   const regressionSummary = reports.find(row => row.reportKind === "regression")?.regressionSummary ?? null;
   return {
     ok: true,
@@ -676,7 +844,9 @@ export function readPlatformTestRun(world, testRunId) {
     testCases: cases,
     testReports: reports,
     regressionSummary,
-    latestResult: results.at(-1) ?? null
+    latestResult: results.at(-1) ?? null,
+    freshnessAtRead,
+    invalidationReasons: invalidationRows
   };
 }
 
@@ -692,10 +862,14 @@ export async function runPlatformTestGate(world, {
   runCommand = runPlatformTestCommand,
   resolveRunnerVersion = resolvePlatformTestRunnerVersion,
   timeoutMs = null,
-  executionClass = "child_process",
+  executionClass = null,
   requiresCleanWorkspace = false,
   serverRunnerId = null,
-  verification = null
+  verification = null,
+  verificationPersistence = null,
+  appContext = null,
+  runtimeCompositionFingerprint = null,
+  verificationPolicyFingerprint = null
 }) {
   if (!gate?.id) return { ok: false, status: 400, error: "test gate is required" };
   const runId = String(id || defaultTestRunId(gate.id)).trim();
@@ -705,12 +879,20 @@ export async function runPlatformTestGate(world, {
   const normalizedChangeSetId = optionalText(changeSetId);
   const normalizedCandidateSnapshotId = optionalText(candidateSnapshotId);
   const effectiveTimeoutMs = timeoutMs == null ? gate.timeoutMs : timeoutMs;
+  const effectiveExecutionClass = inferPlatformTestExecutionClass(gate, {
+    candidateSnapshotId: normalizedCandidateSnapshotId,
+    executionClass
+  });
   const effectiveVerification = verification && typeof verification === "object"
-    ? { ...verification, executionClass: verification.executionClass ?? executionClass, requiresCleanWorkspace: verification.requiresCleanWorkspace ?? requiresCleanWorkspace }
-    : { executionClass, requiresCleanWorkspace };
+    ? {
+        ...verification,
+        executionClass: verification.executionClass ?? effectiveExecutionClass,
+        requiresCleanWorkspace: verification.requiresCleanWorkspace ?? requiresCleanWorkspace
+      }
+    : { executionClass: effectiveExecutionClass, requiresCleanWorkspace };
   const environment = resolvePlatformTestEnvironment(gate, {
     candidateSnapshotId: normalizedCandidateSnapshotId,
-    executionClass,
+    executionClass: effectiveExecutionClass,
     requiresCleanWorkspace
   });
   const workspaceDescriptor = resolvePlatformTestWorkspaceDescriptor(world, {
@@ -725,7 +907,7 @@ export async function runPlatformTestGate(world, {
     env: {},
     runner: gate.runner,
     environment,
-    executionClass,
+    executionClass: effectiveExecutionClass,
     runtimeProfile,
     workspaceMode: workspaceDescriptor.workspaceMode,
     workspaceSource: workspaceDescriptor.workspaceSource,
@@ -738,13 +920,30 @@ export async function runPlatformTestGate(world, {
     candidateSnapshotId: normalizedCandidateSnapshotId
   });
   const testRunnerVersion = await resolveRunnerVersion(String(gate.runner || "node-test"));
+  const effectiveRuntimeCompositionFingerprint = optionalText(runtimeCompositionFingerprint)
+    ?? buildPlatformRuntimeCompositionFingerprint({
+      appContext,
+      serverRunnerId,
+      runtimeProfile
+    });
+  const effectiveVerificationPolicyFingerprint = optionalText(verificationPolicyFingerprint)
+    ?? buildPlatformVerificationPolicyFingerprint({
+      appContext,
+      gate,
+      verification: effectiveVerification,
+      serverRunnerId,
+      runtimeProfile
+    });
   const cacheIdentity = buildPlatformTestCacheIdentity({
     gate,
     environmentInputs,
     sourceRevision,
-    testRunnerVersion
+    testRunnerVersion,
+    serverRunnerId,
+    runtimeCompositionFingerprint: effectiveRuntimeCompositionFingerprint,
+    verificationPolicyFingerprint: effectiveVerificationPolicyFingerprint
   });
-  const reusableResult = findReusablePlatformTestResult(world, gate.id, cacheIdentity.cacheKey);
+  const reusableResult = await findReusablePlatformTestResult(world, gate.id, cacheIdentity.cacheKey, verificationPersistence);
   const cacheStatus = reusableResult ? "hit" : "miss";
   const cacheHit = reusableResult
     ? {
@@ -820,7 +1019,16 @@ export async function runPlatformTestGate(world, {
     serverRunnerId,
     verification: effectiveVerification
   });
-  const readback = readPlatformTestRun(world, runId);
+  const readback = await readPlatformTestRun(world, runId, { verificationPersistence });
+  await verificationPersistence?.persistTestRunBundle?.({
+    testRun: readback.testRun,
+    testResults: readback.testResults,
+    testArtifacts: readback.testArtifacts,
+    testSuites: readback.testSuites,
+    testCases: readback.testCases,
+    testReports: readback.testReports,
+    regressionSummary: readback.regressionSummary
+  });
   return {
     ok: true,
     status: 201,

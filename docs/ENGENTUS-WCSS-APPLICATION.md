@@ -82,14 +82,18 @@ Engentus adapter.
 Engentus now also installs a standalone headless authoring lane through
 `plugin.wcss-authoring`.
 
-The first authoring surface is token-only and session-scoped:
+The first authoring surface is still session-scoped and non-persistent, but it
+has now moved beyond token-only preview into structured document patches:
 
 - `GET /engentus/__generated/wcss/document`
-  - returns the canonical `WCSSDocument` plus a safe token catalog
+  - returns the canonical `WCSSDocument` plus a compatibility token catalog
+- `GET /engentus/__generated/wcss/schema`
+  - returns the editor-facing WCSS schema graph for tokens, styles, slices, and
+    read-only views
 - `POST /engentus/__generated/wcss/preview-session`
   - creates a preview session id
 - `PATCH /engentus/__generated/wcss/preview-session`
-  - applies token patch ops to that preview session only
+  - applies typed document patch ops to that preview session only
 - `DELETE /engentus/__generated/wcss/preview-session`
   - clears the preview session
 
@@ -98,11 +102,25 @@ Preview never mutates repo-tracked WCSS. Instead, stylesheet requests may carry:
 - `?wcssPreview=<previewSessionId>`
 
 When present, the runtime-generated CSS routes rebuild shell/chart CSS from the
-canonical document plus the session token overlay for that request only.
+canonical document plus the session document-op overlay for that request only.
 
 Page requests may also carry the same query param. The current page renderers
 propagate `wcssPreview` into emitted stylesheet hrefs so browser-session preview
 stays explicit and route-local rather than global runner state.
+
+The current typed patch lane supports:
+
+- token ops:
+  `token.create`, `token.remove`, `token.set`, `token.reset`
+- style ops:
+  `style.create`, `style.remove`, `style.field.set`, `style.field.reset`,
+  `style.state.create`, `style.state.remove`, `style.state_field.set`,
+  `style.state_field.reset`
+- slice contract ops:
+  `slice.family.assign`, `slice.family.unassign`, `slice.seam.upsert`,
+  `slice.seam.remove`
+
+Views and slice topology remain read-only in this tranche.
 
 ## Outputs
 

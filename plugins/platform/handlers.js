@@ -450,7 +450,9 @@ export function createPlatformHandlers({
           candidateSnapshotId: body?.candidateSnapshotId ?? null,
           session: requestSession ?? null,
           runtimeProfile: appContext?.runtimeProfile ?? null,
-          runCommand: platformTestRunner
+          runCommand: platformTestRunner,
+          verificationPersistence: appContext?.verificationPersistence ?? null,
+          appContext
         });
         if (!result.ok) {
           sendJson(res, result.status || 400, { error: result.error });
@@ -524,7 +526,9 @@ export function createPlatformHandlers({
           candidateSnapshotId: gateCandidateSnapshotId,
           session: requestSession ?? null,
           runtimeProfile: appContext?.runtimeProfile ?? null,
-          runCommand: platformTestRunner
+          runCommand: platformTestRunner,
+          verificationPersistence: appContext?.verificationPersistence ?? null,
+          appContext
         });
         if (!result.ok) {
           sendJson(res, result.status || 400, {
@@ -589,8 +593,10 @@ export function createPlatformHandlers({
       });
     },
 
-    "platform.testRun.read": async ({ res, params }) => {
-      const result = readPlatformTestRun(world, params.id || "");
+    "platform.testRun.read": async ({ res, params, appContext }) => {
+      const result = await readPlatformTestRun(world, params.id || "", {
+        verificationPersistence: appContext?.verificationPersistence ?? null
+      });
       if (!result.ok) {
         sendJson(res, result.status || 404, { error: result.error });
         return;
@@ -603,8 +609,25 @@ export function createPlatformHandlers({
         testCases: result.testCases,
         testReports: result.testReports,
         regressionSummary: result.regressionSummary,
-        latestResult: result.latestResult
+        latestResult: result.latestResult,
+        freshnessAtRead: result.freshnessAtRead,
+        invalidationReasons: result.invalidationReasons
       });
+    },
+
+    "platform.testArtifact.content": async ({ res, params, appContext }) => {
+      const artifactId = params.id || "";
+      const persisted = await appContext?.verificationPersistence?.readArtifactContent?.(artifactId);
+      if (persisted?.ok) {
+        send(res, 200, persisted.contentType || "text/plain; charset=utf-8", persisted.content);
+        return;
+      }
+      const artifact = world.project(moduleProjectors.testArtifacts)?.find?.(row => String(row?.id || "") === String(artifactId)) ?? null;
+      if (!artifact?.content) {
+        sendJson(res, 404, { error: "artifact content not found" });
+        return;
+      }
+      send(res, 200, artifact.contentType || "text/plain; charset=utf-8", artifact.content);
     },
 
     "platform.proposal.create": async ({ req, res, requestActor }) => {

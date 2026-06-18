@@ -49,7 +49,7 @@ The current backend slice is real but narrow:
 - authored MCP transport and tool surfaces through `mcpServer` + `mcpToolInstall`
 - many shipped demo/backend routes now execute through authored `backendProgram` definitions instead of raw handler-set glue
 - the remaining demo/runtime compatibility seam is explicit: `serverRunner.handlerSet = "demo"` still causes startup to add `bundle-demo`, and that ownership is now reported honestly in runtime diagnostics
-- shipped demo backend-program mutations now run through explicit `process.request` steps for `todo.create`, `todo.update`, `todo.delete`, `privateNote.create`, and `widget.define`; the old `*.createModel` and `*.updateModel` handlers remain only as thin compatibility wrappers instead of being the authored truth path
+- shipped demo backend-program reads and mutations now run through explicit `project.read`, `process.request`, and `witness.emit` steps for maintained Todo, private-note, widget, inspect, and trace flows; the old demo handler-set route wrappers are no longer the authored truth path and have been removed from `plugins/demo/handler-set.js`
 
 That is an honest baseline.
 

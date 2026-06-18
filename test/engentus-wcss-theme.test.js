@@ -45,12 +45,14 @@ test("engentus runtime installs the generic wcss runtime plugin and authored sty
   assert.equal(source.includes('plugin = "plugin.engentus-wcss-runtime"'), false);
   assert.equal(source.includes('handler = "wcss.stylesheet.read"'), true);
   assert.equal(source.includes('handler = "wcss.document.read"'), true);
+  assert.equal(source.includes('handler = "wcss.schema.read"'), true);
   assert.equal(source.includes('handler = "wcss.preview.session.create"'), true);
-  assert.equal(source.includes('handler = "wcss.preview.tokens.patch"'), true);
+  assert.equal(source.includes('handler = "wcss.preview.document.patch"'), true);
+  assert.equal(source.includes('handler = "wcss.preview.tokens.patch"'), false);
   assert.equal(source.includes('handler = "wcss.preview.session.clear"'), true);
 });
 
-test("engentus authoring routes expose the canonical document and preview-scoped token patches", async () => {
+test("engentus authoring routes expose the canonical document, schema, and preview-scoped document patches", async () => {
   const [canonical, server] = await Promise.all([
     loadEngentusCanonicalWcss(),
     startUiServer({
@@ -68,6 +70,18 @@ test("engentus authoring routes expose the canonical document and preview-scoped
     assert.equal(readBody.document?.theme, "engentus");
     assert.deepEqual(readBody.tokenCatalog, expectedCatalog);
 
+    const schemaResponse = await fetch(`${server.url}/engentus/__generated/wcss/schema`);
+    assert.equal(schemaResponse.status, 200);
+    const schemaBody = await schemaResponse.json();
+    assert.equal(schemaBody.documentModel, "wcss");
+    assert.equal(Array.isArray(schemaBody.schema?.supportedOperations), true);
+    assert.equal(schemaBody.schema.supportedOperations.includes("style.field.set"), true);
+    assert.equal(schemaBody.schema.views[0]?.readOnly, true);
+    assert.equal(
+      schemaBody.schema.styles.some(style => style.name === "chrome.toolbar" && style.fields.some(field => field.field === "layout.height" && field.previewable)),
+      true
+    );
+
     const createResponse = await fetch(`${server.url}/engentus/__generated/wcss/preview-session`, {
       method: "POST"
     });
@@ -80,7 +94,10 @@ test("engentus authoring routes expose the canonical document and preview-scoped
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         previewSessionId: created.previewSessionId,
-        ops: [{ kind: "set", token: "color.chrome.bg", value: "#123456" }]
+        ops: [
+          { kind: "token.set", token: "color.chrome.bg", value: "#123456" },
+          { kind: "style.field.set", style: "chrome.toolbar", field: "layout.height", value: "61px" }
+        ]
       })
     });
     assert.equal(patchResponse.status, 200);
@@ -93,8 +110,11 @@ test("engentus authoring routes expose the canonical document and preview-scoped
       fetch(`${server.url}/engentus/login?wcssPreview=${encodeURIComponent(created.previewSessionId)}`).then(response => response.text())
     ]);
     assert.match(baseShellCss, /--dk:\s*#2C3C63;/i);
+    assert.match(baseShellCss, /--th:\s*44px;/i);
     assert.match(previewShellCss, /--dk:\s*#123456;/i);
+    assert.match(previewShellCss, /--th:\s*61px;/i);
     assert.equal(previewShellCss.includes("--dk: #2C3C63;"), false);
+    assert.equal(previewShellCss.includes("--th: 44px;"), false);
     assert.match(previewPageHtml, new RegExp(`${ENGENTUS_GENERATED_STYLESHEET_PATHS.shell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?wcssPreview=${created.previewSessionId}`));
 
     const clearResponse = await fetch(`${server.url}/engentus/__generated/wcss/preview-session`, {

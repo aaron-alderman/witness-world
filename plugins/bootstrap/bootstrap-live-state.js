@@ -34,6 +34,16 @@ export function createBootstrapLiveStateReaders({
     compatibilityBridgeRows() {
       return state.bootstrapState?.compatibilityBridges || [];
     },
+    legacyCapabilityCompatibilityMode() {
+      return state.bootstrapState?.legacyCapabilityCompatibilityMode || {
+        mode: "first-class-only",
+        pendingCount: 0,
+        bridgeSources: []
+      };
+    },
+    legacyCapabilityMigrationRows() {
+      return state.bootstrapState?.legacyCapabilityMigration?.pending || [];
+    },
     governanceRouteRows() {
       return state.bootstrapState?.governanceRoutes || [];
     },

@@ -44,6 +44,7 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "capability.create",
   "capability.install",
   "capability.remove",
+  "capability.migrateLegacy",
   "mcpServer.create",
   "mcpTool.install",
   "mcpTool.remove"
@@ -80,6 +81,7 @@ export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
   "capability.create",
   "capability.install",
   "capability.remove",
+  "capability.migrateLegacy",
   "mcpServer.create",
   "mcpTool.install",
   "mcpTool.remove"
@@ -291,7 +293,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         status: "supported"
       }),
       capability: capabilityState({
-        publicActions: ["capability.create", "capability.install", "capability.remove"],
+        publicActions: ["capability.create", "capability.install", "capability.remove", "capability.migrateLegacy"],
         runtimeConsumers: ["runtime capability resolution"],
         status: "supported"
       }),

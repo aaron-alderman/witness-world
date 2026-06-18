@@ -111,7 +111,7 @@ export function createHandlers(deps = {}) {
         return adapter;
       }
       const document = previewSession
-        ? adapter.applyTokenPatch({ ops: previewSession.ops })
+        ? adapter.applyPatch({ ops: previewSession.ops })
         : structuredClone(adapter.document);
       return validateWcssGeneratedFiles(await adapter.buildStylesheets({
         document,

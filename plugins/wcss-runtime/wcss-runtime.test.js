@@ -160,11 +160,12 @@ test("wcss runtime plugin serves preview-scoped CSS when a preview session id is
         };
         return {
           document,
+          schema: { supportedOperations: ["token.set"], tokens: [], styles: [], slices: [], views: [] },
           tokenCatalog: { tokens: [{ name: "color.chrome.bg", value: "#112233", domain: "color" }] },
-          applyTokenPatch({ ops }) {
+          applyPatch({ ops }) {
             const next = JSON.parse(JSON.stringify(document));
             for (const op of ops) {
-              if (op.kind === "set") next.tokens[0].value = op.value;
+              if (op.kind === "token.set") next.tokens[0].value = op.value;
             }
             return next;
           },
@@ -185,12 +186,12 @@ test("wcss runtime plugin serves preview-scoped CSS when a preview session id is
       adapterKey: `${path.join(appRoot, "app/authoring-adapter.js")}\u0000loadAuthoringAdapter`,
       requestSnapshot: { appRevision: 3 }
     });
-    previewRuntime.patchTokens({
+    previewRuntime.patchDocument({
       previewSessionId: session.previewSessionId,
       appRoot,
       adapterKey: `${path.join(appRoot, "app/authoring-adapter.js")}\u0000loadAuthoringAdapter`,
       requestSnapshot: { appRevision: 3 },
-      ops: [{ kind: "set", token: "color.chrome.bg", value: "#445566" }]
+      ops: [{ kind: "token.set", token: "color.chrome.bg", value: "#445566" }]
     });
     const handlers = createHandlers({
       send(res, status, contentType, body, headers = {}) {

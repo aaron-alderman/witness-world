@@ -1,4 +1,5 @@
 import { projectors, relation } from "../../src/kernel.js";
+import { applyLegacyCapabilityMigration } from "../../src/capability-legacy-migration.js";
 import {
   defineCapability,
   installCapability,
@@ -469,4 +470,22 @@ export function requestBootstrapCapabilityRemove(world, {
     body: { capability: input.capability, target: input.target, targetKind: input.targetKind }
   });
   return { ok: true, status: 200, capabilityInstall: input, witness };
+}
+
+export function requestBootstrapCapabilityMigrateLegacy(world, {
+  actor,
+  backendHost
+}) {
+  const migrated = applyLegacyCapabilityMigration(world, {
+    actor: actor || backendHost
+  });
+  if (!migrated.ok) return migrated;
+  return {
+    ok: true,
+    status: 200,
+    actions: migrated.actions,
+    previewBefore: migrated.previewBefore,
+    previewAfter: migrated.previewAfter,
+    witness: migrated.witness
+  };
 }

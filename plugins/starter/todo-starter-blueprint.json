@@ -1481,9 +1481,9 @@
     {
       "version": "todo.witnesses.list.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"witnesses.list\",\"method\":\"GET\",\"path\":\"/api/witnesses\",\"query\":\"${state.request.query}\",\"into\":\"witnessResponse\"}"
+      "paramsJson": "{\"projector\":\"inspect.witnessesReadModel\",\"into\":\"witnessResponse\",\"options\":{\"query\":\"${state.request.query}\"}}"
     },
     {
       "version": "todo.witnesses.list.v1",
@@ -1495,9 +1495,9 @@
     {
       "version": "todo.witnesses.list.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"witnesses.list\",\"method\":\"GET\",\"path\":\"/api/witnesses\",\"query\":\"${state.request.query}\",\"into\":\"witnessResponse\"}"
+      "paramsJson": "{\"projector\":\"inspect.witnessesReadModel\",\"into\":\"witnessResponse\",\"options\":{\"query\":\"${state.request.query}\"}}"
     },
     {
       "version": "todo.witnesses.list.v2",
@@ -1565,9 +1565,9 @@
     {
       "version": "todo.worldGraph.read.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"worldGraph.read\",\"method\":\"GET\",\"path\":\"/api/world-graph\",\"into\":\"worldGraphResponse\"}"
+      "paramsJson": "{\"projector\":\"inspect.worldGraphReadModel\",\"into\":\"worldGraphResponse\"}"
     },
     {
       "version": "todo.worldGraph.read.v1",
@@ -1579,9 +1579,9 @@
     {
       "version": "todo.worldGraph.read.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"worldGraph.read\",\"method\":\"GET\",\"path\":\"/api/world-graph\",\"into\":\"worldGraphResponse\"}"
+      "paramsJson": "{\"projector\":\"inspect.worldGraphReadModel\",\"into\":\"worldGraphResponse\"}"
     },
     {
       "version": "todo.worldGraph.read.v2",
@@ -1607,9 +1607,9 @@
     {
       "version": "todo.processView.read.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"processView.read\",\"method\":\"GET\",\"path\":\"/api/process-view\",\"query\":\"${state.request.query}\",\"into\":\"processViewResponse\"}"
+      "paramsJson": "{\"projector\":\"inspect.processViewReadModel\",\"into\":\"processViewResponse\",\"options\":{\"query\":\"${state.request.query}\"}}"
     },
     {
       "version": "todo.processView.read.v1",
@@ -1621,9 +1621,9 @@
     {
       "version": "todo.processView.read.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"processView.read\",\"method\":\"GET\",\"path\":\"/api/process-view\",\"query\":\"${state.request.query}\",\"into\":\"processViewResponse\"}"
+      "paramsJson": "{\"projector\":\"inspect.processViewReadModel\",\"into\":\"processViewResponse\",\"options\":{\"query\":\"${state.request.query}\"}}"
     },
     {
       "version": "todo.processView.read.v2",
@@ -1649,23 +1649,39 @@
     {
       "version": "todo.processRun.read.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"processRun.read\",\"method\":\"GET\",\"path\":\"/api/process-runs/${state.request.params.runId}\",\"query\":\"${state.request.query}\",\"into\":\"processRunResponse\",\"params\":{\"runId\":\"${state.request.params.runId}\"}}"
+      "paramsJson": "{\"projector\":\"inspect.processRunReadModel\",\"into\":\"processRunResponse\",\"options\":{\"runId\":\"${state.request.params.runId}\",\"query\":\"${state.request.query}\"}}"
     },
     {
       "version": "todo.processRun.read.v1",
       "event": "request",
-      "op": "response.json",
+      "op": "run",
       "order": 1,
-      "paramsJson": "{\"from\":\"processRunResponse\"}"
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.processRun.read.v1",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"processRunResponse.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"processRunResponse.body\",\"statusFrom\":\"processRunResponse.status\"}"
+    },
+    {
+      "version": "todo.processRun.read.v1",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"processRunResponse.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"processRunResponse.status\",\"messageFrom\":\"processRunResponse.error\",\"bodyFrom\":\"processRunResponse.body\"}"
     },
     {
       "version": "todo.processRun.read.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "project.read",
       "order": 0,
-      "paramsJson": "{\"handler\":\"processRun.read\",\"method\":\"GET\",\"path\":\"/api/process-runs/${state.request.params.runId}\",\"query\":\"${state.request.query}\",\"into\":\"processRunResponse\",\"params\":{\"runId\":\"${state.request.params.runId}\"}}"
+      "paramsJson": "{\"projector\":\"inspect.processRunReadModel\",\"into\":\"processRunResponse\",\"options\":{\"runId\":\"${state.request.params.runId}\",\"query\":\"${state.request.query}\"}}"
     },
     {
       "version": "todo.processRun.read.v2",
@@ -1686,7 +1702,16 @@
       "event": "respond",
       "op": "response.json",
       "order": 0,
-      "paramsJson": "{\"from\":\"processRunResponse\"}"
+      "whenJson": "{\"path\":\"processRunResponse.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"processRunResponse.body\",\"statusFrom\":\"processRunResponse.status\"}"
+    },
+    {
+      "version": "todo.processRun.read.v2",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"processRunResponse.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"processRunResponse.status\",\"messageFrom\":\"processRunResponse.error\",\"bodyFrom\":\"processRunResponse.body\"}"
     },
     {
       "version": "todo.processEvents.record.v1",
@@ -1698,9 +1723,9 @@
     {
       "version": "todo.processEvents.record.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 1,
-      "paramsJson": "{\"handler\":\"processEvents.record\",\"method\":\"POST\",\"path\":\"/api/process-events\",\"from\":\"traceEvent\",\"into\":\"processEventResult\",\"allowFailure\":true}"
+      "paramsJson": "{\"process\":\"inspect.processEventRecord\",\"from\":\"traceEvent\",\"into\":\"processEventResult\",\"allowFailure\":true}"
     },
     {
       "version": "todo.processEvents.record.v1",
@@ -1715,7 +1740,7 @@
       "op": "response.json",
       "order": 0,
       "whenJson": "{\"path\":\"processEventResult.ok\",\"truthy\":true}",
-      "paramsJson": "{\"from\":\"processEventResult\"}"
+      "paramsJson": "{\"from\":\"processEventResult.payload\",\"statusFrom\":\"processEventResult.status\"}"
     },
     {
       "version": "todo.processEvents.record.v1",
@@ -1723,7 +1748,7 @@
       "op": "response.error",
       "order": 1,
       "whenJson": "{\"path\":\"processEventResult.ok\",\"falsy\":true}",
-      "paramsJson": "{\"messageFrom\":\"processEventResult.error\",\"bodyFrom\":\"processEventResult\"}"
+      "paramsJson": "{\"statusFrom\":\"processEventResult.status\",\"messageFrom\":\"processEventResult.error\",\"bodyFrom\":\"processEventResult.payload\"}"
     },
     {
       "version": "todo.processEvents.record.v2",
@@ -1735,9 +1760,9 @@
     {
       "version": "todo.processEvents.record.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 1,
-      "paramsJson": "{\"handler\":\"processEvents.record\",\"method\":\"POST\",\"path\":\"/api/process-events\",\"from\":\"traceEvent\",\"into\":\"processEventResult\",\"allowFailure\":true}"
+      "paramsJson": "{\"process\":\"inspect.processEventRecord\",\"from\":\"traceEvent\",\"into\":\"processEventResult\",\"allowFailure\":true}"
     },
     {
       "version": "todo.processEvents.record.v2",
@@ -1759,7 +1784,7 @@
       "op": "response.json",
       "order": 0,
       "whenJson": "{\"path\":\"processEventResult.ok\",\"truthy\":true}",
-      "paramsJson": "{\"from\":\"processEventResult\"}"
+      "paramsJson": "{\"from\":\"processEventResult.payload\",\"statusFrom\":\"processEventResult.status\"}"
     },
     {
       "version": "todo.processEvents.record.v2",
@@ -1767,7 +1792,7 @@
       "op": "response.error",
       "order": 1,
       "whenJson": "{\"path\":\"processEventResult.ok\",\"falsy\":true}",
-      "paramsJson": "{\"messageFrom\":\"processEventResult.error\",\"bodyFrom\":\"processEventResult\"}"
+      "paramsJson": "{\"statusFrom\":\"processEventResult.status\",\"messageFrom\":\"processEventResult.error\",\"bodyFrom\":\"processEventResult.payload\"}"
     }
   ],
   "backendActivations": [

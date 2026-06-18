@@ -8,7 +8,7 @@ import { createWorld } from "../../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../../src/host.js";
 import { applyWitnessDocs, applyWitnessToml, loadWitnessAppFile } from "../../src/dsl.js";
 import { applyDesire } from "../../src/desire/index.js";
-import { resolveRuntimeOperatorPaths } from "../../src/runtime-operator-contract.js";
+import { startBlankRuntime } from "../../src/runtime-local-launcher.js";
 
 const silentLogger = {
   error() {},
@@ -85,17 +85,12 @@ export async function startUiDemoServer({
 }
 
 export async function startBlankUiServer({ logger = silentLogger } = {}) {
-  const world = createWorld();
-  const runtimeRoot = await tempRuntimeRoot("witness-world-bootstrap-ui-");
-
-  declareBackendHost(world, { actor: "system", id: "backendHost" });
-  declareFrontendHost(world, { actor: "system", id: "frontendHost" });
-
-  const server = await startServer(world, {
+  const launched = await startBlankRuntime({
     actor: "system",
-    runtimeRoot,
-    logger
+    startupMode: "bootstrap",
+    port: 0
   });
+  const { world, server, operatorContract } = launched;
 
   if (!server.ok) {
     throw new Error(`failed to start blank bootstrap server for UI tests: ${server.reason}`);
@@ -105,6 +100,7 @@ export async function startBlankUiServer({ logger = silentLogger } = {}) {
     world,
     server,
     url: server.url,
+    operatorContract,
     close: async () => {
       await server.close();
     }
@@ -113,27 +109,13 @@ export async function startBlankUiServer({ logger = silentLogger } = {}) {
 
 export async function startBlankUiServerWithWorldHome({ worldHome, logger = silentLogger } = {}) {
   const resolvedWorldHome = worldHome || await fs.mkdtemp(path.join(os.tmpdir(), "witness-world-bootstrap-home-"));
-  const operatorContract = await resolveRuntimeOperatorPaths({
-    startupMode: "bootstrap",
-    cwd: process.cwd(),
-    env: { WORLD_HOME: resolvedWorldHome }
-  });
-  const world = createWorld({
-    genesis: { system: "witness-world", mode: "bootstrap" },
-    witnessLogPath: operatorContract.canonicalTruth.witnessLogPath,
-    observationLogPath: operatorContract.canonicalTruth.observationLogPath
-  });
-
-  declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
-  declareFrontendHost(world, { actor: "system", id: "frontendHost", runtimeProfile: "authoring" });
-
-  const server = await startServer(world, {
+  const launched = await startBlankRuntime({
     actor: "system",
-    runtimeRoot: operatorContract.directories.runtimeRoot,
-    runtimeStartupMode: "bootstrap",
-    runtimeOperatorContract: operatorContract,
-    logger
+    startupMode: "bootstrap",
+    worldHome: resolvedWorldHome,
+    port: 0
   });
+  const { world, server, operatorContract } = launched;
 
   if (!server.ok) {
     throw new Error(`failed to start world-home bootstrap server for UI tests: ${server.reason}`);

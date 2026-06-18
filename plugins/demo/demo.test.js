@@ -25,13 +25,17 @@ test("demo plugin owns demo handler-set provider", async () => {
   assert.equal(handlerSetSource.includes('kind: "handlerSet"'), true);
   assert.equal(handlerSetSource.includes('id: "demo"'), true);
   assert.equal(handlerSetSource.includes("factory: createDemoHandlerSet"), true);
-  assert.equal(handlerSetSource.includes('"todos.list"'), true);
+  assert.equal(handlerSetSource.includes("visibleWitnesses: requestActor => publicWitnessesFor(world.allWitnesses(), requestActor)"), true);
   assert.equal(handlerSetSource.includes('"demo.echo"'), true);
+  assert.deepEqual(DEMO_HANDLER_SET_DEFINITION.handlers, []);
   assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("todos.createModel"), false);
   assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("todos.updateModel"), false);
   assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("todos.deleteModel"), false);
   assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("privateNotes.createModel"), false);
   assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("widgets.createModel"), false);
+  assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("todos.list"), false);
+  assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("privateNotes.list"), false);
+  assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("network.simulateError"), false);
 });
 
 test("demo plugin owns todo, private-note, and public witness helpers", () => {

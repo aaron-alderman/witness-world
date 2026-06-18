@@ -111,23 +111,28 @@ test("platform test monitor runs selected source gates without overlap", async (
     await waitForIdle(runtime);
 
     assert.equal(maxConcurrent, 1);
-    assert.deepEqual(runtime.inspect(), {
-      enabled: true,
-      watchFs: false,
-      maxAutoRunsPerCycle: 4,
-      watchDebounceMs: 150,
-      status: "idle",
-      processing: false,
-      pendingSourcePaths: [],
-      pendingSourceCount: 0,
-      pendingChangeSets: [],
-      pendingChangeSetCount: 0
-    });
+    const inspect = runtime.inspect();
+    assert.equal(inspect.enabled, true);
+    assert.equal(inspect.policySource, "synthesized");
+    assert.equal(inspect.watchFs, false);
+    assert.equal(inspect.watchDebounceMs, 150);
+    assert.equal(inspect.compatibility.watchFs, false);
+    assert.equal(inspect.compatibility.maxAutoRunsPerCycle, 4);
+    assert.equal(inspect.status, "idle");
+    assert.equal(inspect.processing, false);
+    assert.deepEqual(inspect.pendingSourcePaths, []);
+    assert.equal(inspect.pendingSourceCount, 0);
+    assert.deepEqual(inspect.pendingChangeSets, []);
+    assert.equal(inspect.pendingChangeSetCount, 0);
+    assert.deepEqual(inspect.queue, []);
+    assert.equal(inspect.queueCount, 0);
+    assert.equal(Array.isArray(inspect.recentExecutions), true);
+    assert.equal(inspect.recentExecutions.length, 2);
     assert.deepEqual(calls, [
-      { phase: "start", gateId: "gate:runtime" },
-      { phase: "finish", gateId: "gate:runtime" },
       { phase: "start", gateId: "gate:platform" },
-      { phase: "finish", gateId: "gate:platform" }
+      { phase: "finish", gateId: "gate:platform" },
+      { phase: "start", gateId: "gate:runtime" },
+      { phase: "finish", gateId: "gate:runtime" }
     ]);
   } finally {
     runtime.close();

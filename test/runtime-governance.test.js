@@ -93,6 +93,7 @@ test("governance inventory preserves proposal, operator, mixed, and session clas
   assert.equal(byHandler.get("asset.attach")?.sharedAuthorityPath, true);
   assert.equal(byHandler.get("capability.install")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("capability.remove")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("capability.migrateLegacy")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("context.create")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("contextBinding.create")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("contextImport.remove")?.governanceMode, "proposal-fallback");
@@ -139,6 +140,7 @@ test("proposal target governance catalog covers every supported executor target 
   assert.deepEqual(proposalTargetProcessIds({ bootstrapSelectableOnly: true }), Object.keys(bootstrapCatalog));
   assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("runtimePlugin.install"), true);
   assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("mcpServer.define"), true);
+  assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("capability.migrateLegacy"), true);
   assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("package.define"), true);
   assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("packageRevision.define"), true);
   assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("packageRevision.publish"), true);
@@ -147,6 +149,7 @@ test("proposal target governance catalog covers every supported executor target 
   assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("edenVersions.activate"), false);
   assert.equal(proposalTargetGovernanceEntry("changeSet.apply")?.governanceMode, "operator-only");
   assert.equal(proposalTargetGovernanceEntry("widget.define")?.governanceMode, "proposal-fallback");
+  assert.equal(proposalTargetGovernanceEntry("capability.migrateLegacy")?.governanceMode, "proposal-fallback");
   assert.equal(proposalTargetGovernanceEntry("packageRevision.publish")?.governanceMode, "proposal-fallback");
   assert.equal(proposalTargetGovernanceEntry("packagePatch.define")?.governanceMode, "proposal-fallback");
   assert.equal(proposalTargetGovernanceEntry("packageDependency.define")?.governanceMode, "proposal-fallback");

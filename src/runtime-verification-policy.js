@@ -68,7 +68,7 @@ function legacyRuntimeConfigInputs(runtimeConfig = {}) {
     return {
       hasLegacyKeys: false,
       enabled: true,
-      watch: true,
+      watchFs: true,
       watchDebounceMs: 150,
       maxAutoRunsPerCycle: 6
     };
@@ -76,7 +76,7 @@ function legacyRuntimeConfigInputs(runtimeConfig = {}) {
   return {
     hasLegacyKeys: Object.keys(testMonitor).length > 0,
     enabled: booleanOrDefault(testMonitor.enabled, true),
-    watch: booleanOrDefault(testMonitor.watchFs, true),
+    watchFs: booleanOrDefault(testMonitor.watchFs, true),
     watchDebounceMs: integerOrDefault(testMonitor.watchDebounceMs, 150),
     maxAutoRunsPerCycle: integerOrDefault(testMonitor.maxAutoRunsPerCycle, 6, { minimum: 1 })
   };
@@ -119,7 +119,7 @@ export function resolveRunnerVerificationPolicy({
     defaults = {
       ...normalizeDefaults(),
       startup: true,
-      watch: legacy.watch,
+      watch: true,
       onChangeSet: true,
       maxConcurrency: 1,
       cpuBudget: 1
@@ -149,6 +149,7 @@ export function resolveRunnerVerificationPolicy({
     defaults,
     gateOverlays,
     compatibility: {
+      watchFs: legacy.watchFs,
       watchDebounceMs: legacy.watchDebounceMs,
       maxAutoRunsPerCycle: legacy.maxAutoRunsPerCycle,
       legacyRuntimeConfigPresent: legacy.hasLegacyKeys

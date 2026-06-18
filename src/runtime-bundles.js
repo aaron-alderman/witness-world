@@ -422,6 +422,70 @@ function compositionOptions(options = {}) {
   };
 }
 
+function runtimeCompositionStory({
+  startupRunner = null,
+  startupMode = "serve",
+  profilePluginIds = [],
+  authoredPluginIds = [],
+  operatorPluginIds = [],
+  effectivePluginIds = []
+} = {}) {
+  const runnerId = startupRunner?.id ? String(startupRunner.id) : null;
+  const bootstrapOnly = startupRunner?.bootstrapOnly === true;
+  const normalizedProfilePluginIds = [...new Set((profilePluginIds ?? []).map(String).filter(Boolean))];
+  const normalizedAuthoredPluginIds = [...new Set((authoredPluginIds ?? []).map(String).filter(Boolean))];
+  const normalizedOperatorPluginIds = [...new Set((operatorPluginIds ?? []).map(String).filter(Boolean))];
+  const normalizedEffectivePluginIds = [...new Set((effectivePluginIds ?? []).map(String).filter(Boolean))];
+  const usesAuthoredServerRunner = Boolean(runnerId) && !bootstrapOnly;
+  const usesAuthoredRuntimePluginInstalls = normalizedAuthoredPluginIds.length > 0;
+
+  let activePluginSource = "core-profile-only";
+  if (usesAuthoredRuntimePluginInstalls && normalizedOperatorPluginIds.length > 0) {
+    activePluginSource = "authored-installs-plus-operator-defaults";
+  } else if (usesAuthoredRuntimePluginInstalls) {
+    activePluginSource = "authored-runtime-plugin-installs";
+  } else if (normalizedProfilePluginIds.length > 0 || normalizedOperatorPluginIds.length > 0) {
+    activePluginSource = "profile-or-operator-defaults";
+  }
+
+  const storyId = usesAuthoredServerRunner
+    ? "authored-runner-driven"
+    : "synthetic-runner-profile-driven";
+  const notes = [];
+  if (usesAuthoredServerRunner) {
+    notes.push(`Active runtime is anchored by authored server runner ${runnerId}.`);
+  } else if (runnerId) {
+    notes.push(`Active runtime is anchored by synthetic startup runner ${runnerId}; no authored serverRunner row owns the current runtime.`);
+  } else {
+    notes.push("Active runtime has no resolved authored serverRunner anchor.");
+  }
+  if (usesAuthoredRuntimePluginInstalls) {
+    notes.push("Authored runtimePluginInstall rows participate in the active runtime plugin composition.");
+  } else if (normalizedEffectivePluginIds.length > 0) {
+    notes.push("Effective runtime plugins come from the startup profile and operator-configured defaults, not authored runtimePluginInstall rows.");
+  } else {
+    notes.push("No runtime plugin packages are active beyond the selected core profile bundles.");
+  }
+
+  const explanation = usesAuthoredServerRunner
+    ? `Runtime is running in ${startupMode} mode from authored runner ${runnerId}; plugin activation source is ${activePluginSource}.`
+    : `Runtime is running in ${startupMode} mode from synthetic startup runner ${runnerId ?? "<none>"}; plugin activation source is ${activePluginSource}.`;
+
+  return {
+    storyId,
+    startupMode: String(startupMode || "serve"),
+    activeRunnerId: runnerId,
+    activeRunnerSource: usesAuthoredServerRunner
+      ? "authored-server-runner"
+      : "synthetic-startup-runner",
+    activePluginSource,
+    usesAuthoredServerRunner,
+    usesAuthoredRuntimePluginInstalls,
+    explanation,
+    notes
+  };
+}
+
 function selectedComposition(profileName, options = {}) {
   const resolved = resolveRuntimeComposition({
     profileName,
@@ -774,6 +838,14 @@ export function buildRuntimeDiagnosticsForProfile({
       mode: defaultRuntimeAuthoringMode({ runtimeStartupMode: startupMode })
     })
   );
+  const composition = runtimeCompositionStory({
+    startupRunner,
+    startupMode,
+    profilePluginIds: summary.profilePluginIds ?? [],
+    authoredPluginIds,
+    operatorPluginIds,
+    effectivePluginIds
+  });
   return {
     requestedProfile: requestedProfile ?? profileName,
     activeProfile: summary.profile,
@@ -858,6 +930,7 @@ export function buildRuntimeDiagnosticsForProfile({
         ...describeShellOwnership(shell.id)
       }))
     },
+    composition,
     authoringPolicy: effectiveAuthoringPolicy,
     authoringMatrix: buildRuntimeAuthoringCapabilityMatrix(effectiveAuthoringPolicy),
     operator: operatorContract

@@ -81,6 +81,7 @@ test("server runner serves a route that points at a frontend artifact", () => {
     allowActorHeader: false,
     hosts: null,
     default: false,
+    requireAuth: false,
     context: null,
     values: null
   }]);

@@ -55,6 +55,264 @@ rel = "references"
 to = "doc:docs/EXPERIENCE.md"
 
 # -------------------------------------------------------------------
+# Intent Entities (the tree promoted to the model)
+# Primary + 12 category intents as first-class `intent:*` nodes.
+# Tree structure via "expands" relations.
+# Each links to its canonical doc and key realizing code.
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "intent:primary"
+kind = "intent"
+label = "Primary Intent (Witness-Oriented Platform)"
+description = "The platform's root desire is to be a witness-oriented application runtime and ownership environment that preserves continuity of agency through witnessed memory."
+facet = ["system", "rationale", "product"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:01-foundational-philosophy-ontology"
+kind = "intent"
+label = "01 - Foundational Philosophy & Ontology"
+facet = ["system", "rationale"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:02-witness-substrate-projections"
+kind = "intent"
+label = "02 - Witness Substrate & Projections"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:03-semantic-authoring-kernel"
+kind = "intent"
+label = "03 - Semantic Authoring Kernel (DESIRE)"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:04-composition-primitives-authoring"
+kind = "intent"
+label = "04 - Composition Primitives & Authoring"
+facet = ["system", "developer", "author"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:05-capabilities-plugins-extensibility"
+kind = "intent"
+label = "05 - Capabilities, Plugins & Extensibility"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:06-identity-context-authority-governance"
+kind = "intent"
+label = "06 - Identity, Context, Authority & Governance"
+facet = ["system", "developer", "admin"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:07-runtime-execution-processes-inspection"
+kind = "intent"
+label = "07 - Runtime Execution, Processes & Inspection"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:08-product-experience-guidance-academy"
+kind = "intent"
+label = "08 - Product Experience, Guidance & Academy"
+facet = ["product", "actor-facing"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:09-surfaces-editing-grammar"
+kind = "intent"
+label = "09 - Surfaces & Editing Grammar"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:10-shells-persistence-ecosystem"
+kind = "intent"
+label = "10 - Shells, Persistence & Ecosystem"
+facet = ["system", "operator"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:11-platform-self-modeling-verification-knowledge"
+kind = "intent"
+label = "11 - Platform Self-Modeling, Verification & Knowledge"
+facet = ["system", "developer", "admin"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[entity]]
+id = "intent:12-backend-external-integration-seams"
+kind = "intent"
+label = "12 - Backend & External Integration Seams"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# Tree structure
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:01-foundational-philosophy-ontology"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:02-witness-substrate-projections"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:03-semantic-authoring-kernel"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:04-composition-primitives-authoring"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:05-capabilities-plugins-extensibility"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:06-identity-context-authority-governance"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:07-runtime-execution-processes-inspection"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:08-product-experience-guidance-academy"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:09-surfaces-editing-grammar"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:10-shells-persistence-ecosystem"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:11-platform-self-modeling-verification-knowledge"
+
+[[relation]]
+actor = "system"
+from = "intent:primary"
+rel = "expands"
+to = "intent:12-backend-external-integration-seams"
+
+# Intent to its documentation
+[[relation]]
+actor = "system"
+from = "intent:01-foundational-philosophy-ontology"
+rel = "hasDocumentation"
+to = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+
+[[relation]]
+actor = "system"
+from = "intent:02-witness-substrate-projections"
+rel = "hasDocumentation"
+to = "doc:docs/intent/02-witness-substrate-projections.md"
+
+[[relation]]
+actor = "system"
+from = "intent:03-semantic-authoring-kernel"
+rel = "hasDocumentation"
+to = "doc:docs/intent/03-semantic-authoring-kernel.md"
+
+[[relation]]
+actor = "system"
+from = "intent:04-composition-primitives-authoring"
+rel = "hasDocumentation"
+to = "doc:docs/intent/04-composition-primitives-authoring.md"
+
+[[relation]]
+actor = "system"
+from = "intent:05-capabilities-plugins-extensibility"
+rel = "hasDocumentation"
+to = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+
+[[relation]]
+actor = "system"
+from = "intent:06-identity-context-authority-governance"
+rel = "hasDocumentation"
+to = "doc:docs/intent/06-identity-context-authority-governance.md"
+
+[[relation]]
+actor = "system"
+from = "intent:07-runtime-execution-processes-inspection"
+rel = "hasDocumentation"
+to = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+
+[[relation]]
+actor = "system"
+from = "intent:08-product-experience-guidance-academy"
+rel = "hasDocumentation"
+to = "doc:docs/intent/08-product-experience-guidance-academy.md"
+
+[[relation]]
+actor = "system"
+from = "intent:09-surfaces-editing-grammar"
+rel = "hasDocumentation"
+to = "doc:docs/intent/09-surfaces-editing-grammar.md"
+
+[[relation]]
+actor = "system"
+from = "intent:10-shells-persistence-ecosystem"
+rel = "hasDocumentation"
+to = "doc:docs/intent/10-shells-persistence-ecosystem.md"
+
+[[relation]]
+actor = "system"
+from = "intent:11-platform-self-modeling-verification-knowledge"
+rel = "hasDocumentation"
+to = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+
+[[relation]]
+actor = "system"
+from = "intent:12-backend-external-integration-seams"
+rel = "hasDocumentation"
+to = "doc:docs/intent/12-backend-external-integration-seams.md"
+
+# -------------------------------------------------------------------
 # Category 01 - Foundational Philosophy & Ontology
 # -------------------------------------------------------------------
 
@@ -746,24 +1004,18 @@ to = "code:src/desire/ir.js"
 # Intent to doc + code (bridging the intent registry)
 # -------------------------------------------------------------------
 
-# These would ideally be generated or maintained alongside the intent tree
-# For now they are explicitly authored here as the canonical model.
-
+# Promoted: explicit first-class intent entities + links (see entities above).
 [[relation]]
 actor = "system"
-from = "intent:foundational-philosophy-ontology"
+from = "intent:01-foundational-philosophy-ontology"
 rel = "explainedBy"
 to = "doc:docs/intent/01-foundational-philosophy-ontology.md"
 
 [[relation]]
 actor = "system"
-from = "intent:foundational-philosophy-ontology"
+from = "intent:01-foundational-philosophy-ontology"
 rel = "implementedBy"
 to = "code:src/kernel.js"
-
-# Note: intent:* ids are placeholders here to match the spirit of
-# INTENT-REGISTRY-ROADMAP and CONTEXTHUB-SPEC. They can be promoted to
-# first-class [[entity]] id = "intent:..." when the registry is modeled.
 
 # -------------------------------------------------------------------
 # Usage

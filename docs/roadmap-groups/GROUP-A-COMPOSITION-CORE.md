@@ -240,6 +240,13 @@ Acceptance:
 - a user can explain any contextual reference from product surfaces
 - name collision cases are visible before mutation
 
+Current proof:
+
+- `src/context-naming-world.js` now projects first-class explanation state instead of leaving contextual visibility inside lowering helpers only: `contextBindings`, `contextExports`, `contextImports`, `contextScopes`, `contextualTargets`, `contextNameResolutions`, and `contextNameConflicts` sit alongside explicit `nameExplanation`, `targetVisibility`, and `canonicalIdPolicy` answers for a requested context, name, or target
+- `plugins/platform/platform-model.js` now exposes that explanation surface through `platform.read(view="contextNaming")`, and `plugins/mcp/mcp-tools.js` mirrors the same projection through both `world.read(view="contextNaming")` and `platform.read(view="contextNaming")` instead of forcing callers to infer resolution behavior from authoring failures
+- `plugins/platform/platform.test.js` and `plugins/mcp/mcp.test.js` prove product-facing contextual reads can show bindings, imports, visible scope, conflicts, ambiguous name resolution, hidden-target visibility failures, and canonical-id policy classification directly from the projected world state
+- `plugins/bootstrap/bootstrap-read-models.js`, `plugins/bootstrap/bootstrap-live-state.js`, `plugins/bootstrap/bootstrap-live-state.test.js`, and `test/bootstrap-host.test.js` keep the canonical-id policy classes inspectable from bootstrap state as well, so the explanation surface remains visible to operator-facing product seams without reaching into validator internals
+
 #### A2.3 Decide the long-term role of canonical-id sugar
 
 Implementation:
@@ -261,7 +268,6 @@ Current proof:
 
 - package authorship now uses the same contextual-ref lane for `packageRevision`, `packageRevision.publish`, `packagePatch`, `packageNamespace`, `packageDependency`, and `packageTransformer` references in `plugins/authoring-core/authoring-core-processes.js`, `plugins/authoring-core/authoring-core-handlers.js`, and `plugins/authoring-core/authoring-core-proposal-targets.js`, with `plugins/authoring-core/authoring-core.test.js` covering local, imported, hidden, and ambiguous package-noun reference behavior plus pre-authority lowering for handler and proposal execution paths
 
-- contextual explanation rows and answers are now exposed through first-class read seams in `src/context-naming-world.js`, `plugins/mcp/mcp-tools.js`, and `plugins/platform/platform-model.js`, with `plugins/mcp/mcp.test.js` and `plugins/platform/platform.test.js` proving product-facing `contextNaming` reads can show bindings, imports, conflicts, why a name resolves ambiguously, and why a target is hidden
 - canonical-id compatibility classes are now explicit product state instead of code-only constants: `plugins/bootstrap/bootstrap-read-models.js` publishes the allowed class list in bootstrap state, `plugins/bootstrap/bootstrap-live-state.js` exposes `canonicalIdPolicyClasses()` and `classifyCanonicalIdPolicy(...)`, and `plugins/bootstrap/bootstrap-live-state.test.js` plus `test/bootstrap-host.test.js` prove same-context, imported, legacy, and hidden cases are inspectable without reading validator internals
 
 ### Stage A3. Unify Authority and Proposal Coverage
@@ -303,6 +309,13 @@ Acceptance:
 
 - unauthorized signed-in users create real proposals instead of dead-end failures
 - approved proposals execute through the same helpers as direct writes
+
+Current proof:
+
+- remaining widget and app-composition CRUD lanes now route unauthorized signed-in actors toward real proposals through the shared authoring seams in `plugins/authoring-core/authoring-core-handlers.js` and `plugins/program-authoring/program-authoring-handlers.js`, with `plugins/authoring-core/authoring-core.test.js` covering widget plus route and serve proposal fallback and `plugins/program-authoring/program-authoring.test.js` covering backend-program version activate and rollback proposal fallback plus approved execution through shared helpers
+- widget version operations are no longer review-only folklore in product surfaces: `plugins/inspect/runtime.js` now proposes `widgetVersion.activate` and `widgetVersion.rollback` through the same proposal lane, while `test/bootstrap-host.test.js`, `test/host.test.js`, `plugins/inspect/inspect.test.js`, and `test/ui.live-inspector.test.js` prove read-only shared widget version changes create real proposals and apply only after authorized approval
+- remaining canvas and asset shared mutations now follow the same rule, with `plugins/assets/handlers.js` returning proposals for unauthorized asset attach and detach requests and shared canvas proposal targets executing through `plugins/proposals/proposal-executor.js`; `test/canvas-host.test.js` and `test/runtime-authoring-services.test.js` prove proposal fallback and approved execution for asset attachment, scoped perspective creation, canvas thing mutation, batch mutation, duplicate or removeMany, and place operations
+- runtime-plugin and MCP mutation surfaces now stay parallel to direct execution under the governed authoring path in `plugins/server-runner-authoring/*` and `plugins/mcp-authoring/*`, with `plugins/server-runner-authoring/server-runner-authoring.test.js`, `plugins/mcp-authoring/mcp-authoring.test.js`, `test/runtime-authoring-services.test.js`, `test/bootstrap-host.test.js`, and `test/ui.bootstrap.test.js` proving unauthorized actors receive proposals for `runtimePlugin.install`, `runtimePlugin.remove`, `mcpServer.create`, `mcpTool.install`, and `mcpTool.remove`, and that approved proposals execute through the shared bootstrap proposal executor instead of a separate write path
 
 #### A3.3 Personal versus shared semantics contract
 
@@ -388,8 +401,9 @@ Acceptance:
 Current proof:
 
 - proposal-backed package authoring now runs on the shared authority lane in `plugins/authoring-core/authoring-core-processes.js`, `plugins/authoring-core/authoring-core-handlers.js`, `plugins/authoring-core/authoring-core-proposal-targets.js`, and `plugins/proposals/proposal-executor.js`, with `plugins/authoring-core/authoring-core.test.js` covering proposal fallback and approved execution for `package`, `packageRevision`, `packageRevision.publish`, `packagePatch`, `packageNamespace`, and `packageDependency`
-- the constrained MCP seam now exposes those authored package nouns directly through `plugins/mcp/mcp-tools.js` `authoring.write` actions for `package.create`, `packageRevision.create`, `packageRevision.publish`, `packagePatch.create`, `packageNamespace.create`, and `packageDependency.create`, with `plugins/mcp/mcp.test.js` covering package-aware scope extraction and routing to the shared package handlers
-- the constrained MCP seam now also exposes `package.bundle` preview for authored revisions, backed by `src/package-authorship-world.js` projection of live world state into canonical bundle output, with `plugins/mcp/mcp.test.js` covering inspectable preview of emitted `package`, `packageRevision`, `packagePatch`, `packageNamespace`, and `packageDependency` documents without bypassing the normal witnessed model
+- the constrained MCP seam now exposes those authored package nouns directly through `plugins/mcp/mcp-tools.js` `authoring.write` actions for `package.create`, `packageRevision.create`, `packageRevision.publish`, `packagePatch.create`, `packageNamespace.create`, `packageDependency.create`, and `packageTransformer.create`, with `plugins/mcp/mcp.test.js` covering package-aware scope extraction and routing to the shared package handlers
+- the constrained MCP seam now also exposes `package.bundle` `preview` and `previewApply` for authored revisions, backed by `src/package-authorship-world.js` projection of live world state into canonical bundle output plus package coexistence and convergence impact, with `plugins/mcp/mcp.test.js` covering inspectable preview of emitted `package`, `packageRevision`, `packagePatch`, `packageNamespace`, `packageDependency`, and `packageTransformer` documents, including namespace docs referenced by included transformers and blocked manifest-collision truth instead of fake merge collapse, without bypassing the normal witnessed model
+- package revision apply preview is now also a first-class review noun instead of an MCP-only payload: `plugins/platform/platform-model.js`, `plugins/platform/platform-page.js`, and `plugins/platform/platform-console.rvm` project and route `packageApplyPreview` rows through `platform.read(view="packageApplyPreview")`, while `plugins/mcp/mcp-tools.js` mirrors the same projected truth through `world.read(view="packageApplyPreview")`
 - runner-scoped versus profile-scoped runtime composition is now explicitly covered in `test/runtime-multihost-host.test.js`, proving authored plugin bundle endpoints stay mounted only on the host that installs them while profile-activated bundle endpoints like `/_bootstrap` remain mounted on every host in the same multi-runner process
 
 ### Stage A5. Namespace and Merge Convergence
@@ -436,10 +450,10 @@ Acceptance:
 Current proof:
 
 - `src/modules.js` now defines first-class `packageTransformer` nouns plus `packageConvergence` projections, so authored revision or namespace mapping contracts and their remaining glue stay visible instead of hiding inside fake merge semantics
-- `src/package-authorship.js`, `src/package-authorship-world.js`, and `src/desire/apply.js` now carry transformer-linked package patches through canonical bundle materialization and WTOML lowering, making authored convergence patches part of the same inspectable package surface
+- `src/package-authorship.js`, `src/package-authorship-world.js`, and `src/desire/apply.js` now carry transformer-linked package patches through canonical bundle materialization and WTOML lowering, including namespace-scoped transformers that touch the selected revision namespace, so authored convergence patches and their transformer contracts stay part of the same inspectable package surface instead of falling back to revision-only lookup shortcuts
 - `plugins/authoring-core/*`, `src/runtime-governance.js`, and `src/runtime-authoring-policy.js` now expose `packageTransformer.create` and `packageTransformer.define` through the shared governed authoring path rather than bespoke side channels
-- `plugins/platform/platform-model.js` and `plugins/mcp/mcp-tools.js` now expose `packageConvergence` reads alongside package coexistence, including explicit remaining-glue explanations when convergence still needs authored follow-up
-- `test/package-authorship-world.test.js`, `plugins/platform/platform.test.js`, `plugins/mcp/mcp.test.js`, `plugins/authoring-core/authoring-core.test.js`, and `test/runtime-governance.test.js` cover transformer authoring, transformer-linked patches, convergence reads, and governance wiring end to end
+- `plugins/platform/platform-model.js`, `plugins/platform/platform-page.js`, and `plugins/mcp/mcp-tools.js` now expose `packageConvergence` and revision-scoped `packageApplyPreview` reads alongside package coexistence, including explicit remaining-glue explanations, blocked manifest-collision truth, and unplanned-versus-converging status instead of flattening divergent lines into fake merge simplicity
+- `test/package-authorship-world.test.js`, `plugins/platform/platform.test.js`, `plugins/mcp/mcp.test.js`, `plugins/authoring-core/authoring-core.test.js`, and `test/runtime-governance.test.js` cover transformer authoring, transformer-linked patches, namespace-scoped transformer bundle preview, convergence reads, and governance wiring end to end
 
 ## Detailed Task Backlog
 

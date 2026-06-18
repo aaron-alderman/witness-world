@@ -272,6 +272,8 @@ Needs:
 - `provenanceNote`
   - authored, inferred, bot-suggested, or imported source classification
 
+See `docs/intent/knowledge-relations.wtoml` for a concrete WTOML-authored example of `docNode` + `code` entities and typed `contextLink`-style relations (`explains`, `isRealizedBy`, `references`, `expands`, `implements`) between documents and between documents and code. This is intended as the direction for making ContextHub relationships first-class and witnessed rather than markdown-only or JS-inferred.
+
 ### 6.3 Key typed links
 
 - `explains`
@@ -622,6 +624,14 @@ Suggested MCP lanes:
 - `platform.context.read`
 - `platform.context.pack`
 - `platform.context.align`
+
+First-class documentation MCP (implemented):
+- `platform.docs`, `docs.list` / `docs.read` / `docs.search` / `docs.pack`
+- `docs.pack` produces context packs with doc content + modeled doc↔doc/doc↔code relations (from the knowledge-relations.wtoml + platform knowledge model).
+- Rich responses include modeled relations (from knowledge-relations.wtoml) and links to code/intents.
+- These give LLMs stable, relation-aware access to docs + the intent registry.
+
+This realizes the suggested MCP lanes for documentation-focused context in section 14.
 
 Important rule:
 

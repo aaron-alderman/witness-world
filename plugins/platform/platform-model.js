@@ -5,8 +5,10 @@ import { APP_REVISION_EVENTS_PATH } from "../../src/app-snapshot-manager.js";
 import { buildCompatibilityBridgeLedger } from "../../src/compatibility-bridges.js";
 import { contextNamingStateFromProject } from "../../src/context-naming-world.js";
 import { moduleProjectors } from "../../src/modules.js";
+import { previewPackageRevisionApplyFromProject } from "../../src/package-authorship-world.js";
 import { buildGovernanceRouteInventory } from "../../src/runtime-governance.js";
 import { buildMutableSurfaceSemanticsLedger } from "../../src/runtime-semantics.js";
+import { parseWitnessToml } from "../../src/dsl.js";
 import {
   platformBranchInsights,
   platformChangeSetInsights,
@@ -39,7 +41,8 @@ const CONTROL_DOCS = new Map([
   ["docs/SHELLS-PERSISTENCE-ECOSYSTEM.md", ["ship", "steward"]],
   ["docs/PIPELINE-FIDELITY-AUDIT.md", ["transform", "verify"]],
   ["docs/AUTHORING-REPLAY-PLAYBOOK.md", ["author", "verify"]],
-  ["docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", ["author", "steward"]]
+  ["docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", ["author", "steward"]],
+  ["docs/intent/knowledge-relations.wtoml", ["author", "steward"]]
 ]);
 
 const GOVERNED_DOC_TARGETS = Object.freeze({
@@ -50,7 +53,8 @@ const GOVERNED_DOC_TARGETS = Object.freeze({
   "docs/SHELLS-PERSISTENCE-ECOSYSTEM.md": Object.freeze(["runtime.core"]),
   "docs/PIPELINE-FIDELITY-AUDIT.md": Object.freeze(["plugin.pipeline-runtime"]),
   "docs/AUTHORING-REPLAY-PLAYBOOK.md": Object.freeze(["plugin.authoring"]),
-  "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md": Object.freeze(["plugin.platform"])
+  "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md": Object.freeze(["plugin.platform"]),
+  "docs/intent/knowledge-relations.wtoml": Object.freeze(["plugin.platform"])
 });
 
 const PLATFORM_AUTHORED_SOURCES = Object.freeze([
@@ -67,6 +71,14 @@ const PLATFORM_AUTHORED_SOURCES = Object.freeze([
     title: "Platform Console WCSS",
     lifecycle: ["author", "observe", "steward"],
     source: "plugins/platform/platform-console.wcss"
+  },
+  {
+    id: "wtoml:docs/intent/knowledge-relations.wtoml",
+    kind: "wtomlSource",
+    title: "Intent Knowledge Relations (doc↔doc / doc↔code)",
+    lifecycle: ["author", "transform", "execute", "steward"],
+    source: "docs/intent/knowledge-relations.wtoml",
+    purpose: "Explicit WTOML model of document/document and document/code relationships for ContextHub and the intent registry."
   }
 ]);
 
@@ -557,6 +569,40 @@ function normalizeVerificationDiagnostics(testMonitor = null) {
   };
 }
 
+function normalizeVerificationPersistence(value = null) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    source: value.source ? String(value.source) : "synthesized",
+    verificationRoot: value.verificationRoot ? String(value.verificationRoot) : null,
+    ledgerBackend: value.ledgerBackend && typeof value.ledgerBackend === "object"
+      ? { ...value.ledgerBackend }
+      : null,
+    artifactBackend: value.artifactBackend && typeof value.artifactBackend === "object"
+      ? { ...value.artifactBackend }
+      : null,
+    cacheBackend: value.cacheBackend && typeof value.cacheBackend === "object"
+      ? { ...value.cacheBackend }
+      : null,
+    retention: value.retention && typeof value.retention === "object"
+      ? { ...value.retention }
+      : null,
+    diagnostics: Array.isArray(value.diagnostics) ? value.diagnostics.map(row => ({ ...row })) : []
+  };
+}
+
+function mergeRowsById(durableRows = [], liveRows = []) {
+  const byId = new Map();
+  for (const row of durableRows) {
+    if (!row?.id) continue;
+    byId.set(String(row.id), { ...(byId.get(String(row.id)) ?? {}), ...row });
+  }
+  for (const row of liveRows) {
+    if (!row?.id) continue;
+    byId.set(String(row.id), { ...(byId.get(String(row.id)) ?? {}), ...row });
+  }
+  return [...byId.values()];
+}
+
 function normalizeGovernanceRoutes(rows = []) {
   return (Array.isArray(rows) ? rows : [])
     .map(row => ({
@@ -677,6 +723,7 @@ function platformObjectKindForId(targetId, nodes) {
   if (value.startsWith("feature:")) return "feature";
   if (value.startsWith("branch:")) return "branch";
   if (value.startsWith("proposal:")) return "proposal";
+  if (value.startsWith("intent:")) return "intent";
   return "platformObject";
 }
 
@@ -984,6 +1031,19 @@ function buildFilteredDocProjection(model, docs, id = null, { expandByTarget = f
     docReferences,
     docDependencies,
     docsByPlatformObject: buildDocsByPlatformObject(filteredDocs, docDependencies),
+    // First-class knowledge relations (from docs/intent/knowledge-relations.wtoml + model)
+    // exposed for MCP / ContextHub consumers of documentation.
+    knowledgeRelations: (model.knowledgeRelations ?? []).filter(r =>
+      docPaths.has(String(r.from || "").replace(/^doc:/, "")) ||
+      docPaths.has(String(r.to || "").replace(/^doc:/, "")) ||
+      filteredDocs.some(d => d.id === r.from || d.id === r.to || d.path === r.from || d.path === r.to)
+    ),
+    relatedIntents: (model.knowledgeRelations ?? []).filter(r =>
+      (r.from && r.from.startsWith("intent:")) || (r.to && r.to.startsWith("intent:"))
+    ).filter(r =>
+      docIds.has(r.from) || docIds.has(r.to) ||
+      filteredDocs.some(d => d.id === r.from || d.id === r.to)
+    ),
     summaries: model.summaries
   };
 }
@@ -1288,6 +1348,61 @@ function matchesPackageCoexistenceRow(row, id) {
       || (conflict.revisionIds ?? []).includes(target)
       || (conflict.namespaceIds ?? []).includes(target)
     );
+}
+
+function buildPackageApplyPreviewRows(project) {
+  const packageRevisionIndex = projectValue(project, moduleProjectors.packageRevisionIndex, null);
+  const revisions = Array.isArray(packageRevisionIndex?.rows) ? packageRevisionIndex.rows : [];
+  return revisions
+    .map(revision => {
+      try {
+        const preview = previewPackageRevisionApplyFromProject(project, {
+          revisionId: revision.id
+        });
+        return {
+          ...preview,
+          id: `packageApplyPreview:${preview.revisionId}`,
+          title: preview.selectedRevision?.version
+            ? `${preview.packageId} ${preview.selectedRevision.version}`
+            : preview.revisionId,
+          packageLabel: preview.bundle?.packageRecord?.label ?? preview.packageId,
+          revisionVersion: preview.selectedRevision?.version ?? preview.bundle?.revisionRecord?.version ?? null,
+          revisionStatus: preview.selectedRevision?.status ?? preview.bundle?.revisionRecord?.status ?? null,
+          bundleHash: preview.bundle?.bundleHash ?? null,
+          bundleFileCount: Array.isArray(preview.bundle?.files) ? preview.bundle.files.length : 0,
+          bundleFilePaths: Array.isArray(preview.bundle?.files) ? preview.bundle.files.map(file => file.path) : [],
+          coexistenceId: preview.coexistence?.id ?? null,
+          convergenceId: preview.convergence?.id ?? null,
+          selectedNamespaceIds: (preview.selectedNamespaces ?? []).map(namespace => namespace.id),
+          manifestConflictIds: (preview.manifestPluginConflicts ?? []).map(conflict => conflict.id),
+          relatedTransformerIds: (preview.relatedTransformers ?? []).map(transformer => transformer.id),
+          relatedConvergencePatchIds: (preview.relatedConvergencePatches ?? []).map(patch => patch.id),
+          remainingGlueMessages: (preview.remainingGlue ?? []).map(item => item.message)
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((left, right) =>
+      String(left.packageId).localeCompare(String(right.packageId))
+      || String(left.revisionVersion ?? "").localeCompare(String(right.revisionVersion ?? ""))
+      || String(left.revisionId).localeCompare(String(right.revisionId))
+    );
+}
+
+function matchesPackageApplyPreviewRow(row, id) {
+  const target = typeof id === "string" && id.trim() ? id.trim() : "";
+  if (!target) return true;
+  return row.id === target
+    || row.packageId === target
+    || row.revisionId === target
+    || row.coexistenceId === target
+    || row.convergenceId === target
+    || (row.selectedNamespaceIds ?? []).includes(target)
+    || (row.manifestConflictIds ?? []).includes(target)
+    || (row.relatedTransformerIds ?? []).includes(target)
+    || (row.relatedConvergencePatchIds ?? []).includes(target);
 }
 
 function slugify(value) {
@@ -2442,6 +2557,38 @@ export function parseRoadmapTasks(docPath, source) {
   return tasks;
 }
 
+async function loadKnowledgeRelationsWtoml() {
+  const relPath = "docs/intent/knowledge-relations.wtoml";
+  const source = await readText(relPath, "");
+  if (!source.trim()) return { entities: [], relations: [], sourcePath: relPath };
+  const parsed = parseWitnessToml(source);
+  const entities = parsed
+    .filter(d => d.kind === "entity")
+    .map(d => ({
+      id: d.values.id || d.values.name || null,
+      kind: d.values.kind || "docNode",
+      label: d.values.label || d.values.id || null,
+      path: d.values.path || null,
+      facet: d.values.facet || null,
+      lifecycle: d.values.lifecycle || null,
+      owner: d.values.owner || null,
+      description: d.values.description || null,
+      raw: d.values
+    }))
+    .filter(e => e.id);
+  const relations = parsed
+    .filter(d => d.kind === "relation")
+    .map(d => ({
+      from: d.values.from,
+      rel: d.values.rel,
+      to: d.values.to,
+      meta: d.values.meta || null,
+      actor: d.values.actor || null
+    }))
+    .filter(r => r.from && r.rel && r.to);
+  return { entities, relations, sourcePath: relPath };
+}
+
 function platformTargetNodeId(kind, id) {
   if (!id) return null;
   if (String(id).includes(":")) return String(id);
@@ -2502,22 +2649,41 @@ export async function buildPlatformModel({
     })
   }));
   const candidateSnapshots = projectRows(project, moduleProjectors.candidateSnapshots);
-  const testRuns = projectRows(project, moduleProjectors.testRuns);
-  const testResults = projectRows(project, moduleProjectors.testResults);
-  const testArtifacts = projectRows(project, moduleProjectors.testArtifacts);
-  const testSuites = projectRows(project, moduleProjectors.testSuites);
-  const testCases = projectRows(project, moduleProjectors.testCases);
-  const testReports = projectRows(project, moduleProjectors.testReports);
-  const verificationPolicies = projectRows(project, moduleProjectors.verificationPolicies);
-  const verificationQueue = projectRows(project, moduleProjectors.verificationQueue);
-  const verificationExecutions = projectRows(project, moduleProjectors.verificationExecutions);
+  const durableVerificationRows = appContext?.verificationPersistence?.readModelRows?.() ?? {};
+  const testRuns = mergeRowsById(durableVerificationRows.testRuns ?? [], projectRows(project, moduleProjectors.testRuns));
+  const testResults = mergeRowsById(durableVerificationRows.testResults ?? [], projectRows(project, moduleProjectors.testResults));
+  const testArtifacts = mergeRowsById(durableVerificationRows.testArtifacts ?? [], projectRows(project, moduleProjectors.testArtifacts));
+  const testSuites = mergeRowsById(durableVerificationRows.testSuites ?? [], projectRows(project, moduleProjectors.testSuites));
+  const testCases = mergeRowsById(durableVerificationRows.testCases ?? [], projectRows(project, moduleProjectors.testCases));
+  const testReports = mergeRowsById(durableVerificationRows.testReports ?? [], projectRows(project, moduleProjectors.testReports));
+  const verificationPolicies = mergeRowsById(durableVerificationRows.verificationPolicies ?? [], projectRows(project, moduleProjectors.verificationPolicies));
+  const verificationFreshness = mergeRowsById(durableVerificationRows.verificationFreshness ?? [], projectRows(project, moduleProjectors.verificationFreshness));
+  const verificationInvalidations = mergeRowsById(durableVerificationRows.verificationInvalidations ?? [], projectRows(project, moduleProjectors.verificationInvalidations));
+  const verificationQueue = mergeRowsById(durableVerificationRows.verificationQueue ?? [], projectRows(project, moduleProjectors.verificationQueue));
+  const verificationExecutions = mergeRowsById(durableVerificationRows.verificationExecutions ?? [], projectRows(project, moduleProjectors.verificationExecutions));
   const projectedTestGates = projectRows(project, moduleProjectors.testGates);
   const projectedCoverageEdges = projectRows(project, moduleProjectors.coverageEdges);
   const flakeScoresByGate = buildFlakeScoreByGate(testResults);
-  const latestTestResultsProjection = projectValue(project, moduleProjectors.latestTestResultsByGate, { rows: [], byGate: Object.create(null) });
+  const latestTestResultsProjection = {
+    rows: testResults,
+    byGate: Object.fromEntries(
+      Object.entries(
+        testResults.reduce((acc, row) => {
+          const gateId = String(row?.gateId || "");
+          if (!gateId) return acc;
+          const existing = acc[gateId];
+          if (!existing || String(existing.producedAt || "") <= String(row?.producedAt || "")) acc[gateId] = row;
+          return acc;
+        }, Object.create(null))
+      )
+    )
+  };
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
   const testMonitorDiagnostics = normalizeVerificationDiagnostics(diagnostics?.testMonitor ?? null);
+  const verificationPersistence = normalizeVerificationPersistence(
+    diagnostics?.verificationPersistence ?? appContext?.verificationPersistence?.inspect?.() ?? null
+  );
   const governanceRoutes = normalizeGovernanceRoutes(
     diagnostics?.governanceRoutes
     ?? buildGovernanceRouteInventory(diagnostics?.routes ?? [])
@@ -2532,6 +2698,7 @@ export async function buildPlatformModel({
   const packageDependencies = projectRows(project, moduleProjectors.packageDependencies);
   const packageCoexistence = projectRows(project, moduleProjectors.packageCoexistence);
   const packageConvergence = projectRows(project, moduleProjectors.packageConvergence);
+  const packageApplyPreviews = buildPackageApplyPreviewRows(project);
   const runtimeRevisions = buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch);
   const activeRuntimeRevision = runtimeRevisions[0] ?? null;
   const snapshotBuilds = buildSnapshotBuildRows(candidateSnapshots);
@@ -2841,6 +3008,26 @@ export async function buildPlatformModel({
     for (const patchId of row.convergencePatchIds ?? []) addEdge(edges, row.id, "includes", patchId, "witnesses");
   }
 
+  for (const row of packageApplyPreviews) {
+    addNode(nodes, {
+      id: row.id,
+      kind: "packageApplyPreview",
+      title: row.title,
+      lifecycle: ["author", "transform", "verify", "steward"],
+      owner: row.packageId,
+      status: row.status,
+      source: "witnesses"
+    });
+    addEdge(edges, row.id, "tracks", row.packageId, "witnesses");
+    addEdge(edges, row.id, "tracks", row.revisionId, "witnesses");
+    if (row.coexistenceId) addEdge(edges, row.id, "tracks", row.coexistenceId, "witnesses");
+    if (row.convergenceId) addEdge(edges, row.id, "tracks", row.convergenceId, "witnesses");
+    for (const namespaceId of row.selectedNamespaceIds ?? []) addEdge(edges, row.id, "selects", namespaceId, "witnesses");
+    for (const conflictId of row.manifestConflictIds ?? []) addEdge(edges, row.id, "detects", conflictId, "witnesses");
+    for (const transformerId of row.relatedTransformerIds ?? []) addEdge(edges, row.id, "uses", transformerId, "witnesses");
+    for (const patchId of row.relatedConvergencePatchIds ?? []) addEdge(edges, row.id, "includes", patchId, "witnesses");
+  }
+
   for (const install of capabilityInstalls) {
     const id = `capabilityInstall:${install.targetKind || "target"}:${install.target}:${install.capability}`;
     addNode(nodes, {
@@ -3021,6 +3208,54 @@ export async function buildPlatformModel({
       authoredSource.id,
       "source"
     );
+  }
+
+  // Load and integrate the authored WTOML knowledge relations (doc<->doc, doc<->code)
+  // This makes the explicit relationships from knowledge-relations.wtoml first-class
+  // in the platform graph (for ContextHub, intent registry, knowledge views).
+  const knowledgeRel = await loadKnowledgeRelationsWtoml();
+  for (const ent of knowledgeRel.entities) {
+    let nodeKind = ent.kind || "knowledgeEntity";
+    if (nodeKind === "docNode") nodeKind = "docNode";
+    if (nodeKind === "intent" || ent.id.startsWith("intent:")) nodeKind = "intent";
+    addNode(nodes, {
+      id: ent.id,
+      kind: nodeKind,
+      title: ent.label || ent.id,
+      lifecycle: Array.isArray(ent.lifecycle) ? ent.lifecycle : (ent.lifecycle ? [ent.lifecycle] : ["author", "steward"]),
+      owner: ent.owner || "plugin.platform",
+      status: "authored",
+      source: knowledgeRel.sourcePath,
+      facet: ent.facet,
+      path: ent.path,
+      description: ent.description
+    });
+  }
+  for (const rel of knowledgeRel.relations) {
+    addEdge(edges, rel.from, rel.rel, rel.to, "authored-knowledge-wtoml");
+  }
+
+  // Build maps from authored knowledge relations for merging into docs
+  const authDocLinksByDoc = Object.create(null); // docPath -> {docLinks: [], codeLinks: [], intentLinks: []}
+  for (const rel of knowledgeRel.relations) {
+    const from = String(rel.from || "");
+    const to = String(rel.to || "");
+    // match doc: or direct path for from
+    let docPath = null;
+    if (from.startsWith("doc:")) docPath = from.slice(4);
+    else if (from.includes("/intent/") || from.endsWith(".md")) docPath = from.replace(/^doc:/, "");
+    if (!docPath) continue;
+    const isCode = to.startsWith("code:") || /^(src|plugins|test)\//.test(to);
+    const isDoc = to.startsWith("doc:") || to.endsWith(".md");
+    const isIntent = to.startsWith("intent:");
+    if (!authDocLinksByDoc[docPath]) authDocLinksByDoc[docPath] = { docLinks: [], codeLinks: [], intentLinks: [] };
+    if (isDoc) {
+      authDocLinksByDoc[docPath].docLinks.push({ rel: rel.rel, target: to });
+    } else if (isCode) {
+      authDocLinksByDoc[docPath].codeLinks.push({ rel: rel.rel, target: to });
+    } else if (isIntent) {
+      authDocLinksByDoc[docPath].intentLinks.push({ rel: rel.rel, target: to });
+    }
   }
 
   for (const proposal of proposals) {
@@ -3413,7 +3648,11 @@ export async function buildPlatformModel({
       capabilityIds: [...doc.references.capabilityIds],
       proposalIds: [...(doc.references.proposalIds ?? [])],
       branchIds: [...(doc.references.branchIds ?? [])],
-      routes: [...doc.references.routes]
+      routes: [...doc.references.routes],
+      // explicit authored from knowledge-relations.wtoml (doc/doc + doc/code + doc/intent)
+      authoredDocLinks: (authDocLinksByDoc[doc.path]?.docLinks || []),
+      authoredCodeLinks: (authDocLinksByDoc[doc.path]?.codeLinks || []),
+      authoredIntentLinks: (authDocLinksByDoc[doc.path]?.intentLinks || [])
     }
   }));
   const docSections = parsedDocs.flatMap(doc => doc.sections.map(section => ({ ...section })));
@@ -3530,12 +3769,21 @@ export async function buildPlatformModel({
     packageDependencies,
     packageCoexistence,
     packageConvergence,
+    packageApplyPreviews,
     roadmaps: planning.roadmaps,
     epics: planning.epics,
     features: planning.features,
     branchesByEpic: planning.branchesByEpic,
     defectsByEpic: planning.defectsByEpic,
     testsByFeature: planning.testsByFeature,
+    // Promoted intent tree (from knowledge-relations.wtoml)
+    intents: knowledgeRel.entities.filter(e => e.id && e.id.startsWith("intent:")).map(e => ({
+      id: e.id,
+      title: e.label || e.id,
+      description: e.description,
+      facet: e.facet,
+      lifecycle: e.lifecycle
+    })),
     testGates: testGateProjection.rows,
     testGateIndex: testGateProjection.index,
     coverageEdges,
@@ -3554,6 +3802,8 @@ export async function buildPlatformModel({
     testCases: testCases.map(row => ({ ...row })),
     testReports: testReports.map(row => ({ ...row })),
     verificationPolicies: verificationPolicies.map(row => ({ ...row })),
+    verificationFreshness: verificationFreshness.map(row => ({ ...row })),
+    verificationInvalidations: verificationInvalidations.map(row => ({ ...row })),
     verificationQueue: verificationQueue.map(row => ({ ...row })),
     verificationExecutions: verificationExecutions.map(row => ({ ...row })),
     latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
@@ -3573,13 +3823,17 @@ export async function buildPlatformModel({
     snapshotBuildErrors,
     snapshotDiagnostics,
     testMonitorDiagnostics,
+    verificationPersistence,
     compatibilityBridges,
     governanceRoutes,
     proposalTargetGovernance,
     mutableSurfaceSemantics,
     conflicts: conflicts.map(row => ({ ...row })),
     mergeIntents: mergeIntents.map(row => ({ ...row })),
-    roadmapTasks
+    roadmapTasks,
+    // explicit authored from the knowledge-relations.wtoml (for ContextHub / intent links)
+    knowledgeRelations: knowledgeRel.relations,
+    knowledgeAuthoredEntities: knowledgeRel.entities
   };
 }
 
@@ -3622,6 +3876,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       testCases: model.testCases,
       testReports: model.testReports,
       verificationPolicies: model.verificationPolicies,
+      verificationFreshness: model.verificationFreshness,
+      verificationInvalidations: model.verificationInvalidations,
       verificationQueue: model.verificationQueue,
       verificationExecutions: model.verificationExecutions,
       runtimeRevisions: model.runtimeRevisions,
@@ -3631,6 +3887,7 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       snapshotBuildErrors: model.snapshotBuildErrors,
       snapshotDiagnostics: model.snapshotDiagnostics,
       testMonitorDiagnostics: model.testMonitorDiagnostics,
+      verificationPersistence: model.verificationPersistence,
       branchTestRedGreen: model.branchTestRedGreen,
       changeSetTestRedGreen: model.changeSetTestRedGreen,
       latestTestResultsByGate: model.latestTestResultsByGate,
@@ -4023,6 +4280,12 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       )
       : (model.packageConvergence ?? []);
     return { packageConvergence, summaries: model.summaries };
+  }
+  if (view === "packageApplyPreview") {
+    const packageApplyPreviews = id
+      ? (model.packageApplyPreviews ?? []).filter(row => matchesPackageApplyPreviewRow(row, id))
+      : (model.packageApplyPreviews ?? []);
+    return { packageApplyPreviews, summaries: model.summaries };
   }
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;

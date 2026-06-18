@@ -136,6 +136,11 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(toolNames.includes("platform.docs"), true);
   assert.equal(toolNames.includes("platform.roadmap"), true);
   assert.equal(toolNames.includes("platform.telemetry"), true);
+  // First-class documentation MCP tools
+  assert.equal(toolNames.includes("docs.list"), true);
+  assert.equal(toolNames.includes("docs.read"), true);
+  assert.equal(toolNames.includes("docs.search"), true);
+  assert.equal(toolNames.includes("docs.pack"), true);
   assert.equal(toolNames.includes("platform.branch"), true);
   assert.equal(toolNames.includes("platform.proposal"), true);
   assert.equal(toolNames.includes("platform.changeSet"), true);
@@ -149,6 +154,14 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.deepEqual(resolveMcpToolScope("world.read", { view: "packageCoexistence", id: "package.plugin.inspect" }), {
     contextIds: [],
     targetIds: ["package.plugin.inspect"]
+  });
+  assert.deepEqual(resolveMcpToolScope("world.read", { view: "packageApplyPreview", id: "packageRevision.plugin.inspect.v2" }), {
+    contextIds: [],
+    targetIds: ["packageRevision.plugin.inspect.v2"]
+  });
+  assert.deepEqual(resolveMcpToolScope("world.read", { view: "capabilityLegacyMigration", id: "cap.search" }), {
+    contextIds: [],
+    targetIds: ["cap.search"]
   });
   const worldRead = listSupportedMcpTools().find(tool => tool.name === "world.read");
   const packageBundle = listSupportedMcpTools().find(tool => tool.name === "package.bundle");
@@ -165,7 +178,9 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("contextNaming"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageCoexistence"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageConvergence"), true);
-  assert.deepEqual(packageBundle.inputSchema.properties.operation.enum, ["preview"]);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageApplyPreview"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("capabilityLegacyMigration"), true);
+  assert.deepEqual(packageBundle.inputSchema.properties.operation.enum, ["preview", "previewApply"]);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("docs"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("roadmap"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("telemetry"), true);
@@ -181,6 +196,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("contextNaming"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("packageCoexistence"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("packageConvergence"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("packageApplyPreview"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("candidateSnapshots"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("runtimeRevisions"), true);
   assert.deepEqual(platformDocs.inputSchema.properties.operation.enum, ["list", "read"]);
@@ -209,8 +225,59 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageNamespace.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageDependency.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageTransformer.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.migrateLegacy"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontendProgram.create"), false);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("widget.create"), false);
+});
+
+test("mcp world.read exposes legacy capability migration as projected first-class state", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.shared"
+
+[[capability]]
+actor = "system"
+id = "cap.search"
+label = "Search"
+provenance = { source = "dsl.context.capabilities" }
+placement = ["context"]
+`);
+  world.emit({
+    process: "legacy.contextCapability",
+    actor: "system",
+    claims: [relation("ctx.shared", "contextCapability", "cap.search")],
+    body: {}
+  });
+  world.emit({
+    process: "legacy.contextCapability",
+    actor: "system",
+    claims: [relation("ctx.shared", "contextCapability", "cap.legacyOnly")],
+    body: {}
+  });
+
+  const result = await executeMcpTool("world.read", {
+    args: { view: "capabilityLegacyMigration" },
+    appContext: {
+      project: projector => world.project(projector)
+    },
+    callHandler: async () => {
+      throw new Error("capabilityLegacyMigration read should not call HTTP handlers");
+    }
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(result.structuredContent.legacyCapabilityCompatibilityMode.mode, "bridge-active");
+  assert.equal(result.structuredContent.legacyCapabilityCompatibilityMode.pendingCount, 4);
+  assert.equal(result.structuredContent.legacyCapabilityMigration.pending.some(row =>
+    row.action === "definition.update"
+    && row.capabilityId === "cap.search"
+  ), true);
+  assert.equal(result.structuredContent.legacyCapabilityMigration.pending.some(row =>
+    row.action === "definition.create"
+    && row.capabilityId === "cap.legacyOnly"
+  ), true);
 });
 
 test("mcp package.bundle previews canonical revision bundle from projected authored package state", async () => {
@@ -282,6 +349,248 @@ targetId = "dom.render"
     "namespaces/0001-ctx-shared-inspectlocal.wtoml",
     "dependencies/0001-capability-dom-render.wtoml"
   ]);
+});
+
+test("mcp package.bundle includes namespace-scoped transformers that touch the selected revision namespace", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.shared:inspectLocal"
+context = "ctx.shared"
+name = "inspectLocal"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.namespace-only"
+package = "package.plugin.inspect"
+sourceNamespace = "packageNamespace:ctx.shared:inspectLocal"
+targetNamespace = "packageNamespace:ctx.shared:inspectLocal"
+strategy = "namespace-alias"
+status = "active"
+mappings = [{ kind = "alias", from = "ctx.shared:inspectLocal", to = "ctx.shared:inspectLocal" }]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+transformer = "packageTransformer.inspect.namespace-only"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "namespaced" }
+`);
+
+  const result = await executeMcpTool("package.bundle", {
+    args: {
+      operation: "preview",
+      revisionId: "packageRevision.plugin.inspect.v1"
+    },
+    appContext: {
+      project: projector => world.project(projector)
+    },
+    callHandler: async () => {
+      throw new Error("package.bundle preview should not call HTTP handlers");
+    }
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(result.structuredContent.transformers.length, 1);
+  assert.equal(result.structuredContent.transformers[0].id, "packageTransformer.inspect.namespace-only");
+  assert.equal(result.structuredContent.files.some(file => file.path === "transformers/0001-packagetransformer-inspect-namespace-only.wtoml"), true);
+});
+
+test("mcp package.bundle includes namespace docs referenced by cross-revision transformers", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.alpha:inspectA"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.beta:inspectB"
+context = "ctx.beta"
+name = "inspectB"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1-to-v2"
+package = "package.plugin.inspect"
+sourceNamespace = "packageNamespace:ctx.alpha:inspectA"
+targetNamespace = "packageNamespace:ctx.beta:inspectB"
+strategy = "follow-up-revision"
+status = "active"
+mappings = [{ kind = "alias", from = "ctx.alpha:inspectA", to = "ctx.beta:inspectB" }]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+transformer = "packageTransformer.inspect.v1-to-v2"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "migrated" }
+`);
+
+  const result = await executeMcpTool("package.bundle", {
+    args: {
+      operation: "preview",
+      revisionId: "packageRevision.plugin.inspect.v2"
+    },
+    appContext: {
+      project: projector => world.project(projector)
+    },
+    callHandler: async () => {
+      throw new Error("package.bundle preview should not call HTTP handlers");
+    }
+  });
+
+  assert.equal(result.isError, false);
+  assert.deepEqual(
+    result.structuredContent.namespaces.map(row => row.id),
+    [
+      "packageNamespace:ctx.alpha:inspectA",
+      "packageNamespace:ctx.beta:inspectB"
+    ]
+  );
+  assert.equal(result.structuredContent.files.some(file => file.path === "namespaces/0001-ctx-alpha-inspecta.wtoml"), true);
+  assert.equal(result.structuredContent.files.some(file => file.path === "namespaces/0002-ctx-beta-inspectb.wtoml"), true);
+});
+
+test("mcp package.bundle previewApply exposes authored coexistence and convergence impact for a revision", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+status = "review"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.alpha:inspectA"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.beta:inspectB"
+context = "ctx.beta"
+name = "inspectB"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1-to-v2"
+package = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+sourceNamespace = "packageNamespace:ctx.alpha:inspectA"
+targetRevision = "packageRevision.plugin.inspect.v2"
+targetNamespace = "packageNamespace:ctx.beta:inspectB"
+strategy = "follow-up-revision"
+status = "active"
+remainingGlue = ["rename remaining runtimePlugin installs"]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+transformer = "packageTransformer.inspect.v1-to-v2"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "migrated" }
+`);
+
+  const result = await executeMcpTool("package.bundle", {
+    args: {
+      operation: "previewApply",
+      revisionId: "packageRevision.plugin.inspect.v2"
+    },
+    appContext: {
+      project: projector => world.project(projector)
+    },
+    callHandler: async () => {
+      throw new Error("package.bundle previewApply should not call HTTP handlers");
+    }
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(result.structuredContent.kind, "packageRevisionApplyPreview");
+  assert.equal(result.structuredContent.status, "glue-required");
+  assert.equal(result.structuredContent.bundle.revisionRecord.id, "packageRevision.plugin.inspect.v2");
+  assert.deepEqual(
+    result.structuredContent.selectedNamespaces.map(row => row.id),
+    ["packageNamespace:ctx.beta:inspectB"]
+  );
+  assert.deepEqual(
+    result.structuredContent.relatedTransformers.map(row => row.id),
+    ["packageTransformer.inspect.v1-to-v2"]
+  );
+  assert.deepEqual(result.structuredContent.remainingGlue, [{
+    kind: "explicit-glue",
+    transformerId: "packageTransformer.inspect.v1-to-v2",
+    message: "rename remaining runtimePlugin installs"
+  }]);
 });
 
 test("mcp world.read exposes package coexistence projection from projected authored package state", async () => {
@@ -419,6 +728,83 @@ body = { export = "migrated" }
   assert.equal(result.structuredContent.packageConvergence.length, 1);
   assert.equal(result.structuredContent.packageConvergence[0].status, "glue-required");
   assert.deepEqual(result.structuredContent.packageConvergence[0].transformerIds, ["packageTransformer.inspect.v1-to-v2"]);
+});
+
+test("mcp world.read exposes package apply preview projection from projected authored package state", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+status = "review"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageNamespace]]
+actor = "system"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageNamespace]]
+actor = "system"
+context = "ctx.beta"
+name = "inspectB"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1-to-v2"
+package = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+targetRevision = "packageRevision.plugin.inspect.v2"
+remainingGlue = ["rename remaining runtimePlugin installs"]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+transformer = "packageTransformer.inspect.v1-to-v2"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "migrated" }
+`);
+
+  const result = await executeMcpTool("world.read", {
+    args: {
+      view: "packageApplyPreview",
+      id: "packageRevision.plugin.inspect.v2"
+    },
+    appContext: {
+      project: projector => world.project(projector)
+    },
+    callHandler: async () => {
+      throw new Error("packageApplyPreview projection should not call HTTP handlers");
+    }
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(result.structuredContent.packageApplyPreview.length, 1);
+  assert.equal(result.structuredContent.packageApplyPreview[0].status, "glue-required");
+  assert.equal(result.structuredContent.packageApplyPreview[0].bundle.revisionRecord.id, "packageRevision.plugin.inspect.v2");
 });
 
 test("mcp world.read exposes contextual naming explanations from projected world state", async () => {
@@ -564,6 +950,13 @@ test("mcp authoring.write exposes authored package actions and package-aware sco
       "packageNamespace:ctx.beta:inspectB"
     ]
   });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "capability.migrateLegacy",
+    body: {}
+  }), {
+    contextIds: [],
+    targetIds: []
+  });
 });
 
 test("mcp authoring.write routes package authorship actions through shared package handlers", async () => {
@@ -652,6 +1045,12 @@ test("mcp authoring.write routes package authorship actions through shared packa
         targetNamespace: "packageNamespace:ctx.beta:inspectB",
         remainingGlue: ["rename remaining runtimePlugin installs"]
       }
+    },
+    {
+      action: "capability.migrateLegacy",
+      path: "/api/capability-migrations/legacy",
+      handler: "capability.migrateLegacy",
+      body: {}
     }
   ];
 
@@ -709,6 +1108,10 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   assert.equal(services.mcpToolAvailable("platform.telemetry"), false);
   assert.equal(services.mcpToolAvailable("platform.changeSet"), false);
   assert.equal(services.mcpToolAvailable("platform.test"), false);
+  assert.equal(services.mcpToolAvailable("docs.list"), false);
+  assert.equal(services.mcpToolAvailable("docs.read"), false);
+  assert.equal(services.mcpToolAvailable("docs.search"), false);
+  assert.equal(services.mcpToolAvailable("docs.pack"), false);
   projected.backendCapabilities.add("platform.self");
   assert.equal(services.mcpToolAvailable("platform.read"), true);
   assert.equal(services.mcpToolAvailable("platform.docs"), true);
@@ -716,6 +1119,10 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   assert.equal(services.mcpToolAvailable("platform.telemetry"), true);
   assert.equal(services.mcpToolAvailable("platform.changeSet"), true);
   assert.equal(services.mcpToolAvailable("platform.test"), true);
+  assert.equal(services.mcpToolAvailable("docs.list"), true);
+  assert.equal(services.mcpToolAvailable("docs.read"), true);
+  assert.equal(services.mcpToolAvailable("docs.search"), true);
+  assert.equal(services.mcpToolAvailable("docs.pack"), true);
   assert.deepEqual(
     services.validateMcpOrigin({ headers: { origin: "http://localhost:3000", host: "127.0.0.1:8787" } }),
     { ok: true }
@@ -999,6 +1406,16 @@ test("platform MCP read tool routes runtime revision view through platform model
   assert.equal(calls.at(-1).path, "/api/platform-model");
   assert.equal(calls.at(-1).query.view, "packageConvergence");
   assert.equal(calls.at(-1).query.id, "package.plugin.inspect");
+
+  const packageApplyPreviewResult = await executeMcpTool("platform.read", {
+    args: { view: "packageApplyPreview", id: "packageRevision.plugin.inspect.v2" },
+    callHandler
+  });
+  assert.equal(packageApplyPreviewResult.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.model.read");
+  assert.equal(calls.at(-1).path, "/api/platform-model");
+  assert.equal(calls.at(-1).query.view, "packageApplyPreview");
+  assert.equal(calls.at(-1).query.id, "packageRevision.plugin.inspect.v2");
 });
 
 test("platform MCP read tool routes proposal, branch, change-set, candidate snapshot, telemetry, bridge, semantics, and governance views through platform model handlers", async () => {
@@ -1047,6 +1464,42 @@ test("platform MCP docs tool routes docs and roadmap task reads through platform
   assert.equal(calls.at(-1).path, "/api/platform-model");
   assert.equal(calls.at(-1).query.view, "docs");
   assert.equal(calls.at(-1).query.id, "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
+
+  // First-class new operations and dedicated docs.* tools
+  const full = await executeMcpTool("platform.docs", {
+    args: { operation: "readFull", id: "docs/intent/01-foundational-philosophy-ontology.md", includeRelations: true },
+    callHandler
+  });
+  assert.equal(full.isError, false);
+
+  const rels = await executeMcpTool("platform.docs", {
+    args: { operation: "getRelations", id: "docs/intent/knowledge-relations.wtoml" },
+    callHandler
+  });
+  assert.equal(rels.isError, false);
+
+  const dedicatedList = await executeMcpTool("docs.list", { args: {}, callHandler });
+  assert.equal(dedicatedList.isError, false);
+  assert.equal(calls.at(-1).query.view, "docs");
+
+  const dedicatedRead = await executeMcpTool("docs.read", {
+    args: { id: "docs/intent/PRIMARY-INTENT.md", includeRelations: true },
+    callHandler
+  });
+  assert.equal(dedicatedRead.isError, false);
+
+  const search = await executeMcpTool("docs.search", {
+    args: { query: "intent" },
+    callHandler
+  });
+  assert.equal(search.isError, false);
+
+  const pack = await executeMcpTool("docs.pack", {
+    args: { id: "docs/intent/01-foundational-philosophy-ontology.md", maxRelations: 5 },
+    callHandler
+  });
+  assert.equal(pack.isError, false);
+  // The pack should include packId and summary indicating modeled relations
 });
 
 test("platform MCP roadmap tool routes roadmap reads through platform model handlers", async () => {

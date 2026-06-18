@@ -55,3 +55,14 @@ For ContextHub to become real, the doc/document and doc/code relationships are e
 This file uses [[entity]] for `docNode`s and code locations, plus [[relation]] using typed links (`references`, `expands`, `explains`, `isRealizedBy`, `implements`, etc.) that can lower into the DESIRE model and be projected by ContextHub surfaces.
 
 The platform model (plugins/platform/platform-model.js) now parses this WTOML at build time, adds nodes/edges, and augments doc.references with authoredDocLinks / authoredCodeLinks. The knowledge view surfaces them via the related cards.
+
+## First-Class MCP Experience
+Documentation (governed + these intent docs + modeled relations) is exposed as first-class MCP tools:
+
+- `platform.docs` (enhanced with search/readFull/getRelations + includeRelations)
+- `platform.read` (view=docs)
+- Dedicated: `docs.list`, `docs.read`, `docs.search`, `docs.pack`
+
+`docs.pack` builds a first-class context pack: doc + sections + explicit authored relations to other docs and code (from the knowledge-relations.wtoml model).
+
+These return structured docs + explicit knowledge relations for LLM agents (stable doc:* ids, linked code, intent context). See CONTEXTHUB-SPEC for the broader vision.

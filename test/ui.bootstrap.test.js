@@ -139,11 +139,14 @@ test("blank world can bootstrap into a working todo app purely through the UI", 
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.privateNotes.list.v1" && row.op === "response.json"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.privateNotes.create.v1" && row.op === "request.readJson"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.widgets.create.v1" && row.op === "process.request"), true);
-    assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.witnesses.list.v1" && row.op === "handler.invoke"), true);
+    assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.witnesses.list.v1" && row.op === "project.read"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.network.simulateError.v1" && row.op === "witness.emit"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.network.simulateError.v1" && row.op === "response.error"), true);
+    assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.worldGraph.read.v1" && row.op === "project.read"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.worldGraph.read.v2" && row.op === "run"), true);
+    assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.processView.read.v1" && row.op === "project.read"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.processView.read.v2" && row.op === "run"), true);
+    assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.processRun.read.v1" && row.op === "project.read"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.processRun.read.v2" && row.op === "run"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.processEvents.record.v2" && row.op === "response.error"), true);
     assert.equal(bootstrapState.routes.some(row => row.id === "events_stream_route" && row.handler === "events.stream"), true);

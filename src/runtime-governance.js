@@ -229,6 +229,10 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-target-authority",
     "Capability removal attempts shared target authority first and routes to proposal creation when direct removal is not allowed."
   ),
+  "capability.migrateLegacy": proposalFallback(
+    "bootstrap-target-authority",
+    "Legacy capability migration attempts shared target authority across every affected legacy install target first and routes to proposal creation when direct migration is not allowed."
+  ),
   "db.sql.command": directAuthority(
     "server-runner-authority",
     "SQL command execution is immediate but always runs through the shared server-runner mutation gate.",
@@ -812,6 +816,10 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   "capability.remove": proposalTarget(
     "bootstrap-target-authority",
     "Capability-remove proposals execute through shared target authority on the install target once approved."
+  ),
+  "capability.migrateLegacy": proposalTarget(
+    "bootstrap-target-authority",
+    "Legacy capability migration proposals execute through shared target authority across every affected legacy install target before writing explicit capability definitions and installs."
   ),
   "runtimePlugin.install": proposalTarget(
     "bootstrap-target-authority",

@@ -11,14 +11,18 @@ export const bundleId = "bundle-wcss-authoring";
 export const handlerCatalog = Object.freeze({
   authorableHandlers: Object.freeze([
     "wcss.document.read",
+    "wcss.schema.read",
     "wcss.preview.session.create",
+    "wcss.preview.document.patch",
     "wcss.preview.tokens.patch",
     "wcss.preview.session.clear"
   ]),
   pageHandlers: Object.freeze([]),
   dispatchHandlers: Object.freeze([
     "wcss.document.read",
+    "wcss.schema.read",
     "wcss.preview.session.create",
+    "wcss.preview.document.patch",
     "wcss.preview.tokens.patch",
     "wcss.preview.session.clear"
   ]),
@@ -28,10 +32,20 @@ export const handlerCatalog = Object.freeze({
       responseKind: "json",
       methods: Object.freeze(["GET"])
     }),
+    "wcss.schema.read": Object.freeze({
+      routeKind: "json",
+      responseKind: "json",
+      methods: Object.freeze(["GET"])
+    }),
     "wcss.preview.session.create": Object.freeze({
       routeKind: "json",
       responseKind: "json",
       methods: Object.freeze(["POST"])
+    }),
+    "wcss.preview.document.patch": Object.freeze({
+      routeKind: "json",
+      responseKind: "json",
+      methods: Object.freeze(["PATCH"])
     }),
     "wcss.preview.tokens.patch": Object.freeze({
       routeKind: "json",
@@ -72,12 +86,29 @@ function normalizeTokenPatchOps(ops) {
   });
 }
 
-function overlayToOps(overlay) {
-  return [...overlay.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([token, state]) => state.kind === "set"
-      ? { kind: "set", token, value: state.value }
-      : { kind: "reset", token });
+function normalizeDocumentPatchOps(ops) {
+  if (!Array.isArray(ops)) throw new Error("document patch ops must be an array");
+  return ops.map((op, index) => {
+    if (!op || typeof op !== "object" || Array.isArray(op)) {
+      throw new Error(`document patch op ${index} must be an object`);
+    }
+    const kind = typeof op.kind === "string" ? op.kind.trim() : "";
+    if (!kind) throw new Error(`document patch op ${index} is missing kind`);
+    return structuredClone(op);
+  });
+}
+
+function tokenOpsToDocumentPatchOps(ops) {
+  return normalizeTokenPatchOps(ops).map(op => op.kind === "set"
+    ? {
+      kind: "token.set",
+      token: op.token,
+      value: op.value
+    }
+    : {
+      kind: "token.reset",
+      token: op.token
+    });
 }
 
 function buildPreviewSessionRuntime() {
@@ -111,7 +142,7 @@ function buildPreviewSessionRuntime() {
         adapterKey,
         snapshotRevision: snapshotRevision(requestSnapshot),
         version: 0,
-        overlay: new Map()
+        ops: []
       };
       sessions.set(previewSessionId, session);
       return {
@@ -119,7 +150,7 @@ function buildPreviewSessionRuntime() {
         version: session.version
       };
     },
-    patchTokens({
+    patchDocument({
       previewSessionId,
       appRoot,
       adapterKey,
@@ -132,17 +163,19 @@ function buildPreviewSessionRuntime() {
         adapterKey,
         requestSnapshot
       });
-      const nextOps = normalizeTokenPatchOps(ops);
-      for (const op of nextOps) {
-        if (op.kind === "reset") session.overlay.delete(op.token);
-        else session.overlay.set(op.token, op);
-      }
+      session.ops = [...session.ops, ...normalizeDocumentPatchOps(ops)];
       session.version += 1;
       return {
         previewSessionId: session.previewSessionId,
         version: session.version,
-        ops: overlayToOps(session.overlay)
+        ops: structuredClone(session.ops)
       };
+    },
+    patchTokens(args) {
+      return this.patchDocument({
+        ...args,
+        ops: tokenOpsToDocumentPatchOps(args.ops)
+      });
     },
     clearSession({
       previewSessionId,
@@ -174,7 +207,7 @@ function buildPreviewSessionRuntime() {
       return {
         previewSessionId: session.previewSessionId,
         version: session.version,
-        ops: overlayToOps(session.overlay)
+        ops: structuredClone(session.ops)
       };
     },
     close() {
@@ -272,6 +305,21 @@ export function createHandlers(deps = {}) {
       }
     },
 
+    "wcss.schema.read": async ({ res, route, appContext }) => {
+      try {
+        const { adapter } = await withAdapter(route, appContext);
+        sendJson(res, 200, {
+          documentModel: "wcss",
+          schema: adapter.schema
+        });
+      } catch (error) {
+        sendJson(res, 500, {
+          error: "wcss schema read failed",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    },
+
     "wcss.preview.session.create": async ({ res, route, appContext }) => {
       try {
         const { identity, requestSnapshot } = await withAdapter(route, appContext);
@@ -284,6 +332,34 @@ export function createHandlers(deps = {}) {
       } catch (error) {
         sendJson(res, 500, {
           error: "wcss preview session create failed",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    },
+
+    "wcss.preview.document.patch": async ({ req, res, route, appContext }) => {
+      try {
+        const body = await readBody(req);
+        const previewSessionId = typeof body?.previewSessionId === "string" ? body.previewSessionId.trim() : "";
+        if (!previewSessionId) throw new Error("previewSessionId is required");
+        const { identity, requestSnapshot, adapter } = await withAdapter(route, appContext);
+        const patched = previewServiceFor(appContext).patchDocument({
+          previewSessionId,
+          appRoot: identity.appRoot,
+          adapterKey: identity.key,
+          requestSnapshot,
+          ops: body?.ops
+        });
+        adapter.applyPatch({ ops: patched.ops });
+        sendJson(res, 200, {
+          ok: true,
+          previewSessionId: patched.previewSessionId,
+          version: patched.version,
+          ops: patched.ops
+        });
+      } catch (error) {
+        sendJson(res, 500, {
+          error: "wcss preview document patch failed",
           message: error instanceof Error ? error.message : String(error)
         });
       }
@@ -302,7 +378,7 @@ export function createHandlers(deps = {}) {
           requestSnapshot,
           ops: body?.ops
         });
-        adapter.applyTokenPatch({ ops: patched.ops });
+        adapter.applyPatch({ ops: patched.ops });
         sendJson(res, 200, {
           ok: true,
           previewSessionId: patched.previewSessionId,

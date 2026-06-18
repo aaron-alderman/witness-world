@@ -5,8 +5,7 @@ export function materializeCanonicalPackageBundleFromProject(project, {
   revisionId,
   materializedFiles = []
 } = {}) {
-  const normalizedRevisionId = typeof revisionId === "string" && revisionId.trim() ? revisionId.trim() : "";
-  if (!normalizedRevisionId) throw new Error("revisionId is required");
+  const normalizedRevisionId = normalizeRequiredRevisionId(revisionId);
   if (typeof project !== "function") throw new Error("project must be a function");
 
   const packageRevisionIndex = project(moduleProjectors.packageRevisionIndex);
@@ -25,6 +24,12 @@ export function materializeCanonicalPackageBundleFromProject(project, {
     row.package === packageRecord.id
     && (row.revision == null || row.revision === normalizedRevisionId)
   );
+  const namespaceRowsById = new Map(
+    packageNamespaces
+      .filter(row => row.package === packageRecord.id && row.id)
+      .map(row => [row.id, row])
+  );
+  const namespaceIdSet = new Set(namespaces.map(row => row.id).filter(Boolean));
 
   const packageDependencyIndex = project(moduleProjectors.packageDependencyIndex);
   const dependencies = packageDependencyIndex?.bySourceRevision?.[normalizedRevisionId] ?? [];
@@ -32,17 +37,150 @@ export function materializeCanonicalPackageBundleFromProject(project, {
   const transformers = (packageTransformerIndex?.byPackage?.[packageRecord.id] ?? []).filter(row =>
     row.sourceRevision === normalizedRevisionId
     || row.targetRevision === normalizedRevisionId
+    || (row.sourceNamespace && namespaceIdSet.has(row.sourceNamespace))
+    || (row.targetNamespace && namespaceIdSet.has(row.targetNamespace))
   );
+  const bundleNamespaces = [...namespaces];
+  for (const transformer of transformers) {
+    for (const namespaceId of [transformer.sourceNamespace, transformer.targetNamespace]) {
+      if (!namespaceId || namespaceIdSet.has(namespaceId)) continue;
+      const namespaceRow = namespaceRowsById.get(namespaceId);
+      if (!namespaceRow) continue;
+      namespaceIdSet.add(namespaceId);
+      bundleNamespaces.push(namespaceRow);
+    }
+  }
 
   return materializeCanonicalPackageBundle({
     packageRecord,
     revisionRecord,
     patches,
-    namespaces,
+    namespaces: bundleNamespaces,
     dependencies,
     transformers,
     materializedFiles
   });
+}
+
+export function previewPackageRevisionApplyFromProject(project, {
+  revisionId,
+  materializedFiles = []
+} = {}) {
+  if (typeof project !== "function") throw new Error("project must be a function");
+  const normalizedRevisionId = normalizeRequiredRevisionId(revisionId);
+  const bundle = materializeCanonicalPackageBundleFromProject(project, {
+    revisionId: normalizedRevisionId,
+    materializedFiles
+  });
+  const packageId = bundle.packageRecord.id;
+  const coexistenceIndex = project(moduleProjectors.packageCoexistenceIndex);
+  const coexistence = coexistenceIndex?.byRevision?.[normalizedRevisionId]
+    ?? coexistenceIndex?.byPackage?.[packageId]
+    ?? null;
+  const convergenceIndex = project(moduleProjectors.packageConvergenceIndex);
+  const convergence = convergenceIndex?.byPackage?.[packageId] ?? null;
+  const selectedRevision = coexistence?.revisions?.find(row => row.id === normalizedRevisionId) ?? null;
+  const selectedNamespaces = (coexistence?.namespaceSelections ?? [])
+    .filter(row => row.revision === normalizedRevisionId);
+  const selectedNamespaceIdSet = new Set(selectedNamespaces.map(row => row.id).filter(Boolean));
+  const manifestPluginConflicts = (coexistence?.manifestPluginConflicts ?? [])
+    .filter(conflict => conflict.revisionIds.includes(normalizedRevisionId));
+  const relatedTransformers = (convergence?.transformers ?? [])
+    .filter(transformer =>
+      transformer.sourceRevision === normalizedRevisionId
+      || transformer.targetRevision === normalizedRevisionId
+      || (transformer.sourceNamespace && selectedNamespaceIdSet.has(transformer.sourceNamespace))
+      || (transformer.targetNamespace && selectedNamespaceIdSet.has(transformer.targetNamespace))
+    );
+  const relatedTransformerIdSet = new Set(relatedTransformers.map(row => row.id).filter(Boolean));
+  const relatedConvergencePatches = (convergence?.convergencePatches ?? [])
+    .filter(patch =>
+      patch.revision === normalizedRevisionId
+      || (patch.transformer && relatedTransformerIdSet.has(patch.transformer))
+    );
+  const remainingGlue = (convergence?.remainingGlue ?? [])
+    .filter(entry => entry.transformerId == null || relatedTransformerIdSet.has(entry.transformerId));
+  const status = packageRevisionApplyPreviewStatus({
+    coexistenceMode: coexistence?.coexistenceMode ?? "single-line",
+    convergenceStatus: convergence?.status ?? null,
+    manifestPluginConflicts,
+    remainingGlue
+  });
+  return {
+    kind: "packageRevisionApplyPreview",
+    revisionId: normalizedRevisionId,
+    packageId,
+    status,
+    explanation: packageRevisionApplyPreviewExplanation({
+      status,
+      selectedNamespaces,
+      manifestPluginConflicts,
+      convergenceExplanation: convergence?.explanation ?? null
+    }),
+    bundle,
+    coexistence: cloneProjectedValue(coexistence),
+    convergence: cloneProjectedValue(convergence),
+    selectedRevision: cloneProjectedValue(selectedRevision),
+    selectedNamespaces: cloneProjectedValue(selectedNamespaces),
+    manifestPluginConflicts: cloneProjectedValue(manifestPluginConflicts),
+    relatedTransformers: cloneProjectedValue(relatedTransformers),
+    relatedConvergencePatches: cloneProjectedValue(relatedConvergencePatches),
+    remainingGlue: cloneProjectedValue(remainingGlue)
+  };
+}
+
+function normalizeRequiredRevisionId(revisionId) {
+  const normalizedRevisionId = typeof revisionId === "string" && revisionId.trim() ? revisionId.trim() : "";
+  if (!normalizedRevisionId) throw new Error("revisionId is required");
+  return normalizedRevisionId;
+}
+
+function packageRevisionApplyPreviewStatus({
+  coexistenceMode,
+  convergenceStatus,
+  manifestPluginConflicts,
+  remainingGlue
+}) {
+  if ((manifestPluginConflicts ?? []).some(conflict => conflict.blocked)) return "blocked";
+  if (convergenceStatus === "unplanned") return "unplanned";
+  if (convergenceStatus === "glue-required") return "glue-required";
+  if (convergenceStatus === "converging") return "converging";
+  if ((remainingGlue ?? []).length > 0) return "glue-required";
+  if (coexistenceMode === "coexisting") return "coexisting";
+  return "ready";
+}
+
+function packageRevisionApplyPreviewExplanation({
+  status,
+  selectedNamespaces,
+  manifestPluginConflicts,
+  convergenceExplanation
+}) {
+  switch (status) {
+    case "blocked":
+      return "Revision still collides with another authored line under the same manifest identity, and no explicit namespace split or supersede rule explains the coexistence.";
+    case "unplanned":
+      return convergenceExplanation
+        ?? "Revision coexists with another authored line, but no package transformer contract explains convergence yet.";
+    case "glue-required":
+      return convergenceExplanation
+        ?? "Revision can be inspected and replayed, but authored convergence glue still remains before the divergent lines can be treated as fully converged.";
+    case "converging":
+      return convergenceExplanation
+        ?? "Revision participates in an authored convergence contract with patches already present and no remaining glue notes.";
+    case "coexisting":
+      return (selectedNamespaces ?? []).length > 0
+        ? "Revision is selected by explicit package namespace rows, so it can coexist without collapsing the other authored line into a fake merge."
+        : "Revision coexists with other authored lines and remains inspectable without forcing destructive collapse.";
+    default:
+      return (manifestPluginConflicts ?? []).length > 0
+        ? "Revision is inspectable and replayable, and the current coexistence facts do not mark its manifest conflict as blocked."
+        : "Revision is inspectable and replayable as the current authored package line with no remaining convergence blockers.";
+  }
+}
+
+function cloneProjectedValue(value) {
+  return value == null ? value : structuredClone(value);
 }
 
 function matchesPackageCoexistenceRow(row, id) {

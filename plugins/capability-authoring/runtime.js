@@ -12,7 +12,8 @@ export const handlerCatalog = Object.freeze({
   dispatchHandlers: Object.freeze([
     "capability.create",
     "capability.install",
-    "capability.remove"
+    "capability.remove",
+    "capability.migrateLegacy"
   ]),
   handlerMetadata: Object.freeze({})
 });
@@ -20,7 +21,8 @@ export const handlerCatalog = Object.freeze({
 export const routes = Object.freeze([
   exactRoute("POST", "/api/capabilities", "capability.create"),
   exactRoute("POST", "/api/capability-installs", "capability.install"),
-  exactRoute("DELETE", "/api/capability-installs", "capability.remove")
+  exactRoute("DELETE", "/api/capability-installs", "capability.remove"),
+  exactRoute("POST", "/api/capability-migrations/legacy", "capability.migrateLegacy")
 ]);
 
 export const surfaces = Object.freeze([]);

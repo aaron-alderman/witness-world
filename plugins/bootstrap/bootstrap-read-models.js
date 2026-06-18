@@ -1,6 +1,10 @@
 import { authorityForActor } from "../../src/kernel.js";
 import { buildCompatibilityBridgeLedger } from "../../src/compatibility-bridges.js";
 import {
+  legacyCapabilityCompatibilityModeFromProject,
+  previewLegacyCapabilityMigrationFromProject
+} from "../../src/capability-legacy-migration.js";
+import {
   CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
   moduleProjectors
 } from "../../src/modules.js";
@@ -165,6 +169,8 @@ export function createBootstrapReadModels({
     const capabilities = project(moduleProjectors.capabilities);
     const capabilityCatalog = project(moduleProjectors.capabilityCatalog);
     const capabilityInstalls = project(moduleProjectors.capabilityInstalls);
+    const legacyCapabilityCompatibilityMode = legacyCapabilityCompatibilityModeFromProject(project);
+    const legacyCapabilityMigration = previewLegacyCapabilityMigrationFromProject(project);
     const compatibilityBridges = buildCompatibilityBridgeLedger({
       capabilities,
       capabilityInstalls
@@ -232,6 +238,8 @@ export function createBootstrapReadModels({
       capabilityCatalog: capabilityPluginSources.capabilityCatalog,
       capabilityPackageSources: capabilityPluginSources.capabilityPackageSources,
       capabilityInstalls,
+      legacyCapabilityCompatibilityMode,
+      legacyCapabilityMigration,
       compatibilityBridges,
       governanceRoutes,
       proposalTargetGovernance,

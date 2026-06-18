@@ -1,0 +1,64 @@
+# Multi-host manifest: one platform instance, one witness world, two server runners bound to
+# different hosts. Run with:  node src/cli.js serve examples/master --runtime-profile full
+#
+#   http://platform.localhost:3000/platform   -> master_platform_server (operator console)
+#   http://engentus.localhost:3000/           -> engentus_host_server (no operator surfaces)
+#
+# The two hosts share one world but expose different programs. Host-header dispatch (see
+# resolveRunnerForHost) selects the runner per request; per-runner route filtering and per-runner
+# bundle gating ensure the master-only operator endpoints (/platform, /api/platform-*) are NOT
+# reachable on the engentus host. To run real apps per host, add their files to `imports` and serve
+# their routes to the matching runner.
+#
+# Note: *.localhost resolves to 127.0.0.1 on most systems. If yours does not, add entries to your
+# hosts file or use the auth.oauth.callbackBaseUrl / Host header accordingly.
+
+[app]
+id = "master_hosts_app"
+imports = ["../_lib/common.wtoml"]
+spawn = ["backend", "frontend"]
+
+# Master platform host — the operator/stewardship console. Default runner: any unmatched Host (and
+# plain localhost/127.0.0.1) lands here. requireAuth makes every endpoint default-deny except the
+# sign-in/OAuth/MCP allowlist and routes that opt out with params.auth.public.
+[[serverRunner]]
+actor = "aaron"
+id = "master_platform_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+default = true
+hosts = ["platform.localhost", "localhost", "127.0.0.1"]
+allowActorHeader = false
+requireAuth = true
+# Offer both Gmail (Google) and GitHub sign-in. The operator supplies credentials out-of-band, e.g.
+#   auth.oauth.google.clientId / .clientSecret, auth.oauth.github.clientId / .clientSecret
+# (via env or the secret seam — not committed). Endpoints come from the built-in vendor presets.
+runtimeConfig = { "auth.oauth.providers" = "google, github", "auth.oauth.autoCreate" = true }
+
+# Engentus host — application surface only. Does NOT install plugin.platform, so /platform and the
+# /api/platform-* bundle endpoints are gated off here, and requireAuth gates the rest.
+[[serverRunner]]
+actor = "aaron"
+id = "engentus_host_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+hosts = ["engentus.localhost"]
+allowActorHeader = false
+requireAuth = true
+
+# Operator console lives only on the master host.
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "master_platform_server"
+plugin = "plugin.platform"
+
+# OAuth sign-in is available on both hosts so each can authenticate its users.
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "master_platform_server"
+plugin = "plugin.oauth"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_host_server"
+plugin = "plugin.oauth"
