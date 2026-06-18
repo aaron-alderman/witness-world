@@ -267,22 +267,22 @@ Make common backend needs composable, inspectable capability seams instead of ad
 - `fs.blob`
 - `fs.stream`
 - `upload.asset`
-- `db.sql` with SQLite
+- `db.sql` with SQLite (`preview` Postgres/MySQL: resolve + connection-test only)
 - `jobs.queue`
 - `search.index`
-- `auth.oauth` stub path
+- `auth.oauth` stub path plus real generic-OIDC, Google, and GitHub providers
 - `http.outbound` stub + native-fetch path
 - `webhook.inbound`
-- `notify.email`
+- `notify.email` stub path plus real generic-HTTP and SendGrid transports
 - `notify.sms`
+- a per-seam contract-coverage guard that freezes provider/witness/authority/config metadata for every backend seam
 - first MCP operator/automation surface over real witnessed seams
 
 ### Next Outcomes
 
 - deepen asset understanding and richer ingestion-derived product surfaces
-- add first serious hosted providers where needed
-- prove one real provider for outbound email and OAuth
-- prove one serious hosted SQL provider before broadening relational adapters
+- prove one serious hosted SQL provider (promote Postgres/MySQL from `preview` to full query/command/migrate) before broadening relational adapters
+- prove a hosted asset/object-storage provider behind the existing `upload.asset`/`fs.blob` seam
 - keep all external systems proxy-shaped and inspectable
 
 ### Dependencies

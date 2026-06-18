@@ -30,6 +30,29 @@ export const surfaces = Object.freeze([]);
 
 export const providers = Object.freeze([
   {
+    kind: "capabilityDefinitions",
+    id: "webhooks.capabilities",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: "webhook.inbound",
+        label: "Inbound Webhooks",
+        dependsOn: Object.freeze(["jobs.queue"]),
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "generic-signed", label: "Generic signed", status: "shipped", default: true })
+        ]),
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["deliveryId"]),
+          failure: Object.freeze(["webhook.inbound.receive.failed", "webhook.inbound.verify.failed", "webhook.inbound.replay.failed", "webhook.inbound.process.failed"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([
+          Object.freeze({ name: "webhook.inbound.secret", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "webhook.inbound.replayWindowMs", accepts: "runtimeConfig.key" })
+        ])
+      })
+    ])
+  },
+  {
     kind: "moduleProjectors",
     id: "webhooks.projections",
     projectors: webhookModuleProjectors

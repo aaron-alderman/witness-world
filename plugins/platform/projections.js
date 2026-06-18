@@ -31,6 +31,98 @@ function sortRows(rows, keys) {
   });
 }
 
+function uniqueStrings(values = []) {
+  return [...new Set(values.map(value => String(value || "")).filter(Boolean))];
+}
+
+function numberOrNull(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function activityMoment(row) {
+  return String(row?.finishedAt || row?.startedAt || row?.producedAt || "");
+}
+
+function compareActivityRows(left, right) {
+  return activityMoment(left).localeCompare(activityMoment(right))
+    || String(left?.id || "").localeCompare(String(right?.id || ""));
+}
+
+function primaryStructuredFormat(artifacts = [], suites = []) {
+  const structuredFormats = new Set([
+    ...artifacts.map(artifact => String(artifact?.structuredFormat || "")),
+    ...suites.map(suite => String(suite?.format || ""))
+  ]);
+  if (structuredFormats.has("junit")) return "junit";
+  if (structuredFormats.has("tap")) return "tap";
+  return null;
+}
+
+function formatCountSummary({ suiteCount = 0, caseCount = 0, failedCount = 0, errorCount = 0, skippedCount = 0 } = {}) {
+  const parts = [
+    `${suiteCount} suite${suiteCount === 1 ? "" : "s"}`,
+    `${caseCount} case${caseCount === 1 ? "" : "s"}`
+  ];
+  if (failedCount > 0) parts.push(`${failedCount} failed`);
+  if (errorCount > 0) parts.push(`${errorCount} error${errorCount === 1 ? "" : "s"}`);
+  if (skippedCount > 0) parts.push(`${skippedCount} skipped`);
+  return parts.join(", ");
+}
+
+function inferRegressionStatus(currentDurationMs, baselineDurationMs) {
+  if (!Number.isFinite(currentDurationMs) || !Number.isFinite(baselineDurationMs) || baselineDurationMs <= 0) {
+    return {
+      status: "unknown",
+      deltaMs: null,
+      deltaPercent: null
+    };
+  }
+  const deltaMs = currentDurationMs - baselineDurationMs;
+  const deltaPercent = baselineDurationMs === 0 ? null : (deltaMs / baselineDurationMs) * 100;
+  const meaningful = Math.abs(deltaMs) >= 500 && Math.abs(deltaPercent ?? 0) >= 25;
+  if (meaningful && deltaMs > 0) {
+    return { status: "regressed", deltaMs, deltaPercent };
+  }
+  if (meaningful && deltaMs < 0) {
+    return { status: "improved", deltaMs, deltaPercent };
+  }
+  return { status: "steady", deltaMs, deltaPercent };
+}
+
+function regressionSummaryByRun(runs = []) {
+  const summaries = Object.create(null);
+  const byGateAndEnvironment = Object.create(null);
+  for (const run of [...runs].sort(compareActivityRows)) {
+    const gateId = String(run?.gateId || "");
+    if (!gateId) continue;
+    const environmentIdentityHash = String(run?.cacheIdentity?.environmentIdentityHash || "");
+    const runtimeProfile = String(run?.runtimeProfile || "");
+    const key = `${gateId}\u0000${environmentIdentityHash}\u0000${runtimeProfile}`;
+    pushByKey(byGateAndEnvironment, key, run);
+  }
+  for (const group of Object.values(byGateAndEnvironment)) {
+    let latestPassedBaseline = null;
+    for (const run of group) {
+      const baselineDurationMs = numberOrNull(latestPassedBaseline?.durationMs);
+      const currentDurationMs = numberOrNull(run?.durationMs);
+      const heuristic = inferRegressionStatus(currentDurationMs, baselineDurationMs);
+      summaries[run.id] = {
+        id: `regressionSummary:${run.id}`,
+        runId: String(run.id),
+        gateId: String(run.gateId || ""),
+        status: heuristic.status,
+        baselineRunId: latestPassedBaseline ? String(latestPassedBaseline.id) : null,
+        baselineDurationMs,
+        currentDurationMs,
+        deltaMs: heuristic.deltaMs,
+        deltaPercent: heuristic.deltaPercent
+      };
+      if (run.status === "passed" && run.cacheStatus !== "hit") latestPassedBaseline = run;
+    }
+  }
+  return summaries;
+}
+
 function changeSetEditRows(witnesses) {
   const latest = new Map();
   for (const witness of witnesses) {
@@ -679,6 +771,151 @@ function testCaseRows(witnesses) {
   return sortRows(rows, ["runId", "suiteId", "id"]);
 }
 
+function testReportRows(witnesses) {
+  const runs = platformModuleProjectors.testRuns(witnesses);
+  const results = platformModuleProjectors.testResults(witnesses);
+  const artifacts = platformModuleProjectors.testArtifacts(witnesses);
+  const suites = platformModuleProjectors.testSuites(witnesses);
+  const testCases = platformModuleProjectors.testCases(witnesses);
+  const regressionsByRun = regressionSummaryByRun(runs);
+  const resultsByRun = Object.create(null);
+  const artifactsByRun = Object.create(null);
+  const suitesByRun = Object.create(null);
+  const casesByRun = Object.create(null);
+  for (const row of results) pushByKey(resultsByRun, row.runId, row);
+  for (const row of artifacts) pushByKey(artifactsByRun, row.runId, row);
+  for (const row of suites) pushByKey(suitesByRun, row.runId, row);
+  for (const row of testCases) pushByKey(casesByRun, row.runId, row);
+  const rows = [];
+  for (const run of runs) {
+    const runResults = resultsByRun[run.id] ?? [];
+    const runArtifacts = artifactsByRun[run.id] ?? [];
+    const runSuites = suitesByRun[run.id] ?? [];
+    const runCases = casesByRun[run.id] ?? [];
+    const format = primaryStructuredFormat(runArtifacts, runSuites);
+    const structuredArtifacts = format
+      ? runArtifacts.filter(artifact => artifact.structuredFormat === format)
+      : runArtifacts.filter(artifact => artifact.structuredFormat);
+    const relevantSuites = format
+      ? runSuites.filter(suite => suite.format === format)
+      : runSuites;
+    const relevantCases = format
+      ? runCases.filter(testCase => testCase.format === format)
+      : runCases;
+    const failedCases = relevantCases.filter(testCase => testCase.status === "failed" || testCase.status === "error");
+    const caseStatusCounts = relevantCases.reduce((counts, testCase) => {
+      const status = String(testCase.status || "unknown");
+      counts[status] = (counts[status] ?? 0) + 1;
+      return counts;
+    }, Object.create(null));
+    const suiteStatusCounts = relevantSuites.reduce((counts, suite) => {
+      const status = String(suite.status || "unknown");
+      counts[status] = (counts[status] ?? 0) + 1;
+      return counts;
+    }, Object.create(null));
+    const totalCases = relevantCases.length || relevantSuites.reduce((sum, suite) => sum + Number(suite.total || 0), 0);
+    const passedCount = caseStatusCounts.passed ?? relevantSuites.reduce((sum, suite) => sum + Number(suite.passed || 0), 0);
+    const failedCount = caseStatusCounts.failed ?? relevantSuites.reduce((sum, suite) => sum + Number(suite.failed || 0), 0);
+    const errorCount = caseStatusCounts.error ?? relevantSuites.reduce((sum, suite) => sum + Number(suite.errors || 0), 0);
+    const skippedCount = (caseStatusCounts.skipped ?? 0) + (caseStatusCounts.todo ?? 0)
+      || relevantSuites.reduce((sum, suite) => sum + Number(suite.skipped || 0), 0);
+    const suiteCount = relevantSuites.length;
+    const summarySuffix = run.cacheStatus === "hit" ? ", cached" : "";
+    const baseArtifactIds = runArtifacts.map(artifact => artifact.id);
+    const baseSuiteIds = relevantSuites.map(suite => suite.id);
+    const baseCaseIds = relevantCases.map(testCase => testCase.id);
+    const producedAt = run.finishedAt ?? run.startedAt ?? null;
+    const latestResult = runResults.at(-1) ?? null;
+    const regression = regressionsByRun[run.id] ?? {
+      id: `regressionSummary:${run.id}`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      status: "unknown",
+      baselineRunId: null,
+      baselineDurationMs: null,
+      currentDurationMs: numberOrNull(run.durationMs),
+      deltaMs: null,
+      deltaPercent: null
+    };
+    rows.push({
+      id: `testReport:${run.id}:summary`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "summary",
+      title: "Report Summary",
+      status: String(run.status || latestResult?.status || "unknown"),
+      summary: `${formatCountSummary({ suiteCount, caseCount: totalCases, failedCount, errorCount, skippedCount })}${summarySuffix}`,
+      artifactIds: baseArtifactIds,
+      suiteIds: baseSuiteIds,
+      caseIds: baseCaseIds,
+      producedAt,
+      format: format || null,
+      suiteCount,
+      caseCount: totalCases,
+      passedCount,
+      failedCount,
+      errorCount,
+      skippedCount,
+      cached: run.cacheStatus === "hit"
+    });
+    rows.push({
+      id: `testReport:${run.id}:suites`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "suites",
+      title: "Suite Summary",
+      status: suiteStatusCounts.error ? "error" : (suiteStatusCounts.failed ? "failed" : (suiteCount ? "passed" : "unknown")),
+      summary: suiteCount
+        ? formatCountSummary({ suiteCount, caseCount: totalCases, failedCount, errorCount, skippedCount })
+        : "No structured suites were derived for this run.",
+      artifactIds: structuredArtifacts.map(artifact => artifact.id),
+      suiteIds: baseSuiteIds,
+      caseIds: baseCaseIds,
+      producedAt,
+      format: format || null,
+      suiteCount,
+      caseCount: totalCases,
+      failedCount,
+      errorCount,
+      skippedCount
+    });
+    rows.push({
+      id: `testReport:${run.id}:failures`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "failures",
+      title: "Failing Cases",
+      status: failedCases.length ? (failedCases.some(testCase => testCase.status === "error") ? "error" : "failed") : "passed",
+      summary: failedCases.length
+        ? `${failedCases.length} failing or error case${failedCases.length === 1 ? "" : "s"}`
+        : "No failing or error cases were derived for this run.",
+      artifactIds: uniqueStrings(failedCases.map(testCase => testCase.artifactId)),
+      suiteIds: uniqueStrings(failedCases.map(testCase => testCase.suiteId)),
+      caseIds: failedCases.map(testCase => testCase.id),
+      producedAt,
+      format: format || null,
+      failureCount: failedCases.length
+    });
+    rows.push({
+      id: `testReport:${run.id}:regression`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "regression",
+      title: "Regression Summary",
+      status: regression.status,
+      summary: regression.status === "unknown"
+        ? "No valid non-cached passed baseline is available yet."
+        : `${regression.status} vs ${regression.baselineRunId || "baseline"}: ${regression.currentDurationMs ?? "?"} ms vs ${regression.baselineDurationMs ?? "?"} ms (${regression.deltaPercent == null ? "n/a" : `${regression.deltaPercent >= 0 ? "+" : ""}${Math.round(regression.deltaPercent)}%`})`,
+      artifactIds: [],
+      suiteIds: [],
+      caseIds: [],
+      producedAt,
+      regressionSummary: regression
+    });
+  }
+  return sortRows(rows, ["runId", "reportKind", "id"]);
+}
+
 export const platformModuleProjectors = {
   changeSetEdits(witnesses) {
     return changeSetEditRows(witnesses);
@@ -743,6 +980,23 @@ export const platformModuleProjectors = {
 
   testCases(witnesses) {
     return testCaseRows(witnesses);
+  },
+
+  testReports(witnesses) {
+    return testReportRows(witnesses);
+  },
+
+  testReportIndex(witnesses) {
+    const rows = platformModuleProjectors.testReports(witnesses);
+    const byId = Object.create(null);
+    const byRun = Object.create(null);
+    const byGate = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(byRun, row.runId, row);
+      pushByKey(byGate, row.gateId, row);
+    }
+    return { rows, byId, byRun, byGate };
   },
 
   testGates(witnesses) {

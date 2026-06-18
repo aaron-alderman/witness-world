@@ -41,216 +41,216 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### What Exists Now
 
-- [ ] Treat `plugin.platform` as the existing home for this work.
-- [ ] Treat `/platform` as the human surface for platform self-inspection.
-- [ ] Treat `/api/platform-model` as the existing read API for the platform graph.
-- [ ] Treat `/api/platform-gaps` as the existing read API for platform gaps.
-- [ ] Treat `/api/platform-proposals` as the existing mutation entry point for supported platform proposals.
-- [ ] Treat `platform.read` as the existing MCP read lane.
-- [ ] Treat `platform.proposal` as the existing MCP proposal lane.
-- [ ] Treat `platform.self` as the capability that gates platform MCP availability.
-- [ ] Treat `full` as the profile where platform self-modeling is exposed.
-- [ ] Treat `minimal` as the profile that must stay free of platform console/routes.
-- [ ] Treat `plugins/platform/platform-console.rvm` as the authored RVM source for the console.
-- [ ] Treat `plugins/platform/platform-console.wcss` as the authored WCSS source for the console.
-- [ ] Treat `plugins/platform/platform-style.js` as the current WCSS lowering bridge.
-- [ ] Treat `plugins/platform/platform-page.js` as the current HTML/JS console renderer.
-- [ ] Treat `plugins/platform/platform-model.js` as the current platform graph builder.
-- [ ] Treat `plugins/platform/platform-proposals.js` as the current proposal body builder/template registry.
-- [ ] Treat `plugins/platform/handlers.js` as the current platform HTTP handler implementation.
-- [ ] Treat `plugins/platform/runtime.js` as the current route/surface/capability registration point.
-- [ ] Treat `plugins/platform/handler-catalog.js` as the handler ownership/catalog contract.
-- [ ] Treat `plugins/platform/plugin.json` as the plugin manifest.
-- [ ] Treat `plugins/platform/platform.test.js` as the co-located platform test suite.
-- [ ] Treat `plugins/mcp/mcp-tools.js` as the current MCP tool declaration/execution surface.
-- [ ] Treat `plugins/mcp/mcp-support-services.js` as the current MCP capability availability gate.
-- [ ] Treat `plugins/mcp/mcp.test.js` as the current MCP test suite.
-- [ ] Treat `store/seeds/runtime-profiles.json` as the runtime profile seed source.
-- [ ] Treat `store/seeds/first-party-plugin-catalog.json` as the first-party plugin catalog source.
-- [ ] Treat `src/app-snapshot-manager.js` as the existing app snapshot and source-change detection mechanism.
-- [ ] Treat `src/runtime-server.js` as the current runtime server composition point.
-- [ ] Treat `test/runtime-profile.test.js` as the profile isolation/exposure test suite.
-- [ ] Treat `test/app-snapshot-manager.test.js` as the app snapshot manager test suite.
+- Treat `plugin.platform` as the existing home for this work.
+- Treat `/platform` as the human surface for platform self-inspection.
+- Treat `/api/platform-model` as the existing read API for the platform graph.
+- Treat `/api/platform-gaps` as the existing read API for platform gaps.
+- Treat `/api/platform-proposals` as the existing mutation entry point for supported platform proposals.
+- Treat `platform.read` as the existing MCP read lane.
+- Treat `platform.proposal` as the existing MCP proposal lane.
+- Treat `platform.self` as the capability that gates platform MCP availability.
+- Treat `full` as the profile where platform self-modeling is exposed.
+- Treat `minimal` as the profile that must stay free of platform console/routes.
+- Treat `plugins/platform/platform-console.rvm` as the authored RVM source for the console.
+- Treat `plugins/platform/platform-console.wcss` as the authored WCSS source for the console.
+- Treat `plugins/platform/platform-style.js` as the current WCSS lowering bridge.
+- Treat `plugins/platform/platform-page.js` as the current HTML/JS console renderer.
+- Treat `plugins/platform/platform-model.js` as the current platform graph builder.
+- Treat `plugins/platform/platform-proposals.js` as the current proposal body builder/template registry.
+- Treat `plugins/platform/handlers.js` as the current platform HTTP handler implementation.
+- Treat `plugins/platform/runtime.js` as the current route/surface/capability registration point.
+- Treat `plugins/platform/handler-catalog.js` as the handler ownership/catalog contract.
+- Treat `plugins/platform/plugin.json` as the plugin manifest.
+- Treat `plugins/platform/platform.test.js` as the co-located platform test suite.
+- Treat `plugins/mcp/mcp-tools.js` as the current MCP tool declaration/execution surface.
+- Treat `plugins/mcp/mcp-support-services.js` as the current MCP capability availability gate.
+- Treat `plugins/mcp/mcp.test.js` as the current MCP test suite.
+- Treat `store/seeds/runtime-profiles.json` as the runtime profile seed source.
+- Treat `store/seeds/first-party-plugin-catalog.json` as the first-party plugin catalog source.
+- Treat `src/app-snapshot-manager.js` as the existing app snapshot and source-change detection mechanism.
+- Treat `src/runtime-server.js` as the current runtime server composition point.
+- Treat `test/runtime-profile.test.js` as the profile isolation/exposure test suite.
+- Treat `test/app-snapshot-manager.test.js` as the app snapshot manager test suite.
 
 ### Do Not Build The Wrong Thing
 
-- [ ] Do not create a second platform console outside `plugin.platform`.
-- [ ] Do not add privileged direct-write APIs for platform state.
-- [ ] Do not bypass proposal, change-set, or explicit operator authority paths.
-- [ ] Do not expose platform routes from `minimal`.
-- [ ] Do not make MCP more powerful than the human proposal path.
-- [ ] Do not add MCP-only mutation backdoors.
-- [ ] Do not treat Git as the source of truth for the internal platform model.
-- [ ] Do not run tests from ad hoc external fixtures when the roadmap calls for in-platform execution.
-- [ ] Do not model docs as an unstructured blob once doc nodes are introduced.
-- [ ] Do not give runtime code ambient handles to external boundaries.
-- [ ] Do not mutate live runtime composition before candidate validation succeeds.
-- [ ] Do not let failed validation replace the last good active runtime revision.
-- [ ] Do not hand-roll a parallel dependency graph if existing projections, manifests, diagnostics, and app snapshot data can be reused.
-- [ ] Do not move platform work into an unrelated plugin unless there is a specific boundary reason and route/profile tests prove it.
-- [ ] Do not collapse RVM/WCSS back into opaque hand-authored HTML/CSS.
-- [ ] Do not remove current platform tests while extending the model.
+- Do not create a second platform console outside `plugin.platform`.
+- Do not add privileged direct-write APIs for platform state.
+- Do not bypass proposal, change-set, or explicit operator authority paths.
+- Do not expose platform routes from `minimal`.
+- Do not make MCP more powerful than the human proposal path.
+- Do not add MCP-only mutation backdoors.
+- Do not treat Git as the source of truth for the internal platform model.
+- Do not run tests from ad hoc external fixtures when the roadmap calls for in-platform execution.
+- Do not model docs as an unstructured blob once doc nodes are introduced.
+- Do not give runtime code ambient handles to external boundaries.
+- Do not mutate live runtime composition before candidate validation succeeds.
+- Do not let failed validation replace the last good active runtime revision.
+- Do not hand-roll a parallel dependency graph if existing projections, manifests, diagnostics, and app snapshot data can be reused.
+- Do not move platform work into an unrelated plugin unless there is a specific boundary reason and route/pre tests prove it.
+- Do not collapse RVM/WCSS back into opaque hand-authored HTML/CSS.
+- Do not remove current platform tests while extending the model.
 
 ### First Files To Read
 
-- [ ] Read `plugins/platform/plugin.json`.
-- [ ] Read `plugins/platform/runtime.js`.
-- [ ] Read `plugins/platform/handlers.js`.
-- [ ] Read `plugins/platform/platform-model.js`.
-- [ ] Read `plugins/platform/platform-proposals.js`.
-- [ ] Read `plugins/platform/platform-page.js`.
-- [ ] Read `plugins/platform/platform-console.rvm`.
-- [ ] Read `plugins/platform/platform-console.wcss`.
-- [ ] Read `plugins/platform/platform.test.js`.
-- [ ] Read `plugins/mcp/mcp-tools.js`.
-- [ ] Read `plugins/mcp/mcp-support-services.js`.
-- [ ] Read `plugins/mcp/mcp.test.js`.
-- [ ] Read `store/seeds/runtime-profiles.json`.
-- [ ] Read `store/seeds/first-party-plugin-catalog.json`.
-- [ ] Read `src/app-snapshot-manager.js`.
-- [ ] Read `test/runtime-profile.test.js`.
+- Read `plugins/platform/plugin.json`.
+- Read `plugins/platform/runtime.js`.
+- Read `plugins/platform/handlers.js`.
+- Read `plugins/platform/platform-model.js`.
+- Read `plugins/platform/platform-proposals.js`.
+- Read `plugins/platform/platform-page.js`.
+- Read `plugins/platform/platform-console.rvm`.
+- Read `plugins/platform/platform-console.wcss`.
+- Read `plugins/platform/platform.test.js`.
+- Read `plugins/mcp/mcp-tools.js`.
+- Read `plugins/mcp/mcp-support-services.js`.
+- Read `plugins/mcp/mcp.test.js`.
+- Read `store/seeds/runtime-profiles.json`.
+- Read `store/seeds/first-party-plugin-catalog.json`.
+- Read `src/app-snapshot-manager.js`.
+- Read `test/runtime-profile.test.js`.
 
 ### Current Test Commands
 
-- [ ] Run the platform/MCP/profile smoke suite before changing behavior:
-  - [ ] `node --test plugins/platform/platform.test.js plugins/mcp/mcp.test.js test/runtime-profile.test.js`
-- [ ] Run app snapshot tests before changing reload/snapshot behavior:
-  - [ ] `node --test test/app-snapshot-manager.test.js`
-- [ ] Run runtime profile tests before changing plugin/profile exposure:
-  - [ ] `node --test test/runtime-profile.test.js`
-- [ ] Run MCP tests before changing `platform.read`, `platform.proposal`, or future platform MCP tools:
-  - [ ] `node --test plugins/mcp/mcp.test.js`
-- [ ] Run platform tests before changing platform model, proposals, console, RVM, or WCSS:
-  - [ ] `node --test plugins/platform/platform.test.js`
-- [ ] Add narrower tests first when behavior is ambiguous, then implement against those tests.
+- Run the platform/MCP/profile smoke suite before changing behavior:
+  - `node --test plugins/platform/platform.test.js plugins/mcp/mcp.test.js test/runtime-profile.test.js`
+- Run app snapshot tests before changing reload/snapshot behavior:
+  - `node --test test/app-snapshot-manager.test.js`
+- Run runtime profile tests before changing plugin/profile exposure:
+  - `node --test test/runtime-profile.test.js`
+- Run MCP tests before changing `platform.read`, `platform.proposal`, or future platform MCP tools:
+  - `node --test plugins/mcp/mcp.test.js`
+- Run platform tests before changing platform model, proposals, console, RVM, or WCSS:
+  - `node --test plugins/platform/platform.test.js`
+- Add narrower tests first when behavior is ambiguous, then implement against those tests.
 
 ### Current Implemented Behaviors To Preserve
 
-- [ ] Preserve `plugin.platform` manifest identity.
-- [ ] Preserve `platform.self` capability declaration.
-- [ ] Preserve `/platform` rendering from the active platform plugin.
-- [ ] Preserve `/api/platform-model` JSON response.
-- [ ] Preserve `/api/platform-gaps` JSON response.
-- [ ] Preserve `/api/platform-proposals` create behavior.
-- [ ] Preserve platform proposal approve/reject behavior.
-- [ ] Preserve MCP `platform.read` using existing route handlers.
-- [ ] Preserve MCP `platform.proposal` using existing route handlers.
-- [ ] Preserve platform tool availability gating through `platform.self`.
-- [ ] Preserve `full` profile exposure.
-- [ ] Preserve `minimal` profile isolation.
-- [ ] Preserve RVM/WCSS source nodes in the platform model.
-- [ ] Preserve test coverage proving RVM identity and WCSS lowering.
-- [ ] Preserve proposal support only for existing target processes.
-- [ ] Preserve unsupported gaps as read-only recommendations.
+- Preserve `plugin.platform` manifest identity.
+- Preserve `platform.self` capability declaration.
+- Preserve `/platform` rendering from the active platform plugin.
+- Preserve `/api/platform-model` JSON response.
+- Preserve `/api/platform-gaps` JSON response.
+- Preserve `/api/platform-proposals` create behavior.
+- Preserve platform proposal approve/reject behavior.
+- Preserve MCP `platform.read` using existing route handlers.
+- Preserve MCP `platform.proposal` using existing route handlers.
+- Preserve platform tool availability gating through `platform.self`.
+- Preserve `full` profile exposure.
+- Preserve `minimal` profile isolation.
+- Preserve RVM/WCSS source nodes in the platform model.
+- Preserve test coverage proving RVM identity and WCSS lowering.
+- Preserve proposal support only for existing target processes.
+- Preserve unsupported gaps as read-only recommendations.
 
 ### Recommended First Slice For A New Agent
 
-- [ ] Start with the `First Concrete Implementation Slice` at the bottom of this document.
-- [ ] Implement `changeSet`, `changeSetEdit`, `branch`, and `candidateSnapshot` as projected platform objects first.
-- [ ] Keep the first slice in `plugin.platform` unless a boundary requires a small subordinate plugin.
-- [ ] Add read-model nodes and edges before adding mutation UI.
-- [ ] Add proposal body generation before adding approval/application.
-- [ ] Add API tests before console wiring.
-- [ ] Add MCP parity after the HTTP proposal path exists.
-- [ ] Add console panels last, consuming the same APIs as MCP.
-- [ ] Keep validation model-only until there is a candidate snapshot path.
-- [ ] Avoid JS/plugin hot swap in the first slice; begin with RVM/WCSS/WTOML/JSON overlay validation.
+- Start with the `First Concrete Implementation Slice` at the bottom of this document.
+- Implement `changeSet`, `changeSetEdit`, `branch`, and `candidateSnapshot` as projected platform objects first.
+- Keep the first slice in `plugin.platform` unless a boundary requires a small subordinate plugin.
+- Add read-model nodes and edges before adding mutation UI.
+- Add proposal body generation before adding approval/application.
+- Add API tests before console wiring.
+- Add MCP parity after the HTTP proposal path exists.
+- Add console panels last, consuming the same APIs as MCP.
+- Keep validation model-only until there is a candidate snapshot path.
+- Avoid JS/plugin hot swap in the first slice; begin with RVM/WCSS/WTOML/JSON overlay validation.
 
 ### Expected Architecture Shape
 
-- [ ] Human console and MCP tools must converge on the same route handlers.
-- [ ] Platform routes must be declared by the platform runtime entry.
-- [ ] Handler ownership must be visible in the handler catalog.
-- [ ] Profile exposure must be tested from the actual runtime profile seeds.
-- [ ] Platform model nodes must have stable IDs.
-- [ ] Platform model edges must explain ownership, authorship, governance, dependency, or runtime exposure.
-- [ ] Gaps must be deterministic.
-- [ ] Gaps must include a supported `recommendedProposal` only when that proposal can actually be created.
-- [ ] Proposals must produce reviewable bodies, not direct writes.
-- [ ] Approvals must delegate to already-supported target processes.
-- [ ] Candidate snapshots must compile and validate before activation.
-- [ ] Runtime revision activation must be atomic from the perspective of new requests.
-- [ ] In-flight work must keep its original runtime revision.
-- [ ] Tests must become platform executions, but local test commands remain acceptable while building that substrate.
+- Human console and MCP tools must converge on the same route handlers.
+- Platform routes must be declared by the platform runtime entry.
+- Handler ownership must be visible in the handler catalog.
+- Profile exposure must be tested from the actual runtime profile seeds.
+- Platform model nodes must have stable IDs.
+- Platform model edges must explain ownership, authorship, governance, dependency, or runtime exposure.
+- Gaps must be deterministic.
+- Gaps must include a supported `recommendedProposal` only when that proposal can actually be created.
+- Proposals must produce reviewable bodies, not direct writes.
+- Approvals must delegate to already-supported target processes.
+- Candidate snapshots must compile and validate before activation.
+- Runtime revision activation must be atomic from the perspective of new requests.
+- In-flight work must keep its original runtime revision.
+- Tests must become platform executions, but local test commands remain acceptable while building that substrate.
 
 ### How To Decide Where A New Feature Goes
 
-- [ ] If it is a platform self-inspection view, put it in `plugin.platform`.
-- [ ] If it is a platform mutation request, put it behind proposals/change sets.
-- [ ] If it is a human view, expose it through `/platform` and platform APIs.
-- [ ] If it is an agent/tool view, expose it through MCP using the same platform APIs.
-- [ ] If it changes plugin/profile availability, update runtime profile/catalog seeds and profile tests.
-- [ ] If it changes MCP behavior, update MCP tool declarations, support services, and MCP tests.
-- [ ] If it changes RVM/WCSS authored source, update source identity/lowering tests.
-- [ ] If it touches external systems, model the boundary, authority, lease, execution, and artifact.
-- [ ] If it produces evidence, store or model it as an artifact.
-- [ ] If it observes failure, model it as a defect or meta-defect.
-- [ ] If it affects docs, create or update doc nodes and freshness edges.
+- If it is a platform self-inspection view, put it in `plugin.platform`.
+- If it is a platform mutation request, put it behind proposals/change sets.
+- If it is a human view, expose it through `/platform` and platform APIs.
+- If it is an agent/tool view, expose it through MCP using the same platform APIs.
+- If it changes plugin/profile availability, update runtime profile/catalog seeds and profile tests.
+- If it changes MCP behavior, update MCP tool declarations, support services, and MCP tests.
+- If it changes RVM/WCSS authored source, update source identity/lowering tests.
+- If it touches external systems, model the boundary, authority, lease, execution, and artifact.
+- If it produces evidence, store or model it as an artifact.
+- If it observes failure, model it as a defect or meta-defect.
+- If it affects docs, create or update doc nodes and freshness edges.
 
 ### Minimum Bar For Each Pull Of Work
 
-- [ ] Identify the platform object kinds involved.
-- [ ] Identify the lifecycle phases involved: `author`, `transform`, `execute`, `observe`, `verify`, `ship`, `steward`.
-- [ ] Identify the profile exposure impact.
-- [ ] Identify whether the change needs MCP parity.
-- [ ] Identify whether the change needs a human console panel.
-- [ ] Identify whether the change needs a proposal path.
-- [ ] Identify whether the change needs a candidate snapshot.
-- [ ] Identify which tests prove `minimal` remains clean.
-- [ ] Identify which tests prove `full` exposes the new behavior.
-- [ ] Identify which docs become stale or need new ownership.
-- [ ] Identify which defects/gaps should be emitted when the behavior is incomplete.
+- Identify the platform object kinds involved.
+- Identify the lifecycle phases involved: `author`, `transform`, `execute`, `observe`, `verify`, `ship`, `steward`.
+- Identify the profile exposure impact.
+- Identify whether the change needs MCP parity.
+- Identify whether the change needs a human console panel.
+- Identify whether the change needs a proposal path.
+- Identify whether the change needs a candidate snapshot.
+- Identify which tests prove `minimal` remains clean.
+- Identify which tests prove `full` exposes the new behavior.
+- Identify which docs become stale or need new ownership.
+- Identify which defects/gaps should be emitted when the behavior is incomplete.
 
 ## Current Baseline
 
-- [ ] Confirm `plugin.platform` is active in the `full` runtime profile and absent from `minimal`.
-- [ ] Confirm `/platform`, `/api/platform-model`, `/api/platform-gaps`, and `/api/platform-proposals` are owned by `plugin.platform`.
-- [ ] Confirm `platform.read` and `platform.proposal` are available only when `platform.self` is active and installed on the MCP server.
-- [ ] Confirm the Platform Console has authored source artifacts:
-  - [ ] `plugins/platform/platform-console.rvm`
-  - [ ] `plugins/platform/platform-console.wcss`
-  - [ ] `plugins/platform/platform-style.js`
-- [ ] Confirm the platform model exposes RVM/WCSS authored source nodes:
-  - [ ] `rvm:plugins/platform/platform-console.rvm`
-  - [ ] `wcss:plugins/platform/platform-console.wcss`
-- [ ] Confirm existing app snapshot reload works for `.rvm` and `.wtoml` app sources through `AppSnapshotManager`.
-- [ ] Confirm current proposal machinery can create, approve, and reject guarded target-process mutations.
-- [ ] Confirm runtime diagnostics expose active profile, active bundles, routes, surfaces, handlers, capabilities, and plugins.
+- Confirm `plugin.platform` is active in the `full` runtime profile and absent from `minimal`.
+- Confirm `/platform`, `/api/platform-model`, `/api/platform-gaps`, and `/api/platform-proposals` are owned by `plugin.platform`.
+- Confirm `platform.read` and `platform.proposal` are available only when `platform.self` is active and installed on the MCP server.
+- Confirm the Platform Console has authored source artifacts:
+  - `plugins/platform/platform-console.rvm`
+  - `plugins/platform/platform-console.wcss`
+  - `plugins/platform/platform-style.js`
+- Confirm the platform model exposes RVM/WCSS authored source nodes:
+  - `rvm:plugins/platform/platform-console.rvm`
+  - `wcss:plugins/platform/platform-console.wcss`
+- Confirm existing app snapshot reload works for `.rvm` and `.wtoml` app sources through `AppSnapshotManager`.
+- Confirm current proposal machinery can create, approve, and reject guarded target-process mutations.
+- Confirm runtime diagnostics expose active profile, active bundles, routes, surfaces, handlers, capabilities, and plugins.
 
 ## Guiding Invariants
 
-- [ ] No privileged direct-write paths for platform mutations.
-- [ ] Every mutation enters through a proposal, change set, execution command, or explicit operator authority path.
-- [ ] Multi-file edits apply atomically to a candidate snapshot before becoming active.
-- [ ] Failed validation preserves the last good active snapshot.
-- [ ] In-flight requests continue on the runtime revision they started with.
-- [ ] New requests use the newest valid active runtime revision.
-- [ ] External boundaries are addressed by capability-scoped commands, not ambient handles.
-- [ ] Tests, docs, telemetry, and defects are first-class platform objects.
-- [ ] Git can mirror platform state, but internal platform state is the product source of truth.
-- [ ] All objects have provenance: actor/session, source, branch/change set, proposal, execution, timestamp.
-- [ ] Dependency analysis explains why a gate, doc, test, or subsystem is affected.
-- [ ] The platform can inspect its own blind spots as meta-defects.
+- No privileged direct-write paths for platform mutations.
+- Every mutation enters through a proposal, change set, execution command, or explicit operator authority path.
+- Multi-file edits apply atomically to a candidate snapshot before becoming active.
+- Failed validation preserves the last good active snapshot.
+- In-flight requests continue on the runtime revision they started with.
+- New requests use the newest valid active runtime revision.
+- External boundaries are addressed by capability-scoped commands, not ambient handles.
+- Tests, docs, telemetry, and defects are first-class platform objects.
+- Git can mirror platform state, but internal platform state is the product source of truth.
+- All objects have provenance: actor/session, source, branch/change set, proposal, execution, timestamp.
+- Dependency analysis explains why a gate, doc, test, or subsystem is affected.
+- The platform can inspect its own blind spots as meta-defects.
 
 ## Core Vocabulary
 
-- [ ] Define `intent`: a human or LLM goal statement that starts platform work.
-- [ ] Define `intentRegistryEntry`: the canonical classified registry row for an intent, with scope, actors, linked docs, linked tests, linked features, and freshness evidence.
-- [ ] Define `proposal`: a reviewable request to mutate platform state.
-- [ ] Define `changeSet`: a multi-file and multi-object staged change.
-- [ ] Define `branch`: an isolated platform work line backed by a change set graph.
-- [ ] Define `candidateSnapshot`: a compiled and validated runtime candidate.
-- [ ] Define `runtimeRevision`: the active backend/runtime composition revision.
-- [ ] Define `docNode`: a governed document with scope, freshness, and dependencies.
-- [ ] Define `testGate`: an executable verification contract.
-- [ ] Define `execution`: a runtime command, test run, build, LLM turn, or boundary effect.
-- [ ] Define `defect`: an observed product/design/logic/runtime failure.
-- [ ] Define `metaDefect`: a defect in the platform's own understanding or process.
-- [ ] Define `telemetrySample`: live measurement linked to platform objects.
-- [ ] Define `boundary`: an external resource or effect actor.
-- [ ] Define `lease`: temporary authority to use a boundary.
-- [ ] Define `artifact`: output of execution, validation, test, docs, screenshots, traces, logs, or generated files.
-- [ ] Define `shipRecord`: durable evidence that a branch was applied, pushed, released, or deployed.
+- Define `intent`: a human or LLM goal statement that starts platform work.
+- Define `intentRegistryEntry`: the canonical classified registry row for an intent, with scope, actors, linked docs, linked tests, linked features, and freshness evidence.
+- Define `proposal`: a reviewable request to mutate platform state.
+- Define `changeSet`: a multi-file and multi-object staged change.
+- Define `branch`: an isolated platform work line backed by a change set graph.
+- Define `candidateSnapshot`: a compiled and validated runtime candidate.
+- Define `runtimeRevision`: the active backend/runtime composition revision.
+- Define `docNode`: a governed document with scope, freshness, and dependencies.
+- Define `testGate`: an executable verification contract.
+- Define `execution`: a runtime command, test run, build, LLM turn, or boundary effect.
+- Define `defect`: an observed product/design/logic/runtime failure.
+- Define `metaDefect`: a defect in the platform's own understanding or process.
+- Define `telemetrySample`: live measurement linked to platform objects.
+- Define `boundary`: an external resource or effect actor.
+- Define `lease`: temporary authority to use a boundary.
+- Define `artifact`: output of execution, validation, test, docs, screenshots, traces, logs, or generated files.
+- Define `shipRecord`: durable evidence that a branch was applied, pushed, released, or deployed.
 
 ## Phase 1: Platform Branch And Change Set Kernel
 

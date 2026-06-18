@@ -53,6 +53,176 @@ test("builtin notification job handlers render and send stub notifications", asy
   assert.equal(emitted[1].process, "notify.email.send");
   assert.equal(emitted[1].body.sender, "stub@example.com");
   assert.equal(emitted[1].body.preview, "Hi Ada");
+  assert.equal(emitted[1].body.transport, "stub");
+});
+
+function notificationWorld(emitted) {
+  return {
+    emit(entry) {
+      emitted.push(entry);
+      return { id: `w${emitted.length}`, ...entry };
+    },
+    project(projector) {
+      if (projector === moduleProjectors.notificationIndex) {
+        return {
+          byId: {
+            "notification-1": {
+              id: "notification-1",
+              recipient: "x@example.com",
+              subject: "Hello",
+              template: null,
+              vars: {},
+              text: "Body text"
+            }
+          }
+        };
+      }
+      return { byId: {} };
+    }
+  };
+}
+
+test("notify.email delivers through the http provider and witnesses the real provider message id", async () => {
+  const emitted = [];
+  const calls = [];
+  const handlers = createBuiltinNotificationJobHandlers({
+    world: notificationWorld(emitted),
+    backendHost: "backendHost",
+    runtimeConfig: {
+      "notify.email.provider": "http",
+      "notify.email.http.url": "https://mail.example.test/send",
+      "notify.email.http.apiKey": "secret-key",
+      "notify.email.http.fromAddress": "ops@example.test"
+    },
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return { status: 202, json: async () => ({ id: "msg_123" }) };
+    }
+  });
+
+  const result = await handlers["notify.email.deliver"]({
+    actor: "adam",
+    job: { id: "job-1" },
+    payload: { notificationId: "notification-1" },
+    attempt: 1
+  });
+
+  assert.deepEqual(result, { sent: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://mail.example.test/send");
+  assert.equal(calls[0].init.headers.authorization, "Bearer secret-key");
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    to: "x@example.com",
+    subject: "Hello",
+    from: "ops@example.test",
+    body: "Body text"
+  });
+  const send = emitted.find(entry => entry.process === "notify.email.send");
+  assert.ok(send);
+  assert.equal(send.body.transport, "http");
+  assert.equal(send.body.providerMessageId, "msg_123");
+  assert.equal(send.body.sender, "ops@example.test");
+  assert.equal(emitted.some(entry => entry.process === "notify.email.send.failed"), false);
+});
+
+test("notify.email http provider failure witnesses notify.email.send.failed and rethrows for retry", async () => {
+  const emitted = [];
+  const handlers = createBuiltinNotificationJobHandlers({
+    world: notificationWorld(emitted),
+    backendHost: "backendHost",
+    runtimeConfig: {
+      "notify.email.provider": "http",
+      "notify.email.http.url": "https://mail.example.test/send",
+      "notify.email.http.fromAddress": "ops@example.test"
+    },
+    fetchImpl: async () => ({ status: 500, text: async () => "upstream boom" })
+  });
+
+  await assert.rejects(
+    () => handlers["notify.email.deliver"]({
+      actor: "adam",
+      job: { id: "job-1" },
+      payload: { notificationId: "notification-1" },
+      attempt: 1
+    }),
+    /http email provider responded 500/
+  );
+
+  const failure = emitted.find(entry => entry.process === "notify.email.send.failed");
+  assert.ok(failure);
+  assert.equal(failure.body.transport, "http");
+  assert.match(failure.body.reason, /500/);
+  assert.equal(emitted.some(entry => entry.process === "notify.email.send"), false);
+});
+
+test("notify.email delivers through the sendgrid provider and witnesses the X-Message-Id header", async () => {
+  const emitted = [];
+  const calls = [];
+  const handlers = createBuiltinNotificationJobHandlers({
+    world: notificationWorld(emitted),
+    backendHost: "backendHost",
+    runtimeConfig: {
+      "notify.email.provider": "sendgrid",
+      "notify.email.sendgrid.apiKey": "sg-key",
+      "notify.email.sendgrid.fromAddress": "ops@example.test"
+    },
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return { status: 202, headers: { get: name => (String(name).toLowerCase() === "x-message-id" ? "sg-msg-1" : null) } };
+    }
+  });
+
+  const result = await handlers["notify.email.deliver"]({
+    actor: "adam",
+    job: { id: "job-1" },
+    payload: { notificationId: "notification-1" },
+    attempt: 1
+  });
+
+  assert.deepEqual(result, { sent: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api.sendgrid.com/v3/mail/send");
+  assert.equal(calls[0].init.headers.authorization, "Bearer sg-key");
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    personalizations: [{ to: [{ email: "x@example.com" }] }],
+    from: { email: "ops@example.test" },
+    subject: "Hello",
+    content: [{ type: "text/plain", value: "Body text" }]
+  });
+  const send = emitted.find(entry => entry.process === "notify.email.send");
+  assert.ok(send);
+  assert.equal(send.body.transport, "sendgrid");
+  assert.equal(send.body.providerMessageId, "sg-msg-1");
+  assert.equal(send.body.sender, "ops@example.test");
+});
+
+test("notify.email sendgrid failure witnesses notify.email.send.failed and rethrows for retry", async () => {
+  const emitted = [];
+  const handlers = createBuiltinNotificationJobHandlers({
+    world: notificationWorld(emitted),
+    backendHost: "backendHost",
+    runtimeConfig: {
+      "notify.email.provider": "sendgrid",
+      "notify.email.sendgrid.apiKey": "sg-key",
+      "notify.email.sendgrid.fromAddress": "ops@example.test"
+    },
+    fetchImpl: async () => ({ status: 401, headers: { get: () => null } })
+  });
+
+  await assert.rejects(
+    () => handlers["notify.email.deliver"]({
+      actor: "adam",
+      job: { id: "job-1" },
+      payload: { notificationId: "notification-1" },
+      attempt: 1
+    }),
+    /sendgrid email provider responded 401/
+  );
+
+  const failure = emitted.find(entry => entry.process === "notify.email.send.failed");
+  assert.ok(failure);
+  assert.equal(failure.body.transport, "sendgrid");
+  assert.equal(emitted.some(entry => entry.process === "notify.email.send"), false);
 });
 
 test("builtin webhook job handlers read stored payloads and emit processed witnesses", async () => {

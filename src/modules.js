@@ -2133,6 +2133,15 @@ export const moduleProjectors = {
 
   testCases: delegatedModuleProjector("testCases", emptyRows),
 
+  testReports: delegatedModuleProjector("testReports", emptyRows),
+
+  testReportIndex: delegatedModuleProjector("testReportIndex", () => ({
+    rows: [],
+    byId: Object.create(null),
+    byRun: Object.create(null),
+    byGate: Object.create(null)
+  })),
+
   coverageEdges: delegatedModuleProjector("coverageEdges", emptyRows),
 
   latestTestResultsByGate: delegatedModuleProjector("latestTestResultsByGate", () => ({

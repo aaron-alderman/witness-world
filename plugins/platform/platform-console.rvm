@@ -124,6 +124,7 @@ view PlatformVerificationPage {
   prop title = "Verification"
   prop summary = "Live test runs, RVM-authored reports, candidate snapshots, failures, regressions, and runtime revisions."
   children {
+    PlatformVerificationStatusBanner
     PlatformVerificationList
     PlatformVerificationDetail
     PlatformVerificationStreams
@@ -544,11 +545,12 @@ view PlatformVerificationDetail {
   prop title = "Verification Detail"
   prop summary = "Properties and linked resources for the selected verification object."
   prop detailSource = "verification"
-  prop detailSelectionSources = "testGates|runtimeRevisions|testRuns|candidateSnapshots"
+  prop detailSelectionSources = "testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots"
   prop gateIdPrefixes = "gate:"
   prop runtimeRevisionIdPrefixes = "runtimeRevision:|backendRevision:|frontendRevision:"
   prop candidateSnapshotIdPrefixes = "candidateSnapshot:"
   prop testRunIdPrefixes = "testRun:"
+  prop testReportIdPrefixes = "testReport:"
   prop emptyTitle = "Detail"
   prop emptyState = "No verification rows are projected yet."
   children {
@@ -557,7 +559,25 @@ view PlatformVerificationDetail {
     PlatformVerificationRunHistory
     PlatformVerificationBuildHistory
     PlatformVerificationBuildErrors
+    PlatformVerificationReportSummary
+    PlatformVerificationArtifactsReport
+    PlatformVerificationSuiteSummary
+    PlatformVerificationFailingCases
+    PlatformVerificationRegressionSummary
   }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformVerificationStatusBanner {
+  kind region
+  class platform-verification-status
+  prop title = "Live Verification Status"
+  prop summary = "Current verification health, active execution, and first-pass regression signals."
+  prop verificationPanelKind = "statusBanner"
+  prop propertyCardTitle = "Current Verification State"
+  prop propertyFields = "Status=status|Summary=summary|Running runs=runningCount|Failing gates=failingGateCount|Regressed runs=regressedRunCount|Latest completed run=latestCompletedRunId@concept|Latest completion=latestCompletedAt|Active runtime revision=activeRuntimeRevision@concept"
   projections {
     PlatformModelRead
   }
@@ -632,6 +652,57 @@ view PlatformVerificationBuildErrors {
   prop rowFields = "Build=snapshotBuildId@concept|Path=path|Kind=kind|Message=message"
   prop emptyState = "No build errors for this revision."
   prop rowLimit = "12"
+}
+
+view PlatformVerificationReportSummary {
+  kind region
+  class platform-verification-report-summary
+  prop title = "Report Summary"
+  prop summary = "Derived run summary authored by RVM and populated from projected report rows."
+  prop propertyCardTitle = "Run Report Summary"
+  prop propertyFields = "Report=reportId@concept|Status=status|Summary=summary|Format=format|Suites=suiteCount|Cases=caseCount|Passed=passedCount|Failed=failedCount|Errors=errorCount|Skipped=skippedCount|Cached=cached|Produced=producedAt"
+}
+
+view PlatformVerificationArtifactsReport {
+  kind table
+  class platform-verification-artifacts
+  prop title = "Artifacts and Report Streams"
+  prop summary = "Raw streams and structured TAP/JUnit report artifacts for the selected run."
+  prop columns = "Kind|Artifact|File|Content Type|Bytes"
+  prop rowFields = "Kind=artifactKind|Artifact=id@concept|File=fileName|Content Type=contentType|Bytes=sizeBytes"
+  prop emptyState = "No artifacts or report streams were captured for this run."
+  prop rowLimit = "12"
+}
+
+view PlatformVerificationSuiteSummary {
+  kind table
+  class platform-verification-suite-summary
+  prop title = "Suite Summary"
+  prop summary = "Structured suite rows derived from the selected run."
+  prop columns = "Status|Suite|Total|Failed|Errors"
+  prop rowFields = "Status=status|Suite=id@concept|Total=total|Failed=failed|Errors=errors"
+  prop emptyState = "No structured suites were derived for this run."
+  prop rowLimit = "12"
+}
+
+view PlatformVerificationFailingCases {
+  kind table
+  class platform-verification-failing-cases
+  prop title = "Failing Cases"
+  prop summary = "Failed or errored test cases for the selected run."
+  prop columns = "Status|Case|Suite|Class|Duration"
+  prop rowFields = "Status=status|Case=id@concept|Suite=suiteId@concept|Class=classname|Duration=durationMs"
+  prop emptyState = "No failing or error cases were derived for this run."
+  prop rowLimit = "20"
+}
+
+view PlatformVerificationRegressionSummary {
+  kind region
+  class platform-verification-regression-summary
+  prop title = "Regression Summary"
+  prop summary = "Heuristic duration comparison against the latest non-cached passed baseline."
+  prop propertyCardTitle = "Timing Regression"
+  prop propertyFields = "Report=reportId@concept|Status=status|Summary=summary|Baseline run=baselineRunId@concept|Baseline duration=baselineDurationMs|Current duration=currentDurationMs|Delta ms=deltaMs|Delta=deltaPercent"
 }
 
 view PlatformVerificationStreams {

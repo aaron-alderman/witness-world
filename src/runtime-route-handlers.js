@@ -522,6 +522,7 @@ export function createRuntimeRouteHandlers({
       world,
       backendHost,
       frontendHost,
+      fetchImpl: typeof globalThis.fetch === "function" ? (...args) => globalThis.fetch(...args) : null,
       logger,
       send,
       sendJson,

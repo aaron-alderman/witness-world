@@ -565,6 +565,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationPage.props.modelView, "verification");
   assert.match(verificationPage.props.summaryCards, /Snapshot Builds=snapshotBuilds@count/);
   assert.deepEqual(verificationPage.children, [
+    "PlatformVerificationStatusBanner",
     "PlatformVerificationList",
     "PlatformVerificationDetail",
     "PlatformVerificationStreams",
@@ -576,11 +577,12 @@ test("platform console layout compiles authored top-level surface metadata from 
   const verificationDetailSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
   assert.ok(verificationDetailSurface);
   assert.equal(verificationDetailSurface.props.detailSource, "verification");
-  assert.equal(verificationDetailSurface.props.detailSelectionSources, "testGates|runtimeRevisions|testRuns|candidateSnapshots");
+  assert.equal(verificationDetailSurface.props.detailSelectionSources, "testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots");
   assert.equal(verificationDetailSurface.props.gateIdPrefixes, "gate:");
   assert.equal(verificationDetailSurface.props.runtimeRevisionIdPrefixes, "runtimeRevision:|backendRevision:|frontendRevision:");
   assert.equal(verificationDetailSurface.props.candidateSnapshotIdPrefixes, "candidateSnapshot:");
   assert.equal(verificationDetailSurface.props.testRunIdPrefixes, "testRun:");
+  assert.equal(verificationDetailSurface.props.testReportIdPrefixes, "testReport:");
   assert.equal(verificationDetailSurface.props.emptyTitle, "Detail");
   assert.equal(verificationDetailSurface.props.emptyState, "No verification rows are projected yet.");
   assert.deepEqual(verificationDetailSurface.children, [
@@ -588,7 +590,12 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationRelatedPanel",
     "PlatformVerificationRunHistory",
     "PlatformVerificationBuildHistory",
-    "PlatformVerificationBuildErrors"
+    "PlatformVerificationBuildErrors",
+    "PlatformVerificationReportSummary",
+    "PlatformVerificationArtifactsReport",
+    "PlatformVerificationSuiteSummary",
+    "PlatformVerificationFailingCases",
+    "PlatformVerificationRegressionSummary"
   ]);
   assert.equal(verificationDetailSurface.childSurfaces.some(surface => surface.name === "PlatformVerificationBuildErrors" && surface.summary === "Build errors for the selected runtime revision when available."), true);
   const verificationRunSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRunHistory");
@@ -632,6 +639,25 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationStreamsSurface.props.propertyCardTitle, "Event Streams");
   assert.equal(verificationStreamsSurface.props.propertyFields, "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href");
   assert.equal(verificationStreamsSurface.props.propertyValues, "testRunEventsHref=/api/platform-test-runs/events|backendRevisionEventsHref=/api/runtime/backend-revisions/events");
+  const verificationStatusSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStatusBanner");
+  assert.ok(verificationStatusSurface);
+  assert.equal(verificationStatusSurface.props.verificationPanelKind, "statusBanner");
+  assert.match(verificationStatusSurface.props.propertyFields, /Running runs=runningCount/);
+  const verificationReportSummarySurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationReportSummary");
+  assert.ok(verificationReportSummarySurface);
+  assert.match(verificationReportSummarySurface.props.propertyFields, /Report=reportId@concept/);
+  const verificationArtifactsSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationArtifactsReport");
+  assert.ok(verificationArtifactsSurface);
+  assert.equal(verificationArtifactsSurface.props.rowFields, "Kind=artifactKind|Artifact=id@concept|File=fileName|Content Type=contentType|Bytes=sizeBytes");
+  const verificationSuiteSummarySurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationSuiteSummary");
+  assert.ok(verificationSuiteSummarySurface);
+  assert.equal(verificationSuiteSummarySurface.props.rowFields, "Status=status|Suite=id@concept|Total=total|Failed=failed|Errors=errors");
+  const verificationFailingCasesSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationFailingCases");
+  assert.ok(verificationFailingCasesSurface);
+  assert.equal(verificationFailingCasesSurface.props.rowFields, "Status=status|Case=id@concept|Suite=suiteId@concept|Class=classname|Duration=durationMs");
+  const verificationRegressionSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRegressionSummary");
+  assert.ok(verificationRegressionSurface);
+  assert.match(verificationRegressionSurface.props.propertyFields, /Baseline run=baselineRunId@concept/);
   const testRunPanelSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformTestRunPanel");
   assert.ok(testRunPanelSurface);
   assert.equal(testRunPanelSurface.props.formId, "platform-test-run-form");
@@ -875,7 +901,7 @@ test("platform page views filter the model to page-scoped slices", () => {
 
   assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleBoard", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
   assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "summaries"]);
-  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testGates", "testMonitorDiagnostics", "testRuns"]);
+  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites"]);
   assert.deepEqual(Object.keys(knowledge).sort(), ["docSections", "docTasks", "docs", "epics", "features", "roadmapTasks", "summaries"]);
   assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
   assert.deepEqual(Object.keys(bridges).sort(), ["compatibilityBridges", "summaries"]);
@@ -1159,6 +1185,9 @@ test("platform model filters support MCP views", async () => {
     testCases: [
       { id: "testCase:demo:1", suiteId: "testSuite:demo", runId: "testRun:demo", resultId: "testResult:demo:1", artifactId: "testArtifact:demo:stdout", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
     ],
+    testReports: [
+      { id: "testReport:testRun:demo:summary", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", reportKind: "summary", status: "passed" }
+    ],
     latestTestResultsByGate: {
       "gate:test/runtime-profile.test.js": { id: "testResult:demo:1", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
     }
@@ -1210,6 +1239,34 @@ test("platform model filters support MCP views", async () => {
       "gate:test/runtime-profile.test.js": { id: "testResult:demo:1", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
     }
   }, "testRedGreen");
+  const verificationModel = filterPlatformModel({
+    ...model,
+    testRuns: [
+      { id: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", branchId: "branch.demo", status: "passed" }
+    ],
+    testArtifacts: [
+      { id: "testArtifact:demo:stdout", runId: "testRun:demo", resultId: "testResult:demo:1", gateId: "gate:test/runtime-profile.test.js", artifactKind: "stdout" }
+    ],
+    testSuites: [
+      { id: "testSuite:demo", runId: "testRun:demo", resultId: "testResult:demo:1", artifactId: "testArtifact:demo:stdout", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
+    ],
+    testCases: [
+      { id: "testCase:demo:1", suiteId: "testSuite:demo", runId: "testRun:demo", resultId: "testResult:demo:1", artifactId: "testArtifact:demo:stdout", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
+    ],
+    testReports: [
+      { id: "testReport:testRun:demo:summary", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", reportKind: "summary", status: "passed" }
+    ],
+    runtimeRevisions: [],
+    activeRuntimeRevision: null,
+    candidateSnapshots: [],
+    snapshotBuilds: [],
+    snapshotBuildErrors: [],
+    snapshotDiagnostics: {},
+    testMonitorDiagnostics: {},
+    branchTestRedGreen: [],
+    changeSetTestRedGreen: [],
+    latestTestResultsByGate: {}
+  }, "verification", "testRun:demo");
   const telemetry = filterPlatformModel({
     ...model,
     nodes: [
@@ -1346,7 +1403,10 @@ test("platform model filters support MCP views", async () => {
   assert.equal(testRuns.testArtifacts[0].id, "testArtifact:demo:stdout");
   assert.equal(testRuns.testSuites[0].id, "testSuite:demo");
   assert.equal(testRuns.testCases[0].id, "testCase:demo:1");
+  assert.equal(testRuns.testReports[0].id, "testReport:testRun:demo:summary");
   assert.equal(testRuns.latestTestResultsByGate["gate:test/runtime-profile.test.js"].status, "passed");
+  assert.equal(verificationModel.testReports[0].id, "testReport:testRun:demo:summary");
+  assert.equal(verificationModel.testArtifacts[0].id, "testArtifact:demo:stdout");
   assert.equal(testRedGreen.branchTestRedGreen[0].status, "green");
   assert.equal(testRedGreen.changeSetTestRedGreen[0].status, "red");
   assert.equal(testRedGreen.testGates[0].id, "gate:test/runtime-profile.test.js");
@@ -3560,8 +3620,182 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.testArtifacts.length, 4);
   assert.equal(sent.at(-1).body.testSuites.length, 2);
   assert.equal(sent.at(-1).body.testCases.length, 1);
+  assert.equal(sent.at(-1).body.testReports.length, 4);
+  assert.equal(sent.at(-1).body.regressionSummary.status, "unknown");
   assert.equal(sent.at(-1).body.testRun.environmentInputs.environment, "platform-candidate-snapshot");
   assert.equal(sent.at(-1).body.testResults[0].sourceRevision.branchId, "branch.platform.demo");
+}));
+
+test("platform test reports derive TAP summaries and default regression heuristics", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const observeRun = ({ id, startedAt, finishedAt, durationMs, cacheStatus = "miss", stdout = "", stderr = "" }) => {
+    const cacheIdentity = { environmentIdentityHash: "env:local-node" };
+    world.emit({
+      process: "platform.test.run.start",
+      actor: "aaron",
+      body: {
+        id,
+        gateId: "gate:demo.tap",
+        title: "Demo TAP Gate",
+        command: "node --test demo.tap.test.js",
+        runner: "node-test",
+        environment: "local-node",
+        timeoutMs: 5000,
+        runtimeProfile: "full",
+        cacheStatus,
+        cacheIdentity,
+        startedAt,
+        sourceDependencies: ["tests/demo.tap.test.js"],
+        protectedObjects: ["plugin.platform"]
+      }
+    });
+    world.emit({
+      process: "platform.test.run.finish",
+      actor: "aaron",
+      body: {
+        id,
+        gateId: "gate:demo.tap",
+        title: "Demo TAP Gate",
+        command: "node --test demo.tap.test.js",
+        runner: "node-test",
+        environment: "local-node",
+        timeoutMs: 5000,
+        runtimeProfile: "full",
+        cacheStatus,
+        cacheIdentity,
+        status: "passed",
+        startedAt,
+        finishedAt,
+        durationMs,
+        exitCode: 0,
+        signal: null,
+        stdout,
+        stderr,
+        timedOut: false,
+        error: null,
+        results: [{
+          id: `testResult:${id}:1`,
+          runId: id,
+          gateId: "gate:demo.tap",
+          title: "Demo TAP Gate",
+          status: "passed",
+          exitCode: 0,
+          signal: null,
+          stdout,
+          stderr,
+          durationMs,
+          timedOut: false,
+          cacheStatus,
+          cacheIdentity,
+          producedAt: finishedAt
+        }]
+      }
+    });
+  };
+
+  const tapOutput = "TAP version 13\n1..2\nok 1 - boots\nok 2 - verifies\n";
+  observeRun({ id: "testRun:tap:1", startedAt: "2026-06-18T00:00:00.000Z", finishedAt: "2026-06-18T00:00:01.000Z", durationMs: 1000, stdout: tapOutput });
+  observeRun({ id: "testRun:tap:2", startedAt: "2026-06-18T00:01:00.000Z", finishedAt: "2026-06-18T00:01:01.200Z", durationMs: 1200, stdout: tapOutput });
+  observeRun({ id: "testRun:tap:3", startedAt: "2026-06-18T00:02:00.000Z", finishedAt: "2026-06-18T00:02:01.800Z", durationMs: 1800, stdout: tapOutput });
+  observeRun({ id: "testRun:tap:4", startedAt: "2026-06-18T00:03:00.000Z", finishedAt: "2026-06-18T00:03:02.500Z", durationMs: 2500, cacheStatus: "hit", stdout: tapOutput });
+  observeRun({ id: "testRun:tap:5", startedAt: "2026-06-18T00:04:00.000Z", finishedAt: "2026-06-18T00:04:00.700Z", durationMs: 700, stdout: tapOutput });
+
+  const reports = world.project(moduleProjectors.testReports);
+  const summary = reports.find(row => row.id === "testReport:testRun:tap:1:summary");
+  const failures = reports.find(row => row.id === "testReport:testRun:tap:1:failures");
+  const run1Regression = reports.find(row => row.id === "testReport:testRun:tap:1:regression");
+  const steadyRegression = reports.find(row => row.id === "testReport:testRun:tap:2:regression");
+  const regressed = reports.find(row => row.id === "testReport:testRun:tap:4:regression");
+  const improved = reports.find(row => row.id === "testReport:testRun:tap:5:regression");
+
+  assert.ok(summary);
+  assert.equal(summary.format, "tap");
+  assert.equal(summary.suiteCount, 1);
+  assert.equal(summary.caseCount, 2);
+  assert.equal(summary.passedCount, 2);
+  assert.equal(summary.failedCount, 0);
+  assert.equal(failures.summary, "No failing or error cases were derived for this run.");
+  assert.equal(run1Regression.status, "unknown");
+  assert.equal(steadyRegression.status, "steady");
+  assert.equal(regressed.status, "regressed");
+  assert.equal(regressed.regressionSummary.baselineRunId, "testRun:tap:3");
+  assert.equal(improved.status, "improved");
+  assert.equal(improved.regressionSummary.baselineRunId, "testRun:tap:3");
+}));
+
+test("platform test reports derive JUnit failures from structured artifacts", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const junit = `<?xml version="1.0" encoding="UTF-8"?><testsuite name="demo" tests="3" failures="1" errors="1" skipped="0"><testcase classname="demo" name="passes" time="0.1" /><testcase classname="demo" name="fails" time="0.2"><failure message="boom">boom</failure></testcase><testcase classname="demo" name="errors" time="0.3"><error message="kaput">kaput</error></testcase></testsuite>`;
+  world.emit({
+    process: "platform.test.run.start",
+    actor: "aaron",
+    body: {
+      id: "testRun:junit:1",
+      gateId: "gate:demo.junit",
+      title: "Demo JUnit Gate",
+      command: "node --test demo.junit.test.js",
+      runner: "node-test",
+      environment: "local-node",
+      timeoutMs: 5000,
+      runtimeProfile: "full",
+      cacheStatus: "miss",
+      cacheIdentity: { environmentIdentityHash: "env:local-node" },
+      startedAt: "2026-06-18T01:00:00.000Z"
+    }
+  });
+  world.emit({
+    process: "platform.test.run.finish",
+    actor: "aaron",
+    body: {
+      id: "testRun:junit:1",
+      gateId: "gate:demo.junit",
+      title: "Demo JUnit Gate",
+      command: "node --test demo.junit.test.js",
+      runner: "node-test",
+      environment: "local-node",
+      timeoutMs: 5000,
+      runtimeProfile: "full",
+      cacheStatus: "miss",
+      cacheIdentity: { environmentIdentityHash: "env:local-node" },
+      status: "failed",
+      startedAt: "2026-06-18T01:00:00.000Z",
+      finishedAt: "2026-06-18T01:00:01.900Z",
+      durationMs: 1900,
+      exitCode: 1,
+      signal: null,
+      stdout: "",
+      stderr: junit,
+      timedOut: false,
+      error: null,
+      results: [{
+        id: "testResult:testRun:junit:1:1",
+        runId: "testRun:junit:1",
+        gateId: "gate:demo.junit",
+        title: "Demo JUnit Gate",
+        status: "failed",
+        exitCode: 1,
+        signal: null,
+        stdout: "",
+        stderr: junit,
+        durationMs: 1900,
+        timedOut: false,
+        cacheStatus: "miss",
+        cacheIdentity: { environmentIdentityHash: "env:local-node" },
+        producedAt: "2026-06-18T01:00:01.900Z"
+      }]
+    }
+  });
+
+  const byRun = world.project(moduleProjectors.testReportIndex).byRun["testRun:junit:1"];
+  const failures = byRun.find(row => row.reportKind === "failures");
+  const suites = byRun.find(row => row.reportKind === "suites");
+
+  assert.ok(failures);
+  assert.equal(failures.status, "error");
+  assert.equal(failures.caseIds.length, 2);
+  assert.ok(suites);
+  assert.equal(suites.status, "error");
+  assert.equal(suites.suiteIds.length, 1);
 }));
 
 test("platform test run handlers can execute the selected gate set for a change set", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -5329,6 +5563,22 @@ test("platform page renders required operating views", async () => {
       durationMs: 12,
       exitCode: 0
     }],
+    testArtifacts: [
+      { id: "testArtifact:demo:stdout", runId: "testRun:demo", resultId: "testResult:demo:1", gateId: "gate:demo", artifactKind: "stdout", fileName: "stdout.txt", contentType: "text/plain", sizeBytes: 24 },
+      { id: "testArtifact:demo:tap", runId: "testRun:demo", resultId: "testResult:demo:1", gateId: "gate:demo", artifactKind: "tap", fileName: "stdout.tap", contentType: "application/tap", sizeBytes: 24, structuredFormat: "tap" }
+    ],
+    testSuites: [
+      { id: "testSuite:demo", runId: "testRun:demo", resultId: "testResult:demo:1", artifactId: "testArtifact:demo:tap", gateId: "gate:demo", format: "tap", status: "passed", total: 1, failed: 0, errors: 0 }
+    ],
+    testCases: [
+      { id: "testCase:demo:1", suiteId: "testSuite:demo", runId: "testRun:demo", resultId: "testResult:demo:1", artifactId: "testArtifact:demo:tap", gateId: "gate:demo", format: "tap", status: "passed", classname: "demo", durationMs: 12 }
+    ],
+    testReports: [
+      { id: "testReport:testRun:demo:summary", runId: "testRun:demo", gateId: "gate:demo", reportKind: "summary", title: "Report Summary", status: "passed", summary: "1 suite, 1 case", artifactIds: ["testArtifact:demo:stdout", "testArtifact:demo:tap"], suiteIds: ["testSuite:demo"], caseIds: ["testCase:demo:1"], producedAt: "2026-06-18T00:00:00.012Z", format: "tap", suiteCount: 1, caseCount: 1, passedCount: 1, failedCount: 0, errorCount: 0, skippedCount: 0, cached: false },
+      { id: "testReport:testRun:demo:suites", runId: "testRun:demo", gateId: "gate:demo", reportKind: "suites", title: "Suite Summary", status: "passed", summary: "1 suite, 1 case", artifactIds: ["testArtifact:demo:tap"], suiteIds: ["testSuite:demo"], caseIds: ["testCase:demo:1"], producedAt: "2026-06-18T00:00:00.012Z", format: "tap", suiteCount: 1, caseCount: 1, failedCount: 0, errorCount: 0, skippedCount: 0 },
+      { id: "testReport:testRun:demo:failures", runId: "testRun:demo", gateId: "gate:demo", reportKind: "failures", title: "Failing Cases", status: "passed", summary: "No failing or error cases were derived for this run.", artifactIds: [], suiteIds: [], caseIds: [], producedAt: "2026-06-18T00:00:00.012Z", format: "tap", failureCount: 0 },
+      { id: "testReport:testRun:demo:regression", runId: "testRun:demo", gateId: "gate:demo", reportKind: "regression", title: "Regression Summary", status: "regressed", summary: "regressed vs testRun:baseline", artifactIds: [], suiteIds: [], caseIds: [], producedAt: "2026-06-18T00:00:00.012Z", regressionSummary: { baselineRunId: "testRun:baseline", baselineDurationMs: 6, currentDurationMs: 12, deltaMs: 6, deltaPercent: 100 } }
+    ],
     branchTestRedGreen: [{
       branchId: "branch:demo-0",
       status: "green",
@@ -5478,6 +5728,7 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /<form id="platform-change-set-lifecycle-form" data-platform-client-action="changeSet.lifecycle" data-platform-submit-spec=/);
   assert.match(workflowHtml, /<option value="reject" selected>Reject<\/option>/);
   assert.match(workflowHtml, /<option value="abandon">Abandon<\/option>/);
+  assert.match(workflowHtml, /enableVerificationLiveUpdates: false/);
   assert.match(workflowHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
   assert.match(workflowHtml, /offset=20/);
   assert.match(workflowHtml, /Sort/);
@@ -5489,6 +5740,8 @@ test("platform page renders required operating views", async () => {
   assert.doesNotMatch(workflowHtml, /<pre/);
 
   assert.match(verificationHtml, /Platform Console - Verification/);
+  assert.match(verificationHtml, /Live Verification Status/);
+  assert.match(verificationHtml, /Current Verification State/);
   assert.match(verificationHtml, /Verification Items/);
   assert.match(verificationHtml, /Properties and linked resources for the selected verification object\./);
   assert.match(verificationHtml, /Primary Detail/);
@@ -5512,6 +5765,14 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationRevisionHtml, />Backend revision event stream</);
   assert.match(verificationRunHtml, />Test run event stream</);
   assert.match(verificationRunHtml, />Backend revision event stream</);
+  assert.match(verificationRunHtml, /Run Report Summary/);
+  assert.match(verificationRunHtml, /Artifacts and Report Streams/);
+  assert.match(verificationRunHtml, /Suite Summary/);
+  assert.match(verificationRunHtml, /Failing Cases/);
+  assert.match(verificationRunHtml, /Timing Regression/);
+  assert.match(verificationRunHtml, /enableVerificationLiveUpdates: true/);
+  assert.match(verificationRunHtml, /new EventSource\(platformPageState\.testRunEventsHref\)/);
+  assert.match(verificationRunHtml, /new EventSource\(platformPageState\.backendRevisionEventsHref\)/);
 
   assert.match(knowledgeHtml, /Platform Console - Knowledge/);
   assert.match(knowledgeHtml, /Knowledge Items/);
@@ -5656,6 +5917,47 @@ test("platform workflow detail follows authored child-surface order", () => {
   assert.ok(html.indexOf("Candidate Snapshots") < html.indexOf("Staged Edits"));
 });
 
+test("platform verification run detail respects authored empty states for reports, suites, and failures", () => {
+  const model = {
+    lifecycleVocabulary: [],
+    lifecycleBoard: [],
+    branchLifecycleVocabulary: [],
+    branchBoard: [],
+    nodes: [],
+    edges: [],
+    testGates: [],
+    testRuns: [{
+      id: "testRun:empty",
+      title: "Empty Run",
+      status: "passed",
+      gateId: "gate:empty",
+      durationMs: 10,
+      exitCode: 0
+    }],
+    testArtifacts: [],
+    testSuites: [],
+    testCases: [],
+    testReports: [],
+    runtimeRevisions: [],
+    activeRuntimeRevision: null,
+    candidateSnapshots: [],
+    snapshotBuilds: [],
+    snapshotBuildErrors: [],
+    snapshotDiagnostics: {},
+    testMonitorDiagnostics: {},
+    branchTestRedGreen: [],
+    changeSetTestRedGreen: [],
+    latestTestResultsByGate: {},
+    summaries: {}
+  };
+
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=testRun:empty") });
+
+  assert.match(html, /No artifacts or report streams were captured for this run\./);
+  assert.match(html, /No structured suites were derived for this run\./);
+  assert.match(html, /No failing or error cases were derived for this run\./);
+});
+
 test("platform page uses authored empty-detail states", () => {
   const emptyModel = {
     lifecycleVocabulary: [],
@@ -5675,6 +5977,10 @@ test("platform page uses authored empty-detail states", () => {
     proposalActions: [],
     testGates: [],
     testRuns: [],
+    testArtifacts: [],
+    testSuites: [],
+    testCases: [],
+    testReports: [],
     runtimeRevisions: [],
     activeRuntimeRevision: null,
     snapshotBuilds: [],

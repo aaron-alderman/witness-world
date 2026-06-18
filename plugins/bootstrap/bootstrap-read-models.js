@@ -24,7 +24,7 @@ import {
   defaultRuntimeAuthoringMode
 } from "../../src/runtime-authoring-policy.js";
 import {
-  proposalTargetGovernanceCatalog,
+  proposalTargetGovernanceRows,
   proposalTargetProcessIds
 } from "../../src/runtime-governance.js";
 
@@ -248,7 +248,7 @@ export function createBootstrapReadModels({
 
   const bootstrapModel = async (appContext = null) => {
     const authored = await bootstrapState(null, appContext);
-    const proposalTargetGovernance = proposalTargetGovernanceCatalog({ bootstrapSelectableOnly: true });
+    const proposalTargetGovernance = proposalTargetGovernanceRows({ bootstrapSelectableOnly: true });
     const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
     const appReady = Boolean(homeRoute && homeRoute.params?.rootWidget);
     const typeModel = world.project(typeModelProjection);
@@ -304,10 +304,7 @@ export function createBootstrapReadModels({
       ],
       attachableContexts: authored.contexts || [],
       proposalTargetProcesses: proposalTargetProcessIds({ bootstrapSelectableOnly: true }),
-      proposalTargetGovernance: Object.entries(proposalTargetGovernance).map(([targetProcess, entry]) => ({
-        targetProcess,
-        ...entry
-      }))
+      proposalTargetGovernance
     };
   };
 

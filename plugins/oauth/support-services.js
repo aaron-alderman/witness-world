@@ -1,5 +1,31 @@
 import { relation, thing } from "../../src/kernel.js";
 
+// OIDC-family providers all resolve to the generic OIDC/OAuth2 adapter. Named vendors are config
+// presets (endpoints + field mapping + any required headers); the operator supplies only credentials.
+const OAUTH_PROVIDER_PRESETS = Object.freeze({
+  oidc: Object.freeze({}),
+  google: Object.freeze({
+    authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    tokenUrl: "https://oauth2.googleapis.com/token",
+    userinfoUrl: "https://openidconnect.googleapis.com/v1/userinfo",
+    scope: "openid email profile",
+    externalIdField: "sub"
+  }),
+  github: Object.freeze({
+    authorizeUrl: "https://github.com/login/oauth/authorize",
+    tokenUrl: "https://github.com/login/oauth/access_token",
+    userinfoUrl: "https://api.github.com/user",
+    scope: "read:user user:email",
+    externalIdField: "id",
+    usernameField: "login",
+    labelField: "name",
+    // GitHub's user API rejects requests without a User-Agent.
+    userinfoHeaders: Object.freeze({ "user-agent": "witness-world-oauth", accept: "application/vnd.github+json" })
+  })
+});
+
+const OIDC_FAMILY_PROVIDERS = new Set(Object.keys(OAUTH_PROVIDER_PRESETS));
+
 export function createRuntimeAuthOAuthSupportServices({
   world,
   backendHost,
@@ -42,14 +68,47 @@ export function createRuntimeAuthOAuthSupportServices({
     if (configuredProvider && requestedProvider && configuredProvider !== requestedProvider) {
       return { ok: false, status: 409, reason: `auth.oauth provider mismatch: configured ${configuredProvider}, requested ${requestedProvider}` };
     }
-    if (provider !== "stub") return { ok: false, status: 501, reason: `${provider} oauth adapter not implemented` };
+    if (provider !== "stub" && !OIDC_FAMILY_PROVIDERS.has(provider)) {
+      return { ok: false, status: 501, reason: `${provider} oauth adapter not implemented` };
+    }
     const autoCreateRaw = runtimeConfigLookup(runtimeConfig ?? {}, "auth.oauth.autoCreate");
-    return {
+    const resolved = {
       ok: true,
       status: 200,
       provider,
       autoCreate: autoCreateRaw == null ? true : autoCreateRaw === true || String(autoCreateRaw).trim().toLowerCase() === "true"
     };
+    if (OIDC_FAMILY_PROVIDERS.has(provider)) {
+      // Named vendors (google, github) are presets over the generic OIDC adapter: endpoints default
+      // from the preset, operator supplies clientId/clientSecret. Generic "oidc" has no preset, so all
+      // endpoints stay required. Every key is overridable for self-hosted/Enterprise deployments.
+      const preset = OAUTH_PROVIDER_PRESETS[provider] ?? {};
+      const cfg = key => {
+        const value = runtimeConfigLookup(runtimeConfig ?? {}, `auth.oauth.${provider}.${key}`);
+        return typeof value === "string" && value.trim() ? value.trim() : null;
+      };
+      const oidc = {
+        clientId: cfg("clientId"),
+        clientSecret: cfg("clientSecret"),
+        authorizeUrl: cfg("authorizeUrl") || preset.authorizeUrl || null,
+        tokenUrl: cfg("tokenUrl") || preset.tokenUrl || null,
+        userinfoUrl: cfg("userinfoUrl") || preset.userinfoUrl || null,
+        scope: cfg("scope") || preset.scope || "openid email profile",
+        redirectUri: cfg("redirectUri"),
+        externalIdField: cfg("externalIdField") || preset.externalIdField || "sub",
+        usernameField: cfg("usernameField") || preset.usernameField || null,
+        labelField: cfg("labelField") || preset.labelField || null,
+        userinfoHeaders: preset.userinfoHeaders ?? null
+      };
+      const missing = ["clientId", "clientSecret", "authorizeUrl", "tokenUrl", "userinfoUrl"]
+        .filter(key => !oidc[key]);
+      if (missing.length) {
+        return { ok: false, status: 503, reason: `auth.oauth.${provider} config missing: ${missing.map(key => `auth.oauth.${provider}.${key}`).join(", ")}` };
+      }
+      resolved.oidc = oidc;
+      resolved.redirectUri = oidc.redirectUri;
+    }
+    return resolved;
   };
   const normalizeAuthOAuthProfile = profile => {
     const object = profile && typeof profile === "object" ? profile : {};

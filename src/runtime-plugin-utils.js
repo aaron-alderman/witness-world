@@ -1020,6 +1020,27 @@ function activationFailureReasons(pluginPackage, {
   return uniqueStrings(reasons);
 }
 
+function missingPluginPackage(pluginId) {
+  return {
+    id: pluginId,
+    missingPackage: true,
+    discoveryPath: null,
+    manifest: null,
+    validation: { ok: false, errors: ["plugin package not found"] },
+    compatibility: { compatible: false, reasons: ["plugin package not found"] },
+    activation: { eligible: false, reasons: ["plugin package not found"] },
+    execution: { executable: false },
+    resolvedBundles: [],
+    resolvedRuntimeContributions: {
+      capabilities: [],
+      routes: [],
+      surfaces: [],
+      providers: [],
+      handlerSets: []
+    }
+  };
+}
+
 export function resolveRuntimePluginSelection({
   profileName = DEFAULT_RUNTIME_PROFILE,
   configuredPluginIds = [],
@@ -1051,7 +1072,10 @@ export function resolveRuntimePluginSelection({
   const rejectedPlugins = [];
   const activeBundleIds = [];
   const activeBundleSet = new Set();
-  const packages = discoveredPlugins.map(pluginPackage => {
+  const pluginToBundleMap = Object.create(null);
+  const allPluginIds = uniqueStrings([...discoveredPlugins.map(p => p.id), ...effectivePluginIds]);
+  const packages = allPluginIds.map(pluginId => {
+    const pluginPackage = packageById.get(pluginId) ?? missingPluginPackage(pluginId);
     const requestedSources = [...(requestedSourcesById.get(pluginPackage.id) ?? [])];
     const requested = requestedSources.length > 0;
     const missingRequestedDependencies = requested
@@ -1068,11 +1092,14 @@ export function resolveRuntimePluginSelection({
       : [];
     if (active) {
       activePluginIds.push(pluginPackage.id);
+      const addedBundles = [];
       for (const bundleId of pluginPackage.manifest?.activatesBundles ?? []) {
+        if (!baseBundleSet.has(bundleId)) addedBundles.push(bundleId);
         if (activeBundleSet.has(bundleId)) continue;
         activeBundleSet.add(bundleId);
         activeBundleIds.push(bundleId);
       }
+      if (addedBundles.length) pluginToBundleMap[pluginPackage.id] = addedBundles;
     } else if (requested) {
       rejectedPlugins.push({ id: pluginPackage.id, reasons, requestedSources });
     }
@@ -1087,14 +1114,6 @@ export function resolveRuntimePluginSelection({
       }
     };
   });
-  for (const pluginId of effectivePluginIds) {
-    if (packageById.has(pluginId)) continue;
-    rejectedPlugins.push({
-      id: pluginId,
-      reasons: ["plugin package not found"],
-      requestedSources: [...(requestedSourcesById.get(pluginId) ?? [])]
-    });
-  }
   return {
     profileName,
     profilePluginIds,
@@ -1105,6 +1124,7 @@ export function resolveRuntimePluginSelection({
     activePluginIds,
     rejectedPlugins,
     activeBundleIds,
+    pluginToBundleMap,
     addedBundleIds: activeBundleIds.filter(bundleId => !baseBundleSet.has(bundleId)),
     packages,
     hasBlockingErrors: rejectedPlugins.length > 0
@@ -1477,6 +1497,32 @@ function buildRuntimePluginReviewRows({
               : []
           })
         : null;
+      const reconcileActions = [];
+      const uniqueBlockingReasons = uniqueStrings(blockingReasons);
+      if (installed && uniqueBlockingReasons.length > 0) {
+        reconcileActions.push({
+          kind: "remove",
+          label: "Remove broken install",
+          severity: "high",
+          description: `This authored plugin install is broken: ${uniqueBlockingReasons.join("; ")}.`
+        });
+      } else if (!installed && requested && pluginPackage.missingPackage) {
+        reconcileActions.push({
+          kind: "remove",
+          label: "Cleanup missing plugin intent",
+          severity: "medium",
+          description: "This plugin is requested in the world model but is missing from the local plugin directory."
+        });
+      }
+      for (const dependencyId of missingDependencies) {
+        reconcileActions.push({
+          kind: "install",
+          label: `Install missing dependency: ${dependencyId}`,
+          severity: "medium",
+          targetPluginId: dependencyId
+        });
+      }
+
       const metadata = pluginPackage.metadata ?? null;
       return {
         plugin: pluginId,
@@ -1489,7 +1535,8 @@ function buildRuntimePluginReviewRows({
         installable: !installed && blockingReasons.length === 0,
         executable: pluginPackage.execution?.executable === true,
         compatible: pluginPackage.compatibility?.compatible === true,
-        blockingReasons: uniqueStrings(blockingReasons),
+        blockingReasons: uniqueBlockingReasons,
+        reconcileActions,
         dependencies: {
           direct: directDependencies,
           missing: missingDependencies,

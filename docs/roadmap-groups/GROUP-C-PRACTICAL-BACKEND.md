@@ -24,6 +24,16 @@ Group C is done when:
 - repair, retry, and diagnostics are first-class product behavior
 - MCP can operate these seams without bypassing the normal authority and witness model
 
+## Progress
+
+Shipped so far against this group:
+
+- **Stage C0 (contract freeze)** — a per-seam contract-coverage guard (`test/backend-seam-contract.test.js`, canonical list `BACKEND_SEAM_CAPABILITY_IDS` in `src/runtime-builtins.js`) asserts every backend seam declares provider adapters, a witness contract with a failure phase, and authority/config arrays, and fails when a new seam ships provider/failure metadata without being declared.
+- **Stage C3.1 (real email provider)** — `notify.email` now ships a generic-HTTP transport and a concrete **SendGrid** transport behind the same seam, selected by `notify.email.provider`, with the stub default still first-class.
+- **Stage C3.2 (real OAuth provider)** — `auth.oauth` now ships a generic OIDC/OAuth2 adapter plus concrete **Google** and **GitHub** presets, with real code-exchange + userinfo through a host-injected fetch and the stub default still first-class.
+
+Next per the priority order: a serious hosted SQL provider (promote `preview` Postgres/MySQL to full operations) and a hosted asset/object-storage provider.
+
 ## Non-Goals
 
 - vendor-first architecture

@@ -33,6 +33,8 @@ import {
   dispatchHandlerIdsForProfile,
   handlerSetDefinitionsForProfile,
   handlerSetFactoriesForProfile,
+  handlerMetadataForProfile,
+  matchRuntimeBundleRoute,
   providedCapabilityIdsForProfile,
   runtimeCapabilityDefinitionsForProfile,
   runtimeBuiltinSeedContributionsForProfile,
@@ -40,6 +42,7 @@ import {
   runtimeSurfaceEntriesForProfile,
   startupRequiredHostCapabilitiesForProfile
 } from "./runtime-bundles.js";
+import { renderCompositionGatedPage } from "./runtime-page-fallbacks.js";
 import {
   readRuntimePluginCatalog,
   resolveConfiguredRuntimePluginIds,
@@ -85,6 +88,7 @@ export async function startRuntimeServer(world, {
     fsModule = fs,
     ensureRuntimeBuiltins: ensureRuntimeBuiltinsImpl = ensureRuntimeBuiltins,
     runtimeBundleSummaryForProfile: runtimeBundleSummaryForProfileImpl = runtimeBundleSummaryForProfile,
+    handlerMetadataForProfile: handlerMetadataForProfileImpl = handlerMetadataForProfile,
     runtimeSurfaceEntriesForProfile: runtimeSurfaceEntriesForProfileImpl = runtimeSurfaceEntriesForProfile,
     dispatchHandlerIdsForProfile: dispatchHandlerIdsForProfileImpl = dispatchHandlerIdsForProfile,
     handlerSetFactoriesForProfile: handlerSetFactoriesForProfileImpl = handlerSetFactoriesForProfile,
@@ -106,6 +110,42 @@ export async function startRuntimeServer(world, {
     applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState,
     collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions
   } = deps;
+
+  const handleProfileGatedAbsence = async ({ req, res, appContext, pathname, method }) => {
+    const isHtml = String(req.headers["accept"] || "").includes("text/html");
+    if (!isHtml) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    const compositionOptions = {
+      operatorPluginIds: appContext?.operatorRuntimePluginIds ?? [],
+      authoredPluginIds: appContext?.authoredRuntimePluginIds ?? []
+    };
+    const fullMatched = matchRuntimeBundleRoute("full", method, pathname, compositionOptions);
+    if (fullMatched) {
+      const handlerMetadata = handlerMetadataForProfileImpl("full", compositionOptions);
+      const metadata = handlerMetadata[String(fullMatched.route.handler)];
+      const html = renderCompositionGatedPage({
+        title: metadata?.displayName || "Feature Unavailable",
+        heading: metadata?.displayName || "Feature Unavailable",
+        reason: "This route is defined but its handler is inactive in the current profile.",
+        requiredProfile: metadata?.bundleId ? null : "full",
+        requiredBundles: metadata?.bundleId ? [metadata.bundleId] : [],
+        activeProfile: appContext?.runtimeProfile ?? null
+      });
+      res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      res.end(html);
+      return;
+    }
+    const html = renderCompositionGatedPage({
+      title: "Not Found",
+      heading: "Not Found",
+      reason: "The requested path was not found in the current runtime composition.",
+      activeProfile: appContext?.runtimeProfile ?? null
+    });
+    res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+    res.end(html);
+  };
   const logInfo = typeof logger?.info === "function"
     ? (event, fields) => logger.info(event, fields)
     : () => {};
@@ -651,7 +691,7 @@ export async function startRuntimeServer(world, {
           };
           const handler = routeHandlers[genericEndpoint.handler];
           if (!activeDispatchHandlers.has(genericEndpoint.handler) || typeof handler !== "function") {
-            sendJson(res, 404, { error: "not found" });
+            await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
             return;
           }
           await handler({
@@ -671,7 +711,7 @@ export async function startRuntimeServer(world, {
       }
 
       if (!matched) {
-        sendJson(res, 404, { error: "not found" });
+        await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
         return;
       }
       matchedRoute = matched.route;
@@ -682,7 +722,7 @@ export async function startRuntimeServer(world, {
           claims: [],
           body: { route: matched.route.id, method: matched.route.method, path: matched.route.path, handler: matched.route.handler, reason: "handler unavailable in runtime profile", runtimeProfile }
         });
-        sendJson(res, 404, { error: "not found" });
+        await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
         return;
       }
       const routeHandlers = {

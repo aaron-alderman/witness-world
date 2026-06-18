@@ -459,6 +459,8 @@ export function createPlatformHandlers({
           testArtifacts: result.testArtifacts,
           testSuites: result.testSuites,
           testCases: result.testCases,
+          testReports: result.testReports,
+          regressionSummary: result.regressionSummary,
           latestResult: result.latestResult,
           startWitness: result.startWitness,
           finishWitness: result.finishWitness
@@ -550,7 +552,11 @@ export function createPlatformHandlers({
         testResults: results.flatMap(result => result.testResults ?? []),
         testArtifacts: results.flatMap(result => result.testArtifacts ?? []),
         testSuites: results.flatMap(result => result.testSuites ?? []),
-        testCases: results.flatMap(result => result.testCases ?? [])
+        testCases: results.flatMap(result => result.testCases ?? []),
+        testReports: results.flatMap(result => result.testReports ?? []),
+        regressionSummaries: results
+          .map(result => result.regressionSummary)
+          .filter(Boolean)
       });
     },
 
@@ -592,6 +598,8 @@ export function createPlatformHandlers({
         testArtifacts: result.testArtifacts,
         testSuites: result.testSuites,
         testCases: result.testCases,
+        testReports: result.testReports,
+        regressionSummary: result.regressionSummary,
         latestResult: result.latestResult
       });
     },

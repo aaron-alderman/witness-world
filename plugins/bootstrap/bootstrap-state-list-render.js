@@ -1,3 +1,5 @@
+import path from "node:path";
+
 export function renderBootstrapStateListRenderFactory() {
   return String.raw`
     const renderBootstrapStateItems = ${renderBootstrapStateItems.toString()};
@@ -147,8 +149,22 @@ export function renderBootstrapStateInventory({
   renderList("mcp-tool-inventory", (authored.mcp?.servers || []).filter(row => (row.tools || []).length), mcpToolInventoryLabel);
   renderList("state-mcp-servers", authored.mcp?.servers || [], mcpServerInventoryLabel);
   renderList("state-mcp-tool-installs", (authored.mcp?.servers || []).filter(row => (row.tools || []).length), mcpToolInventoryLabel);
-  renderList("state-operator-backups", operator.inventory?.backups || [], row => row.id + " / witnesses " + row.witnessCount + " / observations " + row.observationCount);
-  renderList("state-operator-exports", operator.inventory?.exports || [], row => row.id + " / witnesses " + row.witnessCount + " / observations " + row.observationCount);
-  renderList("state-operator-imports", operator.inventory?.imports || [], row => row.id + " / " + (row.status || "unknown"));
+  renderList("state-operator-backups", operator.inventory?.backups || [], row => {
+    const lineage = row.lineage?.worldHome ? ` (from ${path.basename(row.lineage.worldHome)})` : "";
+    const comp = row.compatibility?.platformVersion ? ` [v:${row.compatibility.platformVersion}]` : "";
+    const warning = row.compatibility?.platformVersion !== "v1" ? " [WARN: Incompatible]" : "";
+    return `${row.id}${lineage}${comp}${warning} / ${row.createdAt?.slice(0, 10) || "unknown"} / ${row.witnessCount}w ${row.observationCount}o`;
+  });
+  renderList("state-operator-exports", operator.inventory?.exports || [], row => {
+    const lineage = row.lineage?.worldHome ? ` (from ${path.basename(row.lineage.worldHome)})` : "";
+    const comp = row.compatibility?.platformVersion ? ` [v:${row.compatibility.platformVersion}]` : "";
+    const warning = row.compatibility?.platformVersion !== "v1" ? " [WARN: Incompatible]" : "";
+    return `${row.id}${lineage}${comp}${warning} / ${row.createdAt?.slice(0, 10) || "unknown"} / ${row.witnessCount}w ${row.observationCount}o`;
+  });
+  renderList("state-operator-imports", operator.inventory?.imports || [], row => {
+    const comp = row.compatibility?.platformVersion ? ` [v:${row.compatibility.platformVersion}]` : "";
+    const warning = row.compatibility?.platformVersion !== "v1" ? " [WARN: Incompatible]" : "";
+    return `${row.id}${comp}${warning} / ${row.status || "unknown"}`;
+  });
   renderList("state-operator-activity", operator.recentActivity || [], row => row.process + " / " + (row.body?.artifactId || row.id));
 }

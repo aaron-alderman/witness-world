@@ -196,6 +196,8 @@ test("runtime diagnostics summarize seed profile and loaded composition separate
   assert.equal(diagnostics.handlerMetadata["events.stream"].routeKind, "stream");
   assert.equal(diagnostics.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
   assert.equal(diagnostics.routes.find(route => route.handler === "events.stream")?.ownerClass, "runtime-plugin");
+  assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "runtimePlugin.install" && row.governanceMode === "proposal-fallback"), true);
+  assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "changeSet.apply" && row.governanceMode === "operator-only"), true);
   assert.equal(diagnostics.shells.shells.find(shell => shell.id === "browser")?.ownerClass, "shell");
 });
 

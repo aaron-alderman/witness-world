@@ -24,6 +24,25 @@ export const surfaces = Object.freeze([]);
 
 export const providers = Object.freeze([
   {
+    kind: "capabilityDefinitions",
+    id: "fs-stream.capabilities",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: "fs.stream",
+        label: "Stream Storage",
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "local-disk", label: "Local disk", status: "shipped", default: true })
+        ]),
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["storageKey"]),
+          failure: Object.freeze(["fs.stream.write.failed", "fs.stream.copy.failed"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([])
+      })
+    ])
+  },
+  {
     kind: "supportServiceFactory",
     id: "fs-stream.support",
     factory: () => ({

@@ -643,6 +643,8 @@ export function readPlatformTestRun(world, testRunId) {
   const artifacts = world.project(moduleProjectors.testArtifacts).filter(row => row.runId === runId);
   const suites = world.project(moduleProjectors.testSuites).filter(row => row.runId === runId);
   const cases = world.project(moduleProjectors.testCases).filter(row => row.runId === runId);
+  const reports = world.project(moduleProjectors.testReports).filter(row => row.runId === runId);
+  const regressionSummary = reports.find(row => row.reportKind === "regression")?.regressionSummary ?? null;
   return {
     ok: true,
     status: 200,
@@ -651,6 +653,8 @@ export function readPlatformTestRun(world, testRunId) {
     testArtifacts: artifacts,
     testSuites: suites,
     testCases: cases,
+    testReports: reports,
+    regressionSummary,
     latestResult: results.at(-1) ?? null
   };
 }
@@ -788,6 +792,8 @@ export async function runPlatformTestGate(world, {
     testArtifacts: readback.testArtifacts,
     testSuites: readback.testSuites,
     testCases: readback.testCases,
+    testReports: readback.testReports,
+    regressionSummary: readback.regressionSummary,
     latestResult: readback.latestResult
   };
 }

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { buildServerRunnerOptions } from "./bootstrap-runtime-integration-options-view.js";
 import {
   runtimePluginReviewRows,
@@ -97,8 +98,8 @@ export function applyBootstrapShellSelectFill({
   fillSelect("runner-backend-host", model?.backendHosts || [], x => x.id, x => x.id);
   fillSelect("runner-frontend-host", model?.frontendHosts || [], x => x.id, x => x.id);
   fillSelect("runtime-plugin-review-runner", buildServerRunnerOptionsFn(authored.serverRunners || []), row => row.value, row => row.label, { includeBlank: false });
-  fillSelect("operator-restore-artifact", operator.inventory?.backups || [], x => x.id, x => x.id + " [" + (x.status || "unknown") + "]", { includeBlank: false });
-  fillSelect("operator-import-artifact", operator.inventory?.imports || [], x => x.id, x => x.id + " [" + (x.status || "unknown") + "]", { includeBlank: false });
+  fillSelect("operator-restore-artifact", operator.inventory?.backups || [], x => x.id, x => `${x.id} [${x.status || "unknown"}]${x.lineage?.worldHome ? ' (from ' + path.basename(x.lineage.worldHome) + ')' : ''}${x.compatibility?.platformVersion ? ' [v:' + x.compatibility.platformVersion + ']' : ''}`, { includeBlank: false });
+  fillSelect("operator-import-artifact", operator.inventory?.imports || [], x => x.id, x => `${x.id} [${x.status || "unknown"}]${x.lineage?.worldHome ? ' (from ' + path.basename(x.lineage.worldHome) + ')' : ''}${x.compatibility?.platformVersion ? ' [v:' + x.compatibility.platformVersion + ']' : ''}`, { includeBlank: false });
   fillSelect("runtime-plugin-review-plugin", runtimePluginReviewRowsFn(runtimePluginReview), row => row.plugin, runtimePluginReviewOptionLabelFn, { includeBlank: false });
 
   setSelectedValue("runtime-plugin-review-runner", runtimePluginReview?.serverRunner);

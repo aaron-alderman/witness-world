@@ -1,8 +1,10 @@
 import { relation } from "../../src/kernel.js";
+import { createOAuthProvider } from "./oauth-providers.js";
 
 export function createOauthHandlers({
   world,
   backendHost,
+  fetchImpl,
   readJson,
   sendJson,
   sendGateFailure,
@@ -68,9 +70,10 @@ export function createOauthHandlers({
         requestedIdentity: requestSession?.identity ?? null,
         callbackUrl: `${authOAuthCallbackBaseUrl(req, appContext)}/${encodeURIComponent(resolvedConfig.provider)}`,
         authorizeUrl: null,
-        profile: normalizeAuthOAuthProfile(body?.profile)
+        // The stub carries its profile in the flow; real providers resolve it from userinfo at callback.
+        profile: resolvedConfig.provider === "stub" ? normalizeAuthOAuthProfile(body?.profile) : null
       };
-      flow.authorizeUrl = `${flow.callbackUrl}?state=${encodeURIComponent(flow.state)}&code=stub-success`;
+      flow.authorizeUrl = createOAuthProvider(resolvedConfig).buildAuthorizeUrl({ callbackUrl: flow.callbackUrl, state: flow.state });
       appContext.authOAuth?.pendingFlows?.set?.(flow.state, flow);
       emitAuthOauthFlow({ actor: requestSession?.actor || backendHost, flow, process: "auth.oauth.start" });
       sendJson(res, 200, {
@@ -117,13 +120,23 @@ export function createOauthHandlers({
         sendJson(res, 400, { error: reason });
         return;
       }
-      if (code === "stub-fail") {
-        emitAuthOauthFlow({ actor: requestSession?.actor || backendHost, flow, process: "auth.oauth.callback.failed", reason: "stub oauth code rejected" });
-        sendJson(res, 401, { error: "stub oauth code rejected" });
+      let rawProfile;
+      try {
+        rawProfile = await createOAuthProvider(resolvedConfig).resolveProfile({
+          flow,
+          code,
+          callbackUrl: flow.callbackUrl,
+          fetchImpl
+        });
+      } catch (error) {
+        const status = Number.isFinite(error?.status) ? error.status : 401;
+        const reason = error?.reason || (error instanceof Error ? error.message : String(error));
+        emitAuthOauthFlow({ actor: requestSession?.actor || backendHost, flow, process: "auth.oauth.callback.failed", reason });
+        sendJson(res, status, { error: reason });
         return;
       }
 
-      const profile = normalizeAuthOAuthProfile(flow.profile);
+      const profile = normalizeAuthOAuthProfile(rawProfile);
       emitAuthOauthFlow({
         actor: requestSession?.actor || backendHost,
         flow,

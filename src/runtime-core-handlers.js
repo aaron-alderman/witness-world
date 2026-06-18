@@ -109,7 +109,7 @@ export function createCoreRuntimeBundleHandlers({
   const witnessesSince = index => typeof world?.witnessesSince === "function"
     ? world.witnessesSince(index)
     : world?.allWitnesses?.().slice(index) ?? [];
-  const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget }) => renderInactiveRuntimeWidgetPage({ rootWidget }));
+  const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget, appContext }) => renderInactiveRuntimeWidgetPage({ rootWidget, appContext }));
   const projectPagePresentationThemeHook = coreHooks.projectPagePresentationTheme
     ?? coreHooks.projectEdenPageTheme
     ?? (() => null);
@@ -989,7 +989,8 @@ export function createCoreRuntimeBundleHandlers({
         send(res, 200, "text/html", renderWidgetPageHook(world, {
           actor: frontendHost,
           rootWidget,
-        frontendProgram: params.frontendProgram ?? null,
+          appContext,
+          frontendProgram: params.frontendProgram ?? null,
         appConfig: {
           actors: requestActors(appContext),
           page,

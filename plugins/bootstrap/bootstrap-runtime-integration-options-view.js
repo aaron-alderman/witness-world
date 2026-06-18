@@ -42,7 +42,7 @@ export function buildRuntimePluginRemoveOptions({
   serverRunnerId = "",
   availabilityRows = []
 } = {}) {
-  return (serverRunnerId ? (availabilityRows || []).filter(row => row.installed) : []).map(row => ({
+  return (serverRunnerId ? (availabilityRows || []).filter(row => row.installed || row.missingPackage) : []).map(row => ({
     value: row.plugin,
     label: runtimePluginOptionLabel(row)
   }));

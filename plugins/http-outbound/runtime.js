@@ -40,9 +40,20 @@ export const providers = Object.freeze([
       Object.freeze({
         id: "http.outbound",
         label: "HTTP Outbound",
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "stub", label: "Stub transport", status: "shipped", default: true }),
+          Object.freeze({ id: "native-fetch", label: "Native fetch", status: "shipped" })
+        ]),
         witnessContract: Object.freeze({
-          externalRefs: Object.freeze(["externalRefId", "correlationId"])
-        })
+          externalRefs: Object.freeze(["externalRefId", "correlationId"]),
+          failure: Object.freeze(["http.outbound.request.failed", "http.outbound.failed"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([
+          Object.freeze({ name: "http.outbound.timeoutMs", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "http.outbound.maxAttempts", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "http.outbound.retryDelayMs", accepts: "runtimeConfig.key" })
+        ])
       })
     ])
   },

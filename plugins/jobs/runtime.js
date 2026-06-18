@@ -25,6 +25,29 @@ export const surfaces = Object.freeze([]);
 
 export const providers = Object.freeze([
   {
+    kind: "capabilityDefinitions",
+    id: "jobs.capabilities",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: "jobs.queue",
+        label: "Jobs Queue",
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "in-process", label: "In-process worker", status: "shipped", default: true })
+        ]),
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["jobId", "idempotencyKey"]),
+          failure: Object.freeze(["jobs.queue.deadLetter"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([
+          Object.freeze({ name: "jobs.queue.pollMs", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "jobs.queue.maxAttempts", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "jobs.queue.retryDelayMs", accepts: "runtimeConfig.key" })
+        ])
+      })
+    ])
+  },
+  {
     kind: "moduleProjectors",
     id: "jobs.projections",
     projectors: jobsModuleProjectors

@@ -90,6 +90,7 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert(model.supportedHandlers.includes("page.home"));
     assert.equal(model.supportedHandlerMetadata["backendProgram.run"].routeKind, "backendProgram");
     assert(model.supportedBackendOps.includes("handler.invoke"));
+    assert(model.supportedBackendOps.includes("process.request"));
     assert(model.supportedBackendOps.includes("project.read"));
     assert(model.supportedBackendOps.includes("witness.emit"));
     assert(model.supportedFrontendOps.includes("renderCollection"));
@@ -102,6 +103,8 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.surface.status, "supported");
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.process.status, "supported");
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.frontendProgram.status, "legacy_only");
+    assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "runtimePlugin.install" && row.governanceMode === "proposal-fallback"), true);
+    assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "changeSet.apply" && row.governanceMode === "operator-only"), true);
     assert.deepEqual([...diagnostics.activeBundles.map(bundle => bundle.id)].sort(), [
       "bundle-authoring-core",
       "bundle-core-runtime",

@@ -186,7 +186,7 @@ function conceptDestination(value) {
   if (raw.startsWith("runtimeRevision:") || raw.startsWith("backendRevision:") || raw.startsWith("frontendRevision:") || raw.startsWith("snapshotBuild:") || raw.startsWith("snapshotBuildError:")) {
     return { view: "verification", id: raw };
   }
-  if (raw.startsWith("gate:") || raw.startsWith("testRun:") || raw.startsWith("testResult:") || raw.startsWith("testArtifact:") || raw.startsWith("testSuite:") || raw.startsWith("testCase:")) {
+  if (raw.startsWith("gate:") || raw.startsWith("testRun:") || raw.startsWith("testResult:") || raw.startsWith("testArtifact:") || raw.startsWith("testSuite:") || raw.startsWith("testCase:") || raw.startsWith("testReport:")) {
     return { view: "verification", id: raw };
   }
   if (raw.startsWith("roadmap:") || raw.startsWith("epic:") || raw.startsWith("feature:") || raw.startsWith("roadmapTask:") || raw.startsWith("docTask:")) {
@@ -214,7 +214,7 @@ function conceptApiHref(value) {
   }
   if (raw.startsWith("gate:")) return `/api/platform-model?view=testGates&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("testRun:")) return `/api/platform-test-runs/${encodeURIComponent(raw)}`;
-  if (raw.startsWith("testResult:") || raw.startsWith("testArtifact:") || raw.startsWith("testSuite:") || raw.startsWith("testCase:")) {
+  if (raw.startsWith("testResult:") || raw.startsWith("testArtifact:") || raw.startsWith("testSuite:") || raw.startsWith("testCase:") || raw.startsWith("testReport:")) {
     return `/api/platform-model?view=testRuns&id=${encodeURIComponent(raw)}`;
   }
   if (raw.startsWith("roadmap:") || raw.startsWith("epic:") || raw.startsWith("feature:") || raw.startsWith("roadmapTask:") || raw.startsWith("docTask:")) {
@@ -1260,6 +1260,8 @@ function detailRecordsForSource(source, model) {
       return model.runtimeRevisions ?? [];
     case "testRuns":
       return model.testRuns ?? [];
+    case "testReports":
+      return model.testReports ?? [];
     case "candidateSnapshots":
       return model.candidateSnapshots ?? [];
     case "nodes":
@@ -1433,6 +1435,71 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
   ]));
 }
 
+function reportRunId(reportId) {
+  const raw = optionalText(reportId);
+  if (!raw || !raw.startsWith("testReport:")) return null;
+  const suffixIndex = raw.lastIndexOf(":");
+  if (suffixIndex <= "testReport:".length) return null;
+  return raw.slice("testReport:".length, suffixIndex);
+}
+
+function countByStatus(rows = []) {
+  return rows.reduce((counts, row) => {
+    const status = String(row?.status || "unknown");
+    counts[status] = (counts[status] ?? 0) + 1;
+    return counts;
+  }, Object.create(null));
+}
+
+function verificationStatusRecord(model) {
+  const runs = model.testRuns ?? [];
+  const runningCount = runs.filter(run => run.status === "running").length;
+  const latestResults = Object.values(model.latestTestResultsByGate ?? {});
+  const failingGateCount = latestResults.filter(result =>
+    ["failed", "error"].includes(String(result?.status || ""))
+    || result?.timedOut === true
+  ).length;
+  const regressionRows = (model.testReports ?? []).filter(report => report.reportKind === "regression");
+  const regressedRunCount = regressionRows.filter(report => report.status === "regressed").length;
+  const completedRuns = runs
+    .filter(run => optionalText(run.finishedAt))
+    .sort((left, right) => String(right.finishedAt || "").localeCompare(String(left.finishedAt || "")));
+  const latestCompletedRun = completedRuns[0] ?? null;
+  const status = failingGateCount > 0
+    ? "failed"
+    : regressedRunCount > 0
+      ? "regressed"
+      : runningCount > 0
+        ? "running"
+        : "passed";
+  const summary = failingGateCount > 0
+    ? `${failingGateCount} failing gate${failingGateCount === 1 ? "" : "s"} need attention.`
+    : regressedRunCount > 0
+      ? `${regressedRunCount} run${regressedRunCount === 1 ? "" : "s"} show a timing regression.`
+      : runningCount > 0
+        ? `${runningCount} run${runningCount === 1 ? "" : "s"} currently executing.`
+        : "No active failures or regressions are currently projected.";
+  return {
+    id: "verificationStatus:current",
+    status,
+    summary,
+    runningCount,
+    failingGateCount,
+    regressedRunCount,
+    latestCompletedRunId: latestCompletedRun?.id ?? null,
+    latestCompletedAt: latestCompletedRun?.finishedAt ?? null,
+    activeRuntimeRevision: model.activeRuntimeRevision?.id ?? null
+  };
+}
+
+function renderVerificationPanel(surface, model, ctx) {
+  const panelKind = surfacePropText(surface, "verificationPanelKind", "");
+  if (panelKind !== "statusBanner") return "";
+  const record = verificationStatusRecord(model);
+  const card = propertyRowsFromSurfaceSchema(surface, "propertyCardTitle", "propertyFields", ctx, record, "Live Verification Status");
+  return renderSurfaceFrame(surface, renderPropertyCard(card));
+}
+
 function renderVerificationDetail(surface, detail, model, ctx) {
   const primarySurface = nestedSurface(surface, "PlatformVerificationPrimaryPanel", {
     title: "Primary Detail",
@@ -1457,10 +1524,36 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     summary: "Build errors for the selected runtime revision when available.",
     surfaceKind: "table"
   });
+  const reportSummarySurface = nestedSurface(surface, "PlatformVerificationReportSummary", {
+    title: "Report Summary",
+    summary: "Derived report summary for the selected test run.",
+    surfaceKind: "region"
+  });
+  const artifactsSurface = nestedSurface(surface, "PlatformVerificationArtifactsReport", {
+    title: "Artifacts and Report Streams",
+    summary: "Artifacts and structured report streams for the selected test run.",
+    surfaceKind: "table"
+  });
+  const suiteSummarySurface = nestedSurface(surface, "PlatformVerificationSuiteSummary", {
+    title: "Suite Summary",
+    summary: "Structured suite summary for the selected test run.",
+    surfaceKind: "table"
+  });
+  const failingCasesSurface = nestedSurface(surface, "PlatformVerificationFailingCases", {
+    title: "Failing Cases",
+    summary: "Failing and error cases for the selected test run.",
+    surfaceKind: "table"
+  });
+  const regressionSurface = nestedSurface(surface, "PlatformVerificationRegressionSummary", {
+    title: "Regression Summary",
+    summary: "Heuristic timing regression summary for the selected test run.",
+    surfaceKind: "region"
+  });
   const gateIdPrefixes = surfaceIdPrefixes(surface, "gateIdPrefixes", ["gate:"]);
   const runtimeRevisionIdPrefixes = surfaceIdPrefixes(surface, "runtimeRevisionIdPrefixes", ["runtimeRevision:", "backendRevision:", "frontendRevision:"]);
   const candidateSnapshotIdPrefixes = surfaceIdPrefixes(surface, "candidateSnapshotIdPrefixes", ["candidateSnapshot:"]);
   const testRunIdPrefixes = surfaceIdPrefixes(surface, "testRunIdPrefixes", ["testRun:"]);
+  const testReportIdPrefixes = surfaceIdPrefixes(surface, "testReportIdPrefixes", ["testReport:"]);
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No verification rows are projected yet." });
   if (recordMatchesIdPrefixes(detail, gateIdPrefixes)) {
     const gate = detail;
@@ -1558,8 +1651,11 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       `)]
     ]));
   }
-  const run = detail;
-  if (!recordMatchesIdPrefixes(run, testRunIdPrefixes) && detail.id) {
+  const selectedReport = recordMatchesIdPrefixes(detail, testReportIdPrefixes) ? detail : null;
+  const run = selectedReport
+    ? ((model.testRuns ?? []).find(row => row.id === selectedReport.runId) ?? null)
+    : detail;
+  if (!run || (!recordMatchesIdPrefixes(run, testRunIdPrefixes) && detail.id)) {
     return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No verification rows are projected yet." });
   }
   const runRecord = {
@@ -1567,12 +1663,30 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     testRunEventsHref: "/api/platform-test-runs/events",
     backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
   };
+  const runReports = (model.testReports ?? []).filter(report => report.runId === run.id);
+  const reportByKind = Object.fromEntries(runReports.map(report => [report.reportKind, report]));
+  const summaryReport = selectedReport?.reportKind === "summary" ? selectedReport : (reportByKind.summary ?? null);
+  const suitesReport = selectedReport?.reportKind === "suites" ? selectedReport : (reportByKind.suites ?? null);
+  const failuresReport = selectedReport?.reportKind === "failures" ? selectedReport : (reportByKind.failures ?? null);
+  const regressionReport = selectedReport?.reportKind === "regression" ? selectedReport : (reportByKind.regression ?? null);
+  const artifactsById = new Map((model.testArtifacts ?? []).map(row => [row.id, row]));
+  const suitesById = new Map((model.testSuites ?? []).map(row => [row.id, row]));
+  const casesById = new Map((model.testCases ?? []).map(row => [row.id, row]));
+  const artifactRows = selectedReport?.artifactIds?.length
+    ? selectedReport.artifactIds.map(id => artifactsById.get(id)).filter(Boolean)
+    : (model.testArtifacts ?? []).filter(row => row.runId === run.id);
+  const suiteRows = suitesReport?.suiteIds?.length
+    ? suitesReport.suiteIds.map(id => suitesById.get(id)).filter(Boolean)
+    : (model.testSuites ?? []).filter(row => row.runId === run.id);
+  const failureRows = failuresReport?.caseIds?.length
+    ? failuresReport.caseIds.map(id => casesById.get(id)).filter(Boolean)
+    : (model.testCases ?? []).filter(row => row.runId === run.id && ["failed", "error"].includes(String(row.status || "")));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "testRunCardTitle", "testRunFields", ctx, runRecord, "Test Run Detail");
   const streamsCard = propertyRowsFromSurfaceSchema(relatedSurface, "testRunPropertyCardTitle", "testRunPropertyFields", ctx, runRecord, "Verification Streams");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "testRunFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "testRunFields")
     : ["id", "title", "status", "gateId", "branchId", "changeSetId", "candidateSnapshotId", "durationMs", "exitCode", "startedAt", "finishedAt"];
-  return renderAuthoredDetailLayout(surface, new Map([
+  const sections = new Map([
     [primarySurface.name, renderSurfaceFrame(primarySurface, `
       ${renderPropertyCard(primaryCard)}
       ${renderLongTailProperties(primarySurface, ctx, run, usedKeys)}
@@ -1580,7 +1694,77 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
       ${renderPropertyCard(streamsCard)}
     `)]
-  ]));
+  ]);
+  if (summaryReport) {
+    const summaryRecord = {
+      reportId: summaryReport.id,
+      status: summaryReport.status,
+      summary: summaryReport.summary,
+      format: summaryReport.format ?? null,
+      suiteCount: summaryReport.suiteCount ?? 0,
+      caseCount: summaryReport.caseCount ?? 0,
+      passedCount: summaryReport.passedCount ?? 0,
+      failedCount: summaryReport.failedCount ?? 0,
+      errorCount: summaryReport.errorCount ?? 0,
+      skippedCount: summaryReport.skippedCount ?? 0,
+      cached: summaryReport.cached === true ? "yes" : "no",
+      producedAt: summaryReport.producedAt ?? null
+    };
+    const card = propertyRowsFromSurfaceSchema(reportSummarySurface, "propertyCardTitle", "propertyFields", ctx, summaryRecord, "Report Summary");
+    sections.set(reportSummarySurface.name, renderSurfaceFrame(reportSummarySurface, renderPropertyCard(card)));
+  }
+  sections.set(artifactsSurface.name, renderSurfaceFrame(artifactsSurface, renderAuthoredSurfaceTable(
+    artifactsSurface,
+    renderRowsFromSurfaceSchema(artifactsSurface, "rowFields", artifactRows.slice(0, surfaceRowLimit(artifactsSurface, 12)), ctx, artifact => `
+      <tr>
+        <td>${esc(artifact.artifactKind || "")}</td>
+        <td>${renderConceptLink(ctx, artifact.id)}</td>
+        <td>${esc(artifact.fileName || "")}</td>
+        <td>${esc(artifact.contentType || "")}</td>
+        <td>${esc(artifact.sizeBytes ?? "")}</td>
+      </tr>
+    `)
+  )));
+  sections.set(suiteSummarySurface.name, renderSurfaceFrame(suiteSummarySurface, renderAuthoredSurfaceTable(
+    suiteSummarySurface,
+    renderRowsFromSurfaceSchema(suiteSummarySurface, "rowFields", suiteRows.slice(0, surfaceRowLimit(suiteSummarySurface, 12)), ctx, suite => `
+      <tr>
+        <td>${esc(suite.status || "")}</td>
+        <td>${renderConceptLink(ctx, suite.id)}</td>
+        <td>${esc(suite.total ?? "")}</td>
+        <td>${esc(suite.failed ?? "")}</td>
+        <td>${esc(suite.errors ?? "")}</td>
+      </tr>
+    `)
+  )));
+  sections.set(failingCasesSurface.name, renderSurfaceFrame(failingCasesSurface, renderAuthoredSurfaceTable(
+    failingCasesSurface,
+    renderRowsFromSurfaceSchema(failingCasesSurface, "rowFields", failureRows.slice(0, surfaceRowLimit(failingCasesSurface, 20)), ctx, testCase => `
+      <tr>
+        <td>${esc(testCase.status || "")}</td>
+        <td>${renderConceptLink(ctx, testCase.id)}</td>
+        <td>${testCase.suiteId ? renderConceptLink(ctx, testCase.suiteId) : ""}</td>
+        <td>${esc(testCase.classname || "")}</td>
+        <td>${esc(testCase.durationMs ?? "")}</td>
+      </tr>
+    `)
+  )));
+  if (regressionReport) {
+    const regression = regressionReport.regressionSummary ?? {};
+    const regressionRecord = {
+      reportId: regressionReport.id,
+      status: regressionReport.status,
+      summary: regressionReport.summary,
+      baselineRunId: regression.baselineRunId ?? null,
+      baselineDurationMs: regression.baselineDurationMs ?? null,
+      currentDurationMs: regression.currentDurationMs ?? null,
+      deltaMs: regression.deltaMs ?? null,
+      deltaPercent: regression.deltaPercent == null ? null : `${regression.deltaPercent >= 0 ? "+" : ""}${Math.round(regression.deltaPercent)}%`
+    };
+    const card = propertyRowsFromSurfaceSchema(regressionSurface, "propertyCardTitle", "propertyFields", ctx, regressionRecord, "Regression Summary");
+    sections.set(regressionSurface.name, renderSurfaceFrame(regressionSurface, renderPropertyCard(card)));
+  }
+  return renderAuthoredDetailLayout(surface, sections);
 }
 
 function renderKnowledgeDetail(surface, detail, model, ctx) {
@@ -1911,7 +2095,7 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
     case "verification":
       return renderSurfaceFrame(surface, renderVerificationDetail(
         surface,
-        findAuthoredDetailBySources(surface, model, ctx.id, ["testGates", "runtimeRevisions", "testRuns", "candidateSnapshots"]),
+        findAuthoredDetailBySources(surface, model, ctx.id, ["testGates", "runtimeRevisions", "testRuns", "testReports", "candidateSnapshots"]),
         model,
         ctx
       ));
@@ -1945,6 +2129,11 @@ function renderAuthoringClientScript() {
   return `
     <script>
       (function () {
+        const platformPageState = {
+          enableVerificationLiveUpdates: ${"__ENABLE_VERIFICATION__"},
+          testRunEventsHref: "/api/platform-test-runs/events",
+          backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
+        };
         function formStatus(form) {
           const statusId = form && form.getAttribute("data-platform-status-id");
           return statusId ? document.getElementById(statusId) : null;
@@ -2111,16 +2300,99 @@ function renderAuthoringClientScript() {
             sync();
           }
         }
-        document.querySelectorAll("form[data-platform-client-action]").forEach(form => {
-          bindAuthoredFieldSyncs(form);
-          bindAuthoredJsonSubmit(form);
-        });
+        function selectedVerificationId() {
+          try {
+            return new URL(window.location.href).searchParams.get("id") || null;
+          } catch {
+            return null;
+          }
+        }
+        function reportRunId(reportId) {
+          const raw = String(reportId || "").trim();
+          if (!raw.startsWith("testReport:")) return null;
+          const suffixIndex = raw.lastIndexOf(":");
+          if (suffixIndex <= "testReport:".length) return null;
+          return raw.slice("testReport:".length, suffixIndex);
+        }
+        function closeVerificationSources() {
+          const sources = Array.isArray(window.__platformVerificationSources) ? window.__platformVerificationSources : [];
+          for (const source of sources) {
+            try { source.close(); } catch {}
+          }
+          window.__platformVerificationSources = [];
+        }
+        async function refreshVerificationPage() {
+          if (window.__platformVerificationRefreshInFlight) return;
+          window.__platformVerificationRefreshInFlight = true;
+          try {
+            const response = await fetch(window.location.href, { headers: { "x-platform-verification-refresh": "1" } });
+            const html = await response.text();
+            const next = new DOMParser().parseFromString(html, "text/html").querySelector("main");
+            const current = document.querySelector("main");
+            if (!next || !current) return;
+            closeVerificationSources();
+            current.innerHTML = next.innerHTML;
+            bindPlatformPage(document);
+          } catch {}
+          window.__platformVerificationRefreshInFlight = false;
+        }
+        function scheduleVerificationRefresh() {
+          clearTimeout(window.__platformVerificationRefreshTimer);
+          window.__platformVerificationRefreshTimer = setTimeout(() => {
+            void refreshVerificationPage();
+          }, 150);
+        }
+        function shouldRefreshForTestRun(payload) {
+          if (!payload || typeof payload !== "object") return false;
+          const id = selectedVerificationId();
+          if (!id) return payload.phase === "start" || payload.phase === "finish";
+          if (id.startsWith("testRun:") || id.startsWith("testRun.")) return payload.runId === id;
+          if (id.startsWith("testReport:")) return payload.runId === reportRunId(id);
+          if (id.startsWith("gate:")) return payload.gateId === id;
+          if (id.startsWith("candidateSnapshot:")) return payload.candidateSnapshotId === id;
+          if (id.startsWith("runtimeRevision:") || id.startsWith("backendRevision:") || id.startsWith("frontendRevision:")) return payload.phase === "finish";
+          return payload.phase === "finish";
+        }
+        function bindVerificationLiveUpdates() {
+          if (!platformPageState.enableVerificationLiveUpdates || typeof EventSource !== "function") return;
+          closeVerificationSources();
+          const testRunSource = new EventSource(platformPageState.testRunEventsHref);
+          testRunSource.addEventListener("testRun", event => {
+            try {
+              const payload = JSON.parse(event.data || "{}");
+              if (shouldRefreshForTestRun(payload)) scheduleVerificationRefresh();
+            } catch {}
+          });
+          testRunSource.onerror = () => {};
+          const backendSource = new EventSource(platformPageState.backendRevisionEventsHref);
+          let backendPrimed = false;
+          backendSource.onmessage = () => {
+            if (!backendPrimed) {
+              backendPrimed = true;
+              return;
+            }
+            scheduleVerificationRefresh();
+          };
+          backendSource.onerror = () => {};
+          window.__platformVerificationSources = [testRunSource, backendSource];
+        }
+        function bindPlatformPage(root) {
+          root.querySelectorAll("form[data-platform-client-action]").forEach(form => {
+            bindAuthoredFieldSyncs(form);
+            bindAuthoredJsonSubmit(form);
+          });
+          bindVerificationLiveUpdates();
+        }
+        bindPlatformPage(document);
       }());
     </script>
   `;
 }
 
 function renderSurfaceSection(surface, model, ctx, consoleLayout) {
+  if (surfacePropText(surface, "verificationPanelKind", "")) {
+    return renderVerificationPanel(surface, model, ctx);
+  }
   if (surface?.props?.summaryPageId) {
     const sourcePageId = surfacePropText(surface, "summaryPageId", "overview");
     return renderSummaryCardsFromSurface(pageSurfaceById(consoleLayout, sourcePageId), model);
@@ -2163,8 +2435,8 @@ function surfaceNeedsClientScript(surface) {
   return (surface.childSurfaces ?? []).some(child => surfaceNeedsClientScript(child));
 }
 
-function pageNeedsClientScript(pageSurface) {
-  return surfaceNeedsClientScript(pageSurface);
+function pageNeedsClientScript(pageSurface, ctx) {
+  return surfaceNeedsClientScript(pageSurface) || ctx?.view === "verification";
 }
 
 function renderPageFromSurface(pageSurface, model, ctx, consoleLayout) {
@@ -2172,7 +2444,7 @@ function renderPageFromSurface(pageSurface, model, ctx, consoleLayout) {
   return `
     ${renderSummaryCardsFromSurface(pageSurface, model)}
     ${sections}
-    ${pageNeedsClientScript(pageSurface) ? renderAuthoringClientScript() : ""}
+    ${pageNeedsClientScript(pageSurface, ctx) ? renderAuthoringClientScript().replace("__ENABLE_VERIFICATION__", ctx.view === "verification" ? "true" : "false") : ""}
   `;
 }
 

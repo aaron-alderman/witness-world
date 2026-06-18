@@ -41,6 +41,33 @@ export const surfaces = Object.freeze([]);
 
 export const providers = Object.freeze([
   {
+    kind: "capabilityDefinitions",
+    id: "sql.capabilities",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: "db.sql",
+        label: "SQL Database",
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "sqlite", label: "SQLite", status: "shipped", default: true }),
+          // pg / mysql2 are wired for connection tests but query/command/migrate stay SQLite-only.
+          Object.freeze({ id: "postgres", label: "PostgreSQL", status: "preview" }),
+          Object.freeze({ id: "mysql", label: "MySQL", status: "preview" })
+        ]),
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["datasourceId", "operationId"]),
+          failure: Object.freeze(["db.sql.query.failed", "db.sql.command.failed", "db.sql.migrate.failed", "db.sql.transaction.failed"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([
+          Object.freeze({ name: "db.sql.provider", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "db.sql.datasource", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "db.sql.migrationTable", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "db.sql.sqlite.path", accepts: "runtimeConfig.key" })
+        ])
+      })
+    ])
+  },
+  {
     kind: "moduleProjectors",
     id: "sql.projections",
     projectors: sqlModuleProjectors

@@ -568,6 +568,23 @@ function normalizeGovernanceRoutes(rows = []) {
     );
 }
 
+function normalizeProposalTargetGovernance(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => ({
+      id: String(row?.id || ""),
+      targetProcess: String(row?.targetProcess || ""),
+      operationSemantics: String(row?.operationSemantics || "unknown"),
+      governanceMode: String(row?.governanceMode || "missing"),
+      authorityMechanism: String(row?.authorityMechanism || "missing"),
+      sharedAuthorityPath: row?.sharedAuthorityPath === true,
+      workflowRole: String(row?.workflowRole || "missing"),
+      bootstrapSelectable: row?.bootstrapSelectable === true,
+      notes: String(row?.notes || "")
+    }))
+    .filter(row => row.id && row.targetProcess)
+    .sort((left, right) => left.targetProcess.localeCompare(right.targetProcess));
+}
+
 function buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch) {
   if (!snapshotDiagnostics?.appRevision) return [];
   return [{
@@ -956,7 +973,7 @@ function buildFilteredDocProjection(model, docs, id = null, { expandByTarget = f
   };
 }
 
-function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], testResults = [], testArtifacts = [], testSuites = [], testCases = []) {
+function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], testResults = [], testArtifacts = [], testSuites = [], testCases = [], testReports = []) {
   addNode(nodes, {
     id: TEST_RUNNER_BOUNDARY_ID,
     kind: "boundary",
@@ -1064,6 +1081,22 @@ function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], test
     if (testCase.artifactId) addEdge(edges, testCase.artifactId, "describes", testCase.id, "witnesses");
     if (testCase.gateId) addEdge(edges, testCase.id, "targets", testCase.gateId, "witnesses");
     if (testCase.candidateSnapshotId) addEdge(edges, testCase.id, "targets", testCase.candidateSnapshotId, "witnesses");
+  }
+  for (const report of testReports) {
+    addNode(nodes, {
+      id: report.id,
+      kind: "testReport",
+      title: report.title || report.id,
+      lifecycle: ["verify", "observe", "steward"],
+      owner: "plugin.platform",
+      status: report.status || "known",
+      source: "derived"
+    });
+    if (report.runId) addEdge(edges, report.runId, "produces", report.id, "derived");
+    if (report.gateId) addEdge(edges, report.id, "targets", report.gateId, "derived");
+    for (const artifactId of report.artifactIds ?? []) addEdge(edges, report.id, "references", artifactId, "derived");
+    for (const suiteId of report.suiteIds ?? []) addEdge(edges, report.id, "references", suiteId, "derived");
+    for (const caseId of report.caseIds ?? []) addEdge(edges, report.id, "references", caseId, "derived");
   }
 }
 
@@ -2428,6 +2461,7 @@ export async function buildPlatformModel({
   const testArtifacts = projectRows(project, moduleProjectors.testArtifacts);
   const testSuites = projectRows(project, moduleProjectors.testSuites);
   const testCases = projectRows(project, moduleProjectors.testCases);
+  const testReports = projectRows(project, moduleProjectors.testReports);
   const projectedTestGates = projectRows(project, moduleProjectors.testGates);
   const projectedCoverageEdges = projectRows(project, moduleProjectors.coverageEdges);
   const flakeScoresByGate = buildFlakeScoreByGate(testResults);
@@ -2438,6 +2472,9 @@ export async function buildPlatformModel({
   const governanceRoutes = normalizeGovernanceRoutes(
     diagnostics?.governanceRoutes
     ?? buildGovernanceRouteInventory(diagnostics?.routes ?? [])
+  );
+  const proposalTargetGovernance = normalizeProposalTargetGovernance(
+    diagnostics?.proposalTargetGovernance
   );
   const runtimeRevisions = buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch);
   const activeRuntimeRevision = runtimeRevisions[0] ?? null;
@@ -2498,6 +2535,18 @@ export async function buildPlatformModel({
     });
     if (governanceRoute.routeId) addEdge(edges, governanceRoute.id, "governs", governanceRoute.routeId, "governance-ledger");
     addEdge(edges, governanceRoute.id, "dispatchesTo", `handler:${governanceRoute.handler}`, "governance-ledger");
+  }
+
+  for (const governanceCommand of proposalTargetGovernance) {
+    addNode(nodes, {
+      id: governanceCommand.id,
+      kind: "governanceCommand",
+      title: governanceCommand.targetProcess,
+      lifecycle: ["steward"],
+      owner: governanceCommand.targetProcess,
+      status: governanceCommand.governanceMode,
+      source: "governance-ledger"
+    });
   }
 
   const profiles = Object.entries(profilesSeed.profiles ?? {}).map(([id, profile]) => ({
@@ -3127,7 +3176,7 @@ export async function buildPlatformModel({
       }))
     : buildCoverageEdgeRows(testGateProjection.rows, nodes);
   addTestGateTelemetryEdges(nodes, edges, testGateProjection.rows);
-  addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts, testSuites, testCases);
+  addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts, testSuites, testCases, testReports);
   for (const coverageEdge of coverageEdges) {
     addNode(nodes, {
       id: coverageEdge.id,
@@ -3297,6 +3346,7 @@ export async function buildPlatformModel({
     testArtifacts: testArtifacts.map(row => ({ ...row })),
     testSuites: testSuites.map(row => ({ ...row })),
     testCases: testCases.map(row => ({ ...row })),
+    testReports: testReports.map(row => ({ ...row })),
     latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
     branchTestRedGreen,
     changeSetTestRedGreen,
@@ -3316,6 +3366,7 @@ export async function buildPlatformModel({
     testMonitorDiagnostics,
     compatibilityBridges,
     governanceRoutes,
+    proposalTargetGovernance,
     conflicts: conflicts.map(row => ({ ...row })),
     mergeIntents: mergeIntents.map(row => ({ ...row })),
     roadmapTasks
@@ -3353,6 +3404,10 @@ export function filterPlatformModel(model, view, id = null) {
     return {
       testGates: model.testGates,
       testRuns: model.testRuns,
+      testArtifacts: model.testArtifacts,
+      testSuites: model.testSuites,
+      testCases: model.testCases,
+      testReports: model.testReports,
       runtimeRevisions: model.runtimeRevisions,
       activeRuntimeRevision: model.activeRuntimeRevision,
       candidateSnapshots: model.candidateSnapshots,
@@ -3550,10 +3605,15 @@ export function filterPlatformModel(model, view, id = null) {
     };
   }
   if (view === "testRuns") {
+    const selectedReport = id
+      ? ((model.testReports ?? []).find(row => row.id === id) ?? null)
+      : null;
     const testRuns = id
       ? model.testRuns.filter(row =>
         row.id === id
+        || row.id === selectedReport?.runId
         || row.gateId === id
+        || row.gateId === selectedReport?.gateId
         || row.branchId === id
         || row.changeSetId === id
         || row.candidateSnapshotId === id
@@ -3611,12 +3671,21 @@ export function filterPlatformModel(model, view, id = null) {
         || row.gateId === id
       )
       : (model.testCases ?? []);
+    const testReports = id
+      ? (model.testReports ?? []).filter(row =>
+        runIds.has(row.runId)
+        || gateIds.has(row.gateId)
+        || row.id === id
+        || row.runId === id
+        || row.gateId === id
+      )
+      : (model.testReports ?? []);
     const latestTestResultsByGate = Object.fromEntries(
       Object.entries(model.latestTestResultsByGate ?? {})
         .filter(([gateId, row]) => !id || gateIds.has(gateId) || runIds.has(row.runId) || gateId === id || row.runId === id)
         .map(([gateId, row]) => [gateId, { ...row }])
     );
-    return { testRuns, testResults, testArtifacts, testSuites, testCases, latestTestResultsByGate, summaries: model.summaries };
+    return { testRuns, testResults, testArtifacts, testSuites, testCases, testReports, latestTestResultsByGate, summaries: model.summaries };
   }
   if (view === "testRedGreen") {
     const branchTestRedGreen = id
@@ -3784,7 +3853,15 @@ export function filterPlatformModel(model, view, id = null) {
         || row.ownerPluginId === id
       )
       : (model.governanceRoutes ?? []);
-    return { governanceRoutes, summaries: model.summaries };
+    const proposalTargetGovernance = id
+      ? (model.proposalTargetGovernance ?? []).filter(row =>
+        row.id === id
+        || row.targetProcess === id
+        || row.governanceMode === id
+        || row.authorityMechanism === id
+      )
+      : (model.proposalTargetGovernance ?? []);
+    return { governanceRoutes, proposalTargetGovernance, summaries: model.summaries };
   }
   if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "testGate"), summaries: model.summaries };
   if (view === "mcp") return {

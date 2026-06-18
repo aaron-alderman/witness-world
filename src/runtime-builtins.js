@@ -522,6 +522,7 @@ const BUILTIN_CAPABILITIES = [
       failure: ["server.start.failed"],
       externalRefs: ["secretRef"]
     },
+    config: [],
     authority: [{ name: "secret.access", accepts: "authority.id", required: true }],
     placement: ["serverRunner"]
   },
@@ -548,6 +549,26 @@ export const CORE_RUNTIME_CAPABILITY_IDS = Object.freeze([
   "runtime.config",
   "dom.render",
   "http.fetch"
+]);
+
+// Canonical list of shipped backend capability seams. Every id here must carry the
+// full seam contract (providerAdapters, witnessContract with a failure phase, authority,
+// config). The Stage C0 guard (test/backend-seam-contract.test.js) freezes this: a new
+// seam that ships provider+failure metadata must be added here, and every id here must
+// keep its contract fields, or the test fails.
+export const BACKEND_SEAM_CAPABILITY_IDS = Object.freeze([
+  "runtime.config",
+  "fs.blob",
+  "fs.stream",
+  "upload.asset",
+  "db.sql",
+  "jobs.queue",
+  "search.index",
+  "auth.oauth",
+  "http.outbound",
+  "webhook.inbound",
+  "notify.email",
+  "notify.sms"
 ]);
 
 const BUILTIN_CAPABILITY_BY_ID = new Map(BUILTIN_CAPABILITIES.map(capability => [capability.id, capability]));

@@ -22,6 +22,25 @@ export const surfaces = Object.freeze([]);
 
 export const providers = Object.freeze([
   {
+    kind: "capabilityDefinitions",
+    id: "fs-blob.capabilities",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: "fs.blob",
+        label: "Blob Storage",
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "local-disk", label: "Local disk", status: "shipped", default: true })
+        ]),
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["storageKey"]),
+          failure: Object.freeze(["fs.blob.write.failed", "fs.blob.read.failed"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([])
+      })
+    ])
+  },
+  {
     kind: "supportServiceFactory",
     id: "fs-blob.support",
     factory: () => ({
