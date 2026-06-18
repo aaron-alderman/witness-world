@@ -2152,6 +2152,270 @@ test("platform test runs capture environment inputs and prefer candidate snapsho
   assert.equal(run.testResults[0].sourceRevision.candidateSnapshotId, candidateSnapshot.id);
 }));
 
+test("platform test runs cache successful results and invalidate on source, environment, runner, and dependency graph changes", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const fixture = await createTempPlatformApplyFixture();
+  let commandCalls = 0;
+  const gateId = "gate:platform-cache-proof";
+  const baseGate = {
+    id: gateId,
+    title: "Platform cache proof gate",
+    command: "node --test plugins/platform/platform.test.js",
+    runner: "node-test",
+    timeoutMs: 1234,
+    sourceDependencies: [fixture.first],
+    protectedObjects: ["plugin.platform"]
+  };
+  async function runCached({
+    id,
+    gate = baseGate,
+    runtimeProfile = "full",
+    runnerVersion = "node-test:fixture-v1"
+  }) {
+    return await runPlatformTestGate(world, {
+      actor: "aaron",
+      gate,
+      id,
+      runtimeProfile,
+      resolveRunnerVersion: async () => runnerVersion,
+      runCommand: async () => {
+        commandCalls += 1;
+        return {
+          startedAt: "2026-06-18T00:00:00.000Z",
+          finishedAt: "2026-06-18T00:00:00.100Z",
+          durationMs: 100,
+          exitCode: 0,
+          signal: null,
+          status: "passed",
+          stdout: `ok 1 - cache call ${commandCalls}`,
+          stderr: "",
+          timedOut: false,
+          error: null
+        };
+      }
+    });
+  }
+
+  try {
+    const first = await runCached({ id: "testRun.cache.first" });
+    const second = await runCached({ id: "testRun.cache.second" });
+
+    assert.equal(first.testRun.cacheStatus, "miss");
+    assert.equal(second.testRun.cacheStatus, "hit");
+    assert.equal(commandCalls, 1);
+    assert.equal(second.latestResult.cacheHit.resultId, first.latestResult.id);
+    assert.equal(second.testRun.cacheIdentity.sourceHashSetHash, first.testRun.cacheIdentity.sourceHashSetHash);
+    assert.equal(second.testRun.cacheIdentity.environmentIdentityHash, first.testRun.cacheIdentity.environmentIdentityHash);
+    assert.equal(second.testRun.cacheIdentity.testRunnerVersion, "node-test:fixture-v1");
+    assert.equal(second.testRun.cacheIdentity.dependencyGraphVersion, first.testRun.cacheIdentity.dependencyGraphVersion);
+    assert.equal(world.project(moduleProjectors.latestTestResultsByGate).byGate[gateId].cacheStatus, "hit");
+
+    await writeFile(path.join(process.cwd(), fixture.first), JSON.stringify({ value: 11 }, null, 2), "utf8");
+    const third = await runCached({ id: "testRun.cache.third" });
+    assert.equal(third.testRun.cacheStatus, "miss");
+    assert.equal(commandCalls, 2);
+    assert.notEqual(third.testRun.cacheIdentity.sourceHashSetHash, first.testRun.cacheIdentity.sourceHashSetHash);
+
+    const fourth = await runCached({ id: "testRun.cache.fourth", runtimeProfile: "minimal" });
+    assert.equal(fourth.testRun.cacheStatus, "miss");
+    assert.equal(commandCalls, 3);
+    assert.notEqual(fourth.testRun.cacheIdentity.environmentIdentityHash, third.testRun.cacheIdentity.environmentIdentityHash);
+
+    const fifth = await runCached({ id: "testRun.cache.fifth", runnerVersion: "node-test:fixture-v2" });
+    assert.equal(fifth.testRun.cacheStatus, "miss");
+    assert.equal(commandCalls, 4);
+    assert.equal(fifth.testRun.cacheIdentity.testRunnerVersion, "node-test:fixture-v2");
+    assert.notEqual(fifth.testRun.cacheIdentity.testRunnerVersion, third.testRun.cacheIdentity.testRunnerVersion);
+
+    const sixth = await runCached({
+      id: "testRun.cache.sixth",
+      gate: {
+        ...baseGate,
+        protectedObjects: ["plugin.platform", "route:GET /platform"]
+      }
+    });
+    assert.equal(sixth.testRun.cacheStatus, "miss");
+    assert.equal(commandCalls, 5);
+    assert.notEqual(sixth.testRun.cacheIdentity.dependencyGraphVersion, third.testRun.cacheIdentity.dependencyGraphVersion);
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
+test("platform test run cache keys include candidate snapshot hashes", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: () => {}
+  });
+
+  const originalConsole = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  const firstConsole = `${originalConsole}\n`;
+  const secondConsole = `${originalConsole}\n\n`;
+  assert.notEqual(firstConsole, secondConsole);
+
+  await handlers["platform.changeSet.create"]({
+    req: {
+      body: {
+        id: "changeset.test.cache.snapshot",
+        branchId: "branch.test.cache.snapshot",
+        title: "Snapshot cache proof"
+      }
+    },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.changeSet.edit"]({
+    req: {
+      body: {
+        edits: [{ path: "plugins/platform/platform-console.rvm", content: firstConsole }]
+      }
+    },
+    res: {},
+    params: { id: "changeset.test.cache.snapshot" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  await handlers["platform.changeSet.validate"]({
+    res: {},
+    params: { id: "changeset.test.cache.snapshot" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  const snapshotOne = world.project(moduleProjectors.candidateSnapshotIndex).byChangeSet["changeset.test.cache.snapshot"]?.at(-1) ?? null;
+  assert.ok(snapshotOne);
+
+  let commandCalls = 0;
+  const gate = {
+    id: "gate:platform-cache-snapshot",
+    title: "Platform cache snapshot gate",
+    command: "node --test plugins/platform/platform.test.js",
+    runner: "node-test",
+    timeoutMs: 2100,
+    sourceDependencies: ["plugins/platform/platform-console.rvm"],
+    protectedObjects: ["plugin.platform"]
+  };
+
+  const firstRun = await runPlatformTestGate(world, {
+    actor: "aaron",
+    gate,
+    id: "testRun.cache.snapshot.one",
+    branchId: "branch.test.cache.snapshot",
+    changeSetId: "changeset.test.cache.snapshot",
+    candidateSnapshotId: snapshotOne.id,
+    runtimeProfile: "full",
+    resolveRunnerVersion: async () => "node-test:fixture-v1",
+    runCommand: async () => {
+      commandCalls += 1;
+      return {
+        startedAt: "2026-06-18T00:00:00.000Z",
+        finishedAt: "2026-06-18T00:00:00.100Z",
+        durationMs: 100,
+        exitCode: 0,
+        signal: null,
+        status: "passed",
+        stdout: `ok 1 - snapshot cache call ${commandCalls}`,
+        stderr: "",
+        timedOut: false,
+        error: null
+      };
+    }
+  });
+  const secondRun = await runPlatformTestGate(world, {
+    actor: "aaron",
+    gate,
+    id: "testRun.cache.snapshot.two",
+    branchId: "branch.test.cache.snapshot",
+    changeSetId: "changeset.test.cache.snapshot",
+    candidateSnapshotId: snapshotOne.id,
+    runtimeProfile: "full",
+    resolveRunnerVersion: async () => "node-test:fixture-v1",
+    runCommand: async () => {
+      commandCalls += 1;
+      return {
+        startedAt: "2026-06-18T00:00:00.000Z",
+        finishedAt: "2026-06-18T00:00:00.100Z",
+        durationMs: 100,
+        exitCode: 0,
+        signal: null,
+        status: "passed",
+        stdout: `ok 1 - snapshot cache call ${commandCalls}`,
+        stderr: "",
+        timedOut: false,
+        error: null
+      };
+    }
+  });
+
+  assert.equal(firstRun.testRun.cacheStatus, "miss");
+  assert.equal(secondRun.testRun.cacheStatus, "hit");
+  assert.equal(commandCalls, 1);
+
+  await handlers["platform.changeSet.edit"]({
+    req: {
+      body: {
+        edits: [{ path: "plugins/platform/platform-console.rvm", content: secondConsole }]
+      }
+    },
+    res: {},
+    params: { id: "changeset.test.cache.snapshot" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  await handlers["platform.changeSet.validate"]({
+    res: {},
+    params: { id: "changeset.test.cache.snapshot" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  const snapshotTwo = world.project(moduleProjectors.candidateSnapshotIndex).byChangeSet["changeset.test.cache.snapshot"]?.at(-1) ?? null;
+  assert.ok(snapshotTwo);
+  assert.notEqual(snapshotTwo.id, snapshotOne.id);
+
+  const thirdRun = await runPlatformTestGate(world, {
+    actor: "aaron",
+    gate,
+    id: "testRun.cache.snapshot.three",
+    branchId: "branch.test.cache.snapshot",
+    changeSetId: "changeset.test.cache.snapshot",
+    candidateSnapshotId: snapshotTwo.id,
+    runtimeProfile: "full",
+    resolveRunnerVersion: async () => "node-test:fixture-v1",
+    runCommand: async () => {
+      commandCalls += 1;
+      return {
+        startedAt: "2026-06-18T00:00:00.000Z",
+        finishedAt: "2026-06-18T00:00:00.100Z",
+        durationMs: 100,
+        exitCode: 0,
+        signal: null,
+        status: "passed",
+        stdout: `ok 1 - snapshot cache call ${commandCalls}`,
+        stderr: "",
+        timedOut: false,
+        error: null
+      };
+    }
+  });
+
+  assert.equal(thirdRun.testRun.cacheStatus, "miss");
+  assert.equal(commandCalls, 2);
+  assert.notEqual(thirdRun.testRun.cacheIdentity.candidateSnapshotHash, firstRun.testRun.cacheIdentity.candidateSnapshotHash);
+}));
+
 test("platform test run event stream publishes start and finish witnesses", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const handlers = createHandlers({

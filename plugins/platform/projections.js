@@ -162,6 +162,13 @@ function testRunRows(witnesses) {
                 : []
             }
           : null,
+        cacheIdentity: body.cacheIdentity && typeof body.cacheIdentity === "object"
+          ? { ...body.cacheIdentity }
+          : null,
+        cacheStatus: body.cacheStatus ? String(body.cacheStatus) : "miss",
+        cacheHit: body.cacheHit && typeof body.cacheHit === "object"
+          ? { ...body.cacheHit }
+          : null,
         actor: body.actor ? String(body.actor) : null,
         session: body.session ? String(body.session) : null,
         runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
@@ -208,6 +215,13 @@ function testRunRows(witnesses) {
                 ? body.sourceRevision.dependencyHashes.map(row => ({ ...row }))
                 : []
             }
+          : null,
+        cacheIdentity: body.cacheIdentity && typeof body.cacheIdentity === "object"
+          ? { ...body.cacheIdentity }
+          : null,
+        cacheStatus: body.cacheStatus ? String(body.cacheStatus) : "miss",
+        cacheHit: body.cacheHit && typeof body.cacheHit === "object"
+          ? { ...body.cacheHit }
           : null,
         actor: body.actor ? String(body.actor) : null,
         session: body.session ? String(body.session) : null,
@@ -268,6 +282,13 @@ function testResultRows(witnesses) {
                 ? result.sourceRevision.dependencyHashes.map(row => ({ ...row }))
                 : []
             }
+          : null,
+        cacheIdentity: result.cacheIdentity && typeof result.cacheIdentity === "object"
+          ? { ...result.cacheIdentity }
+          : null,
+        cacheStatus: result.cacheStatus ? String(result.cacheStatus) : "miss",
+        cacheHit: result.cacheHit && typeof result.cacheHit === "object"
+          ? { ...result.cacheHit }
           : null,
         producedAt: result.producedAt ?? witness.body.finishedAt ?? null
       });

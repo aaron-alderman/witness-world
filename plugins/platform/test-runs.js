@@ -68,6 +68,63 @@ function hashBuffer(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+function hashJson(value) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+const PLATFORM_TEST_DEPENDENCY_GRAPH_SCHEMA_VERSION = "platform-test-gate-graph/v1";
+let cachedCargoVersionPromise = null;
+
+function compareStable(left, right) {
+  return String(left || "").localeCompare(String(right || ""));
+}
+
+async function resolveCargoTestRunnerVersion() {
+  if (cachedCargoVersionPromise) return cachedCargoVersionPromise;
+  cachedCargoVersionPromise = new Promise(resolve => {
+    let stdout = "";
+    let settled = false;
+    const file = process.platform === "win32" ? "cargo.exe" : "cargo";
+    const child = spawn(file, ["--version"], {
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    child.stdout?.setEncoding("utf8");
+    child.stdout?.on("data", chunk => { stdout += chunk; });
+    const finalize = value => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const timer = setTimeout(() => {
+      try {
+        child.kill("SIGTERM");
+      } catch {}
+      finalize(null);
+    }, 2000);
+    timer.unref?.();
+    child.on("error", () => {
+      clearTimeout(timer);
+      finalize(null);
+    });
+    child.on("close", () => {
+      clearTimeout(timer);
+      const trimmed = stdout.trim();
+      finalize(trimmed || null);
+    });
+  });
+  return cachedCargoVersionPromise;
+}
+
+async function resolvePlatformTestRunnerVersion(runner = "node-test") {
+  const normalizedRunner = String(runner || "node-test");
+  if (normalizedRunner === "cargo-test") {
+    const cargoVersion = await resolveCargoTestRunnerVersion();
+    return cargoVersion ? `${normalizedRunner}:${cargoVersion}` : `${normalizedRunner}:unknown`;
+  }
+  return `${normalizedRunner}:node-${process.versions?.node || process.version || "unknown"}`;
+}
+
 function buildPlatformTestEnvironmentInputs({
   command,
   cwd = repoRoot,
@@ -146,6 +203,19 @@ async function capturePlatformTestSourceRevision(world, {
       });
     }
   }
+  const candidateSnapshotHash = snapshot
+    ? hashJson({
+        status: String(snapshot.status || "invalid"),
+        files: (Array.isArray(snapshot.files) ? snapshot.files : [])
+          .map(file => ({
+            path: String(file.path || ""),
+            nextContentHash: String(file.nextContentHash || ""),
+            previousHash: file.previousHash ?? null,
+            sourceLanguage: file.sourceLanguage ? String(file.sourceLanguage) : null
+          }))
+          .sort((left, right) => compareStable(left.path, right.path))
+      })
+    : null;
   return {
     capturedAt: nowIso(),
     branchId: optionalText(branchId),
@@ -153,6 +223,7 @@ async function capturePlatformTestSourceRevision(world, {
     candidateSnapshotId: normalizedCandidateSnapshotId,
     candidateSnapshotRevision: typeof snapshot?.revision === "number" ? snapshot.revision : null,
     candidateSnapshotStatus: snapshot?.status ? String(snapshot.status) : null,
+    candidateSnapshotHash,
     dependencyHashes
   };
 }
@@ -232,6 +303,97 @@ export async function runPlatformTestCommand({
   });
 }
 
+function buildPlatformTestDependencyGraphVersion(gate) {
+  return hashJson({
+    schemaVersion: PLATFORM_TEST_DEPENDENCY_GRAPH_SCHEMA_VERSION,
+    sourceDependencies: Array.isArray(gate?.sourceDependencies) ? gate.sourceDependencies.map(String).sort(compareStable) : [],
+    protectedObjects: Array.isArray(gate?.protectedObjects) ? gate.protectedObjects.map(String).sort(compareStable) : []
+  });
+}
+
+function buildPlatformTestCacheIdentity({
+  gate,
+  environmentInputs,
+  sourceRevision,
+  testRunnerVersion
+}) {
+  const sourceHashSetHash = hashJson(
+    (Array.isArray(sourceRevision?.dependencyHashes) ? sourceRevision.dependencyHashes : [])
+      .map(row => ({
+        path: String(row.path || ""),
+        hash: row.hash ?? null,
+        source: row.source ? String(row.source) : null,
+        previousHash: row.previousHash ?? null,
+        sourceLanguage: row.sourceLanguage ? String(row.sourceLanguage) : null,
+        missing: row.missing === true
+      }))
+      .sort((left, right) => compareStable(left.path, right.path))
+  );
+  const candidateSnapshotHash = sourceRevision?.candidateSnapshotHash ?? null;
+  const environmentIdentityHash = hashJson({
+    cwd: environmentInputs?.cwd ? String(environmentInputs.cwd) : null,
+    platform: environmentInputs?.platform ? String(environmentInputs.platform) : null,
+    shellFile: environmentInputs?.shellFile ? String(environmentInputs.shellFile) : null,
+    shellArgs: Array.isArray(environmentInputs?.shellArgs) ? environmentInputs.shellArgs.map(String) : [],
+    envOverrideKeys: Array.isArray(environmentInputs?.envOverrideKeys) ? environmentInputs.envOverrideKeys.map(String).sort(compareStable) : [],
+    runner: environmentInputs?.runner ? String(environmentInputs.runner) : null,
+    environment: environmentInputs?.environment ? String(environmentInputs.environment) : null,
+    timeoutMs: Number(environmentInputs?.timeoutMs || 0),
+    runtimeProfile: environmentInputs?.runtimeProfile ? String(environmentInputs.runtimeProfile) : null
+  });
+  const dependencyGraphVersion = buildPlatformTestDependencyGraphVersion(gate);
+  const cacheKey = hashJson({
+    gateId: String(gate?.id || ""),
+    sourceHashSetHash,
+    candidateSnapshotHash,
+    environmentIdentityHash,
+    testRunnerVersion: String(testRunnerVersion || "unknown"),
+    dependencyGraphVersion
+  });
+  return {
+    sourceHashSetHash,
+    candidateSnapshotHash,
+    environmentIdentityHash,
+    testRunnerVersion: String(testRunnerVersion || "unknown"),
+    dependencyGraphVersion,
+    cacheKey
+  };
+}
+
+function compareProducedAt(left, right) {
+  const leftProducedAt = String(left?.producedAt || "");
+  const rightProducedAt = String(right?.producedAt || "");
+  if (leftProducedAt && rightProducedAt && leftProducedAt !== rightProducedAt) return leftProducedAt.localeCompare(rightProducedAt);
+  return compareStable(left?.id, right?.id);
+}
+
+function findReusablePlatformTestResult(world, gateId, cacheKey) {
+  return world.project(moduleProjectors.testResults)
+    .filter(row =>
+      String(row?.gateId || "") === String(gateId || "")
+      && String(row?.status || "") === "passed"
+      && String(row?.cacheIdentity?.cacheKey || "") === String(cacheKey || "")
+    )
+    .sort(compareProducedAt)
+    .at(-1) ?? null;
+}
+
+function cachedExecutionFromResult(result) {
+  const startedAt = nowIso();
+  return {
+    startedAt,
+    finishedAt: startedAt,
+    durationMs: 0,
+    exitCode: typeof result?.exitCode === "number" ? result.exitCode : 0,
+    signal: result?.signal ? String(result.signal) : null,
+    status: String(result?.status || "passed"),
+    stdout: String(result?.stdout || ""),
+    stderr: String(result?.stderr || ""),
+    timedOut: false,
+    error: null
+  };
+}
+
 function emitPlatformTestRunStart(world, {
   actor,
   id,
@@ -242,7 +404,10 @@ function emitPlatformTestRunStart(world, {
   session = null,
   runtimeProfile = null,
   environmentInputs = null,
-  sourceRevision = null
+  sourceRevision = null,
+  cacheIdentity = null,
+  cacheStatus = "miss",
+  cacheHit = null
 }) {
   ensureThing(world, actor, id);
   const environment = resolvePlatformTestEnvironment(gate, candidateSnapshotId);
@@ -265,6 +430,9 @@ function emitPlatformTestRunStart(world, {
       protectedObjects: Array.isArray(gate.protectedObjects) ? gate.protectedObjects.map(String) : [],
       environmentInputs: environmentInputs && typeof environmentInputs === "object" ? { ...environmentInputs } : null,
       sourceRevision: sourceRevision && typeof sourceRevision === "object" ? { ...sourceRevision, dependencyHashes: Array.isArray(sourceRevision.dependencyHashes) ? sourceRevision.dependencyHashes.map(row => ({ ...row })) : [] } : null,
+      cacheIdentity: cacheIdentity && typeof cacheIdentity === "object" ? { ...cacheIdentity } : null,
+      cacheStatus: String(cacheStatus || "miss"),
+      cacheHit: cacheHit && typeof cacheHit === "object" ? { ...cacheHit } : null,
       actor,
       session: session?.id ?? null,
       runtimeProfile: runtimeProfile ? String(runtimeProfile) : null,
@@ -284,7 +452,10 @@ function emitPlatformTestRunFinish(world, {
   session = null,
   runtimeProfile = null,
   environmentInputs = null,
-  sourceRevision = null
+  sourceRevision = null,
+  cacheIdentity = null,
+  cacheStatus = "miss",
+  cacheHit = null
 }) {
   const resultId = `testResult:${run.id}:1`;
   ensureThing(world, actor, resultId);
@@ -307,6 +478,9 @@ function emitPlatformTestRunFinish(world, {
     protectedObjects: Array.isArray(run.protectedObjects) ? run.protectedObjects.map(String) : [],
     environmentInputs: environmentInputs && typeof environmentInputs === "object" ? { ...environmentInputs } : null,
     sourceRevision: sourceRevision && typeof sourceRevision === "object" ? { ...sourceRevision, dependencyHashes: Array.isArray(sourceRevision.dependencyHashes) ? sourceRevision.dependencyHashes.map(row => ({ ...row })) : [] } : null,
+    cacheIdentity: cacheIdentity && typeof cacheIdentity === "object" ? { ...cacheIdentity } : null,
+    cacheStatus: String(cacheStatus || "miss"),
+    cacheHit: cacheHit && typeof cacheHit === "object" ? { ...cacheHit } : null,
     producedAt: execution.finishedAt
   };
   return world.emit({
@@ -331,6 +505,9 @@ function emitPlatformTestRunFinish(world, {
       protectedObjects: Array.isArray(run.protectedObjects) ? run.protectedObjects.map(String) : [],
       environmentInputs: environmentInputs && typeof environmentInputs === "object" ? { ...environmentInputs } : null,
       sourceRevision: sourceRevision && typeof sourceRevision === "object" ? { ...sourceRevision, dependencyHashes: Array.isArray(sourceRevision.dependencyHashes) ? sourceRevision.dependencyHashes.map(row => ({ ...row })) : [] } : null,
+      cacheIdentity: cacheIdentity && typeof cacheIdentity === "object" ? { ...cacheIdentity } : null,
+      cacheStatus: String(cacheStatus || "miss"),
+      cacheHit: cacheHit && typeof cacheHit === "object" ? { ...cacheHit } : null,
       actor,
       session: session?.id ?? null,
       runtimeProfile: runtimeProfile ? String(runtimeProfile) : null,
@@ -378,7 +555,8 @@ export async function runPlatformTestGate(world, {
   candidateSnapshotId = null,
   session = null,
   runtimeProfile = null,
-  runCommand = runPlatformTestCommand
+  runCommand = runPlatformTestCommand,
+  resolveRunnerVersion = resolvePlatformTestRunnerVersion
 }) {
   if (!gate?.id) return { ok: false, status: 400, error: "test gate is required" };
   const runId = String(id || defaultTestRunId(gate.id)).trim();
@@ -403,6 +581,22 @@ export async function runPlatformTestGate(world, {
     changeSetId: normalizedChangeSetId,
     candidateSnapshotId: normalizedCandidateSnapshotId
   });
+  const testRunnerVersion = await resolveRunnerVersion(String(gate.runner || "node-test"));
+  const cacheIdentity = buildPlatformTestCacheIdentity({
+    gate,
+    environmentInputs,
+    sourceRevision,
+    testRunnerVersion
+  });
+  const reusableResult = findReusablePlatformTestResult(world, gate.id, cacheIdentity.cacheKey);
+  const cacheStatus = reusableResult ? "hit" : "miss";
+  const cacheHit = reusableResult
+    ? {
+        resultId: String(reusableResult.id),
+        runId: String(reusableResult.runId || ""),
+        producedAt: reusableResult.producedAt ?? null
+      }
+    : null;
   const startWitness = emitPlatformTestRunStart(world, {
     actor,
     id: runId,
@@ -413,13 +607,18 @@ export async function runPlatformTestGate(world, {
     session,
     runtimeProfile,
     environmentInputs,
-    sourceRevision
+    sourceRevision,
+    cacheIdentity,
+    cacheStatus,
+    cacheHit
   });
-  const execution = await runCommand({
-    command: gate.command,
-    timeoutMs: gate.timeoutMs,
-    cwd: repoRoot
-  });
+  const execution = reusableResult
+    ? cachedExecutionFromResult(reusableResult)
+    : await runCommand({
+        command: gate.command,
+        timeoutMs: gate.timeoutMs,
+        cwd: repoRoot
+      });
   const finishWitness = emitPlatformTestRunFinish(world, {
     actor,
     run: {
@@ -440,7 +639,10 @@ export async function runPlatformTestGate(world, {
     session,
     runtimeProfile,
     environmentInputs,
-    sourceRevision
+    sourceRevision,
+    cacheIdentity,
+    cacheStatus,
+    cacheHit
   });
   const readback = readPlatformTestRun(world, runId);
   return {
