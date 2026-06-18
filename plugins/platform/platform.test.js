@@ -645,6 +645,8 @@ test("platform model filters support MCP views", async () => {
   assert.equal(docs.docTasks.length > 0, true);
   assert.equal(docs.roadmapTasks.length > 0, true);
   assert.equal(roadmap.docs.length, 1);
+  assert.equal(roadmap.roadmaps.length, 1);
+  assert.equal(roadmap.roadmaps[0].id, "roadmap:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
   assert.equal(roadmap.docs[0].path, "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
   assert.equal(roadmap.docSections.length > 0, true);
   assert.equal(roadmap.docTasks.length > 0, true);
@@ -684,6 +686,59 @@ test("platform model filters support MCP views", async () => {
   assert.equal(runtimeRevisionDetail.candidateSnapshots[0].id, "candidateSnapshot:demo:1");
   assert.equal(frontendRevisionDetail.runtimeRevisions.length, 1);
   assert.equal(frontendRevisionDetail.runtimeRevisions[0].id, "runtimeRevision:backend:3");
+});
+
+test("roadmap planning model projects branch-backed roadmap, epic, and feature links", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [
+          {
+            id: "branch.platform.console",
+            title: "Platform Console",
+            epic: "platform",
+            feature: "console",
+            status: "valid",
+            changeSetIds: []
+          },
+          {
+            id: "branch.platform.runtime",
+            title: "Platform Runtime",
+            epic: "platform",
+            feature: "runtime",
+            status: "open",
+            changeSetIds: []
+          }
+        ];
+      }
+      return [];
+    }
+  });
+
+  assert.equal(model.roadmaps.length, 1);
+  assert.equal(model.roadmaps[0].id, "roadmap:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
+  assert.equal(model.nodes.some(node => node.kind === "roadmap" && node.id === "roadmap:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"), true);
+  assert.equal(model.nodes.some(node => node.kind === "epic" && node.id === "epic:platform"), true);
+  assert.equal(model.nodes.some(node => node.kind === "feature" && node.id === "feature:platform:console"), true);
+  assert.equal(model.features.some(row => row.id === "feature:platform:console" && row.epicId === "epic:platform"), true);
+  assert.equal(model.branchesByEpic["epic:platform"].includes("branch.platform.console"), true);
+  assert.equal(model.edges.some(edge => edge.from === "branch:branch.platform.console" && edge.rel === "targets" && edge.to === "feature:platform:console"), true);
+  assert.equal(model.edges.some(edge => edge.from === "feature:platform:console" && edge.rel === "belongsTo" && edge.to === "epic:platform"), true);
+  assert.equal(model.edges.some(edge => edge.from === "roadmap:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" && edge.rel === "contains" && edge.to === "epic:platform"), true);
+
+  const roadmap = filterPlatformModel(model, "roadmap", "epic:platform");
+  assert.equal(roadmap.roadmaps.length, 1);
+  assert.equal(roadmap.epics.length, 1);
+  assert.equal(roadmap.features.length, 2);
+  assert.equal(roadmap.branchesByEpic["epic:platform"].includes("branch.platform.runtime"), true);
 });
 
 test("platform docs projections expose dependency indexes and reverse target lookups", async () => {

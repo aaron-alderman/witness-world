@@ -294,6 +294,107 @@ function buildBranchBoard(branches = []) {
   return lanes;
 }
 
+function aggregatePlanningStatus(statuses = []) {
+  const values = unique(statuses);
+  if (values.some(status => ["blocked", "invalid"].includes(status))) return "blocked";
+  if (values.some(status => ["valid", "applied"].includes(status))) return "active";
+  if (values.some(status => ["open", "draft", "validating"].includes(status))) return "open";
+  if (values.some(status => ["closed", "rejected", "abandoned"].includes(status))) return "closed";
+  return values[0] || "known";
+}
+
+function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [] }) {
+  const roadmapDoc = docs.find(doc => doc.path === roadmapDocPath) ?? null;
+  const roadmapId = `roadmap:${roadmapDocPath}`;
+  const epicsById = new Map();
+  const featuresById = new Map();
+  const branchesByEpic = Object.create(null);
+
+  const ensureEpic = label => {
+    const normalized = String(label || "").trim();
+    if (!normalized) return null;
+    const id = `epic:${slugify(normalized)}`;
+    if (!epicsById.has(id)) {
+      epicsById.set(id, {
+        id,
+        title: normalized,
+        roadmapId,
+        branchIds: [],
+        featureIds: [],
+        status: "known"
+      });
+    }
+    return epicsById.get(id);
+  };
+
+  const ensureFeature = (epicLabel, featureLabel) => {
+    const normalizedFeature = String(featureLabel || "").trim();
+    if (!normalizedFeature) return null;
+    const normalizedEpic = String(epicLabel || "").trim();
+    const id = normalizedEpic
+      ? `feature:${slugify(normalizedEpic)}:${slugify(normalizedFeature)}`
+      : `feature:${slugify(normalizedFeature)}`;
+    if (!featuresById.has(id)) {
+      featuresById.set(id, {
+        id,
+        title: normalizedFeature,
+        epicId: normalizedEpic ? `epic:${slugify(normalizedEpic)}` : null,
+        roadmapId,
+        branchIds: [],
+        status: "known"
+      });
+    }
+    return featuresById.get(id);
+  };
+
+  for (const branch of branches) {
+    const branchId = String(branch.id || "");
+    const epic = ensureEpic(branch.epic);
+    const feature = ensureFeature(branch.epic, branch.feature);
+    if (epic) {
+      if (!epic.branchIds.includes(branchId)) epic.branchIds.push(branchId);
+      pushByKey(branchesByEpic, epic.id, branchId);
+    }
+    if (feature) {
+      if (!feature.branchIds.includes(branchId)) feature.branchIds.push(branchId);
+      feature.status = aggregatePlanningStatus([feature.status, branch.status]);
+    }
+    if (epic && feature && !epic.featureIds.includes(feature.id)) epic.featureIds.push(feature.id);
+    if (epic) epic.status = aggregatePlanningStatus([epic.status, branch.status]);
+  }
+
+  const epics = [...epicsById.values()]
+    .map(row => ({
+      ...row,
+      branchIds: [...row.branchIds].sort(),
+      featureIds: [...row.featureIds].sort()
+    }))
+    .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+  const features = [...featuresById.values()]
+    .map(row => ({
+      ...row,
+      branchIds: [...row.branchIds].sort()
+    }))
+    .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+  for (const key of Object.keys(branchesByEpic)) branchesByEpic[key] = unique(branchesByEpic[key]).sort();
+
+  return {
+    roadmaps: [{
+      id: roadmapId,
+      title: roadmapDoc?.path ?? roadmapDocPath,
+      doc: roadmapDoc?.path ?? roadmapDocPath,
+      docId: roadmapDoc?.id ?? `doc:${roadmapDocPath}`,
+      epicIds: epics.map(row => row.id),
+      featureIds: features.map(row => row.id),
+      branchIds: unique(branches.flatMap(branch => branch.epic || branch.feature ? [branch.id] : [])).sort(),
+      status: aggregatePlanningStatus(epics.map(row => row.status))
+    }],
+    epics,
+    features,
+    branchesByEpic
+  };
+}
+
 function pushByKey(target, key, value) {
   if (!target[key]) target[key] = [];
   target[key].push(value);
@@ -408,6 +509,9 @@ function platformObjectKindForId(targetId, nodes) {
   if (value.startsWith("wtoml:")) return "wtomlSource";
   if (value.startsWith("json:")) return "jsonSource";
   if (value.startsWith("file:")) return "fileSource";
+  if (value.startsWith("roadmap:")) return "roadmap";
+  if (value.startsWith("epic:")) return "epic";
+  if (value.startsWith("feature:")) return "feature";
   if (value.startsWith("branch:")) return "branch";
   if (value.startsWith("proposal:")) return "proposal";
   return "platformObject";
@@ -2800,6 +2904,50 @@ export async function buildPlatformModel({
   const roadmapTasks = docTasks.filter(task => task.doc === roadmapDocPath || rawRoadmapTasks.some(rawTask => rawTask.id === task.id));
   const docIndex = buildDocIndex(docs);
   const docsByPlatformObject = buildDocsByPlatformObject(docs, docDependencies);
+  const planning = buildRoadmapPlanningRows({
+    roadmapDocPath,
+    docs,
+    branches: enrichedBranches
+  });
+  for (const roadmap of planning.roadmaps) {
+    addNode(nodes, {
+      id: roadmap.id,
+      kind: "roadmap",
+      title: roadmap.title,
+      lifecycle: ["author", "steward"],
+      owner: "plugin.platform",
+      status: roadmap.status,
+      source: roadmap.doc
+    });
+    if (nodes.has(roadmap.docId)) addEdge(edges, roadmap.docId, "describes", roadmap.id, "roadmap");
+  }
+  for (const epic of planning.epics) {
+    addNode(nodes, {
+      id: epic.id,
+      kind: "epic",
+      title: epic.title,
+      lifecycle: ["author", "verify", "steward"],
+      owner: "plugin.platform",
+      status: epic.status,
+      source: roadmapDocPath
+    });
+    addEdge(edges, epic.roadmapId, "contains", epic.id, "roadmap");
+    for (const branchId of epic.branchIds) addEdge(edges, `branch:${branchId}`, "belongsTo", epic.id, "roadmap");
+  }
+  for (const feature of planning.features) {
+    addNode(nodes, {
+      id: feature.id,
+      kind: "feature",
+      title: feature.title,
+      lifecycle: ["author", "verify", "steward"],
+      owner: "plugin.platform",
+      status: feature.status,
+      source: roadmapDocPath
+    });
+    if (feature.epicId) addEdge(edges, feature.id, "belongsTo", feature.epicId, "roadmap");
+    if (feature.roadmapId) addEdge(edges, feature.roadmapId, "contains", feature.id, "roadmap");
+    for (const branchId of feature.branchIds) addEdge(edges, `branch:${branchId}`, "targets", feature.id, "roadmap");
+  }
   return {
     lifecycleVocabulary: [...PLATFORM_LIFECYCLES],
     branchLifecycleVocabulary: [...PLATFORM_BRANCH_LIFECYCLE_LANES],
@@ -2815,6 +2963,10 @@ export async function buildPlatformModel({
     docReferences,
     docDependencies,
     docsByPlatformObject,
+    roadmaps: planning.roadmaps,
+    epics: planning.epics,
+    features: planning.features,
+    branchesByEpic: planning.branchesByEpic,
     testGates: testGateProjection.rows,
     testGateIndex: testGateProjection.index,
     coverageEdges,
@@ -2860,15 +3012,49 @@ export function filterPlatformModel(model, view, id = null) {
     const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
     const roadmapDocs = model.docs.filter(doc => doc.path === roadmapDocPath);
     const roadmapDocIds = new Set(roadmapDocs.map(doc => doc.path));
+    const roadmaps = (model.roadmaps ?? []).filter(row =>
+      !id
+      || row.id === id
+      || row.doc === id
+      || row.epicIds.includes(id)
+      || row.featureIds.includes(id)
+    );
+    const roadmapIds = new Set(roadmaps.map(row => row.id));
+    const epics = (model.epics ?? []).filter(row =>
+      !id
+      || row.id === id
+      || row.roadmapId === id
+      || roadmapIds.has(row.roadmapId)
+      || row.featureIds.includes(id)
+      || row.branchIds.includes(id)
+    );
+    const epicIds = new Set(epics.map(row => row.id));
+    const features = (model.features ?? []).filter(row =>
+      !id
+      || row.id === id
+      || row.epicId === id
+      || epicIds.has(row.epicId)
+      || row.branchIds.includes(id)
+    );
     const roadmapTasks = (model.roadmapTasks ?? []).filter(task =>
       (!id && roadmapDocIds.has(task.doc))
       || task.id === id
       || task.doc === id
       || task.section === id
     );
-    const includeRoadmapDoc = !id || roadmapTasks.length > 0 || roadmapDocIds.has(id);
+    const includeRoadmapDoc = !id || roadmapTasks.length > 0 || roadmapDocIds.has(id) || roadmaps.length > 0 || epics.length > 0 || features.length > 0;
     const docs = includeRoadmapDoc ? roadmapDocs : [];
-    return buildFilteredDocProjection(model, docs, id);
+    return {
+      ...buildFilteredDocProjection(model, docs, id),
+      roadmaps,
+      epics,
+      features,
+      branchesByEpic: Object.fromEntries(
+        Object.entries(model.branchesByEpic ?? {})
+          .filter(([epicId]) => !id || epicIds.has(epicId) || epicId === id)
+          .map(([epicId, branchIds]) => [epicId, [...branchIds]])
+      )
+    };
   }
   if (view === "docs") {
     const matchDoc = doc => !id || doc.id === id || doc.path === id;

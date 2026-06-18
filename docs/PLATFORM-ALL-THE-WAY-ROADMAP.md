@@ -1061,27 +1061,28 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 10.1 Planning Model
 
-- [ ] Add `roadmap` module kind.
-- [ ] Add `epic` module kind.
-- [ ] Add `feature` module kind.
+- [X] Add `roadmap` module kind.
+- [X] Add `epic` module kind.
+- [X] Add `feature` module kind.
 - [ ] Add `milestone` module kind.
 - [ ] Add `releaseChannel` module kind.
 - [ ] Add `acceptanceCriterion` module kind.
 - [ ] Add projectors:
-  - [ ] `roadmaps`
-  - [ ] `epics`
-  - [ ] `features`
+  - [X] `roadmaps`
+  - [X] `epics`
+  - [X] `features`
   - [ ] `milestones`
-  - [ ] `branchesByEpic`
+  - [X] `branchesByEpic`
   - [ ] `defectsByEpic`
   - [ ] `testsByFeature`
-- [ ] Link branch to feature.
-- [ ] Link feature to epic.
-- [ ] Link epic to roadmap.
+- [X] Link branch to feature.
+- [X] Link feature to epic.
+- [X] Link epic to roadmap.
 - [ ] Link defects to feature/epic.
 - [ ] Link docs and tests to feature/epic.
 - [X] Add Platform Console roadmap view.
 - [ ] Add Platform Console epic view.
+- [L] Current planning objects are branch-metadata-backed: `/api/platform-model?view=roadmap`, `/platform`, and MCP now expose a first-class `roadmap` row for `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md`, plus derived `epic`, `feature`, and `branchesByEpic` projections from branch `epic`/`feature` fields. Milestones, acceptance criteria, defect/test coverage by feature, and a dedicated epic console view remain later work.
 
 ### 10.2 Executable Roadmaps
 
@@ -1202,7 +1203,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `platform.roadmap`
 - [X] Add tests for human/MCP parity.
 - [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated telemetry, defect, and roadmap MCP lanes remain later work.
-- [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, checkbox task rows, and evidence-backed derived task status. This is not yet the broader Phase 10 planning model with first-class epics, milestones, or features.
+- [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, checkbox task rows, evidence-backed derived task status, and branch-metadata-backed `roadmap` / `epic` / `feature` projections. Milestones, acceptance criteria, and deeper planning coverage remain later work.
 - [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, branch, change-set, proposal-create, and test-run/list/read flows. Future telemetry, defect, and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
 - [L] The live docs model now projects explicit `docIndex`, `docReference`, `docDependencies`, and `docsByPlatformObject` rows from governed targets and resolved Markdown references to routes, plugins, capabilities, proposal IDs, branch IDs, governed docs, authored RVM/WCSS sources, JSON/WTOML config sources, and generic repo file/test nodes when the referenced workspace path exists.
 
