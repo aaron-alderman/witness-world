@@ -1012,8 +1012,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   const knowledgeRelatedSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRelatedPanel");
   assert.ok(knowledgeRelatedSurface);
   assert.equal(knowledgeRelatedSurface.props.cardItemLimit, "12");
-  assert.equal(knowledgeRelatedSurface.props.documentLinkCards, "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths");
-  assert.equal(knowledgeRelatedSurface.props.documentLinkCardEmptyStates, "Referenced Routes=No referenced routes in this document.|Referenced Plugins=No referenced plugins in this document.|Referenced Files=No referenced files in this document.");
+  assert.equal(knowledgeRelatedSurface.props.documentLinkCards, "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths|Authored Doc Links=references.authoredDocLinks@authoredLink|Authored Code Links=references.authoredCodeLinks@authoredLink");
+  assert.equal(knowledgeRelatedSurface.props.documentLinkCardEmptyStates, "Referenced Routes=No referenced routes in this document.|Referenced Plugins=No referenced plugins in this document.|Referenced Files=No referenced files in this document.|Authored Doc Links=No authored doc↔doc links in the knowledge model.|Authored Code Links=No authored doc↔code realizations in the knowledge model.");
   assert.equal(knowledgeRelatedSurface.props.roadmapTaskLinkCards, "Linked Targets=targets@targetId");
   assert.equal(knowledgeRelatedSurface.props.roadmapTaskLinkCardEmptyStates, "Linked Targets=No linked platform targets for this roadmap task.");
   assert.equal(knowledgeRelatedSurface.props.epicLinkCards, "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds");
@@ -6184,6 +6184,8 @@ test("platform page renders required operating views", async () => {
   assert.match(knowledgeHtml, /Related Resources/);
   assert.match(knowledgeHtml, /Linked platform resources and supporting context for the selected knowledge object\./);
   assert.match(knowledgeHtml, /Referenced Routes/);
+  assert.match(knowledgeHtml, /Authored Doc Links/);
+  assert.match(knowledgeHtml, /Authored Code Links/);
   assert.match(knowledgeHtml, /Sections/);
   assert.match(knowledgeHtml, /Document sections for the selected governed document when available\./);
   assert.match(knowledgeHtml, /Tasks/);
@@ -6219,6 +6221,43 @@ test("platform page renders required operating views", async () => {
   assert.match(modelHtml, /sort=profile&amp;dir=desc/);
   assert.match(modelHtml, /sort=gate&amp;dir=desc/);
   assert.doesNotMatch(modelHtml, /<pre/);
+});
+
+test("platform knowledge page renders authored knowledge relation links as linkable cards", () => {
+  const html = renderPlatformPage({
+    docs: [{
+      id: "doc:docs/intent/README.md",
+      path: "docs/intent/README.md",
+      role: "governed",
+      owner: "plugin.platform",
+      status: "authored",
+      freshness: { status: "fresh" },
+      sectionCount: 0,
+      taskCount: 0,
+      references: {
+        routes: [],
+        pluginIds: [],
+        filePaths: [],
+        authoredDocLinks: [{ rel: "explains", target: "doc:docs/intent/knowledge-relations.wtoml" }],
+        authoredCodeLinks: [{ rel: "isRealizedBy", target: "code:plugins/platform/platform-model.js" }]
+      }
+    }],
+    docSections: [],
+    docTasks: [],
+    roadmapTasks: [],
+    epics: [],
+    features: [],
+    summaries: {}
+  }, {
+    requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/intent/README.md")
+  });
+
+  assert.match(html, /Authored Doc Links/);
+  assert.match(html, /Authored Code Links/);
+  assert.match(html, />explains: doc:docs\/intent\/knowledge-relations\.wtoml</);
+  assert.match(html, /href="\/platform\?view=knowledge&amp;id=docs%2Fintent%2Fknowledge-relations\.wtoml"/);
+  assert.match(html, />isRealizedBy: code:plugins\/platform\/platform-model\.js</);
+  assert.match(html, /href="\/platform\?view=model&amp;id=code%3Aplugins%2Fplatform%2Fplatform-model\.js"/);
 });
 
 test("platform page renders authored supplemental pages from the RVM page tree", () => {

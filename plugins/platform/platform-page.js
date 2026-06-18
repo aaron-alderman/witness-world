@@ -195,6 +195,29 @@ function uniqueStrings(values = []) {
   return [...new Set(values.map(value => String(value || "")).filter(Boolean))];
 }
 
+function uniqueLinkEntries(values = []) {
+  const seen = new Set();
+  const entries = [];
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    const entry = typeof value === "object" && value
+      ? {
+          id: optionalText(value.id) || optionalText(value.target) || optionalText(value.path) || null,
+          label: optionalText(value.label) || optionalText(value.title) || optionalText(value.target) || optionalText(value.id) || optionalText(value.path) || null
+        }
+      : {
+          id: optionalText(value),
+          label: optionalText(value)
+        };
+    if (!entry.id) continue;
+    const key = `${entry.id}|${entry.label || entry.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entries.push(entry);
+  }
+  return entries;
+}
+
 function conceptDestination(value) {
   const raw = optionalText(value);
   if (!raw) return null;
@@ -224,6 +247,7 @@ function conceptDestination(value) {
   if (raw.startsWith("packageTransformer:") || raw.startsWith("packageTransformer.")) return { view: "packageConvergence", id: raw };
   if (raw.startsWith("packagePatch:")) return { view: "packageConvergence", id: raw };
   if (raw.startsWith("packageDependency:")) return { view: "model", id: raw };
+  if (raw.startsWith("code:")) return { view: "model", id: raw };
   if (raw.startsWith("package.") || raw.startsWith("packageRevision.") || raw.startsWith("packageNamespace:") || raw.startsWith("packageConflict:")) {
     return { view: "packageCoexistence", id: raw };
   }
@@ -261,6 +285,7 @@ function conceptApiHref(value) {
     return `/api/platform-model?view=packageConvergence&id=${encodeURIComponent(raw)}`;
   }
   if (raw.startsWith("packageDependency:")) return `/api/platform-model?id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("code:")) return `/api/platform-model?id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("package.") || raw.startsWith("packageRevision.") || raw.startsWith("packageNamespace:") || raw.startsWith("packageConflict:")) {
     return `/api/platform-model?view=packageCoexistence&id=${encodeURIComponent(raw)}`;
   }
@@ -477,10 +502,10 @@ function renderListOverflowSummary(totalItems, renderedItems) {
 }
 
 function renderLinksCard(title, ctx, values = [], { emptyState = "No linked resources.", itemLimit = 12 } = {}) {
-  const allItems = uniqueStrings(values);
+  const allItems = uniqueLinkEntries(values);
   const renderedItems = allItems.slice(0, itemLimit);
   const items = renderedItems
-    .map(value => `<li>${renderConceptLink(ctx, value)}${conceptApiHref(value) ? ` <span class="muted">(${renderApiLink(value)})</span>` : ""}</li>`)
+    .map(entry => `<li>${renderConceptLink(ctx, entry.id, entry.label || entry.id)}${conceptApiHref(entry.id) ? ` <span class="muted">(${renderApiLink(entry.id)})</span>` : ""}</li>`)
     .join("");
   return `
     <div class="card">
@@ -767,6 +792,18 @@ function listValuesFromMode(value, mode = "text") {
       return items.map(item => typeof item === "object" && item ? item.targetId || item.id || "" : item).filter(Boolean);
     case "path":
       return items.map(item => typeof item === "object" && item ? item.path || item.id || "" : item).filter(Boolean);
+    case "authoredLink":
+      return items.map(item => {
+        if (typeof item === "object" && item) {
+          const t = item.target || item.to || item.id || "";
+          const r = item.rel || "";
+          return {
+            id: t,
+            label: r ? `${r}: ${t}` : t
+          };
+        }
+        return item;
+      }).filter(Boolean);
     case "errorMessage":
       return items.map(item => {
         if (typeof item === "object" && item) return `${item.kind || "error"}: ${item.message || ""}`;
