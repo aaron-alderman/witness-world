@@ -398,6 +398,11 @@ function authoredChildSurface(surface, name, fallback = {}) {
   };
 }
 
+function authoredChildSurfaceByProp(surface, propName, propValue, fallbackName = null, fallback = {}) {
+  return surface?.childSurfaces?.find(child => surfacePropText(child, propName, null) === propValue)
+    || (fallbackName ? authoredChildSurface(surface, fallbackName, fallback) : { name: fallbackName || propValue, ...fallback });
+}
+
 function surfacePropText(surface, key, fallback = null) {
   const value = surface?.props?.[key];
   return typeof value === "string" && value.length ? value : fallback;
@@ -1504,10 +1509,10 @@ function findAuthoredDetailBySources(surface, model, id, fallback = []) {
 }
 
 function renderWorkflowDetail(surface, detail, model, ctx) {
-  const primarySurface = authoredChildSurface(surface, "PlatformWorkflowPrimaryPanel");
-  const relatedSurface = authoredChildSurface(surface, "PlatformWorkflowRelatedPanel");
-  const snapshotSurface = authoredChildSurface(surface, "PlatformWorkflowSnapshotHistory");
-  const editSurface = authoredChildSurface(surface, "PlatformWorkflowEditHistory");
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformWorkflowPrimaryPanel");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related", "PlatformWorkflowRelatedPanel");
+  const snapshotSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "snapshotHistory", "PlatformWorkflowSnapshotHistory");
+  const editSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "editHistory", "PlatformWorkflowEditHistory");
   const branchIdPrefixes = surfaceIdPrefixes(surface, "branchIdPrefixes");
   const changeSetIdPrefixes = surfaceIdPrefixes(surface, "changeSetIdPrefixes");
   const proposalIdPrefixes = surfaceIdPrefixes(surface, "proposalIdPrefixes");
@@ -1701,16 +1706,16 @@ function renderComputedPropertySection(surface, model, ctx) {
 }
 
 function renderVerificationDetail(surface, detail, model, ctx) {
-  const primarySurface = authoredChildSurface(surface, "PlatformVerificationPrimaryPanel");
-  const relatedSurface = authoredChildSurface(surface, "PlatformVerificationRelatedPanel");
-  const runHistorySurface = authoredChildSurface(surface, "PlatformVerificationRunHistory");
-  const buildHistorySurface = authoredChildSurface(surface, "PlatformVerificationBuildHistory");
-  const buildErrorsSurface = authoredChildSurface(surface, "PlatformVerificationBuildErrors");
-  const reportSummarySurface = authoredChildSurface(surface, "PlatformVerificationReportSummary");
-  const artifactsSurface = authoredChildSurface(surface, "PlatformVerificationArtifactsReport");
-  const suiteSummarySurface = authoredChildSurface(surface, "PlatformVerificationSuiteSummary");
-  const failingCasesSurface = authoredChildSurface(surface, "PlatformVerificationFailingCases");
-  const regressionSurface = authoredChildSurface(surface, "PlatformVerificationRegressionSummary");
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformVerificationPrimaryPanel");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related", "PlatformVerificationRelatedPanel");
+  const runHistorySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "runHistory", "PlatformVerificationRunHistory");
+  const buildHistorySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "buildHistory", "PlatformVerificationBuildHistory");
+  const buildErrorsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "buildErrors", "PlatformVerificationBuildErrors");
+  const reportSummarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "reportSummary", "PlatformVerificationReportSummary");
+  const artifactsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "artifacts", "PlatformVerificationArtifactsReport");
+  const suiteSummarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "suiteSummary", "PlatformVerificationSuiteSummary");
+  const failingCasesSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "failingCases", "PlatformVerificationFailingCases");
+  const regressionSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "regressionSummary", "PlatformVerificationRegressionSummary");
   const verificationPolicyIdPrefixes = surfaceIdPrefixes(surface, "verificationPolicyIdPrefixes");
   const verificationQueueIdPrefixes = surfaceIdPrefixes(surface, "verificationQueueIdPrefixes");
   const verificationExecutionIdPrefixes = surfaceIdPrefixes(surface, "verificationExecutionIdPrefixes");
@@ -1969,10 +1974,10 @@ function renderVerificationDetail(surface, detail, model, ctx) {
 }
 
 function renderKnowledgeDetail(surface, detail, model, ctx) {
-  const primarySurface = authoredChildSurface(surface, "PlatformKnowledgePrimaryPanel");
-  const relatedSurface = authoredChildSurface(surface, "PlatformKnowledgeRelatedPanel");
-  const sectionsSurface = authoredChildSurface(surface, "PlatformKnowledgeSections");
-  const tasksSurface = authoredChildSurface(surface, "PlatformKnowledgeTasks");
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformKnowledgePrimaryPanel");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related", "PlatformKnowledgeRelatedPanel");
+  const sectionsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "sections", "PlatformKnowledgeSections");
+  const tasksSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "tasks", "PlatformKnowledgeTasks");
   const documentPathField = surfacePropText(surface, "documentPathField", "");
   const roadmapTaskIdPrefixes = surfaceIdPrefixes(surface, "roadmapTaskIdPrefixes");
   const roadmapTaskFallbackField = surfacePropText(surface, "roadmapTaskFallbackField", "");
@@ -2076,9 +2081,9 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
 }
 
 function renderSignalDetail(surface, detail, model, ctx) {
-  const primarySurface = authoredChildSurface(surface, "PlatformSignalPrimaryPanel");
-  const relatedSurface = authoredChildSurface(surface, "PlatformSignalRelatedPanel");
-  const relationshipsSurface = authoredChildSurface(surface, "PlatformSignalRelationships");
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformSignalPrimaryPanel");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related", "PlatformSignalRelatedPanel");
+  const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships", "PlatformSignalRelationships");
   const gapIdPrefixes = surfaceIdPrefixes(surface, "gapIdPrefixes");
   const signalNodeKinds = surfaceValueList(surface, "signalNodeKinds");
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
@@ -2128,8 +2133,8 @@ function renderSignalDetail(surface, detail, model, ctx) {
 }
 
 function renderModelDetail(surface, node, model, ctx) {
-  const primarySurface = authoredChildSurface(surface, "PlatformModelPrimaryPanel");
-  const relationshipsSurface = authoredChildSurface(surface, "PlatformModelRelationships");
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformModelPrimaryPanel");
+  const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships", "PlatformModelRelationships");
   if (!node) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No platform objects are projected yet." });
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "objectCardTitle", "objectFields", ctx, node, "Platform Object Detail");

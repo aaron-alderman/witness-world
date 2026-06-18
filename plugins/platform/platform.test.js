@@ -667,6 +667,12 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformWorkflowSnapshotHistory",
     "PlatformWorkflowEditHistory"
   ]);
+  assert.deepEqual(workflowDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
+    "primary",
+    "related",
+    "snapshotHistory",
+    "editHistory"
+  ]);
   assert.equal(workflowDetailSurface.childSurfaces.some(surface => surface.name === "PlatformWorkflowSnapshotHistory" && surface.summary === "Candidate snapshot history for the selected workflow object when available."), true);
   const workflowSnapshotSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowSnapshotHistory");
   assert.ok(workflowSnapshotSurface);
@@ -837,6 +843,18 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationFailingCases",
     "PlatformVerificationRegressionSummary"
   ]);
+  assert.deepEqual(verificationDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
+    "primary",
+    "related",
+    "runHistory",
+    "buildHistory",
+    "buildErrors",
+    "reportSummary",
+    "artifacts",
+    "suiteSummary",
+    "failingCases",
+    "regressionSummary"
+  ]);
   assert.equal(verificationDetailSurface.childSurfaces.some(surface => surface.name === "PlatformVerificationBuildErrors" && surface.summary === "Build errors for the selected runtime revision when available."), true);
   const verificationRunSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRunHistory");
   assert.ok(verificationRunSurface);
@@ -954,6 +972,11 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformSignalRelatedPanel",
     "PlatformSignalRelationships"
   ]);
+  assert.deepEqual(signalDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
+    "primary",
+    "related",
+    "relationships"
+  ]);
   assert.equal(signalDetailSurface.childSurfaces.some(surface => surface.name === "PlatformSignalRelationships" && surface.summary === "Linked graph relationships for the selected signal when available."), true);
   const signalRelationshipsSurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalRelationships");
   assert.ok(signalRelationshipsSurface);
@@ -991,6 +1014,12 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformKnowledgeRelatedPanel",
     "PlatformKnowledgeSections",
     "PlatformKnowledgeTasks"
+  ]);
+  assert.deepEqual(knowledgeDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
+    "primary",
+    "related",
+    "sections",
+    "tasks"
   ]);
   assert.equal(knowledgeDetailSurface.childSurfaces.some(surface => surface.name === "PlatformKnowledgeTasks" && surface.summary === "Document or roadmap tasks for the selected knowledge object when available."), true);
   const knowledgeTaskSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeTasks");
@@ -1186,6 +1215,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.deepEqual(modelDetailSurface.children, [
     "PlatformModelPrimaryPanel",
     "PlatformModelRelationships"
+  ]);
+  assert.deepEqual(modelDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
+    "primary",
+    "relationships"
   ]);
   assert.equal(modelDetailSurface.childSurfaces.some(surface => surface.name === "PlatformModelRelationships" && surface.summary === "Linked graph relationships for the selected platform object when available."), true);
   const modelRelationshipsSurface = modelDetailSurface.childSurfaces.find(surface => surface.name === "PlatformModelRelationships");

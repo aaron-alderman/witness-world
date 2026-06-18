@@ -549,6 +549,7 @@ view PlatformWorkflowDetail {
 view PlatformWorkflowPrimaryPanel {
   kind region
   class platform-workflow-primary
+  prop detailPanelRole = "primary"
   prop title = "Primary Detail"
   prop summary = "Selected workflow object properties and long-tail fields."
   prop longTailCardTitle = "Properties"
@@ -566,6 +567,7 @@ view PlatformWorkflowPrimaryPanel {
 view PlatformWorkflowRelatedPanel {
   kind region
   class platform-workflow-related
+  prop detailPanelRole = "related"
   prop title = "Related Resources"
   prop summary = "Linked resources and supporting context for the selected workflow object."
   prop cardItemLimit = "12"
@@ -582,6 +584,7 @@ view PlatformWorkflowRelatedPanel {
 view PlatformWorkflowSnapshotHistory {
   kind table
   class platform-workflow-snapshots
+  prop detailPanelRole = "snapshotHistory"
   prop title = "Candidate Snapshots"
   prop summary = "Candidate snapshot history for the selected workflow object when available."
   prop columns = "Status|Snapshot|Revision|Change Set|Errors"
@@ -594,6 +597,7 @@ view PlatformWorkflowSnapshotHistory {
 view PlatformWorkflowEditHistory {
   kind table
   class platform-workflow-edits
+  prop detailPanelRole = "editHistory"
   prop title = "Staged Edits"
   prop summary = "Staged overlay edits for the selected change set when available."
   prop columns = "Path|Language|Previous Hash|Next Hash"
@@ -843,6 +847,7 @@ view PlatformVerificationStatusBanner {
 view PlatformVerificationPrimaryPanel {
   kind region
   class platform-verification-primary
+  prop detailPanelRole = "primary"
   prop title = "Primary Detail"
   prop summary = "Selected verification object properties and long-tail fields."
   prop longTailCardTitle = "Properties"
@@ -867,6 +872,7 @@ view PlatformVerificationPrimaryPanel {
 view PlatformVerificationRelatedPanel {
   kind region
   class platform-verification-related
+  prop detailPanelRole = "related"
   prop title = "Related Resources"
   prop summary = "Linked verification resources, streams, and supporting context."
   prop cardItemLimit = "12"
@@ -887,6 +893,7 @@ view PlatformVerificationRelatedPanel {
 view PlatformVerificationRunHistory {
   kind table
   class platform-verification-runs
+  prop detailPanelRole = "runHistory"
   prop title = "Recent Test Runs"
   prop summary = "Recent test-run history for the selected verification object when available."
   prop columns = "Status|Run|Branch|Duration|Exit"
@@ -898,6 +905,7 @@ view PlatformVerificationRunHistory {
 view PlatformVerificationBuildHistory {
   kind table
   class platform-verification-builds
+  prop detailPanelRole = "buildHistory"
   prop title = "Snapshot Builds"
   prop summary = "Snapshot build history for the selected runtime revision when available."
   prop columns = "Status|Build|Candidate Snapshot|Branch|Errors"
@@ -909,6 +917,7 @@ view PlatformVerificationBuildHistory {
 view PlatformVerificationBuildErrors {
   kind table
   class platform-verification-build-errors
+  prop detailPanelRole = "buildErrors"
   prop title = "Build Errors"
   prop summary = "Build errors for the selected runtime revision when available."
   prop columns = "Build|Path|Kind|Message"
@@ -920,6 +929,7 @@ view PlatformVerificationBuildErrors {
 view PlatformVerificationReportSummary {
   kind region
   class platform-verification-report-summary
+  prop detailPanelRole = "reportSummary"
   prop title = "Report Summary"
   prop summary = "Derived run summary authored by RVM and populated from projected report rows."
   prop propertyCardTitle = "Run Report Summary"
@@ -929,6 +939,7 @@ view PlatformVerificationReportSummary {
 view PlatformVerificationArtifactsReport {
   kind table
   class platform-verification-artifacts
+  prop detailPanelRole = "artifacts"
   prop title = "Artifacts and Report Streams"
   prop summary = "Raw streams and structured TAP/JUnit report artifacts for the selected run."
   prop columns = "Kind|Artifact|File|Content Type|Bytes"
@@ -940,6 +951,7 @@ view PlatformVerificationArtifactsReport {
 view PlatformVerificationSuiteSummary {
   kind table
   class platform-verification-suite-summary
+  prop detailPanelRole = "suiteSummary"
   prop title = "Suite Summary"
   prop summary = "Structured suite rows derived from the selected run."
   prop columns = "Status|Suite|Total|Failed|Errors"
@@ -951,6 +963,7 @@ view PlatformVerificationSuiteSummary {
 view PlatformVerificationFailingCases {
   kind table
   class platform-verification-failing-cases
+  prop detailPanelRole = "failingCases"
   prop title = "Failing Cases"
   prop summary = "Failed or errored test cases for the selected run."
   prop columns = "Status|Case|Suite|Class|Duration"
@@ -962,6 +975,7 @@ view PlatformVerificationFailingCases {
 view PlatformVerificationRegressionSummary {
   kind region
   class platform-verification-regression-summary
+  prop detailPanelRole = "regressionSummary"
   prop title = "Regression Summary"
   prop summary = "Heuristic duration comparison against the latest non-cached passed baseline."
   prop propertyCardTitle = "Timing Regression"
@@ -1124,6 +1138,7 @@ view PlatformSignalDetail {
 view PlatformSignalPrimaryPanel {
   kind region
   class platform-signal-primary
+  prop detailPanelRole = "primary"
   prop title = "Primary Detail"
   prop summary = "Selected signal properties and long-tail fields."
   prop longTailCardTitle = "Properties"
@@ -1138,6 +1153,7 @@ view PlatformSignalPrimaryPanel {
 view PlatformSignalRelatedPanel {
   kind region
   class platform-signal-related
+  prop detailPanelRole = "related"
   prop title = "Related Resources"
   prop summary = "Linked proposals, selector drift, and supporting signal context."
   prop cardItemLimit = "12"
@@ -1150,6 +1166,7 @@ view PlatformSignalRelatedPanel {
 view PlatformSignalRelationships {
   kind table
   class platform-signal-relationships
+  prop detailPanelRole = "relationships"
   prop title = "Related Relationships"
   prop summary = "Linked graph relationships for the selected signal when available."
   prop columns = "From|Relation|To"
@@ -1220,6 +1237,7 @@ view PlatformKnowledgeDetail {
 view PlatformKnowledgePrimaryPanel {
   kind region
   class platform-knowledge-primary
+  prop detailPanelRole = "primary"
   prop title = "Primary Detail"
   prop summary = "Selected knowledge object properties and long-tail fields."
   prop longTailCardTitle = "Properties"
@@ -1241,6 +1259,7 @@ view PlatformKnowledgePrimaryPanel {
 view PlatformKnowledgeRelatedPanel {
   kind region
   class platform-knowledge-related
+  prop detailPanelRole = "related"
   prop title = "Related Resources"
   prop summary = "Linked platform resources and supporting context for the selected knowledge object."
   prop cardItemLimit = "12"
@@ -1287,6 +1306,7 @@ view PlatformKnowledgeFeatureLinks {
 view PlatformKnowledgeSections {
   kind table
   class platform-knowledge-sections
+  prop detailPanelRole = "sections"
   prop title = "Sections"
   prop summary = "Document sections for the selected governed document when available."
   prop columns = "Title|Line|Depth"
@@ -1298,6 +1318,7 @@ view PlatformKnowledgeSections {
 view PlatformKnowledgeTasks {
   kind table
   class platform-knowledge-tasks
+  prop detailPanelRole = "tasks"
   prop title = "Tasks"
   prop summary = "Document or roadmap tasks for the selected knowledge object when available."
   prop columns = "Status|Task|Line|Section"
@@ -1344,6 +1365,7 @@ view PlatformModelDetail {
 view PlatformModelPrimaryPanel {
   kind region
   class platform-model-primary
+  prop detailPanelRole = "primary"
   prop title = "Primary Detail"
   prop summary = "Selected platform object properties and long-tail fields."
   prop longTailCardTitle = "Properties"
@@ -1355,6 +1377,7 @@ view PlatformModelPrimaryPanel {
 view PlatformModelRelationships {
   kind table
   class platform-model-relationships
+  prop detailPanelRole = "relationships"
   prop title = "Relationships"
   prop summary = "Linked graph relationships for the selected platform object when available."
   prop columns = "From|Relation|To"
