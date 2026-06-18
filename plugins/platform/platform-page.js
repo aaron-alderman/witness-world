@@ -463,6 +463,15 @@ function surfaceSchemaMap(surface, key) {
   return new Map(entries.map(entry => [String(entry.label), entry]));
 }
 
+function resolveSchemaPath(record, pathSpec) {
+  const paths = String(pathSpec || "").split("||").map(part => part.trim()).filter(Boolean);
+  for (const path of paths) {
+    const value = resolveFieldPath(record, path);
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return null;
+}
+
 function resolveFieldPath(record, fieldPath) {
   return String(fieldPath || "")
     .split(".")
@@ -471,11 +480,15 @@ function resolveFieldPath(record, fieldPath) {
 }
 
 function renderSchemaValue(ctx, value, mode = "text") {
-  if (value === undefined || value === null || value === "") return "";
   switch (mode) {
+    case "statusExit":
+      if (!value || typeof value !== "object") return "idle";
+      return esc(`${value.status || "idle"} (${value.exitCode ?? "n/a"})`);
     case "api":
+      if (value === undefined || value === null || value === "") return "";
       return renderApiLink(typeof value === "object" ? value.id : value);
     case "href":
+      if (value === undefined || value === null || value === "") return "";
       if (typeof value === "object") {
         const href = optionalText(value.href) || optionalText(value.url) || optionalText(value.id);
         const label = optionalText(value.title) || optionalText(value.label) || href;
@@ -483,8 +496,10 @@ function renderSchemaValue(ctx, value, mode = "text") {
       }
       return `<a href="${esc(value)}">Event stream</a>`;
     case "value":
+      if (value === undefined || value === null || value === "") return "";
       return renderValue(ctx, value);
     case "concept":
+      if (value === undefined || value === null || value === "") return "";
       if (typeof value === "object") {
         const id = optionalText(value.id) || optionalText(value.path);
         const label = optionalText(value.title) || optionalText(value.label) || optionalText(value.path) || optionalText(value.id);
@@ -492,8 +507,10 @@ function renderSchemaValue(ctx, value, mode = "text") {
       }
       return renderConceptLink(ctx, value);
     case "count":
+      if (value === undefined || value === null || value === "") return "";
       return esc(Array.isArray(value) ? value.length : value);
     default:
+      if (value === undefined || value === null || value === "") return "";
       return esc(Array.isArray(value) ? value.join(", ") : value);
   }
 }
@@ -505,7 +522,7 @@ function propertyRowsFromSurfaceSchema(surface, titleProp, fieldsProp, ctx, reco
     surfacePropText(surface, titleProp, fallbackTitle),
     entries.map(entry => ({
       label: entry.label,
-      valueHtml: renderSchemaValue(ctx, resolveFieldPath(record, entry.path), entry.mode)
+      valueHtml: renderSchemaValue(ctx, resolveSchemaPath(record, entry.path), entry.mode)
     }))
   );
 }
@@ -556,7 +573,7 @@ function listValuesFromMode(value, mode = "text") {
 
 function renderCardSpecs(raw, ctx, record, kind) {
   return parseCardSpecs(raw).map(spec => {
-    const value = resolveFieldPath(record, spec.path);
+    const value = resolveSchemaPath(record, spec.path);
     return kind === "links"
       ? renderLinksCard(spec.title, ctx, listValuesFromMode(value, spec.mode))
       : renderTextListCard(spec.title, listValuesFromMode(value, spec.mode));
@@ -624,7 +641,7 @@ function renderRowsFromSurfaceSchema(surface, schemaProp, records, ctx, fallback
   if (!entries.length) return records.map(fallbackRowRenderer);
   return records.map(record => `
     <tr>
-      ${entries.map(entry => `<td>${renderSchemaValue(ctx, resolveFieldPath(record, entry.path), entry.mode)}</td>`).join("")}
+      ${entries.map(entry => `<td>${renderSchemaValue(ctx, resolveSchemaPath(record, entry.path), entry.mode)}</td>`).join("")}
     </tr>
   `);
 }
@@ -1094,11 +1111,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       runLink: run.id ? { id: run.id, title: run.id } : null,
       branchLink: run.branchId ? { id: run.branchId, title: run.branchId } : null
     }));
-    const gateRecord = {
-      ...gate,
-      lastResultLabel: gate.lastResult ? `${gate.lastResult.status} (${gate.lastResult.exitCode ?? "n/a"})` : "idle"
-    };
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gateCardTitle", "gateFields", ctx, gateRecord, "Test Gate Detail");
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gateCardTitle", "gateFields", ctx, gate, "Test Gate Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "gateFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "gateFields")
@@ -1326,11 +1339,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
   }
   if (detail.id?.startsWith?.("roadmapTask:") || detail.doc) {
     const task = detail;
-    const taskRecord = {
-      ...task,
-      evidenceSummary: task.derivedSummary || task.evidence?.summary || ""
-    };
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "roadmapTaskCardTitle", "roadmapTaskFields", ctx, taskRecord, "Roadmap Task Detail");
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "roadmapTaskCardTitle", "roadmapTaskFields", ctx, task, "Roadmap Task Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "roadmapTaskFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "roadmapTaskFields")

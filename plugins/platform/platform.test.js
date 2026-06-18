@@ -535,7 +535,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(knowledgePrimarySurface.props.featureLongTailExcludedFields, "defectClusterIds");
   assert.equal(knowledgePrimarySurface.props.documentCardTitle, "Document Detail");
   assert.match(knowledgePrimarySurface.props.documentFields, /Document=path@concept/);
-  assert.match(knowledgePrimarySurface.props.roadmapTaskFields, /Evidence=evidenceSummary/);
+  assert.match(knowledgePrimarySurface.props.roadmapTaskFields, /Evidence=derivedSummary\|\|evidence\.summary/);
   assert.match(knowledgePrimarySurface.props.epicFields, /Roadmap=roadmapId@concept/);
   assert.match(knowledgePrimarySurface.props.featureFields, /Epic=epicId@concept/);
   const knowledgeRelatedSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRelatedPanel");
