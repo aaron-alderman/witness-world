@@ -546,6 +546,56 @@ function buildDocsByPlatformObject(docs = [], docDependencies = []) {
   return byObject;
 }
 
+function buildDocTaskEvidence(tasks = [], testGates = [], gaps = []) {
+  const gapsByTarget = Object.create(null);
+  for (const gap of gaps) {
+    if (!gap?.target) continue;
+    pushByKey(gapsByTarget, String(gap.target), gap);
+  }
+  return tasks.map(task => {
+    const targets = Array.isArray(task.targets) ? task.targets : [];
+    const targetIds = unique(targets.map(target => target.targetId));
+    const linkedGates = testGates.filter(gate =>
+      Array.isArray(gate.protectedObjects)
+      && gate.protectedObjects.some(targetId => targetIds.includes(targetId))
+    );
+    const gapRows = unique(targetIds.flatMap(targetId => (gapsByTarget[targetId] ?? []).map(row => row.id)))
+      .map(gapId => gaps.find(row => row.id === gapId))
+      .filter(Boolean);
+    const failedGateIds = linkedGates.filter(gate => ["failed", "error", "timedOut"].includes(gate.lastResult?.status)).map(gate => gate.id);
+    const passedGateIds = linkedGates.filter(gate => gate.lastResult?.status === "passed").map(gate => gate.id);
+    const unknownGateIds = linkedGates.filter(gate => !gate.lastResult?.status).map(gate => gate.id);
+    let status = "unlinked";
+    let summary = "No resolved platform targets.";
+    if (targetIds.length && (gapRows.length || failedGateIds.length)) {
+      status = "at-risk";
+      summary = `${targetIds.length} target${targetIds.length === 1 ? "" : "s"}, ${gapRows.length} gap${gapRows.length === 1 ? "" : "s"}, ${failedGateIds.length} failing gate${failedGateIds.length === 1 ? "" : "s"}.`;
+    } else if (targetIds.length && linkedGates.length && unknownGateIds.length === 0 && passedGateIds.length === linkedGates.length) {
+      status = "verified";
+      summary = `${targetIds.length} target${targetIds.length === 1 ? "" : "s"} verified by ${linkedGates.length} gate${linkedGates.length === 1 ? "" : "s"}.`;
+    } else if (targetIds.length && linkedGates.length) {
+      status = "covered";
+      summary = `${targetIds.length} target${targetIds.length === 1 ? "" : "s"} linked to ${linkedGates.length} gate${linkedGates.length === 1 ? "" : "s"} (${unknownGateIds.length} without latest result).`;
+    } else if (targetIds.length) {
+      status = "linked";
+      summary = `${targetIds.length} target${targetIds.length === 1 ? "" : "s"} linked without modeled gate coverage yet.`;
+    }
+    return {
+      ...task,
+      evidence: {
+        status,
+        summary,
+        targetCount: targetIds.length,
+        gateIds: linkedGates.map(gate => gate.id),
+        passedGateIds,
+        failedGateIds,
+        unknownGateIds,
+        gapIds: gapRows.map(gap => gap.id)
+      }
+    };
+  });
+}
+
 function buildFilteredDocProjection(model, docs, id = null, { expandByTarget = false } = {}) {
   let filteredDocs = [...docs];
   if (expandByTarget && id && !filteredDocs.length) {
@@ -2238,7 +2288,7 @@ export async function buildPlatformModel({
   }
 
   const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
-  const roadmapTasks = parsedDocs.find(doc => doc.path === roadmapDocPath)?.tasks ?? [];
+  const rawRoadmapTasks = parsedDocs.find(doc => doc.path === roadmapDocPath)?.tasks ?? [];
 
   for (const authoredSource of PLATFORM_AUTHORED_SOURCES) {
     addNode(nodes, {
@@ -2621,7 +2671,7 @@ export async function buildPlatformModel({
     }
   }));
   const docSections = parsedDocs.flatMap(doc => doc.sections.map(section => ({ ...section })));
-  const docTasks = parsedDocs.flatMap(doc => doc.tasks.map(task => ({
+  const docTasks = buildDocTaskEvidence(parsedDocs.flatMap(doc => doc.tasks.map(task => ({
     ...task,
     references: {
       codeTokens: [...(task.references?.codeTokens ?? [])],
@@ -2631,7 +2681,8 @@ export async function buildPlatformModel({
       routes: [...(task.references?.routes ?? [])]
     },
     targets: (task.targets ?? []).map(target => ({ ...target }))
-  })));
+  }))), testGateProjection.rows, gaps);
+  const roadmapTasks = docTasks.filter(task => task.doc === roadmapDocPath || rawRoadmapTasks.some(rawTask => rawTask.id === task.id));
   const docIndex = buildDocIndex(docs);
   const docsByPlatformObject = buildDocsByPlatformObject(docs, docDependencies);
   return {

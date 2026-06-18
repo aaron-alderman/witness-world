@@ -731,14 +731,52 @@ test("roadmap task projections link resolved platform targets", async () => {
   assert.ok(pluginTask);
   assert.equal(pluginTask.targets.some(target => target.targetId === "plugin.platform"), true);
   assert.equal(model.edges.some(edge => edge.from === pluginTask.id && edge.rel === "targets" && edge.to === "plugin.platform"), true);
+  assert.equal(pluginTask.evidence.status !== "unlinked", true);
+  assert.equal(pluginTask.evidence.gateIds.length > 0, true);
 
   assert.ok(routeTask);
   assert.equal(routeTask.targets.some(target => target.targetId === "route:GET /platform"), true);
   assert.equal(model.edges.some(edge => edge.from === routeTask.id && edge.rel === "targets" && edge.to === "route:GET /platform"), true);
+  assert.equal(routeTask.evidence.status !== "unlinked", true);
 
   assert.ok(sourceTask);
   assert.equal(sourceTask.targets.some(target => target.targetId === "rvm:plugins/platform/platform-console.rvm"), true);
   assert.equal(model.edges.some(edge => edge.from === sourceTask.id && edge.rel === "targets" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
+  assert.equal(sourceTask.evidence.status !== "unlinked", true);
+  assert.equal(sourceTask.evidence.targetCount > 0, true);
+});
+
+test("roadmap task evidence tracks linked targets, gates, and gaps without replacing markdown status", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.docs.stale", title: "Stale Docs", status: "open", changeSetIds: ["changeset.docs.stale"] }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeset.docs.stale", branchId: "branch.docs.stale", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [{ id: "changeSetEdit:changeset.docs.stale:platform", changeSetId: "changeset.docs.stale", path: "plugins/platform/platform-console.rvm" }];
+      }
+      return [];
+    }
+  });
+
+  const task = model.roadmapTasks.find(row => row.title === "Treat `plugin.platform` as the existing home for this work.");
+
+  assert.ok(task);
+  assert.equal(task.status, "open");
+  assert.equal(task.evidence.status !== "unlinked", true);
+  assert.equal(Array.isArray(task.evidence.gapIds), true);
+  assert.equal(task.evidence.gateIds.length > 0, true);
 });
 
 test("platform model projects structured test gates and affected branch selection", async () => {
@@ -4296,6 +4334,7 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Doc Structure/);
   assert.match(html, /Doc Tasks/);
   assert.match(html, /Roadmap Tasks/);
+  assert.match(html, />Evidence</);
   assert.match(html, /platform-proposal-form/);
   assert.match(html, /platform-review-form/);
   assert.match(html, /platform-branch-create-form/);
