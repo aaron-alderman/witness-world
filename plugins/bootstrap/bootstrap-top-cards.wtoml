@@ -15,7 +15,7 @@ domId = "bootstrap-guidance-card-slot"
 [[box]]
 id = "bootstrap_status_card"
 class = "surface-card surface-stack"
-children = ["bootstrap_status_badge", "bootstrap_status_heading", "bootstrap_summary_text", "bootstrap_status_actions", "bootstrap_status_message"]
+children = ["bootstrap_status_badge", "bootstrap_status_heading", "bootstrap_summary_text", "bootstrap_boundary_state_text", "bootstrap_boundary_plan_text", "bootstrap_boundary_composition_text", "bootstrap_status_actions", "bootstrap_status_message"]
 
 [[text]]
 id = "bootstrap_status_badge"
@@ -33,10 +33,36 @@ domId = "bootstrap-summary"
 class = "surface-mono"
 text = "Loading bootstrap state..."
 
+[[text]]
+id = "bootstrap_boundary_state_text"
+domId = "bootstrap-app-boundary-status"
+class = "surface-note surface-mono"
+text = "Loading app-boundary status..."
+
+[[text]]
+id = "bootstrap_boundary_plan_text"
+domId = "bootstrap-app-boundary-plan"
+class = "surface-note surface-mono"
+text = "Loading authored boundary plan..."
+
+[[text]]
+id = "bootstrap_boundary_composition_text"
+domId = "bootstrap-app-boundary-composition"
+class = "surface-note surface-mono"
+text = "Loading boundary composition..."
+
 [[box]]
 id = "bootstrap_status_actions"
 class = "surface-actions"
-children = ["bootstrap_open_app_link", "bootstrap_refresh_button"]
+children = ["bootstrap_establish_boundary_button", "bootstrap_open_app_link", "bootstrap_refresh_button"]
+
+[[button]]
+id = "bootstrap_establish_boundary_button"
+domId = "establish-app-boundary"
+text = "Establish App Boundary"
+type = "button"
+class = "surface-button-secondary"
+action = "establishBootstrapAppBoundary"
 
 [[link]]
 id = "bootstrap_open_app_link"
@@ -48,6 +74,7 @@ children = ["bootstrap_open_app_button"]
 
 [[button]]
 id = "bootstrap_open_app_button"
+domId = "open-app-button"
 text = "Open App"
 type = "button"
 class = "surface-button-secondary"
@@ -705,38 +732,10 @@ rootWidget = "bootstrap_top_cards_root"
 
 [[step]]
 order = 0
-op = "dispatchDomEvent"
-on = "click:refreshBootstrapHost"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-top-cards", reason = "refresh-bootstrap-button" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "click:openBootstrapAppHome"
-eventName = "witness:bootstrap-host-action"
-detail = { source = "bootstrap-top-cards", action = "open-app" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "click:openBootstrapDesktopWorld"
-eventName = "witness:bootstrap-host-action"
-detail = { source = "bootstrap-top-cards", action = "desktop-open-world" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "click:createBootstrapDesktopWorld"
-eventName = "witness:bootstrap-host-action"
-detail = { source = "bootstrap-top-cards", action = "desktop-create-world" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "click:revealBootstrapDesktopWorld"
-eventName = "witness:bootstrap-host-action"
-detail = { source = "bootstrap-top-cards", action = "desktop-reveal-world" }
+op = "setText"
+on = "click:establishBootstrapAppBoundary"
+widget = "bootstrap_status_message"
+text = "Submitting authored app boundary..."
 
 [[step]]
 id = "bootstrap_identity_load_heading"
@@ -874,22 +873,6 @@ widget = "bootstrap_identity_status"
 text = "Creating identity..."
 
 [[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_identity_form"
-when = { path = "bootstrapIdentityDraft.editId", truthy = true }
-eventName = "witness:bootstrap-top-cards-submit"
-detail = { source = "bootstrap-top-cards", family = "identity-submit", formId = "identity-form", statusId = "identity-status", editId = "${state.bootstrapIdentityDraft.editId}", id = "${state.bootstrapIdentityDraft.id}", actor = "${state.bootstrapIdentityDraft.actor}", label = "${state.bootstrapIdentityDraft.label}", username = "${state.bootstrapIdentityDraft.username}", password = "${state.bootstrapIdentityDraft.password}", homeContext = "${state.bootstrapIdentityDraft.homeContext}", homePerspective = "${state.bootstrapIdentityDraft.homePerspective}" }
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_identity_form"
-when = { path = "bootstrapIdentityDraft.editId", falsy = true }
-eventName = "witness:bootstrap-top-cards-submit"
-detail = { source = "bootstrap-top-cards", family = "identity-submit", formId = "identity-form", statusId = "identity-status", editId = "${state.bootstrapIdentityDraft.editId}", id = "${state.bootstrapIdentityDraft.id}", actor = "${state.bootstrapIdentityDraft.actor}", label = "${state.bootstrapIdentityDraft.label}", username = "${state.bootstrapIdentityDraft.username}", password = "${state.bootstrapIdentityDraft.password}", homeContext = "${state.bootstrapIdentityDraft.homeContext}", homePerspective = "${state.bootstrapIdentityDraft.homePerspective}" }
-
-[[step]]
 order = 3
 op = "setText"
 on = "submit:bootstrap_identity_form"
@@ -931,13 +914,6 @@ op = "refreshProjection"
 on = "click:clearBootstrapIdentityEdit"
 
 [[step]]
-order = 4
-op = "dispatchDomEvent"
-on = "click:clearBootstrapIdentityEdit"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-top-cards", reason = "identity-edit-clear" }
-
-[[step]]
 order = 0
 op = "setText"
 on = "submit:bootstrap_session_form"
@@ -950,13 +926,6 @@ op = "readForm"
 on = "submit:bootstrap_session_form"
 widget = "bootstrap_session_form"
 into = "bootstrapSessionDraft"
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_session_form"
-eventName = "witness:bootstrap-top-cards-submit"
-detail = { source = "bootstrap-top-cards", family = "session-open", statusId = "bootstrap-status", username = "${state.bootstrapSessionDraft.username}", password = "${state.bootstrapSessionDraft.password}" }
 
 [[step]]
 order = 3
@@ -972,13 +941,6 @@ op = "setText"
 on = "click:logoutBootstrapSession"
 widget = "bootstrap_status_message"
 text = "Signing out..."
-
-[[step]]
-order = 1
-op = "dispatchDomEvent"
-on = "click:logoutBootstrapSession"
-eventName = "witness:bootstrap-top-cards-submit"
-detail = { source = "bootstrap-top-cards", family = "session-logout", statusId = "bootstrap-status" }
 
 [[step]]
 order = 0
@@ -1003,25 +965,11 @@ checkboxes = "boolean"
 into = "bootstrapOperatorBackupDraft"
 
 [[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_operator_backup_form"
-eventName = "witness:bootstrap-top-cards-submit"
-detail = { source = "bootstrap-top-cards", family = "operator-backup", statusId = "operator-backup-status", label = "${state.bootstrapOperatorBackupDraft.label}", includeDerived = "${state.bootstrapOperatorBackupDraft.includeDerived}" }
-
-[[step]]
 order = 1
 op = "readForm"
 on = "submit:bootstrap_operator_export_form"
 widget = "bootstrap_operator_export_form"
 into = "bootstrapOperatorExportDraft"
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_operator_export_form"
-eventName = "witness:bootstrap-top-cards-submit"
-detail = { source = "bootstrap-top-cards", family = "operator-export", statusId = "operator-export-status", label = "${state.bootstrapOperatorExportDraft.label}" }
 
 [[step]]
 order = 0
@@ -1047,13 +995,6 @@ checkboxes = "boolean"
 into = "bootstrapOperatorRestoreDraft"
 
 [[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_operator_restore_form"
-eventName = "witness:bootstrap-top-cards-submit"
-detail = { source = "bootstrap-top-cards", family = "operator-restore", statusId = "operator-restore-status", artifactId = "${state.bootstrapOperatorRestoreDraft.artifactId}", preserveCurrent = "${state.bootstrapOperatorRestoreDraft.preserveCurrent}" }
-
-[[step]]
 order = 0
 op = "setText"
 on = "error"
@@ -1075,13 +1016,6 @@ on = "submit:bootstrap_operator_import_form"
 widget = "bootstrap_operator_import_form"
 checkboxes = "boolean"
 into = "bootstrapOperatorImportDraft"
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_operator_import_form"
-eventName = "witness:bootstrap-top-cards-submit"
-detail = { source = "bootstrap-top-cards", family = "operator-import", statusId = "operator-import-status", artifactId = "${state.bootstrapOperatorImportDraft.artifactId}", preserveCurrent = "${state.bootstrapOperatorImportDraft.preserveCurrent}" }
 
 [[step]]
 order = 0

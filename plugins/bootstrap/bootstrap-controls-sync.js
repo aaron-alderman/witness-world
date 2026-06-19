@@ -183,10 +183,11 @@ export function runBootstrapBackendAuthoringControlsSync({
 
 export function bindBootstrapBackendAuthoringControlsSync({
   target = null,
-  eventName = "witness:bootstrap-backend-authoring-sync",
   buildDeps = null,
   ...deps
 } = {}) {
+  const resolvedTarget = target || globalThis?.window || globalThis || null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
   const handler = event => {
     const resolvedDeps = typeof buildDeps === "function" ? (buildDeps() || {}) : deps;
     return runBootstrapBackendAuthoringControlsSync({
@@ -194,7 +195,14 @@ export function bindBootstrapBackendAuthoringControlsSync({
       detail: event?.detail || {}
     });
   };
-  target?.addEventListener?.(eventName, handler);
+  for (const formId of ["backend-program-form", "backend-program-version-form", "backend-step-form"]) {
+    const form = resolvedDocument?.getElementById?.(formId);
+    if (!form || form.__bootstrapBackendAuthoringSyncBound) continue;
+    form.__bootstrapBackendAuthoringSyncBound = true;
+    const trigger = () => handler({ detail: { source: "bootstrap-backend-authoring-controls" } });
+    form.addEventListener("change", trigger);
+    form.addEventListener("input", trigger);
+  }
   return handler;
 }
 
@@ -216,10 +224,11 @@ export function runBootstrapBackendVersionControlsSync({
 
 export function bindBootstrapBackendVersionControlsSync({
   target = null,
-  eventName = "witness:bootstrap-backend-help-sync",
   buildDeps = null,
   ...deps
 } = {}) {
+  const resolvedTarget = target || globalThis?.window || globalThis || null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
   const handler = event => {
     const resolvedDeps = typeof buildDeps === "function" ? (buildDeps() || {}) : deps;
     return runBootstrapBackendVersionControlsSync({
@@ -227,6 +236,13 @@ export function bindBootstrapBackendVersionControlsSync({
       detail: event?.detail || {}
     });
   };
-  target?.addEventListener?.(eventName, handler);
+  for (const formId of ["backend-program-activate-form", "backend-program-rollback-form"]) {
+    const form = resolvedDocument?.getElementById?.(formId);
+    if (!form || form.__bootstrapBackendVersionSyncBound) continue;
+    form.__bootstrapBackendVersionSyncBound = true;
+    const trigger = () => handler({ detail: { source: "bootstrap-backend-version-controls" } });
+    form.addEventListener("change", trigger);
+    form.addEventListener("input", trigger);
+  }
   return handler;
 }

@@ -109,6 +109,20 @@ function normalizeRoleList(value, fallbackCsv = null) {
   return [...new Set(list)];
 }
 
+function normalizeSourceryMuteRules(value) {
+  return Array.isArray(value)
+    ? value
+      .filter(rule => rule && typeof rule === "object")
+      .map(rule => ({
+        scopeKind: normalizeText(rule.scopeKind, "context").toLowerCase(),
+        scopeId: normalizeText(rule.scopeId, "") || null,
+        durationKind: normalizeText(rule.durationKind, "") || null,
+        expiresAt: normalizeText(rule.expiresAt, "") || null,
+        permanent: rule.permanent === true
+      }))
+    : [];
+}
+
 function safeIso(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -317,6 +331,7 @@ function decorateIdentityRow(row) {
     displayName: normalizeText(row?.displayName, normalizeText(row?.label, normalizeText(row?.username, ""))),
     jobTitle: normalizeText(row?.jobTitle, ""),
     initials: normalizeText(row?.initials, ""),
+    sourceryMuteRules: normalizeSourceryMuteRules(row?.sourceryMuteRules),
     rolesText: Array.isArray(row?.roles) && row.roles.length ? row.roles.join(", ") : "No roles"
   };
 }
@@ -541,6 +556,7 @@ function accessIdentityEditorPayload(identity, extras = {}) {
     PlatformConfigAccessIdentityDisplayName: normalizeText(identity?.displayName, normalizeText(identity?.label, "")),
     PlatformConfigAccessIdentityJobTitle: normalizeText(identity?.jobTitle, ""),
     PlatformConfigAccessIdentityInitials: normalizeText(identity?.initials, ""),
+    PlatformConfigAccessIdentitySourceryMuteRules: normalizeSourceryMuteRules(identity?.sourceryMuteRules),
     PlatformConfigAccessIdentityRoles: Array.isArray(identity?.roles) ? [...identity.roles] : [],
     PlatformConfigAccessIdentitySummary: `Selected identity "${normalizeText(identity?.username, "identity")}". Update profile fields or role grants and save.`,
     ...extras
@@ -1069,6 +1085,7 @@ export function createPipelineRuntimeHandlers(deps) {
         displayName: normalizeText(body?.displayName, existing.displayName ?? existing.label),
         jobTitle: normalizeText(body?.jobTitle, ""),
         initials: normalizeText(body?.initials, ""),
+        sourceryMuteRules: normalizeSourceryMuteRules(body?.sourceryMuteRules ?? existing.sourceryMuteRules),
         homeContext: existing.homeContext,
         homePerspective: existing.homePerspective
       });

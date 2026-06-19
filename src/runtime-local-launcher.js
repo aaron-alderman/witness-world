@@ -90,7 +90,10 @@ export async function startBlankRuntime({
   const world = createWorldImpl({
     genesis: { system: "witness-world", mode: startupMode },
     witnessLogPath,
-    observationLogPath
+    observationLogPath,
+    persistencePolicy: {
+      buffered: true
+    }
   });
 
   declareBackendHostImpl(world, {
@@ -124,6 +127,7 @@ export async function startBlankRuntime({
       : (defaultBootstrapRuntimePluginIds.length ? defaultBootstrapRuntimePluginIds : null),
     runtimeStartupMode: startupMode,
     runtimeOperatorContract: operatorContract,
+    startupPersistenceCommitMode: "post-ready",
     startupTelemetry
   }), {
     label: "Start runtime server"

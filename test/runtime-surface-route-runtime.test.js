@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createBrowserRouteInvoker,
-  loadRouteSurfacePage
+  loadRouteSurfacePage,
+  syncQueryStateToUrl,
+  syncUrlToQueryState
 } from "../src/runtime-surface-route-runtime.js";
 
 test("createBrowserRouteInvoker interpolates route templates and normalizes the response payload", async () => {
@@ -402,4 +404,45 @@ test("loadRouteSurfacePage refetches the full document when a fragment response 
     { path: "/engentus/route", header: "1" },
     { path: "/engentus/route", header: null }
   ]);
+});
+
+test("query bindings synchronize URL params into process state and authored state back into the query string", () => {
+  const writes = [];
+  const processRuntime = {
+    state: new Map([["SearchTerm", ""]]),
+    value(id) {
+      return this.state.get(id);
+    },
+    set(id, value) {
+      writes.push({ id, value });
+      this.state.set(id, value);
+    }
+  };
+  const manifest = {
+    queryBindings: [{
+      param: "q",
+      process: "SearchFlow",
+      state: "SearchTerm",
+      defaultValue: ""
+    }]
+  };
+  const window = {
+    location: {
+      href: "http://127.0.0.1:3000/search?q=alpha",
+      pathname: "/search",
+      search: "?q=alpha"
+    },
+    history: {
+      replaceState(_state, _title, nextUrl) {
+        this.lastUrl = nextUrl;
+      }
+    }
+  };
+
+  assert.equal(syncUrlToQueryState({ manifest, processRuntime, processRef: "SearchFlow", window }), true);
+  assert.deepEqual(writes, [{ id: "SearchTerm", value: "alpha" }]);
+
+  processRuntime.set("SearchTerm", "beta");
+  assert.equal(syncQueryStateToUrl({ manifest, processRuntime, processRef: "SearchFlow", window }), true);
+  assert.equal(window.history.lastUrl, "/search?q=beta");
 });

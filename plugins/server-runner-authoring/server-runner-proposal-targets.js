@@ -4,6 +4,7 @@ import {
   requestBootstrapRuntimePluginRemove,
   resolveRuntimePluginServerRunnerInput
 } from "./server-runner-processes.js";
+import { resolveAuthoringHandlerSupport } from "../../src/runtime-authoring-handler-support.js";
 
 export async function executeServerRunnerAuthoringProposalTarget({
   world,
@@ -11,6 +12,7 @@ export async function executeServerRunnerAuthoringProposalTarget({
   backendHost,
   proposal,
   body,
+  runtimeProfile,
   supportedHandlerSets,
   ensureContextAuthority,
   ensureTargetAuthority,
@@ -20,7 +22,24 @@ export async function executeServerRunnerAuthoringProposalTarget({
     case "serverRunner.define": {
       const gate = ensureContextAuthority(actor, body.context ?? null);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-      const result = requestBootstrapServerRunnerDefine(world, { actor, backendHost, body, allowedHandlerSets: supportedHandlerSets });
+      const serverRunnerSupport = await resolveAuthoringHandlerSupport({
+        supportedHandlerSets,
+        supportedHandlers: [],
+        supportedPageHandlers: [],
+        supportedHandlerMetadata: {},
+        pluginCatalog: await getRuntimePluginCatalog({
+          activeProfile: body.runtimeProfile ?? runtimeProfile ?? null,
+          serverRunnerId: null,
+          configuredPluginIds: [],
+          authoredPluginIds: []
+        })
+      });
+      const result = requestBootstrapServerRunnerDefine(world, {
+        actor,
+        backendHost,
+        body,
+        allowedHandlerSets: serverRunnerSupport.supportedHandlerSets
+      });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "runtimePlugin.install": {

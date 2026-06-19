@@ -73,12 +73,27 @@ export function parseWitnessToml(source) {
 }
 
 export async function loadWitnessTomlFile(file, { seen = new Set(), beforeLoad = null, rvmFormRegistry = null } = {}) {
-  const loaded = await loadWitnessAppFile(file, { seen, beforeLoad, rvmFormRegistry });
+  const loaded = await loadWitnessAppFile(file, {
+    seen,
+    beforeLoad,
+    rvmFormRegistry
+  });
   return loaded.witnessDocs;
 }
 
-export async function loadWitnessAppFile(file, { seen = new Set(), beforeLoad = null, rvmFormRegistry = null } = {}) {
+export async function loadWitnessAppFile(
+  file,
+  {
+    seen = new Set(),
+    beforeLoad = null,
+    rvmFormRegistry = null,
+    readFile = null
+  } = {}
+) {
   const resolved = path.resolve(file);
+  const readSource = typeof readFile === "function"
+    ? readFile
+    : (target, encoding) => fs.readFile(target, encoding);
   if (typeof beforeLoad === "function") {
     await beforeLoad(resolved);
   }
@@ -97,7 +112,10 @@ export async function loadWitnessAppFile(file, { seen = new Set(), beforeLoad = 
     return {
       witnessDocs: [],
       authoredDesireDocs: [
-        normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(resolved, { rvmFormRegistry }), { rvmFormRegistry })
+        normalizeDesirePlusToDesire(
+          await compileRvmFileToDesirePlus(resolved, { rvmFormRegistry, readFile: readSource }),
+          { rvmFormRegistry }
+        )
       ],
       allDocs: [],
       sourceFiles: [{ file: resolved, sourceLanguage: "rvm" }],
@@ -105,7 +123,7 @@ export async function loadWitnessAppFile(file, { seen = new Set(), beforeLoad = 
     };
   }
 
-  const source = await fs.readFile(resolved, "utf8");
+  const source = await readSource(resolved, "utf8");
   const parsedDocs = parseWitnessToml(source).map(doc => ({ ...doc, file: resolved }));
   const docs = parsedDocs.filter(doc => !MANIFEST_ONLY_DOC_KINDS.has(doc.kind));
   const imports = parsedDocs
@@ -124,7 +142,12 @@ export async function loadWitnessAppFile(file, { seen = new Set(), beforeLoad = 
       spec,
       file: importedPath
     });
-    const loaded = await loadWitnessAppFile(importedPath, { seen, beforeLoad, rvmFormRegistry });
+    const loaded = await loadWitnessAppFile(importedPath, {
+      seen,
+      beforeLoad,
+      rvmFormRegistry,
+      readFile: readSource
+    });
     witnessDocs.push(...loaded.witnessDocs);
     allDocs.push(...loaded.allDocs);
     authoredDesireDocs.push(...loaded.authoredDesireDocs);
@@ -146,14 +169,20 @@ export function applyWitnessDocs(world, docs, options = {}) {
   return applyDesire(world, desire, { runtimeDeclarationRegistry: options.runtimeDeclarationRegistry });
 }
 
-export async function applyWitnessDocsWithRuntimePlugins(world, docs, options = {}) {
+export async function loadRuntimePluginRegistriesForDocs(docs, options = {}) {
   const authoredPluginIds = runtimePluginInstallIdsFromDocs(docs);
   const configuredPluginIds = resolveConfiguredRuntimePluginIds({
     env: options.env ?? process.env,
     runtimePluginIds: options.runtimePluginIds ?? null
   });
   if (!authoredPluginIds.length && !configuredPluginIds.length) {
-    return applyWitnessDocs(world, docs, options);
+    return {
+      authoredPluginIds,
+      configuredPluginIds,
+      pluginCatalog: null,
+      loadResult: null,
+      registries: null
+    };
   }
 
   const pluginRoot = options.pluginRoot ?? resolveRuntimePluginRoot({ env: options.env ?? process.env });
@@ -178,21 +207,35 @@ export async function applyWitnessDocsWithRuntimePlugins(world, docs, options = 
     });
   }
 
-  const registries = createDesireRegistriesFromPluginExtensions(loadResult);
+  return {
+    authoredPluginIds,
+    configuredPluginIds,
+    pluginCatalog,
+    loadResult,
+    registries: createDesireRegistriesFromPluginExtensions(loadResult)
+  };
+}
+
+export async function applyWitnessDocsWithRuntimePlugins(world, docs, options = {}) {
+  const pluginRuntime = await loadRuntimePluginRegistriesForDocs(docs, options);
+  if (!pluginRuntime.registries) {
+    return applyWitnessDocs(world, docs, options);
+  }
+
   const summary = runtimeBundleSummaryForProfile(options.runtimeProfile ?? DEFAULT_RUNTIME_PROFILE, {
     additionalBundleIds: [
-      ...(pluginCatalog.addedBundleIds ?? []),
-      ...Object.keys(loadResult.bundleOverrides ?? {})
+      ...(pluginRuntime.pluginCatalog?.addedBundleIds ?? []),
+      ...Object.keys(pluginRuntime.loadResult?.bundleOverrides ?? {})
     ],
-    bundleOverrides: loadResult.bundleOverrides
+    bundleOverrides: pluginRuntime.loadResult?.bundleOverrides ?? {}
   });
   const contributions = collectActiveRuntimeContributions({ bundles: summary.bundles });
   const unregisterModuleProjectors = registerModuleProjectors("dsl.activePlugins", contributions.moduleProjectors ?? {});
   try {
     return applyWitnessDocs(world, docs, {
       ...options,
-      elaboratorRegistry: options.elaboratorRegistry ?? registries.elaboratorRegistry,
-      runtimeDeclarationRegistry: options.runtimeDeclarationRegistry ?? registries.runtimeDeclarationRegistry
+      elaboratorRegistry: options.elaboratorRegistry ?? pluginRuntime.registries.elaboratorRegistry,
+      runtimeDeclarationRegistry: options.runtimeDeclarationRegistry ?? pluginRuntime.registries.runtimeDeclarationRegistry
     });
   } finally {
     unregisterModuleProjectors();

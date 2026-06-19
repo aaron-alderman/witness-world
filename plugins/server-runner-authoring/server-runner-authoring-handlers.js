@@ -5,6 +5,7 @@ import {
   resolveRuntimePluginServerRunnerInput
 } from "./server-runner-processes.js";
 import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
+import { resolveAuthoringHandlerSupport } from "../../src/runtime-authoring-handler-support.js";
 
 function proposalPart(value, fallback) {
   const normalized = String(value || "").trim().replace(/[^A-Za-z0-9_.:-]+/g, "-");
@@ -51,6 +52,18 @@ export function createServerRunnerAuthoringBundleHandlers({
   const omitProposalMetadata = body => body && typeof body === "object" && !Array.isArray(body)
     ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "id" && key !== "proposalId" && key !== "reason"))
     : {};
+  const currentServerRunnerSupport = async activeProfile => resolveAuthoringHandlerSupport({
+    supportedHandlerSets,
+    supportedHandlers: [],
+    supportedPageHandlers: [],
+    supportedHandlerMetadata: {},
+    pluginCatalog: await getRuntimePluginCatalog({
+      activeProfile: activeProfile ?? runtimeProfile,
+      serverRunnerId: null,
+      configuredPluginIds: [],
+      authoredPluginIds: []
+    })
+  });
   return {
     "runtimePlugin.install": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
@@ -200,7 +213,7 @@ export function createServerRunnerAuthoringBundleHandlers({
       });
     },
 
-    "serverRunner.create": async ({ req, res, requestActor }) => {
+    "serverRunner.create": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
         sendGateFailure(res, gate);
@@ -242,11 +255,12 @@ export function createServerRunnerAuthoringBundleHandlers({
         sendGateFailure(res, auth);
         return;
       }
+      const serverRunnerSupport = await currentServerRunnerSupport(appContext?.runtimeProfile);
       const result = requestBootstrapServerRunnerDefine(world, {
         actor: gate.actor,
         backendHost,
         body,
-        allowedHandlerSets: supportedHandlerSets
+        allowedHandlerSets: serverRunnerSupport.supportedHandlerSets
       });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });

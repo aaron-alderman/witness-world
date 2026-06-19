@@ -417,6 +417,8 @@ function branchDetail(world, branchId) {
   const changeSetIndex = world.project(moduleProjectors.changeSetIndex);
   const editIndex = world.project(moduleProjectors.changeSetEditIndex);
   const snapshotIndex = world.project(moduleProjectors.candidateSnapshotIndex);
+  const pushRecordIndex = world.project(moduleProjectors.pushRecordIndex);
+  const shipRecordIndex = world.project(moduleProjectors.shipRecordIndex);
   const proposals = safeProjectRows(world, moduleProjectors.proposals);
   const branch = branchIndex.byId?.[branchId] ?? null;
   if (!branch) return null;
@@ -438,13 +440,44 @@ function branchDetail(world, branchId) {
     changeSetId: snapshot.changeSetId,
     errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : 0
   }));
+  const pushRecords = (pushRecordIndex.byBranch?.[branchId] ?? []).map(row => ({ ...row }));
+  const latestPushRecord = branch.latestPushRecordId
+    ? (pushRecordIndex.byId?.[branch.latestPushRecordId] ? { ...pushRecordIndex.byId[branch.latestPushRecordId] } : null)
+    : (pushRecords.at(-1) ?? null);
+  const shipRecords = (shipRecordIndex.byBranch?.[branchId] ?? []).map(row => ({ ...row }));
+  const latestShipRecord = branch.latestShipRecordId
+    ? (shipRecordIndex.byId?.[branch.latestShipRecordId] ? { ...shipRecordIndex.byId[branch.latestShipRecordId] } : null)
+    : (shipRecords.at(-1) ?? null);
+  const branchRow = {
+    ...branch,
+    latestPushRecordId: latestPushRecord?.id ?? branch.latestPushRecordId ?? null,
+    latestPushStatus: latestPushRecord?.status ?? branch.latestPushStatus ?? null,
+    pushRecordIds: latestPushRecord
+      ? [...new Set([...(branch.pushRecordIds ?? []), latestPushRecord.id])]
+      : [...(branch.pushRecordIds ?? [])],
+    latestShipRecordId: latestShipRecord?.id ?? branch.latestShipRecordId ?? null,
+    latestShipStatus: latestShipRecord?.status ?? branch.latestShipStatus ?? null,
+    latestReleaseChannelId: latestShipRecord?.releaseChannelId ?? branch.latestReleaseChannelId ?? null,
+    shipRecordIds: latestShipRecord
+      ? [...new Set([...(branch.shipRecordIds ?? []), latestShipRecord.id])]
+      : [...(branch.shipRecordIds ?? [])],
+    status: latestShipRecord?.status === "shipped" && latestShipRecord?.releaseChannelId === "releaseChannel:local"
+      ? "shipped"
+      : latestPushRecord?.status === "pushed"
+      ? "pushed"
+      : (branch.status ?? "open")
+  };
   return {
-    branch: { ...branch, ...insights },
+    branch: { ...branchRow, ...insights },
     changeSets,
     edits,
     candidateSnapshots,
     latestCandidateSnapshot,
-    validationHistory
+    validationHistory,
+    pushRecords,
+    latestPushRecord,
+    shipRecords,
+    latestShipRecord
   };
 }
 
@@ -611,6 +644,8 @@ export async function validatePlatformChangeSet(world, {
   if (!current) return { ok: false, status: 404, error: "change set not found" };
   const immutable = immutableChangeSetStatusError(current, "validate");
   if (immutable) return immutable;
+  const startedAt = nowIso();
+  const startedAtMs = Date.now();
   const startWitness = world.emit({
     process: "platform.changeSet.validate.start",
     actor,
@@ -620,7 +655,7 @@ export async function validatePlatformChangeSet(world, {
       branchId: current.branchId,
       session: session?.id ?? null,
       status: "validating",
-      startedAt: nowIso()
+      startedAt
     }
   });
   if (typeof hooks?.beforeInspect === "function") {
@@ -667,6 +702,9 @@ export async function validatePlatformChangeSet(world, {
       branchId: changeSet.branchId,
       session: session?.id ?? null,
       status,
+      startedAt,
+      finishedAt: candidateSnapshot.createdAt,
+      durationMs: Date.now() - startedAtMs,
       validatedAt: candidateSnapshot.createdAt,
       candidateSnapshot,
       activeCandidateSnapshotId: errors.length ? (previousActive?.id ?? null) : candidateSnapshotId

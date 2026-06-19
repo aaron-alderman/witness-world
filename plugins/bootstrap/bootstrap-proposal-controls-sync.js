@@ -151,22 +151,34 @@ export function runBootstrapProposalControlsSync({
 
 export function bindBootstrapProposalControlsSync({
   target = null,
-  events = [
-    ["witness:bootstrap-proposal-create-help-sync", "bootstrap-proposal-create-controls"],
-    ["witness:bootstrap-proposal-approve-help-sync", "bootstrap-proposal-review-controls"]
-  ],
   buildDeps = null,
   ...deps
 } = {}) {
-  for (const [eventName, expectedSource] of events) {
-    target?.addEventListener?.(eventName, event => {
+  for (const expectedSource of [
+    "bootstrap-proposal-create-controls",
+    "bootstrap-proposal-review-controls"
+  ]) {
+    const resolvedTarget = target || globalThis?.window || globalThis || null;
+    const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+    const handler = event => {
       const resolvedDeps = typeof buildDeps === "function" ? (buildDeps() || {}) : deps;
       runBootstrapProposalControlsSync({
         ...resolvedDeps,
         detail: event?.detail || {},
         expectedSource,
       });
-    });
+    };
+    const formIds = expectedSource === "bootstrap-proposal-create-controls"
+      ? ["proposal-form"]
+      : ["proposal-approve-form", "proposal-reject-form"];
+    for (const formId of formIds) {
+      const form = resolvedDocument?.getElementById?.(formId);
+      if (!form || form.__bootstrapProposalControlsSyncBound) continue;
+      form.__bootstrapProposalControlsSyncBound = true;
+      const trigger = () => handler({ detail: { source: expectedSource } });
+      form.addEventListener("change", trigger);
+      form.addEventListener("input", trigger);
+    }
   }
-  return target;
+  return target || globalThis?.window || globalThis || null;
 }

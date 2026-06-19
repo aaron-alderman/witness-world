@@ -276,9 +276,23 @@ export function bindBootstrapRuntimeIntegrationDirectControlsSync({
   buildDeps = () => ({})
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = createBootstrapRuntimeIntegrationDirectControlsSyncHandler({ buildDeps });
-  resolvedTarget.addEventListener("witness:bootstrap-runtime-integration-direct-sync", handler);
+  for (const [formId, source, family] of [
+    ["runtime-plugin-install-form", "bootstrap-runtime-integration-controls", "runtime-plugin-install"],
+    ["runtime-plugin-remove-form", "bootstrap-remove-controls", "runtime-plugin-remove"],
+    ["mcp-server-form", "bootstrap-runtime-integration-controls", "mcp-server"],
+    ["mcp-tool-install-form", "bootstrap-runtime-integration-controls", "mcp-tool-install"],
+    ["mcp-tool-remove-form", "bootstrap-remove-controls", "mcp-tool-remove"]
+  ]) {
+    const form = resolvedDocument?.getElementById?.(formId);
+    if (!form || form.__bootstrapRuntimeIntegrationSyncBound) continue;
+    form.__bootstrapRuntimeIntegrationSyncBound = true;
+    const trigger = () => handler({ detail: { source, family } });
+    form.addEventListener("change", trigger);
+    form.addEventListener("input", trigger);
+  }
   return handler;
 }
 

@@ -109,9 +109,10 @@ export async function runBootstrapTopCardsSubmit({
   const request = buildBootstrapTopCardsSubmitRequest({ detail, contractsByFamily });
   if (!request) return false;
   try {
-    await postJson(request.url, request.body, request.method || "POST");
-    if (request.successText && detail.statusId) {
-      setStatus(detail.statusId, request.successText);
+    const result = await postJson(request.url, request.body, request.method || "POST");
+    const statusMessage = result?.statusMessage || request.successText || "";
+    if (statusMessage && detail.statusId) {
+      setStatus(detail.statusId, statusMessage);
     }
     if (request.resetOnSuccess && detail.formId) {
       resetForm(detail.formId);
@@ -141,7 +142,8 @@ export function bindBootstrapTopCardsSubmit({
   contractsByFamily = bootstrapTopCardsSubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = event => {
     const detail = event?.detail || {};
     if (detail.source !== "bootstrap-top-cards") return false;
@@ -155,6 +157,49 @@ export function bindBootstrapTopCardsSubmit({
       contractsByFamily
     });
   };
-  resolvedTarget.addEventListener("witness:bootstrap-top-cards-submit", handler);
+  const readDetailFromForm = form => {
+    const detail = Object.fromEntries(new FormData(form).entries());
+    for (const field of Array.from(form.elements || [])) {
+      if (!field?.name || field?.type !== "checkbox") continue;
+      detail[field.name] = Boolean(field.checked);
+    }
+    return detail;
+  };
+  for (const binding of [
+    { formId: "identity-form", family: "identity-submit", statusId: "identity-status" },
+    { formId: "session-form", family: "session-open", statusId: "bootstrap-status" },
+    { formId: "operator-backup-form", family: "operator-backup", statusId: "operator-backup-status" },
+    { formId: "operator-export-form", family: "operator-export", statusId: "operator-export-status" },
+    { formId: "operator-restore-form", family: "operator-restore", statusId: "operator-restore-status" },
+    { formId: "operator-import-form", family: "operator-import", statusId: "operator-import-status" }
+  ]) {
+    const form = resolvedDocument?.getElementById?.(binding.formId);
+    if (!form || form.__bootstrapTopCardsSubmitBound) continue;
+    form.__bootstrapTopCardsSubmitBound = true;
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      void handler({
+        detail: {
+          source: "bootstrap-top-cards",
+          family: binding.family,
+          formId: binding.formId,
+          statusId: binding.statusId,
+          ...readDetailFromForm(form)
+        }
+      });
+    });
+  }
+  for (const [selector, detail] of [
+    ['[data-action="establishBootstrapAppBoundary"]', { source: "bootstrap-top-cards", family: "bootstrap-app-boundary", statusId: "bootstrap-status" }],
+    ['[data-action="logoutBootstrapSession"]', { source: "bootstrap-top-cards", family: "session-logout", statusId: "bootstrap-status" }]
+  ]) {
+    const node = resolvedDocument?.querySelector?.(selector);
+    if (!node || node.__bootstrapTopCardsActionBound) continue;
+    node.__bootstrapTopCardsActionBound = true;
+    node.addEventListener("click", event => {
+      event.preventDefault();
+      void handler({ detail });
+    });
+  }
   return handler;
 }

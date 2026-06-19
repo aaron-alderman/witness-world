@@ -155,6 +155,27 @@ test("wcss authoring plugin reads schema and manages snapshot-scoped structured 
     assert.equal(patched.version, 1);
     assert.deepEqual(patched.ops, [{ kind: "style.field.set", style: "chrome.toolbar", field: "layout.height", value: "60px" }]);
 
+    const previewReadRes = createResponse();
+    await handlers["wcss.document.read"]({
+      res: previewReadRes,
+      route,
+      appContext,
+      requestUrl: new URL(`http://example.test/engentus/__generated/wcss/document?wcssPreview=${encodeURIComponent(created.previewSessionId)}`)
+    });
+    const previewReadBody = JSON.parse(previewReadRes.body);
+    assert.equal(previewReadBody.previewSession.previewSessionId, created.previewSessionId);
+
+    const previewSchemaRes = createResponse();
+    await handlers["wcss.schema.read"]({
+      res: previewSchemaRes,
+      route,
+      appContext,
+      requestUrl: new URL(`http://example.test/engentus/__generated/wcss/schema?previewSessionId=${encodeURIComponent(created.previewSessionId)}`)
+    });
+    const previewSchemaBody = JSON.parse(previewSchemaRes.body);
+    assert.equal(previewSchemaBody.previewSession.previewSessionId, created.previewSessionId);
+    assert.equal(previewSchemaBody.schema.styles[0].fields[0].value, "60px");
+
     const compatibilityPatchRes = createResponse();
     await handlers["wcss.preview.tokens.patch"]({
       req: {

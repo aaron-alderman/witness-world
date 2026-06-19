@@ -150,7 +150,7 @@ test("engentus canonical style grammar formalizes token domains, style domains, 
   ]);
 
   assert.equal(grammar.theme, "engentus");
-  assert.deepEqual(grammar.tokens.domains, ["color", "font", "radius", "shadow", "size"]);
+  assert.deepEqual(grammar.tokens.domains, ["chart", "color", "font", "radius", "shadow", "size"]);
   assert.deepEqual(grammar.styles.domains, ["auth", "chart", "chrome", "goodman", "interactive", "platform", "surface"]);
   assert.deepEqual(
     grammar.application.sliceFamilyDomainContracts["platform-config"],
@@ -458,7 +458,7 @@ test("engentus can switch isolated slices onto the authored WCSS lane while shri
   assert.equal(shellCss.includes(".auth-signout-icon"), false);
   assert.equal(shellCss.includes(".ms-btn.folding svg"), false);
   assert.equal(shellCss.includes(".ms-btn.pending svg"), true);
-  assert.equal(shellCss.includes("#mill-canvas-wrap canvas"), true);
+  assert.equal(shellCss.includes("#mill-canvas"), true);
   assert.equal(shellCss.includes(".mill-regime-badge.cataracting"), true);
   assert.equal(shellCss.includes(".mill-force-pill.active"), true);
   assert.equal(shellCss.includes(".mill-force-cht-tab.active"), true);
@@ -712,7 +712,7 @@ test("engentus can switch mill-charge onto the authored native proof lane withou
     switchManifest
   });
   const shellCss = renderOracleStylesheet(stylesheets.shell);
-  assert.equal(shellCss.includes("#mill-canvas-wrap canvas"), true);
+  assert.equal(shellCss.includes("#mill-canvas"), true);
   assert.equal(shellCss.includes(".mill-regime-badge.rolling"), true);
   assert.equal(shellCss.includes(".mill-regime-badge.cataracting"), true);
   assert.equal(shellCss.includes("@media (max-width: 980px)"), true);

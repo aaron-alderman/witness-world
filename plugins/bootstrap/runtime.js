@@ -12,6 +12,7 @@ export const handlerCatalog = Object.freeze({
   dispatchHandlers: Object.freeze([
     "bootstrap.model.read",
     "bootstrap.state.read",
+    "bootstrap.appBoundary.establish",
     "bootstrap.page",
     "operator.state.read",
     "operator.backup",
@@ -26,6 +27,7 @@ export const routes = Object.freeze([
   exactRoute("GET", "/_bootstrap", "bootstrap.page"),
   exactRoute("GET", "/api/bootstrap-model", "bootstrap.model.read"),
   exactRoute("GET", "/api/bootstrap-state", "bootstrap.state.read"),
+  exactRoute("POST", "/api/bootstrap/app-boundary", "bootstrap.appBoundary.establish"),
   exactRoute("GET", "/api/operator/state", "operator.state.read"),
   exactRoute("POST", "/api/operator/backups", "operator.backup"),
   exactRoute("POST", "/api/operator/exports", "operator.export"),

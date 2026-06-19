@@ -61,7 +61,7 @@ view PlatformConsolePage {
   kind page
   class platform-console
   prop title = "Platform Console"
-  prop summary = "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, model inspection, and supplemental governance/model seams."
+  prop summary = "RVM-authored platform pages for overview, workflow, verification, telemetry, defects, knowledge, signals compatibility, model inspection, and supplemental governance/model seams."
   capabilities {
     platform.self
   }
@@ -70,11 +70,15 @@ view PlatformConsolePage {
     PlatformWorkflowPage
     PlatformWorkflowBranchesPage
     PlatformWorkflowChangeSetsPage
+    PlatformWorkflowPushesPage
+    PlatformWorkflowShipsPage
     PlatformWorkflowProposalsPage
     PlatformVerificationPage
     PlatformVerificationStatusPage
     PlatformVerificationRunsPage
     PlatformVerificationRuntimePage
+    PlatformTelemetryPage
+    PlatformDefectsPage
     PlatformKnowledgePage
     PlatformKnowledgeDocsPage
     PlatformKnowledgeFoldersPage
@@ -160,6 +164,36 @@ view PlatformWorkflowChangeSetsPage {
   }
 }
 
+view PlatformWorkflowPushesPage {
+  kind page
+  class platform-workflow
+  prop pageId = "workflowPushes"
+  prop modelView = "pushes"
+  prop summaryCards = "Push Records=pushRecords@count|Pushed=pushRecords@countWhere:status=pushed|Dry Runs=pushRecords@countWhere:status=dryRun|Failed=pushRecords@countWhere:status=failed|Remotes=gitRemotes@count"
+  prop title = "Workflow Pushes"
+  prop summary = "Platform-managed Git push records, remote metadata, and linked branch push detail."
+  children {
+    PlatformPushList
+    PlatformPushDetail
+    PlatformBranchPushPanel
+  }
+}
+
+view PlatformWorkflowShipsPage {
+  kind page
+  class platform-workflow
+  prop pageId = "workflowShips"
+  prop modelView = "ships"
+  prop summaryCards = "Ship Records=shipRecords@count|Local Ships=shipRecords@countWhere:status=shipped|Recorded=shipRecords@countWhere:status=recorded|Channels=releaseChannels@count|Rollback Proposals=proposals@countWhere:targetProcess=branch.rollback"
+  prop title = "Workflow Ships"
+  prop summary = "Platform-managed ship records, release channels, observation windows, and rollback follow-up."
+  children {
+    PlatformShipList
+    PlatformShipDetail
+    PlatformBranchShipPanel
+  }
+}
+
 view PlatformWorkflowProposalsPage {
   kind page
   class platform-workflow
@@ -235,6 +269,34 @@ view PlatformVerificationRuntimePage {
     PlatformVerificationRuntimeList
     PlatformVerificationDetail
     PlatformVerificationStreams
+  }
+}
+
+view PlatformTelemetryPage {
+  kind page
+  class platform-telemetry
+  prop pageId = "telemetry"
+  prop modelView = "telemetry"
+  prop summaryCards = "Metrics=telemetryMetrics@count|Samples=telemetrySamples@count|Windows=telemetryWindows@count|Regressions=performanceRegressions@count|Probe Ops=resourceProbeOperations@count|Views=materializedViewStates@count"
+  prop title = "Telemetry"
+  prop summary = "Canonical telemetry page for metrics, samples, windows, and performance regressions."
+  children {
+    PlatformTelemetryList
+    PlatformTelemetryDetail
+  }
+}
+
+view PlatformDefectsPage {
+  kind page
+  class platform-defects
+  prop pageId = "defects"
+  prop modelView = "defects"
+  prop summaryCards = "Defects=defects@count|Observations=defectObservations@count|Clusters=defectClusters@count|Proposals=proposals@countWhere:targetProcess=defect.create"
+  prop title = "Defects"
+  prop summary = "Canonical defects page for defect records, observations, clusters, and linked proposals."
+  children {
+    PlatformDefectList
+    PlatformDefectDetail
   }
 }
 
@@ -798,9 +860,9 @@ view PlatformWorkflowPrimaryPanel {
   prop summary = "Selected workflow object properties and long-tail fields."
   prop longTailCardTitle = "Properties"
   prop longTailValueKinds = "string|number|boolean|scalarList"
-  prop branchLongTailExcludedFields = "changeSetIds|affectedSystemSummaries|telemetryImpactSummaries"
+  prop branchLongTailExcludedFields = "changeSetIds|pushRecordIds|shipRecordIds|affectedSystemSummaries|telemetryImpactSummaries"
   prop branchCardTitle = "Branch Detail"
-  prop branchFields = "Branch=id@concept|Status=status|Title=title|Lane=lifecycleLane|Owner=owner|Parent=parentBranchId@concept|Epic=epic@concept|Feature=feature@concept|Defect=defect@concept|Runtime profile=runtimeProfile|Docs freshness=docsFreshness.status|Red / green=testRedGreen.status|Latest candidate=latestCandidateSnapshotId@concept|API resource=id@api"
+  prop branchFields = "Branch=id@concept|Status=status|Title=title|Lane=lifecycleLane|Owner=owner|Parent=parentBranchId@concept|Epic=epic@concept|Feature=feature@concept|Defect=defect@concept|Runtime profile=runtimeProfile|Git branch=gitBranchName|Docs freshness=docsFreshness.status|Red / green=testRedGreen.status|Latest candidate=latestCandidateSnapshotId@concept|Latest push=latestPushRecordId@concept|Latest ship=latestShipRecordId@concept|Latest channel=latestReleaseChannelId@concept|API resource=id@api"
   prop changeSetLongTailExcludedFields = "changedPaths"
   prop changeSetCardTitle = "Change Set Detail"
   prop changeSetFields = "Change set=id@concept|Status=status|Title=title|Branch=branchId@concept|Owner=owner|Reason=reason|Edits=editCount|Red / green=testRedGreen.status|Latest candidate=latestCandidateSnapshotId@concept|API resource=id@api"
@@ -816,8 +878,8 @@ view PlatformWorkflowRelatedPanel {
   prop title = "Related Resources"
   prop summary = "Linked resources and supporting context for the selected workflow object."
   prop cardItemLimit = "12"
-  prop branchLinkCards = "Change Sets=changeSetIds"
-  prop branchLinkCardEmptyStates = "Change Sets=No change sets linked to this branch."
+  prop branchLinkCards = "Change Sets=changeSetIds|Push Records=pushRecordIds|Ship Records=shipRecordIds"
+  prop branchLinkCardEmptyStates = "Change Sets=No change sets linked to this branch.|Push Records=No push records linked to this branch.|Ship Records=No ship records linked to this branch."
   prop branchTextCards = "Affected Systems=affectedSystemSummaries@label|Telemetry Impacts=telemetryImpactSummaries@label"
   prop branchTextCardEmptyStates = "Affected Systems=No affected system summaries.|Telemetry Impacts=No telemetry impact summaries."
   prop changeSetLinkCards = "Changed Paths=changedPaths"
@@ -1022,6 +1084,60 @@ view PlatformProposalReviewList {
   prop fieldPlaceholders = "reason=Only used when rejecting"
   prop actionButtons = "Approve=approve|Reject=reject"
   prop actionButtonName = "reviewAction"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformBranchPushPanel {
+  kind form
+  class platform-branch-push-panel
+  prop title = "Push Branch"
+  prop summary = "Push an applied branch state through the shared platform Git boundary."
+  prop formId = "platform-branch-push-form"
+  prop clientAction = "branch.push"
+  prop statusId = "branch-push-status"
+  prop submitLabel = "Push Branch"
+  prop formFields = "Branch=branchId@select:branchOptions|Remote=remoteName@text|Git branch=gitBranchName@text|Mode=dryRun@select:pushModeOptions"
+  prop submitPath = "/api/platform-branches/{branchId}/push"
+  prop submitBodyFields = "remoteName=remoteName@nullable|gitBranchName=gitBranchName@nullable|dryRun=dryRun@value"
+  prop requiredFieldMessages = "branchId=Select a branch first."
+  prop successMessageTemplate = "Push {pushRecord.status}: {pushRecord.remoteName} {pushRecord.gitBranchName||branch.gitBranchName||branch.id}"
+  prop errorMessage = "Branch push failed."
+  prop branchOptionsSource = "branches"
+  prop branchOptionsValuePath = "id"
+  prop branchOptionsLabelPath = "title||id"
+  prop pushModeOptions = "Real push=false|Dry run=true"
+  prop fieldDefaults = "remoteName=origin|dryRun=false"
+  prop fieldPlaceholders = "gitBranchName=Optional override for the Git branch name"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformBranchShipPanel {
+  kind form
+  class platform-branch-ship-panel
+  prop title = "Ship Branch"
+  prop summary = "Ship the latest pushed branch state through the shared platform release lane."
+  prop formId = "platform-branch-ship-form"
+  prop clientAction = "branch.ship"
+  prop statusId = "branch-ship-status"
+  prop submitLabel = "Ship Branch"
+  prop formFields = "Branch=branchId@select:branchOptions|Release channel=releaseChannelId@select:releaseChannelOptions|Approved proposal=proposalId@text"
+  prop submitPath = "/api/platform-branches/{branchId}/ship"
+  prop submitBodyFields = "releaseChannelId=releaseChannelId@value|proposalId=proposalId@nullable"
+  prop requiredFieldMessages = "branchId=Select a branch first.|releaseChannelId=Select a release channel."
+  prop successMessageTemplate = "Ship {shipRecord.status}: {releaseChannel.title||releaseChannel.name} {branch.id}"
+  prop errorMessage = "Branch ship failed."
+  prop branchOptionsSource = "branches"
+  prop branchOptionsValuePath = "id"
+  prop branchOptionsLabelPath = "title||id"
+  prop releaseChannelOptionsSource = "releaseChannels"
+  prop releaseChannelOptionsValuePath = "id"
+  prop releaseChannelOptionsLabelPath = "title||id"
+  prop fieldDefaults = "releaseChannelId=releaseChannel:local"
+  prop fieldPlaceholders = "proposalId=Optional approved branch.ship proposal id"
   projections {
     PlatformModelRead
   }
@@ -1530,6 +1646,366 @@ view PlatformSignalRelationships {
   prop detailKinds = "gap|signal"
   prop title = "Related Relationships"
   prop summary = "Linked graph relationships for the selected signal when available."
+  prop columns = "From|Relation|To"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
+  prop emptyState = "No related relationships."
+  prop rowLimit = "20"
+}
+
+view PlatformTelemetryList {
+  kind table
+  class platform-telemetry-list
+  prop title = "Telemetry"
+  prop summary = "Paginated list of telemetry metrics, recent samples, windows, and regressions."
+  prop listSource = "telemetryItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No telemetry rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformTelemetryDetail {
+  kind region
+  class platform-telemetry-detail
+  prop title = "Telemetry Detail"
+  prop summary = "Properties and linked relationships for the selected telemetry concept."
+  prop detailSource = "telemetry"
+  prop detailSelectionSources = "telemetryMetrics|performanceRegressions|telemetryWindows|telemetrySamples"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No telemetry detail is available yet."
+  children {
+    PlatformTelemetryPrimaryPanel
+    PlatformTelemetryRelatedPanel
+    PlatformTelemetryRelationships
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformTelemetryPrimaryPanel {
+  kind region
+  class platform-telemetry-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "telemetryMetric|performanceRegression|telemetryWindow|telemetrySample"
+  prop title = "Primary Detail"
+  prop summary = "Selected telemetry properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop telemetryMetricCardTitle = "Telemetry Metric Detail"
+  prop telemetryMetricFields = "Metric=id@concept|Status=status|Title=title|Owner=owner|Source=source|Lifecycle=lifecycle|API resource=id@api"
+  prop performanceRegressionCardTitle = "Performance Regression Detail"
+  prop performanceRegressionFields = "Regression=id@concept|Metric=metricId@concept|Owner=ownerId|Sample kind=sampleKind|Current=currentAggregateMs|Previous=previousAggregateMs|Delta=deltaMs|Delta %=deltaPercent|Status=status|API resource=id@api"
+  prop telemetryWindowCardTitle = "Telemetry Window Detail"
+  prop telemetryWindowFields = "Window=id@concept|Metric=metricId@concept|Owner=ownerId|Sample kind=sampleKind|Current=currentAggregateMs|Previous=previousAggregateMs|Samples=currentSampleCount|Previous samples=previousSampleCount|Failures=failureCount|API resource=id@api"
+  prop telemetrySampleCardTitle = "Telemetry Sample Detail"
+  prop telemetrySampleFields = "Sample=id@concept|Metric=metricId@concept|Owner=ownerId|Kind=sampleKind|Status=status|Duration=durationMs|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Observed=observedAt|API resource=id@api"
+}
+
+view PlatformTelemetryRelatedPanel {
+  kind region
+  class platform-telemetry-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "telemetryMetric|performanceRegression|telemetryWindow|telemetrySample"
+  prop title = "Related Resources"
+  prop summary = "Linked telemetry context and supporting rows."
+  prop cardItemLimit = "12"
+  prop linkCards = "Gate=gateId|Branch=branchId|Change Set=changeSetId|Candidate Snapshot=candidateSnapshotId|Latest Sample=latestSampleId|Window=windowId"
+  prop linkCardEmptyStates = "Gate=No linked gate.|Branch=No linked branch.|Change Set=No linked change set.|Candidate Snapshot=No linked candidate snapshot.|Latest Sample=No linked sample.|Window=No linked window."
+  prop textCards = "Current Samples=currentSampleIds|Previous Samples=previousSampleIds|Message=message|Branches=branchIds|Change Sets=changeSetIds|Gates=gateIds"
+  prop textCardEmptyStates = "Current Samples=No current sample set.|Previous Samples=No previous sample set.|Message=No message.|Branches=No linked branches.|Change Sets=No linked change sets.|Gates=No linked gates."
+}
+
+view PlatformTelemetryRelationships {
+  kind table
+  class platform-telemetry-relationships
+  prop detailPanelRole = "relationships"
+  prop detailKinds = "telemetryMetric|performanceRegression|telemetryWindow|telemetrySample"
+  prop title = "Related Relationships"
+  prop summary = "Linked graph relationships for the selected telemetry concept when available."
+  prop columns = "From|Relation|To"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
+  prop emptyState = "No related relationships."
+  prop rowLimit = "20"
+}
+
+view PlatformDefectList {
+  kind table
+  class platform-defect-list
+  prop title = "Defects"
+  prop summary = "Paginated list of defect clusters, defects, observations, and linked proposals."
+  prop listSource = "defectItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No defect rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformDefectDetail {
+  kind region
+  class platform-defect-detail
+  prop title = "Defect Detail"
+  prop summary = "Properties and linked relationships for the selected defect concept."
+  prop detailSource = "defects"
+  prop detailSelectionSources = "defectClusters|defects|defectObservations|proposals"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No defect detail is available yet."
+  children {
+    PlatformDefectPrimaryPanel
+    PlatformDefectRelatedPanel
+    PlatformDefectRelationships
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformDefectPrimaryPanel {
+  kind region
+  class platform-defect-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "defectCluster|defect|defectObservation|proposal"
+  prop title = "Primary Detail"
+  prop summary = "Selected defect properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop defectClusterCardTitle = "Defect Cluster Detail"
+  prop defectClusterFields = "Cluster=id@concept|Title=title|Defects=defectCount|Observations=observationCount|API resource=id@api"
+  prop defectCardTitle = "Defect Detail"
+  prop defectFields = "Defect=id@concept|Title=title|Kind=defectKind|Status=status|Metric=metricId@concept|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Summary=summary|API resource=id@api"
+  prop defectObservationCardTitle = "Defect Observation Detail"
+  prop defectObservationFields = "Observation=id@concept|Defect=defectId@concept|Source kind=sourceKind|Source=sourceId@concept|Status=status|Metric=metricId@concept|Gate=gateId@concept|Observed=observedAt|Message=message|API resource=id@api"
+  prop proposalCardTitle = "Proposal Detail"
+  prop proposalFields = "Proposal=id@concept|Status=status|Target process=targetProcess|Target=targetId@concept|Reason=reason|API resource=id@api"
+}
+
+view PlatformDefectRelatedPanel {
+  kind region
+  class platform-defect-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "defectCluster|defect|defectObservation|proposal"
+  prop title = "Related Resources"
+  prop summary = "Linked defects, observations, proposals, and affected resources."
+  prop cardItemLimit = "12"
+  prop linkCards = "Defects=defectIds|Observations=observationIds|Proposals=proposalIds|Metric=metricId|Gate=gateId|Branch=branchId|Change Set=changeSetId|Candidate Snapshot=candidateSnapshotId|Target=targetId"
+  prop linkCardEmptyStates = "Defects=No linked defects.|Observations=No linked observations.|Proposals=No linked proposals.|Metric=No linked metric.|Gate=No linked gate.|Branch=No linked branch.|Change Set=No linked change set.|Candidate Snapshot=No linked candidate snapshot.|Target=No linked target."
+  prop textCards = "Summary=summary|Branches=branchIds|Change Sets=changeSetIds|Gates=gateIds|Metrics=metricIds|Message=message"
+  prop textCardEmptyStates = "Summary=No summary.|Branches=No linked branches.|Change Sets=No linked change sets.|Gates=No linked gates.|Metrics=No linked metrics.|Message=No message."
+}
+
+view PlatformDefectRelationships {
+  kind table
+  class platform-defect-relationships
+  prop detailPanelRole = "relationships"
+  prop detailKinds = "defectCluster|defect|defectObservation|proposal"
+  prop title = "Related Relationships"
+  prop summary = "Linked graph relationships for the selected defect concept when available."
+  prop columns = "From|Relation|To"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
+  prop emptyState = "No related relationships."
+  prop rowLimit = "20"
+}
+
+view PlatformPushList {
+  kind table
+  class platform-push-list
+  prop title = "Push Records"
+  prop summary = "Paginated list of push records, remotes, refs, and linked failure follow-up."
+  prop listSource = "pushItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No push records."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformPushDetail {
+  kind region
+  class platform-push-detail
+  prop title = "Push Detail"
+  prop summary = "Properties and linked resources for the selected push concept."
+  prop detailSource = "pushes"
+  prop detailSelectionSources = "pushRecords|branches|gitRemotes|gitRefs|proposals|defects"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No push detail is available yet."
+  children {
+    PlatformPushPrimaryPanel
+    PlatformPushRelatedPanel
+    PlatformPushRelationships
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformPushPrimaryPanel {
+  kind region
+  class platform-push-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "pushRecord|gitRemote|gitRef|branch|proposal|defect"
+  prop title = "Primary Detail"
+  prop summary = "Selected push properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop pushRecordLongTailExcludedFields = "changeSetId|branchId"
+  prop pushRecordCardTitle = "Push Record Detail"
+  prop pushRecordFields = "Push=id@concept|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Remote=remoteId@concept|Git branch=gitBranchName|Provider=provider|Commit=commitSha|Compare=compareUrl@href|Review=pullRequestUrl@href|API resource=id@api"
+  prop gitRemoteCardTitle = "Git Remote Detail"
+  prop gitRemoteFields = "Remote=id@concept|Name=name|Provider=provider|Fetch=fetchUrl|Push=pushUrl|API resource=id@api"
+  prop gitRefCardTitle = "Git Ref Detail"
+  prop gitRefFields = "Ref=id@concept|Name=refName|Short=shortName|Scope=scope|Remote=remoteId@concept|Upstream=upstream@concept|API resource=id@api"
+  prop branchCardTitle = "Branch Push Detail"
+  prop branchFields = "Branch=id@concept|Status=status|Title=title|Git branch=gitBranchName|Latest push=latestPushRecordId@concept|API resource=id@api"
+  prop proposalCardTitle = "Proposal Detail"
+  prop proposalFields = "Proposal=id@concept|Status=status|Target process=targetProcess|Target=targetId@concept|Reason=reason|API resource=id@api"
+  prop defectCardTitle = "Defect Detail"
+  prop defectFields = "Defect=id@concept|Title=title|Kind=defectKind|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Summary=summary|API resource=id@api"
+}
+
+view PlatformPushRelatedPanel {
+  kind region
+  class platform-push-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "pushRecord|gitRemote|gitRef|branch|proposal|defect"
+  prop title = "Related Resources"
+  prop summary = "Linked remotes, refs, proposals, defects, and branch context."
+  prop cardItemLimit = "12"
+  prop pushRecordLinkCards = "Branch=branchId|Change Set=changeSetId|Remote=remoteId|Local Ref=localRefId|Remote Ref=remoteRefId"
+  prop pushRecordLinkCardEmptyStates = "Branch=No linked branch.|Change Set=No linked change set.|Remote=No linked remote.|Local Ref=No linked local ref.|Remote Ref=No linked remote ref."
+  prop pushRecordTextCards = "Commit message=commitMessage|Error=error"
+  prop pushRecordTextCardEmptyStates = "Commit message=No commit message.|Error=No push error."
+  prop gitRemoteLinkCards = "Push Records=pushRecordIds|Refs=refIds"
+  prop gitRemoteLinkCardEmptyStates = "Push Records=No push records target this remote.|Refs=No refs recorded for this remote."
+  prop branchLinkCards = "Push Records=pushRecordIds"
+  prop branchLinkCardEmptyStates = "Push Records=No push records linked to this branch."
+  prop defectLinkCards = "Branch=branchId|Change Set=changeSetId|Push Record=pushRecordId"
+  prop defectLinkCardEmptyStates = "Branch=No linked branch.|Change Set=No linked change set.|Push Record=No linked push record."
+  prop proposalLinkCards = "Target=targetId"
+  prop proposalLinkCardEmptyStates = "Target=No linked target."
+}
+
+view PlatformPushRelationships {
+  kind table
+  class platform-push-relationships
+  prop detailPanelRole = "relationships"
+  prop detailKinds = "pushRecord|gitRemote|gitRef|branch|proposal|defect"
+  prop title = "Related Relationships"
+  prop summary = "Linked graph relationships for the selected push concept when available."
+  prop columns = "From|Relation|To"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
+  prop emptyState = "No related relationships."
+  prop rowLimit = "20"
+}
+
+view PlatformShipList {
+  kind table
+  class platform-ship-list
+  prop title = "Ship Records"
+  prop summary = "Paginated list of ship records, release channels, linked pushes, and rollback proposals."
+  prop listSource = "shipItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No ship records."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformShipDetail {
+  kind region
+  class platform-ship-detail
+  prop title = "Ship Detail"
+  prop summary = "Properties and linked resources for the selected ship concept."
+  prop detailSource = "ships"
+  prop detailSelectionSources = "shipRecords|releaseChannels|branches|pushRecords|proposals|defects|performanceRegressions"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No ship detail is available yet."
+  children {
+    PlatformShipPrimaryPanel
+    PlatformShipRelatedPanel
+    PlatformShipRelationships
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformShipPrimaryPanel {
+  kind region
+  class platform-ship-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "shipRecord|releaseChannel|branch|pushRecord|proposal|defect|performanceRegression"
+  prop title = "Primary Detail"
+  prop summary = "Selected ship properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop shipRecordLongTailExcludedFields = "branchId|changeSetId|pushRecordId|releaseChannelId"
+  prop shipRecordCardTitle = "Ship Record Detail"
+  prop shipRecordFields = "Ship=id@concept|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Push=pushRecordId@concept|Release channel=releaseChannelId@concept|Commit=commitSha|Git branch=gitBranchName|Observation ends=observationWindowEndsAt|Compare=compareUrl@href|Review=pullRequestUrl@href|API resource=id@api"
+  prop releaseChannelCardTitle = "Release Channel Detail"
+  prop releaseChannelFields = "Channel=id@concept|Name=name|Title=title|Executable=executable|Description=description|API resource=id@api"
+  prop branchCardTitle = "Branch Ship Detail"
+  prop branchFields = "Branch=id@concept|Status=status|Title=title|Latest ship=latestShipRecordId@concept|Latest channel=latestReleaseChannelId@concept|API resource=id@api"
+  prop pushRecordCardTitle = "Push Record Detail"
+  prop pushRecordFields = "Push=id@concept|Status=status|Branch=branchId@concept|Remote=remoteId@concept|Git branch=gitBranchName|Commit=commitSha|API resource=id@api"
+  prop proposalCardTitle = "Proposal Detail"
+  prop proposalFields = "Proposal=id@concept|Status=status|Target process=targetProcess|Target=targetId@concept|Reason=reason|API resource=id@api"
+  prop defectCardTitle = "Defect Detail"
+  prop defectFields = "Defect=id@concept|Title=title|Kind=defectKind|Status=status|Branch=branchId@concept|Summary=summary|API resource=id@api"
+  prop performanceRegressionCardTitle = "Performance Regression Detail"
+  prop performanceRegressionFields = "Regression=id@concept|Metric=metricId@concept|Owner=ownerId|Current=currentAggregateMs|Previous=previousAggregateMs|Delta=deltaMs|Delta %=deltaPercent|Status=status|API resource=id@api"
+}
+
+view PlatformShipRelatedPanel {
+  kind region
+  class platform-ship-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "shipRecord|releaseChannel|branch|pushRecord|proposal|defect|performanceRegression"
+  prop title = "Related Resources"
+  prop summary = "Linked branches, pushes, release channels, regressions, and rollback proposals."
+  prop cardItemLimit = "12"
+  prop shipRecordLinkCards = "Branch=branchId|Change Set=changeSetId|Push=pushRecordId|Release Channel=releaseChannelId"
+  prop shipRecordLinkCardEmptyStates = "Branch=No linked branch.|Change Set=No linked change set.|Push=No linked push record.|Release Channel=No linked release channel."
+  prop shipRecordTextCards = "Commit message=commitMessage"
+  prop shipRecordTextCardEmptyStates = "Commit message=No commit message."
+  prop releaseChannelLinkCards = "Ship Records=shipRecordIds"
+  prop releaseChannelLinkCardEmptyStates = "Ship Records=No ship records target this release channel."
+  prop branchLinkCards = "Push Records=pushRecordIds|Ship Records=shipRecordIds"
+  prop branchLinkCardEmptyStates = "Push Records=No push records linked to this branch.|Ship Records=No ship records linked to this branch."
+  prop pushRecordLinkCards = "Branch=branchId|Change Set=changeSetId|Remote=remoteId"
+  prop pushRecordLinkCardEmptyStates = "Branch=No linked branch.|Change Set=No linked change set.|Remote=No linked remote."
+  prop proposalLinkCards = "Target=targetId|Ship Record=shipRecordId"
+  prop proposalLinkCardEmptyStates = "Target=No linked target.|Ship Record=No linked ship record."
+  prop defectLinkCards = "Branch=branchId|Change Set=changeSetId"
+  prop defectLinkCardEmptyStates = "Branch=No linked branch.|Change Set=No linked change set."
+  prop performanceRegressionLinkCards = "Metric=metricId|Branches=branchIds|Change Sets=changeSetIds"
+  prop performanceRegressionLinkCardEmptyStates = "Metric=No linked metric.|Branches=No linked branches.|Change Sets=No linked change sets."
+}
+
+view PlatformShipRelationships {
+  kind table
+  class platform-ship-relationships
+  prop detailPanelRole = "relationships"
+  prop detailKinds = "shipRecord|releaseChannel|branch|pushRecord|proposal|defect|performanceRegression"
+  prop title = "Related Relationships"
+  prop summary = "Linked graph relationships for the selected ship concept when available."
   prop columns = "From|Relation|To"
   prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
   prop emptyState = "No related relationships."

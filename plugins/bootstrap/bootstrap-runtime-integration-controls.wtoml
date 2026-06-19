@@ -76,22 +76,6 @@ rootWidget = "bootstrap_runtime_plugin_install_controls_root"
 [[step]]
 program = "bootstrap_runtime_plugin_install_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_install_runner_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-runtime-integration-controls", family = "runtime-plugin-install", trigger = "server-runner" }
-
-[[step]]
-program = "bootstrap_runtime_plugin_install_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_install_plugin_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-runtime-integration-controls", family = "runtime-plugin-install", trigger = "plugin" }
-
-[[step]]
-program = "bootstrap_runtime_plugin_install_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_runtime_plugin_install_form"
 widget = "bootstrap_runtime_plugin_install_status"
@@ -104,14 +88,6 @@ op = "readForm"
 on = "submit:bootstrap_runtime_plugin_install_form"
 widget = "bootstrap_runtime_plugin_install_form"
 into = "bootstrapRuntimePluginInstallDraft"
-
-[[step]]
-program = "bootstrap_runtime_plugin_install_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_runtime_plugin_install_form"
-eventName = "witness:bootstrap-runtime-integration-direct-submit"
-detail = { source = "bootstrap-runtime-integration-controls", family = "runtime-plugin-install", formId = "runtime-plugin-install-form", statusId = "runtime-plugin-install-status", serverRunner = "${state.bootstrapRuntimePluginInstallDraft.serverRunner}", plugin = "${state.bootstrapRuntimePluginInstallDraft.plugin}" }
 
 [[step]]
 program = "bootstrap_runtime_plugin_install_controls_program"
@@ -262,30 +238,6 @@ rootWidget = "bootstrap_mcp_server_controls_root"
 [[step]]
 program = "bootstrap_mcp_server_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_server_runner_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-runtime-integration-controls", family = "mcp-server", trigger = "server-runner" }
-
-[[step]]
-program = "bootstrap_mcp_server_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "input:bootstrap_mcp_server_service_identity_input"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-runtime-integration-controls", family = "mcp-server", trigger = "service-identity" }
-
-[[step]]
-program = "bootstrap_mcp_server_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "input:bootstrap_mcp_server_transports_input"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-runtime-integration-controls", family = "mcp-server", trigger = "transports-json" }
-
-[[step]]
-program = "bootstrap_mcp_server_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_mcp_server_form"
 widget = "bootstrap_mcp_server_status"
@@ -298,14 +250,6 @@ op = "readForm"
 on = "submit:bootstrap_mcp_server_form"
 widget = "bootstrap_mcp_server_form"
 into = "bootstrapMcpServerDraft"
-
-[[step]]
-program = "bootstrap_mcp_server_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_mcp_server_form"
-eventName = "witness:bootstrap-runtime-integration-direct-submit"
-detail = { source = "bootstrap-runtime-integration-controls", family = "mcp-server", formId = "mcp-server-form", statusId = "mcp-server-status", id = "${state.bootstrapMcpServerDraft.id}", label = "${state.bootstrapMcpServerDraft.label}", serverRunner = "${state.bootstrapMcpServerDraft.serverRunner}", context = "${state.bootstrapMcpServerDraft.context}", serviceIdentity = "${state.bootstrapMcpServerDraft.serviceIdentity}", transportsJson = "${state.bootstrapMcpServerDraft.transportsJson}" }
 
 [[step]]
 program = "bootstrap_mcp_server_controls_program"
@@ -440,30 +384,6 @@ rootWidget = "bootstrap_mcp_tool_install_controls_root"
 [[step]]
 program = "bootstrap_mcp_tool_install_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_install_server_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-runtime-integration-controls", family = "mcp-tool-install", trigger = "server" }
-
-[[step]]
-program = "bootstrap_mcp_tool_install_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_install_tool_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-runtime-integration-controls", family = "mcp-tool-install", trigger = "tool" }
-
-[[step]]
-program = "bootstrap_mcp_tool_install_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_install_acting_mode_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-runtime-integration-controls", family = "mcp-tool-install", trigger = "acting-mode" }
-
-[[step]]
-program = "bootstrap_mcp_tool_install_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_mcp_tool_install_form"
 widget = "bootstrap_mcp_tool_install_status"
@@ -476,14 +396,6 @@ op = "readForm"
 on = "submit:bootstrap_mcp_tool_install_form"
 widget = "bootstrap_mcp_tool_install_form"
 into = "bootstrapMcpToolInstallDraft"
-
-[[step]]
-program = "bootstrap_mcp_tool_install_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_mcp_tool_install_form"
-eventName = "witness:bootstrap-runtime-integration-direct-submit"
-detail = { source = "bootstrap-runtime-integration-controls", family = "mcp-tool-install", formId = "mcp-tool-install-form", statusId = "mcp-tool-install-status", server = "${state.bootstrapMcpToolInstallDraft.server}", tool = "${state.bootstrapMcpToolInstallDraft.tool}", actingMode = "${state.bootstrapMcpToolInstallDraft.actingMode}", scopeContextsJson = "${state.bootstrapMcpToolInstallDraft.scopeContextsJson}", scopeTargetsJson = "${state.bootstrapMcpToolInstallDraft.scopeTargetsJson}" }
 
 [[step]]
 program = "bootstrap_mcp_tool_install_controls_program"

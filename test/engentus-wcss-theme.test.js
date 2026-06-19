@@ -69,6 +69,8 @@ test("engentus authoring routes expose the canonical document, schema, and previ
     const readBody = await readResponse.json();
     assert.equal(readBody.document?.theme, "engentus");
     assert.deepEqual(readBody.tokenCatalog, expectedCatalog);
+    assert.equal(readBody.tokenCatalog.tokens.some(token => token.name === "chart.chrome.axis.stroke"), true);
+    assert.equal(readBody.tokenCatalog.tokens.some(token => token.name === "chart.goodman.chrome.axis.stroke"), true);
 
     const schemaResponse = await fetch(`${server.url}/engentus/__generated/wcss/schema`);
     assert.equal(schemaResponse.status, 200);
@@ -96,6 +98,8 @@ test("engentus authoring routes expose the canonical document, schema, and previ
         previewSessionId: created.previewSessionId,
         ops: [
           { kind: "token.set", token: "color.chrome.bg", value: "#123456" },
+          { kind: "token.set", token: "chart.chrome.axis.stroke", value: "#102030" },
+          { kind: "token.set", token: "chart.goodman.chrome.axis.stroke", value: "#abcdef" },
           { kind: "style.field.set", style: "chrome.toolbar", field: "layout.height", value: "61px" }
         ]
       })
@@ -104,10 +108,27 @@ test("engentus authoring routes expose the canonical document, schema, and previ
     const patched = await patchResponse.json();
     assert.equal(patched.ok, true);
 
-    const [baseShellCss, previewShellCss, previewPageHtml] = await Promise.all([
+    const previewDocumentResponse = await fetch(`${server.url}/engentus/__generated/wcss/document?previewSessionId=${encodeURIComponent(created.previewSessionId)}`);
+    assert.equal(previewDocumentResponse.status, 200);
+    const previewDocumentBody = await previewDocumentResponse.json();
+    assert.equal(previewDocumentBody.previewSession.previewSessionId, created.previewSessionId);
+
+    const previewSchemaResponse = await fetch(`${server.url}/engentus/__generated/wcss/schema?wcssPreview=${encodeURIComponent(created.previewSessionId)}`);
+    assert.equal(previewSchemaResponse.status, 200);
+    const previewSchemaBody = await previewSchemaResponse.json();
+    assert.equal(previewSchemaBody.previewSession.previewSessionId, created.previewSessionId);
+    assert.equal(
+      previewSchemaBody.schema.styles.some(style => style.name === "chrome.toolbar" && style.fields.some(field => field.field === "layout.height" && field.value === "61px")),
+      true
+    );
+
+    const [baseShellCss, previewShellCss, baseChartCss, previewChartCss, previewPageHtml, previewChartPageHtml] = await Promise.all([
       fetch(`${server.url}${ENGENTUS_GENERATED_STYLESHEET_PATHS.shell}`).then(response => response.text()),
       fetch(`${server.url}${ENGENTUS_GENERATED_STYLESHEET_PATHS.shell}?wcssPreview=${encodeURIComponent(created.previewSessionId)}`).then(response => response.text()),
-      fetch(`${server.url}/engentus/login?wcssPreview=${encodeURIComponent(created.previewSessionId)}`).then(response => response.text())
+      fetch(`${server.url}${ENGENTUS_GENERATED_STYLESHEET_PATHS.chart}`).then(response => response.text()),
+      fetch(`${server.url}${ENGENTUS_GENERATED_STYLESHEET_PATHS.chart}?wcssPreview=${encodeURIComponent(created.previewSessionId)}`).then(response => response.text()),
+      fetch(`${server.url}/engentus/login?wcssPreview=${encodeURIComponent(created.previewSessionId)}`).then(response => response.text()),
+      fetch(`${server.url}/chart?chart=GoodmanDiagram&wcssPreview=${encodeURIComponent(created.previewSessionId)}`).then(response => response.text())
     ]);
     assert.match(baseShellCss, /--dk:\s*#2C3C63;/i);
     assert.match(baseShellCss, /--th:\s*44px;/i);
@@ -115,7 +136,11 @@ test("engentus authoring routes expose the canonical document, schema, and previ
     assert.match(previewShellCss, /--th:\s*61px;/i);
     assert.equal(previewShellCss.includes("--dk: #2C3C63;"), false);
     assert.equal(previewShellCss.includes("--th: 44px;"), false);
+    assert.match(baseChartCss, /--chart-axis-stroke:\s*#cbd5e1;/i);
+    assert.match(previewChartCss, /--chart-axis-stroke:\s*#102030;/i);
+    assert.match(previewChartCss, /\[data-chart-id="GoodmanDiagram"\][\s\S]*--chart-axis-stroke:\s*#abcdef;/i);
     assert.match(previewPageHtml, new RegExp(`${ENGENTUS_GENERATED_STYLESHEET_PATHS.shell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?wcssPreview=${created.previewSessionId}`));
+    assert.match(previewChartPageHtml, new RegExp(`${ENGENTUS_GENERATED_STYLESHEET_PATHS.chart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?wcssPreview=${created.previewSessionId}`));
 
     const clearResponse = await fetch(`${server.url}/engentus/__generated/wcss/preview-session`, {
       method: "DELETE",

@@ -330,6 +330,8 @@ Acceptance:
 Current proof:
 
 - remaining widget and app-composition CRUD lanes now route unauthorized signed-in actors toward real proposals through the shared authoring seams in `plugins/authoring-core/authoring-core-handlers.js` and `plugins/program-authoring/program-authoring-handlers.js`, with `plugins/authoring-core/authoring-core.test.js` covering widget plus route and serve proposal fallback and `plugins/program-authoring/program-authoring.test.js` covering backend-program version activate and rollback proposal fallback plus approved execution through shared helpers
+- legacy frontend retirement no longer depends on privileged `page.home` host behavior: `src/frontend-legacy-migration.js` and `src/legacy-frontend-bridge.js` now define deterministic preview and apply helpers that re-home legacy widget and frontend-program routes onto canonical `page.surface` surfaces with explicit `compat.legacy-widget-program` capability refs and inspectable legacy props instead of hidden route-local JS semantics
+- `plugins/authoring-core/authoring-core-processes.js`, `plugins/authoring-core/authoring-core-handlers.js`, `plugins/authoring-core/authoring-core-proposal-targets.js`, `plugins/proposals/proposal-executor.js`, `src/runtime-governance.js`, `plugins/bootstrap/bootstrap-read-models.js`, `plugins/bootstrap/bootstrap-live-state.js`, `plugins/mcp/mcp-tools.js`, and `src/runtime-core-handlers.js` now expose the governed `frontend.migrateLegacy` write path, `POST /api/frontend-migrations/legacy`, readable `frontendLegacyMigration` state, active compatibility-bridge ledger rows, and one shared render bridge for both migrated `page.surface` routes and the remaining `page.home` shim; `test/frontend-legacy-migration.test.js`, `test/runtime-core-legacy-frontend.test.js`, `plugins/authoring-core/authoring-core.test.js`, `plugins/bootstrap/bootstrap-read-models.test.js`, `plugins/mcp/mcp.test.js`, and `test/runtime-governance.test.js` prove preview, rewrite, idempotence, proposal fallback, constrained reads, and render-path parity end to end
 - widget version operations are no longer review-only folklore in product surfaces: `plugins/inspect/runtime.js` now proposes `widgetVersion.activate` and `widgetVersion.rollback` through the same proposal lane, while `test/bootstrap-host.test.js`, `test/host.test.js`, `plugins/inspect/inspect.test.js`, and `test/ui.live-inspector.test.js` prove read-only shared widget version changes create real proposals and apply only after authorized approval
 - remaining canvas and asset shared mutations now follow the same rule, with `plugins/assets/handlers.js` returning proposals for unauthorized asset attach and detach requests and shared canvas proposal targets executing through `plugins/proposals/proposal-executor.js`; `test/canvas-host.test.js` and `test/runtime-authoring-services.test.js` prove proposal fallback and approved execution for asset attachment, scoped perspective creation, canvas thing mutation, batch mutation, duplicate or removeMany, and place operations
 - runtime-plugin and MCP mutation surfaces now stay parallel to direct execution under the governed authoring path in `plugins/server-runner-authoring/*` and `plugins/mcp-authoring/*`, with `plugins/server-runner-authoring/server-runner-authoring.test.js`, `plugins/mcp-authoring/mcp-authoring.test.js`, `test/runtime-authoring-services.test.js`, `test/bootstrap-host.test.js`, and `test/ui.bootstrap.test.js` proving unauthorized actors receive proposals for `runtimePlugin.install`, `runtimePlugin.remove`, `mcpServer.create`, `mcpTool.install`, and `mcpTool.remove`, and that approved proposals execute through the shared bootstrap proposal executor instead of a separate write path
@@ -525,6 +527,34 @@ This group only counts as materially advanced when:
 - plugin or package authorship has a declared owning noun
 - namespaces and merge semantics are treated as product concerns, not postponed folklore
 - new contributors would be forced toward context, capability, and authority semantics rather than easy global-id shortcuts
+
+## Current Frontend Proof (2026-06-19)
+
+The canonical frontend floor on `page.surface` now includes:
+
+- `surface`
+- `process`
+- `projection`
+- `collection`
+- `boundary`
+- `policy`
+- `capability`
+
+Current proof status:
+
+- legacy route re-homing onto canonical `page.surface` is live through
+  `frontendLegacyMigration`
+- native subset uplift off `compat.legacy-widget-program` is live through
+  `frontendLegacyUplift`
+- collection repeat authoring, route-authored preload policies, and canonical
+  query-state bindings are in the constrained public lane
+- `dispatchDomEvent` is retired from public/runtime support surfaces and no
+  longer counts as an acceptable authored-native target
+- bootstrap and embedded authored flows no longer depend on named page-local
+  `witness:*` host-event bridges as the supported runtime lane
+- the compatibility bridge ledger remains the honest inspection surface for any
+  surviving legacy frontend bridge usage; host-event bridge usage should remain
+  at zero after this tranche
 
 ## Primary Source Map
 

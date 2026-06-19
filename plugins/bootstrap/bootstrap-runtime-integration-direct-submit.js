@@ -94,7 +94,8 @@ export function bindBootstrapRuntimeIntegrationDirectSubmit({
   contractsByFamily = bootstrapRuntimeIntegrationDirectSubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = event => runBootstrapRuntimeIntegrationDirectSubmit({
     detail: event?.detail || {},
     postJson,
@@ -103,6 +104,21 @@ export function bindBootstrapRuntimeIntegrationDirectSubmit({
     resetForm,
     contractsByFamily
   });
-  resolvedTarget.addEventListener("witness:bootstrap-runtime-integration-direct-submit", handler);
+  for (const detail of [
+    { source: "bootstrap-runtime-integration-controls", family: "runtime-plugin-install", formId: "runtime-plugin-install-form", statusId: "runtime-plugin-install-status" },
+    { source: "bootstrap-remove-controls", family: "runtime-plugin-remove", formId: "runtime-plugin-remove-form", statusId: "runtime-plugin-remove-status" },
+    { source: "bootstrap-runtime-integration-controls", family: "mcp-server", formId: "mcp-server-form", statusId: "mcp-server-status" },
+    { source: "bootstrap-runtime-integration-controls", family: "mcp-tool-install", formId: "mcp-tool-install-form", statusId: "mcp-tool-install-status" },
+    { source: "bootstrap-remove-controls", family: "mcp-tool-remove", formId: "mcp-tool-remove-form", statusId: "mcp-tool-remove-status" }
+  ]) {
+    const form = resolvedDocument?.getElementById?.(detail.formId);
+    if (!form || form.__bootstrapRuntimeIntegrationSubmitBound) continue;
+    form.__bootstrapRuntimeIntegrationSubmitBound = true;
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      void handler({ detail: { ...detail, ...data } });
+    });
+  }
   return handler;
 }

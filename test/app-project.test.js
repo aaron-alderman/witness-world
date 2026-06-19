@@ -3,6 +3,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { applyWitnessDocsWithRuntimePlugins } from "../src/dsl.js";
+import { applyDesire } from "../src/desire/index.js";
+import { createWorld } from "../src/kernel.js";
 import {
   APP_MANIFEST_BASENAME,
   loadAppProject,
@@ -50,6 +53,25 @@ test("app project diagnostics report manifest roots, shell targets, and grouped 
   assert.equal(appProject.diagnostics.imports["shared-lib"].some(file => file.endsWith(path.join("examples", "_lib", "common.wtoml"))), true);
   assert.equal(appProject.diagnostics.imports["app-owned"].some(file => file.endsWith(path.join("examples", "engentus", "app", "shell.rvm"))), true);
   assert.deepEqual(appProject.diagnostics.imports["plugin/runtime"], []);
+});
+
+test("app project loads authored runtime plugin registries for later DESIRE application", async () => {
+  const appProject = await loadAppProject(path.join(process.cwd(), "examples", "engentus"), {
+    runtimeProfile: "full"
+  });
+  const world = createWorld();
+
+  await applyWitnessDocsWithRuntimePlugins(world, appProject.witnessDocs, {
+    runtimeProfile: "full"
+  });
+  for (const desire of appProject.authoredDesireDocs) {
+    applyDesire(world, desire, {
+      runtimeDeclarationRegistry: appProject.runtimePluginRegistries?.runtimeDeclarationRegistry ?? null
+    });
+  }
+
+  assert.equal(appProject.runtimePluginRegistries?.rvmFormRegistry?.knows("sql_table"), true);
+  assert.equal(appProject.runtimePluginRegistries?.runtimeDeclarationRegistry?.has("sql_table"), true);
 });
 
 test("shell target selection auto-selects single targets and honors explicit overrides", async () => {

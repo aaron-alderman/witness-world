@@ -76,22 +76,6 @@ rootWidget = "bootstrap_runtime_plugin_remove_controls_root"
 [[step]]
 program = "bootstrap_runtime_plugin_remove_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_remove_runner_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-remove-controls", family = "runtime-plugin-remove", trigger = "server-runner" }
-
-[[step]]
-program = "bootstrap_runtime_plugin_remove_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_remove_plugin_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-remove-controls", family = "runtime-plugin-remove", trigger = "plugin" }
-
-[[step]]
-program = "bootstrap_runtime_plugin_remove_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_runtime_plugin_remove_form"
 widget = "bootstrap_runtime_plugin_remove_status"
@@ -104,14 +88,6 @@ op = "readForm"
 on = "submit:bootstrap_runtime_plugin_remove_form"
 widget = "bootstrap_runtime_plugin_remove_form"
 into = "bootstrapRuntimePluginRemoveDraft"
-
-[[step]]
-program = "bootstrap_runtime_plugin_remove_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_runtime_plugin_remove_form"
-eventName = "witness:bootstrap-runtime-integration-direct-submit"
-detail = { source = "bootstrap-remove-controls", family = "runtime-plugin-remove", formId = "runtime-plugin-remove-form", statusId = "runtime-plugin-remove-status", serverRunner = "${state.bootstrapRuntimePluginRemoveDraft.serverRunner}", plugin = "${state.bootstrapRuntimePluginRemoveDraft.plugin}" }
 
 [[step]]
 program = "bootstrap_runtime_plugin_remove_controls_program"
@@ -196,22 +172,6 @@ rootWidget = "bootstrap_mcp_tool_remove_controls_root"
 [[step]]
 program = "bootstrap_mcp_tool_remove_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_remove_server_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-remove-controls", family = "mcp-tool-remove", trigger = "server" }
-
-[[step]]
-program = "bootstrap_mcp_tool_remove_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_remove_tool_select"
-eventName = "witness:bootstrap-runtime-integration-direct-sync"
-detail = { source = "bootstrap-remove-controls", family = "mcp-tool-remove", trigger = "tool" }
-
-[[step]]
-program = "bootstrap_mcp_tool_remove_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_mcp_tool_remove_form"
 widget = "bootstrap_mcp_tool_remove_status"
@@ -224,14 +184,6 @@ op = "readForm"
 on = "submit:bootstrap_mcp_tool_remove_form"
 widget = "bootstrap_mcp_tool_remove_form"
 into = "bootstrapMcpToolRemoveDraft"
-
-[[step]]
-program = "bootstrap_mcp_tool_remove_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_mcp_tool_remove_form"
-eventName = "witness:bootstrap-runtime-integration-direct-submit"
-detail = { source = "bootstrap-remove-controls", family = "mcp-tool-remove", formId = "mcp-tool-remove-form", statusId = "mcp-tool-remove-status", server = "${state.bootstrapMcpToolRemoveDraft.server}", tool = "${state.bootstrapMcpToolRemoveDraft.tool}" }
 
 [[step]]
 program = "bootstrap_mcp_tool_remove_controls_program"
@@ -330,30 +282,6 @@ rootWidget = "bootstrap_capability_remove_controls_root"
 [[step]]
 program = "bootstrap_capability_remove_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_capability_remove_capability_select"
-eventName = "witness:bootstrap-capability-controls-sync"
-detail = { source = "bootstrap-remove-controls", family = "capability-remove", trigger = "capability" }
-
-[[step]]
-program = "bootstrap_capability_remove_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_capability_remove_kind_select"
-eventName = "witness:bootstrap-capability-controls-sync"
-detail = { source = "bootstrap-remove-controls", family = "capability-remove", trigger = "target-kind" }
-
-[[step]]
-program = "bootstrap_capability_remove_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_capability_remove_target_select"
-eventName = "witness:bootstrap-capability-controls-sync"
-detail = { source = "bootstrap-remove-controls", family = "capability-remove", trigger = "target" }
-
-[[step]]
-program = "bootstrap_capability_remove_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_capability_remove_form"
 widget = "bootstrap_capability_remove_status"
@@ -366,14 +294,6 @@ op = "readForm"
 on = "submit:bootstrap_capability_remove_form"
 widget = "bootstrap_capability_remove_form"
 into = "bootstrapCapabilityRemoveDraft"
-
-[[step]]
-program = "bootstrap_capability_remove_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_capability_remove_form"
-eventName = "witness:bootstrap-capability-submit"
-detail = { source = "bootstrap-remove-controls", family = "capability-remove", formId = "capability-remove-form", statusId = "capability-remove-status", capability = "${state.bootstrapCapabilityRemoveDraft.capability}", target = "${state.bootstrapCapabilityRemoveDraft.target}", targetKind = "${state.bootstrapCapabilityRemoveDraft.targetKind}" }
 
 [[step]]
 program = "bootstrap_capability_remove_controls_program"
@@ -473,14 +393,6 @@ rootWidget = "bootstrap_context_binding_remove_controls_root"
 [[step]]
 program = "bootstrap_context_binding_remove_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_context_binding_remove_context_select"
-eventName = "witness:bootstrap-dependent-select-sync"
-detail = { source = "bootstrap-remove-controls", family = "context-binding-target", contextSelectId = "context-binding-remove-context", targetSelectId = "context-binding-remove-target" }
-
-[[step]]
-program = "bootstrap_context_binding_remove_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_context_binding_remove_form"
 widget = "bootstrap_context_binding_remove_status"
@@ -493,14 +405,6 @@ op = "readForm"
 on = "submit:bootstrap_context_binding_remove_form"
 widget = "bootstrap_context_binding_remove_form"
 into = "bootstrapContextBindingRemoveDraft"
-
-[[step]]
-program = "bootstrap_context_binding_remove_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_context_binding_remove_form"
-eventName = "witness:bootstrap-scoped-submit"
-detail = { source = "bootstrap-remove-controls", family = "context-binding-remove", formId = "context-binding-remove-form", statusId = "context-binding-remove-status", context = "${state.bootstrapContextBindingRemoveDraft.context}", name = "${state.bootstrapContextBindingRemoveDraft.name}", target = "${state.bootstrapContextBindingRemoveDraft.target}" }
 
 [[step]]
 program = "bootstrap_context_binding_remove_controls_program"
@@ -600,14 +504,6 @@ rootWidget = "bootstrap_context_export_remove_controls_root"
 [[step]]
 program = "bootstrap_context_export_remove_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_context_export_remove_context_select"
-eventName = "witness:bootstrap-dependent-select-sync"
-detail = { source = "bootstrap-remove-controls", family = "context-export-target", contextSelectId = "context-export-remove-context", targetSelectId = "context-export-remove-target" }
-
-[[step]]
-program = "bootstrap_context_export_remove_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_context_export_remove_form"
 widget = "bootstrap_context_export_remove_status"
@@ -620,14 +516,6 @@ op = "readForm"
 on = "submit:bootstrap_context_export_remove_form"
 widget = "bootstrap_context_export_remove_form"
 into = "bootstrapContextExportRemoveDraft"
-
-[[step]]
-program = "bootstrap_context_export_remove_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_context_export_remove_form"
-eventName = "witness:bootstrap-scoped-submit"
-detail = { source = "bootstrap-remove-controls", family = "context-export-remove", formId = "context-export-remove-form", statusId = "context-export-remove-status", context = "${state.bootstrapContextExportRemoveDraft.context}", name = "${state.bootstrapContextExportRemoveDraft.name}", target = "${state.bootstrapContextExportRemoveDraft.target}" }
 
 [[step]]
 program = "bootstrap_context_export_remove_controls_program"
@@ -738,14 +626,6 @@ rootWidget = "bootstrap_context_import_remove_controls_root"
 [[step]]
 program = "bootstrap_context_import_remove_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_context_import_remove_source_context_select"
-eventName = "witness:bootstrap-dependent-select-sync"
-detail = { source = "bootstrap-remove-controls", family = "context-import-export", sourceContextSelectId = "context-import-remove-source-context", exportNameSelectId = "context-import-remove-export-name" }
-
-[[step]]
-program = "bootstrap_context_import_remove_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_context_import_remove_form"
 widget = "bootstrap_context_import_remove_status"
@@ -758,14 +638,6 @@ op = "readForm"
 on = "submit:bootstrap_context_import_remove_form"
 widget = "bootstrap_context_import_remove_form"
 into = "bootstrapContextImportRemoveDraft"
-
-[[step]]
-program = "bootstrap_context_import_remove_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_context_import_remove_form"
-eventName = "witness:bootstrap-scoped-submit"
-detail = { source = "bootstrap-remove-controls", family = "context-import-remove", formId = "context-import-remove-form", statusId = "context-import-remove-status", context = "${state.bootstrapContextImportRemoveDraft.context}", sourceContext = "${state.bootstrapContextImportRemoveDraft.sourceContext}", exportName = "${state.bootstrapContextImportRemoveDraft.exportName}", name = "${state.bootstrapContextImportRemoveDraft.name}" }
 
 [[step]]
 program = "bootstrap_context_import_remove_controls_program"
@@ -865,14 +737,6 @@ rootWidget = "bootstrap_stewardship_remove_controls_root"
 [[step]]
 program = "bootstrap_stewardship_remove_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_stewardship_remove_kind_select"
-eventName = "witness:bootstrap-dependent-select-sync"
-detail = { source = "bootstrap-remove-controls", family = "stewardship-target", targetKindSelectId = "stewardship-remove-target-kind", targetSelectId = "stewardship-remove-target" }
-
-[[step]]
-program = "bootstrap_stewardship_remove_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_stewardship_remove_form"
 widget = "bootstrap_stewardship_remove_status"
@@ -885,14 +749,6 @@ op = "readForm"
 on = "submit:bootstrap_stewardship_remove_form"
 widget = "bootstrap_stewardship_remove_form"
 into = "bootstrapStewardshipRemoveDraft"
-
-[[step]]
-program = "bootstrap_stewardship_remove_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_stewardship_remove_form"
-eventName = "witness:bootstrap-scoped-submit"
-detail = { source = "bootstrap-remove-controls", family = "stewardship-remove", formId = "stewardship-remove-form", statusId = "stewardship-remove-status", steward = "${state.bootstrapStewardshipRemoveDraft.steward}", target = "${state.bootstrapStewardshipRemoveDraft.target}", targetKind = "${state.bootstrapStewardshipRemoveDraft.targetKind}" }
 
 [[step]]
 program = "bootstrap_stewardship_remove_controls_program"

@@ -17,11 +17,11 @@ import {
   bindContextName,
   exportContextName,
   importContextName,
-  validateContextBinding,
-  validateContextExport,
-  validateContextImport,
-  resolveContextualRef,
-  resolveCoveredContextualRef,
+  validateContextBindingInWorld,
+  validateContextExportInWorld,
+  validateContextImportInWorld,
+  resolveContextualRefInWorld,
+  resolveCoveredContextualRefInWorld,
   removeCapability,
   createCompiler,
   createDescription,
@@ -32,9 +32,13 @@ import {
   definePackageNamespace,
   definePackageDependency,
   definePackageTransformer,
+  createMaterializedView,
+  createMcpServer,
+  installMcpTool,
   installRuntimePlugin,
   removeRuntimePlugin,
   createServerRunner,
+  defineRuntimePreload,
   defineRoute,
   serveRoute,
   createFrontendRunner,
@@ -77,6 +81,7 @@ const NATIVE_WTOML_DOC_KINDS = new Set([
 export const NATIVE_RUNTIME_DECLARATION_KINDS = new Set([
   "defaults",
   "app",
+  "folder",
   "perspective",
   "contextBinding",
   "contextExport",
@@ -98,7 +103,11 @@ export const NATIVE_RUNTIME_DECLARATION_KINDS = new Set([
   "capabilityRemove",
   "runtimePluginInstall",
   "runtimePluginRemove",
+  "runtimePreload",
+  "materializedView",
   "serverRunner",
+  "mcpServer",
+  "mcpToolInstall",
   "route",
   "serve",
   "authRole",
@@ -144,7 +153,8 @@ export const NATIVE_RUNTIME_DECLARATION_KINDS = new Set([
   "frontendRunner",
   "view",
   "render",
-  "action"
+  "action",
+  "desktopTarget"
 ]);
 
 export const RUNTIME_DECLARATION_BRIDGE_POLICY = Object.freeze({
@@ -1046,6 +1056,8 @@ function applyCoreRuntimeDeclaration(world, doc) {
           body: values
         })
       ]);
+    case "folder":
+      return withSourceAnnotations(world, doc, [req(values, "id")], values.owner ?? values.actor ?? "system", []);
     case "perspective":
       return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         definePerspective(world, {
@@ -1062,7 +1074,7 @@ function applyCoreRuntimeDeclaration(world, doc) {
         name: req(values, "name"),
         target: req(values, "target")
       };
-      const validation = validateContextBinding(world.allWitnesses(), binding);
+      const validation = validateContextBindingInWorld(world, binding);
       if (!validation.ok) throw new Error(validation.error);
       return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         bindContextName(world, {
@@ -1079,7 +1091,7 @@ function applyCoreRuntimeDeclaration(world, doc) {
         name: req(values, "name"),
         target: req(values, "target")
       };
-      const validation = validateContextExport(world.allWitnesses(), contextExport);
+      const validation = validateContextExportInWorld(world, contextExport);
       if (!validation.ok) throw new Error(validation.error);
       return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         exportContextName(world, {
@@ -1097,7 +1109,7 @@ function applyCoreRuntimeDeclaration(world, doc) {
         exportName: req(values, "exportName"),
         name: values.name ?? values.exportName
       };
-      const validation = validateContextImport(world.allWitnesses(), contextImport);
+      const validation = validateContextImportInWorld(world, contextImport);
       if (!validation.ok) throw new Error(validation.error);
       return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         importContextName(world, {
@@ -1386,6 +1398,21 @@ function applyCoreRuntimeDeclaration(world, doc) {
         })
         ]);
       }
+    case "runtimePreload":
+      {
+        const normalizedWhen = normalizeRuntimePreloadWhen(values.when);
+        const normalizedTargets = normalizeRuntimePreloadTargets(values.targets);
+        return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+          defineRuntimePreload(world, {
+            actor: req(values, "actor"),
+            id: req(values, "id"),
+            when: normalizedWhen,
+            targets: normalizedTargets,
+            context: values.context ?? null,
+            owner: values.owner ?? values.actor
+          })
+        ]);
+      }
     case "serverRunner":
       {
         const backendHost = resolveCoveredPreparedDocRef(world, values, {
@@ -1423,6 +1450,54 @@ function applyCoreRuntimeDeclaration(world, doc) {
           })
         ]);
       }
+    case "materializedView":
+      return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+        createMaterializedView(world, {
+          actor: req(values, "actor"),
+          id: req(values, "id"),
+          title: values.title ?? values.label ?? values.id,
+          kind: values.kind ?? "generic",
+          sliceKey: values.sliceKey ?? null,
+          modelView: values.modelView ?? null,
+          maintenance: values.maintenance ?? "on-demand",
+          storageClass: values.storageClass ?? "memory",
+          resourceBudgetClass: values.resourceBudgetClass ?? null,
+          blocking: values.blocking !== false,
+          ttlMs: values.ttlMs ?? 0,
+          sourceProjectors: values.sourceProjectors ?? [],
+          sourceWitnessProcesses: values.sourceWitnessProcesses ?? [],
+          invalidation: values.invalidation ?? null,
+          owner: values.owner ?? values.actor,
+          values
+        })
+      ]);
+    case "mcpServer":
+      return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+        createMcpServer(world, {
+          actor: req(values, "actor"),
+          id: req(values, "id"),
+          label: values.label ?? values.id,
+          serverRunner: req(values, "serverRunner"),
+          serviceIdentity: values.serviceIdentity ?? null,
+          transports: values.transports ?? ["stdio", "http"],
+          context: values.context ?? null,
+          owner: values.owner ?? values.actor
+        })
+      ]);
+    case "mcpToolInstall":
+      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+        installMcpTool(world, {
+          actor: req(values, "actor"),
+          server: req(values, "server"),
+          tool: req(values, "tool"),
+          actingMode: values.actingMode ?? "delegated",
+          scopeContexts: values.scopeContexts ?? [],
+          scopeTargets: values.scopeTargets ?? [],
+          owner: values.owner ?? values.actor
+        })
+      ]);
+    case "desktopTarget":
+      return [];
     case "route":
       {
         const serves = resolveCoveredPreparedDocRef(world, values, {
@@ -2014,6 +2089,31 @@ function routeParamsDirect(values) {
       };
     }
   }
+  if (Array.isArray(values.preloadPolicies) && values.preloadPolicies.length) {
+    params.preloadPolicies = values.preloadPolicies.map(policy => ({
+      id: policy.id,
+      when: normalizeRuntimePreloadWhen(policy.when),
+      targets: normalizeRuntimePreloadTargets(policy.targets)
+    }));
+  }
+  if (Array.isArray(values.queryBindings) && values.queryBindings.length) {
+    params.queryBindings = values.queryBindings.map((binding, index) => {
+      const param = trimOptionalString(binding?.param);
+      const process = trimOptionalString(binding?.process) ?? trimOptionalString(binding?.processRef);
+      const state = trimOptionalString(binding?.state) ?? trimOptionalString(binding?.stateRef);
+      if (!param || !process || !state) {
+        throw new Error(`route.queryBindings[${index}] requires param, process/processRef, and state/stateRef`);
+      }
+      return {
+        param,
+        process,
+        state,
+        ...(Object.prototype.hasOwnProperty.call(binding ?? {}, "defaultValue")
+          ? { defaultValue: structuredClone(binding.defaultValue) }
+          : {})
+      };
+    });
+  }
   if (values.liveProjection === true) params.liveProjection = true;
   if (Array.isArray(values.excludeWidgetRoles) && values.excludeWidgetRoles.length) {
     params.excludeWidgetRoles = [...values.excludeWidgetRoles];
@@ -2022,6 +2122,74 @@ function routeParamsDirect(values) {
     params.rootWidget = values.defaultRootWidget.trim();
   }
   return Object.keys(params).length ? params : null;
+}
+
+function normalizeRuntimePreloadWhen(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("runtimePreload.when must be an object");
+  }
+  const kind = trimOptionalString(value.kind);
+  if (!kind) throw new Error("runtimePreload.when.kind is required");
+  if (kind === "boot") return { kind };
+  if (kind === "routeEnter") {
+    const route = trimOptionalString(value.route);
+    if (!route) throw new Error("runtimePreload.when.route is required for routeEnter");
+    return { kind, route };
+  }
+  if (kind === "idleAfterRoute") {
+    const route = trimOptionalString(value.route);
+    if (!route) throw new Error("runtimePreload.when.route is required for idleAfterRoute");
+    const delayMs = Number(value.delayMs);
+    if (!Number.isFinite(delayMs) || delayMs < 0) {
+      throw new Error("runtimePreload.when.delayMs must be a non-negative number for idleAfterRoute");
+    }
+    return { kind, route, delayMs };
+  }
+  throw new Error(`unsupported runtimePreload.when.kind: ${kind}`);
+}
+
+function normalizeRuntimePreloadTargets(value) {
+  const targets = Array.isArray(value) ? value : [];
+  if (!targets.length) throw new Error("runtimePreload.targets must be a non-empty array");
+  return targets.map((target, index) => {
+    if (!target || typeof target !== "object" || Array.isArray(target)) {
+      throw new Error(`runtimePreload.targets[${index}] must be an object`);
+    }
+    const kind = trimOptionalString(target.kind);
+    if (!kind) throw new Error(`runtimePreload.targets[${index}].kind is required`);
+    if (kind === "route") {
+      const route = trimOptionalString(target.route);
+      if (!route) throw new Error(`runtimePreload.targets[${index}].route is required`);
+      const command = trimOptionalString(target.command);
+      return {
+        kind,
+        route,
+        ...(command ? { command } : {}),
+        load: normalizeRuntimePreloadLoadList(target.load, ["manifest", "capabilityAssets", "command"], `runtimePreload.targets[${index}].load`)
+      };
+    }
+    if (kind === "capability") {
+      const capability = trimOptionalString(target.capability);
+      if (!capability) throw new Error(`runtimePreload.targets[${index}].capability is required`);
+      return {
+        kind,
+        capability,
+        load: normalizeRuntimePreloadLoadList(target.load, ["assets"], `runtimePreload.targets[${index}].load`)
+      };
+    }
+    throw new Error(`unsupported runtimePreload.targets[${index}].kind: ${kind}`);
+  });
+}
+
+function normalizeRuntimePreloadLoadList(value, allowed, label) {
+  const loads = [...new Set((Array.isArray(value) ? value : [])
+    .map(entry => trimOptionalString(entry))
+    .filter(Boolean))];
+  if (!loads.length) throw new Error(`${label} must be a non-empty array`);
+  for (const load of loads) {
+    if (!allowed.includes(load)) throw new Error(`${label} includes unsupported load: ${load}`);
+  }
+  return loads;
 }
 
 function routeParamsResolved(world, values) {
@@ -2083,6 +2251,43 @@ function routeParamsResolved(world, values) {
       };
     }
   }
+  if (Array.isArray(values.preloadPolicies) && values.preloadPolicies.length) {
+    params.preloadPolicies = values.preloadPolicies.map(policy => ({
+      id: trimOptionalString(policy?.id),
+      when: normalizeRuntimePreloadWhen(policy?.when),
+      targets: normalizeRuntimePreloadTargets(policy?.targets)
+    }));
+  }
+  if (Array.isArray(values.queryBindings) && values.queryBindings.length) {
+    params.queryBindings = values.queryBindings.map((binding, index) => {
+      const queryBindingProcess = resolveCoveredNestedPreparedDocRef(world, values.context ?? null, binding, {
+        idField: "process",
+        refField: "processRef",
+        label: `queryBindings[${index}] process`
+      });
+      if (!queryBindingProcess.ok) throw new Error(queryBindingProcess.error);
+      if (!queryBindingProcess.target) throw new Error(`queryBindings[${index}].process is required`);
+      refResolutions.push(docRefResolution({ idField: `queryBindings[${index}].process`, refField: `queryBindings[${index}].processRef`, resolved: queryBindingProcess }));
+      const queryBindingState = resolveCoveredNestedPreparedDocRef(world, values.context ?? null, binding, {
+        idField: "state",
+        refField: "stateRef",
+        label: `queryBindings[${index}] state`
+      });
+      if (!queryBindingState.ok) throw new Error(queryBindingState.error);
+      if (!queryBindingState.target) throw new Error(`queryBindings[${index}].state is required`);
+      refResolutions.push(docRefResolution({ idField: `queryBindings[${index}].state`, refField: `queryBindings[${index}].stateRef`, resolved: queryBindingState }));
+      const param = trimOptionalString(binding?.param);
+      if (!param) throw new Error(`queryBindings[${index}].param is required`);
+      return {
+        param,
+        process: queryBindingProcess.target,
+        state: queryBindingState.target,
+        ...(Object.prototype.hasOwnProperty.call(binding ?? {}, "defaultValue")
+          ? { defaultValue: structuredClone(binding.defaultValue) }
+          : {})
+      };
+    });
+  }
   if (values.liveProjection === true) params.liveProjection = true;
   if (Array.isArray(values.excludeWidgetRoles) && values.excludeWidgetRoles.length) {
     params.excludeWidgetRoles = [...values.excludeWidgetRoles];
@@ -2115,7 +2320,7 @@ function resolvePreparedDocRef(world, values, {
   label,
   allowedCanonicalIdPolicyClasses = null
 }) {
-  return resolveContextualRef(world.allWitnesses(), {
+  return resolveContextualRefInWorld(world, {
     context: values[contextField] ?? null,
     id: values[idField] ?? null,
     ref: values[refField] ?? null,
@@ -2130,7 +2335,7 @@ function resolveCoveredPreparedDocRef(world, values, {
   refField,
   label
 }) {
-  return resolveCoveredContextualRef(world.allWitnesses(), {
+  return resolveCoveredContextualRefInWorld(world, {
     context: values[contextField] ?? null,
     id: values[idField] ?? null,
     ref: values[refField] ?? null,
@@ -2143,7 +2348,7 @@ function resolveCoveredNestedPreparedDocRef(world, context, values, {
   refField,
   label
 }) {
-  return resolveCoveredContextualRef(world.allWitnesses(), {
+  return resolveCoveredContextualRefInWorld(world, {
     context,
     id: values?.[idField] ?? null,
     ref: values?.[refField] ?? null,

@@ -1,4 +1,5 @@
 import { createDesireDocument, createDesireNode, createRuntimeResidual, validateDesirePlusDocument } from "./ir.js";
+import { parseRvmInlineValue } from "./rvm.js";
 
 export function normalizeDesirePlusToDesire(desirePlus, { rvmFormRegistry = null } = {}) {
   const validatedDesirePlus = validateDesirePlusDocument(desirePlus);
@@ -73,6 +74,51 @@ export function normalizeDesirePlusToDesire(desirePlus, { rvmFormRegistry = null
       continue;
     }
 
+    if (node.kind === "rvm.form" && node.meta?.sourceCategory === "runtime" && node.meta?.residualCategory === "authored-runtime") {
+      const declarationKind = runtimeDeclarationKindForRvmSourceKind(node.trace?.sourceKind);
+      const values = runtimeDeclarationValuesFromRvmForm(node);
+      runtimeResiduals.push(createRuntimeResidual({
+        kind: "runtime.declaration",
+        name: node.name,
+        body: {
+          declaration: {
+            kind: declarationKind,
+            values,
+            sourceDefaultsApplied: false,
+            source: {
+              language: node.trace?.sourceLanguage ?? "rvm",
+              kind: node.trace?.sourceKind ?? declarationKind,
+              file: node.payload?.file ?? node.trace?.file ?? null,
+              line: node.trace?.startLine ?? null,
+              order: node.order,
+              sectionStyle: "rvm",
+              trace: structuredClone(node.trace)
+            }
+          },
+          sourceLanguage: node.trace?.sourceLanguage ?? "rvm",
+          sourceKind: node.trace?.sourceKind ?? declarationKind,
+          declarationKind,
+          values,
+          sourceDefaultsApplied: false,
+          file: node.payload?.file ?? node.trace?.file ?? null,
+          line: node.trace?.startLine ?? null,
+          order: node.order,
+          sectionStyle: "rvm",
+          trace: structuredClone(node.trace)
+        },
+        sourceNodeIds: [node.id],
+        meta: {
+          compatibilityBridge: true,
+          kernelResident: false,
+          residualHome: "desire+",
+          sourceCategory: node.meta?.sourceCategory ?? "runtime",
+          residualCategory: node.meta?.residualCategory ?? "authored-runtime",
+          desireBoundary: node.meta?.desireBoundary ?? "desire-plus-only"
+        }
+      }));
+      continue;
+    }
+
     const semanticNodes = normalizeSemanticNode(node, versionFieldsByName);
     for (const semantic of semanticNodes) nodes.push(semantic);
   }
@@ -108,6 +154,38 @@ function pluginNormalizeContext(sourceNode) {
       });
     }
   };
+}
+
+function runtimeDeclarationKindForRvmSourceKind(sourceKind) {
+  const normalized = String(sourceKind || "").trim();
+  if (normalized === "preload") return "runtimePreload";
+  return normalized || "unknown";
+}
+
+function runtimeDeclarationValuesFromRvmForm(node) {
+  const values = {};
+  if (typeof node.name === "string" && node.name.trim()) values.id = node.name.trim();
+  for (const field of node.payload?.fields ?? []) {
+    const rawKey = typeof field?.key === "string" ? field.key.trim() : "";
+    if (!rawKey) continue;
+    const key = runtimeDeclarationFieldKey(node.trace?.sourceKind, rawKey);
+    const parsed = parseRvmInlineValue(field?.value ?? "");
+    if (Object.prototype.hasOwnProperty.call(values, key)) {
+      values[key] = Array.isArray(values[key])
+        ? [...values[key], parsed]
+        : [values[key], parsed];
+      continue;
+    }
+    values[key] = parsed;
+  }
+  return values;
+}
+
+function runtimeDeclarationFieldKey(sourceKind, fieldKey) {
+  const normalizedSourceKind = String(sourceKind || "").trim();
+  const normalizedFieldKey = String(fieldKey || "").trim();
+  if (normalizedSourceKind === "preload" && normalizedFieldKey === "target") return "targets";
+  return normalizedFieldKey;
 }
 
 function isNativeSemanticWtomlNode(node) {

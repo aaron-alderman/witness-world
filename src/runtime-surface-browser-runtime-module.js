@@ -46,13 +46,16 @@ import {
   parseFirstElement,
   parseRouteResponseBody,
   parseRouteSurfacePage,
+  queryBindingsForProcess,
   readSurfaceRuntimeManifest,
   routeStateBindingForProcess,
   routeTargetForManifestState,
   routeTargetForProcessState,
   routeTemplateValue,
   supportsSameDocumentRouteReplacement,
+  syncQueryStateToUrl,
   syncRouteStateToUrl,
+  syncUrlToQueryState,
   syncUrlToRouteState
 } from "./runtime-surface-route-runtime.js";
 import {
@@ -83,7 +86,34 @@ import {
   surfaceParentId,
   surfaceRuntimeIssueSeverityRank
 } from "./runtime-surface-diagnostics.js";
-import { createSurfaceInteractionRuntime } from "./runtime-surface-interaction-runtime.js";
+import {
+  buildRuntimeManifestDiagnostics,
+  childSurfaceIds,
+  classTokensForSurface,
+  collectRelevantProcessWitnesses,
+  collectRouteTargets,
+  collectRuleStepReferences,
+  createBlockedInteractionRuntime,
+  createSurfaceInteractionRuntime,
+  currentWitnessCount,
+  genericSurfaceRuntimeView,
+  normalizeCapabilityPreloadAssets,
+  normalizePreloadPolicies,
+  normalizePreloadPolicyLoadList,
+  normalizePreloadPolicyTarget,
+  normalizePreloadPolicyWhen,
+  normalizeQueryBindings,
+  normalizeRuntimeArray,
+  normalizeRuntimeObject,
+  normalizeViewTargets,
+  resolvedSurfaceDomId,
+  runtimeSpecForSurface,
+  surfaceHasRuntimeMeaning,
+  trimmedIdSet,
+  addToGroupedSet,
+  addToIndexedSet,
+  buildProcessWitnessCatalog
+} from "./runtime-surface-interaction-runtime.js";
 
 function browserHelpersSource() {
   return [
@@ -98,11 +128,44 @@ function browserHelpersSource() {
   formattedText(value) {
     return this.escapeHtml(String(value ?? "")).replace(/\\n/g, "<br>");
   }
-};`,
+};
+const processWitnessCatalogCache = new WeakMap();
+const PROCESS_WITNESS_KINDS = new Set([
+  "desire.defineProcess",
+  "desire.defineMessage",
+  "desire.defineType",
+  "desire.defineBoundary",
+  "desire.defineProjection",
+  "desire.definePolicy"
+]);`,
+    currentWitnessCount.toString(),
     trimString.toString(),
+    resolvedSurfaceDomId.toString(),
+    normalizeRuntimeArray.toString(),
+    normalizeRuntimeObject.toString(),
     buildRenderedHostTree.toString(),
     collectReconcileSurfaceStates.toString(),
     createReconcilePlan.toString(),
+    normalizePreloadPolicyWhen.toString(),
+    normalizePreloadPolicyLoadList.toString(),
+    normalizePreloadPolicyTarget.toString(),
+    normalizePreloadPolicies.toString(),
+    normalizeQueryBindings.toString(),
+    normalizeCapabilityPreloadAssets.toString(),
+    runtimeSpecForSurface.toString(),
+    surfaceHasRuntimeMeaning.toString(),
+    trimmedIdSet.toString(),
+    addToGroupedSet.toString(),
+    addToIndexedSet.toString(),
+    collectRuleStepReferences.toString(),
+    buildProcessWitnessCatalog.toString(),
+    collectRelevantProcessWitnesses.toString(),
+    buildRuntimeManifestDiagnostics.toString(),
+    childSurfaceIds.toString(),
+    collectRouteTargets.toString(),
+    normalizeViewTargets.toString(),
+    classTokensForSurface.toString(),
+    genericSurfaceRuntimeView.toString(),
     formatInlineText.toString(),
     surfaceViewNodeIds.toString(),
     nextPresentSiblingRoot.toString(),
@@ -134,10 +197,13 @@ function browserHelpersSource() {
     collectSurfaceDescendants.toString(),
     activeRuntimeSurfaceIds.toString(),
     activeRouteTargetForPath.toString(),
+    queryBindingsForProcess.toString(),
     routeStateBindingForProcess.toString(),
     routeTargetForProcessState.toString(),
     routeTargetForManifestState.toString(),
+    syncUrlToQueryState.toString(),
     syncUrlToRouteState.toString(),
+    syncQueryStateToUrl.toString(),
     syncRouteStateToUrl.toString(),
     forceDocumentNavigation.toString(),
     parseFirstElement.toString(),
@@ -175,6 +241,7 @@ ${renderSourceryCompanionShellFactory()}
     createSurfaceRuntimeProbe.toString(),
     summarizeSurfaceRuntimeExpectationIssues.toString(),
     patchSurfaceDom.toString(),
+    createBlockedInteractionRuntime.toString(),
     createSurfaceInteractionRuntime.toString(),
     `function bootSurfaceInteractionRuntime(manifest) {
   if (!manifest || !Array.isArray(manifest.surfaces) || !manifest.surfaces.length) return;

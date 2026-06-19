@@ -90,7 +90,10 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.equal(model.appReady, false);
     assert(model.supportedHandlers.includes("backendProgram.run"));
     assert(model.supportedHandlers.includes("page.home"));
+    assert(model.supportedHandlers.includes("events.stream"));
+    assert(model.supportedHandlerSets.includes("demo"));
     assert.equal(model.supportedHandlerMetadata["backendProgram.run"].routeKind, "backendProgram");
+    assert.equal(model.supportedHandlerMetadata["events.stream"].routeKind, "stream");
     assert(model.supportedBackendOps.includes("handler.invoke"));
     assert(model.supportedBackendOps.includes("process.request"));
     assert(model.supportedBackendOps.includes("project.read"));
@@ -101,7 +104,16 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.equal(diagnostics.activeProfile, "authoring");
     assert.equal(diagnostics.authoringPolicy.mode, "mcp_only");
     assert.equal(diagnostics.authoringPolicy.proposalAccess, "read_only");
-    assert.deepEqual(diagnostics.authoringMatrix.baseline.publicFrontendModel, ["surface", "process", "projection", "capability"]);
+    assert.deepEqual(diagnostics.authoringMatrix.baseline.publicFrontendModel, [
+      "surface",
+      "collection",
+      "process",
+      "projection",
+      "message",
+      "boundary",
+      "policy",
+      "capability"
+    ]);
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.surface.status, "supported");
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.process.status, "supported");
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.frontendProgram.status, "legacy_only");
@@ -560,6 +572,15 @@ test("bootstrap route authoring validates stream handler shape and method contra
       body: JSON.stringify(body)
     });
 
+    const valid = await post("/api/routes", {
+      id: "events_stream_route",
+      path: "/api/events",
+      serves: "eventsStream",
+      method: "GET",
+      handler: "events.stream"
+    });
+    assert.equal(valid.status, 201);
+
     const wrongMethod = await post("/api/routes", {
       id: "events_stream_post_route",
       path: "/api/events-post",
@@ -723,6 +744,128 @@ test("a bootstrap-authored runner and home route take over without restarting th
     assert.match(html, /(Bootstrap App|bootstrap_home)/);
     assert.doesNotMatch(html, /Widget rendering is not active in this runtime composition\./);
     assert.doesNotMatch(html, /Recover And Author The App Boundary/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("explicit bootstrap app-boundary action establishes the canonical authored page.surface boundary without restart", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const before = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(before.appBoundary.status, "missing");
+
+    const established = await fetch(`${server.url}/api/bootstrap/app-boundary`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    });
+    assert.equal(established.status, 200);
+    const establishedBody = await established.json();
+    assert.equal(establishedBody.status, "authoredActive");
+    assert.equal(establishedBody.boundary.status, "authoredActive");
+    assert.equal(establishedBody.created.some(row => row.kind === "serverRunner" && row.id === "demo_server"), true);
+    assert.equal(establishedBody.created.some(row => row.kind === "route" && row.id === "home_route"), true);
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(state.appBoundary.status, "authoredActive");
+    assert.equal(state.appBoundary.composition.root.source, "authored-route");
+    assert.equal(state.appBoundary.composition.root.usesAuthoredServerRunner, true);
+    assert.equal(state.appBoundary.composition.root.usesAuthoredRuntimePluginInstalls, true);
+
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
+    assert.equal(diagnostics.composition.storyId, "authored-runner-driven");
+    assert.equal(diagnostics.composition.usesAuthoredServerRunner, true);
+    assert.equal(diagnostics.composition.usesAuthoredRuntimePluginInstalls, true);
+
+    const html = await fetch(`${server.url}/`).then(response => response.text());
+    assert.match(html, /Authored App Boundary/);
+    assert.doesNotMatch(html, /Recover And Author The App Boundary/);
+
+    const bootstrapHtml = await fetch(`${server.url}/_bootstrap`).then(response => response.text());
+    assert.match(bootstrapHtml, /Semi-Internal Bootstrap Seam/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap server-runner authoring accepts compatible plugin-provided handler sets", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const created = await fetch(`${server.url}/api/server-runners`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: "demo_server",
+        handlerSet: "demo",
+        backendHost: "backendHost",
+        frontendHost: "frontendHost"
+      })
+    });
+    assert.equal(created.status, 201);
+    const body = await created.json();
+    assert.equal(body.serverRunner?.handlerSet, "demo");
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap app-boundary action falls back to a witnessed proposal when shared authority blocks direct mutation", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const request = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    assert.equal((await request("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    })).status, 201);
+    const aaron = await openSession(server.url);
+    assert.equal((await request("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie)).status, 201);
+    assert.equal((await request("/api/contexts", {
+      id: "bootstrap.app",
+      label: "Authored App Boundary"
+    }, aaron.cookie)).status, 201);
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    const proposed = await request("/api/bootstrap/app-boundary", {}, callan.cookie);
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.status, "proposed");
+    assert.equal(proposedBody.proposal?.targetProcess, "bootstrap.appBoundary.establish");
+    assert.equal(proposedBody.statusMessage, "Proposed authored app-boundary establishment for review.");
+
+    const approved = await fetch(`${server.url}/api/proposals/${encodeURIComponent(proposedBody.proposal.id)}/approve`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(approved.status, 200);
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`, {
+      headers: { cookie: aaron.cookie }
+    }).then(response => response.json());
+    assert.equal(state.appBoundary.status, "authoredActive");
+    assert.equal(state.proposals.some(row =>
+      row.id === proposedBody.proposal.id
+        && row.status === "approved"
+        && Array.isArray(row.executedWitnessIds)
+        && row.executedWitnessIds.length > 0
+    ), true);
   } finally {
     await server.close();
   }
@@ -1747,6 +1890,102 @@ test("widget update writes real save-back witnesses and blocks versioned widget 
     assert.equal(blocked.status, 409);
     const blockedBody = await blocked.json();
     assert.equal(blockedBody.error, "versioned widgets must be edited through widget versions");
+  } finally {
+    await server.close();
+  }
+});
+
+test("widget replace and rollback follow shared authority semantics and preserve prior widget state", async () => {
+  const { world, server } = await startBlankServer();
+  try {
+    const request = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await request("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+    await request("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie);
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    assert.equal((await request("/api/widgets", widgetInput({
+      id: "replaceable_title",
+      kind: "Heading",
+      text: "Original heading",
+      level: 1,
+      attach: false
+    }), aaron.cookie)).status, 201);
+
+    const replaced = await request("/api/widgets/replaceable_title/replace", {
+      kind: "Button",
+      text: "Replacement button"
+    }, aaron.cookie);
+    assert.equal(replaced.status, 200);
+    const replacedBody = await replaced.json();
+    assert.equal(replacedBody.widget.kind, "Button");
+    assert.equal(replacedBody.widget.props.text, "Replacement button");
+    assert.equal(replacedBody.migrationStatus, "migrate");
+
+    const rollback = await request("/api/widgets/replaceable_title/replace/rollback", {}, aaron.cookie);
+    assert.equal(rollback.status, 200);
+    const rollbackBody = await rollback.json();
+    assert.equal(rollbackBody.widget.kind, "Heading");
+    assert.equal(rollbackBody.widget.props.text, "Original heading");
+
+    const proposed = await request("/api/widgets/replaceable_title/replace", {
+      kind: "Paragraph",
+      text: "Shared replace request",
+      reason: "Shared widget should evolve"
+    }, callan.cookie);
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.proposal?.targetProcess, "widget.replace");
+
+    const approved = await fetch(`${server.url}/api/proposals/${encodeURIComponent(proposedBody.proposal.id)}/approve`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(approved.status, 200);
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    assert.equal(state.widgets.some(row => row.id === "replaceable_title" && row.kind === "Paragraph" && row.props?.text === "Shared replace request"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "widget.replace" && w.body?.next?.id === "replaceable_title"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "widget.replace.rollback" && w.body?.id === "replaceable_title"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "updateWidget" && w.body?.id === "replaceable_title" && w.body?.kind === "Paragraph"), true);
+
+    defineWidgetVersion(world, {
+      actor: "system",
+      owner: "aaron",
+      soul: "replace_blocked_banner",
+      version: "replace_blocked_banner_v1",
+      kind: "Text",
+      props: { text: "Versioned" }
+    });
+    activateWidgetVersion(world, { actor: "system", soul: "replace_blocked_banner", version: "replace_blocked_banner_v1" });
+
+    const blocked = await request("/api/widgets/replace_blocked_banner/replace", {
+      kind: "Paragraph",
+      text: "Nope"
+    }, aaron.cookie);
+    assert.equal(blocked.status, 409);
+    const blockedBody = await blocked.json();
+    assert.equal(blockedBody.error, "versioned widgets must evolve through widget versions");
   } finally {
     await server.close();
   }

@@ -14,7 +14,10 @@ import {
   createRuntimeAppContext,
   createUnavailableRuntimeAppContext
 } from "./runtime-app-context.js";
-import { AppSnapshotManager } from "./app-snapshot-manager.js";
+import {
+  AppPreviewSessionManager,
+  AppSnapshotManager
+} from "./app-snapshot-manager.js";
 import {
   createRuntimeAppContextForRunner,
   createRuntimeResolverForServer
@@ -28,6 +31,7 @@ import {
 } from "./runtime-routing.js";
 import { ensureRuntimeBuiltins } from "./runtime-builtins.js";
 import { createRuntimeVerificationPersistence } from "./runtime-verification-persistence.js";
+import { createMaterializedViewRegistry } from "./materialized-views.js";
 import {
   DEFAULT_RUNTIME_PROFILE,
   defaultHostCapabilitiesForProfile,
@@ -80,6 +84,7 @@ export async function startRuntimeServer(world, {
   devMode = null,
   env = process.env,
   backgroundStartupPolicy = null,
+  startupPersistenceCommitMode = "post-ready",
   startupTelemetry = createStartupTelemetry({ mode: runtimeStartupMode })
 }, deps) {
   const {
@@ -513,6 +518,11 @@ export async function startRuntimeServer(world, {
   appContext.effectiveRuntimePluginIds = effectiveRuntimePluginCatalog.effectivePluginIds;
   appContext.activeRuntimePluginIds = effectiveRuntimePluginCatalog.activePluginIds;
   appContext.startupTelemetry = startupTelemetry;
+  appContext.resourceProbes = startupTelemetry.probeCollector ?? null;
+  appContext.materializedViews = createMaterializedViewRegistry({
+    world,
+    probeCollector: appContext.resourceProbes
+  });
   const verificationPolicy = resolveRunnerVerificationPolicy({
     serverRunner,
     runtimeProfile: activeRuntimeProfile,
@@ -563,6 +573,8 @@ export async function startRuntimeServer(world, {
   appContext.bootstrapOnly = serverRunner.bootstrapOnly === true;
   appContext.devMode = activeDevMode === true;
   appContext.appSnapshotManager = null;
+  appContext.appPreviewSessionManager = null;
+  appContext.appSnapshotManagerReady = null;
   const storage = appContext.storage;
 
   const sessionStore = new Map();
@@ -1114,8 +1126,29 @@ export async function startRuntimeServer(world, {
   });
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}`;
+  if (startupPersistenceCommitMode === "pre-ready") {
+    await startupTelemetry.runPhase("runtime.persistence.commit", () => world.flushPersistence?.(), {
+      label: "Persist startup witnesses"
+    });
+  }
   startupTelemetry.mark("listenReady", { url, serverRunner: serverRunner.id });
   startupTelemetry.mark("meaningfulReady", { url, serverRunner: serverRunner.id });
+  if (startupPersistenceCommitMode !== "pre-ready") {
+    trackBackgroundStartup(
+      "runtime.persistence.commit",
+      "Persist startup witnesses",
+      async () => {
+        await world.commitBufferedPersistence?.({ mode: "post-ready" });
+        return { commitMode: "post-ready" };
+      },
+      {
+        detail: {
+          lazy: true,
+          commitMode: "post-ready"
+        }
+      }
+    );
+  }
 
   const verificationPersistenceReady = scheduleBackgroundStartup(
     "runtime.verificationPersistence",
@@ -1160,7 +1193,7 @@ export async function startRuntimeServer(world, {
   );
 
   if (appProject) {
-    scheduleBackgroundStartup(
+    appContext.appSnapshotManagerReady = scheduleBackgroundStartup(
       "runtime.appSnapshot.initialBuild",
       "Build initial app snapshot",
       effectiveBackgroundStartupPolicy.appSnapshotInitialBuild,
@@ -1179,6 +1212,11 @@ export async function startRuntimeServer(world, {
           return { closedBeforeAttach: true };
         }
         appContext.appSnapshotManager = appSnapshotManager;
+        appContext.appPreviewSessionManager = new AppPreviewSessionManager({
+          appSnapshotManager,
+          logger,
+          fsModule
+        });
         registerDeferredCloser(() => appSnapshotManager.close());
         return {
           appRevision: Number(appSnapshotManager.appRevision || 0),
@@ -1230,6 +1268,7 @@ export async function startRuntimeServer(world, {
       const appContextClose = typeof appContext.close === "function" ? appContext.close.bind(appContext) : null;
       await appContextClose?.();
       await Promise.allSettled(backgroundStartupTasks);
+      await world.flushPersistence?.();
       while (deferredClosers.length) {
         const closer = deferredClosers.pop();
         try {

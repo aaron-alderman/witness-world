@@ -43,11 +43,20 @@ function findLayerByName(view, layerName) {
   return view.layers.find(layer => String(layer?.name ?? "") === name) ?? null;
 }
 
+function layerEncodePath(path) {
+  const suffix = String(path ?? "").trim();
+  if (!suffix) return "";
+  return suffix.startsWith("encode.") ? suffix : `encode.${suffix}`;
+}
+
 export function readChartPresentationPatchValue(view, path) {
   const parts = String(path ?? "").split(".").filter(Boolean);
   if (parts[0] === "layerStyles" && parts.length >= 3) {
     const layer = findLayerByName(view, parts[1]);
-    return layer ? readNestedValue(layer, parts.slice(2).join(".")) : undefined;
+    if (!layer) return undefined;
+    const suffix = parts.slice(2).join(".");
+    const encoded = readNestedValue(layer, layerEncodePath(suffix));
+    return encoded !== undefined ? encoded : readNestedValue(layer, suffix);
   }
   return readNestedValue(view, path);
 }
@@ -56,7 +65,7 @@ export function assignChartPresentationPatchValue(view, path, value) {
   const parts = String(path ?? "").split(".").filter(Boolean);
   if (parts[0] === "layerStyles" && parts.length >= 3) {
     const layer = findLayerByName(view, parts[1]);
-    return layer ? assignNestedPatchValue(layer, parts.slice(2).join("."), value) : false;
+    return layer ? assignNestedPatchValue(layer, layerEncodePath(parts.slice(2).join(".")), value) : false;
   }
   return assignNestedPatchValue(view, path, value);
 }

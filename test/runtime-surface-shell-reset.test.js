@@ -163,3 +163,46 @@ test("runtime-surface-shell preserves generic input attributes on authored form 
   assert.match(html, /<label for="login-email">Email address<\/label>/);
   assert.match(html, /<input type="email" id="login-email" class="auth-input" placeholder="you@company\.com" autocomplete="email">/);
 });
+
+test("runtime-surface-shell stamps authored surface identity metadata onto rendered surface roots", () => {
+  const surfaces = new Map([
+    ["SurfaceRoot", {
+      id: "SurfaceRoot",
+      surfaceKind: "app-root",
+      children: ["LoginScreen"]
+    }],
+    ["LoginScreen", {
+      id: "LoginScreen",
+      surfaceKind: "auth-screen",
+      props: {
+        routeKey: "login",
+        routePath: "/login",
+        presentationAnchor: "login-screen"
+      },
+      children: ["LoginHeader"]
+    }],
+    ["LoginHeader", {
+      id: "LoginHeader",
+      surfaceKind: "screen-header",
+      parentId: "LoginScreen",
+      props: {
+        title: "Welcome back"
+      }
+    }]
+  ]);
+
+  const html = renderSurfaceShellFromMap({
+    surfaces,
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/login"
+  });
+
+  assert.match(
+    html,
+    /data-surface-id="LoginScreen"[^>]*data-surface-kind="auth-screen"[^>]*data-surface-route-key="login"[^>]*id="login-screen"[^>]*data-surface-dom-id="login-screen"[^>]*data-surface-anchor="login-screen"/
+  );
+  assert.match(
+    html,
+    /data-surface-id="LoginHeader"[^>]*data-surface-kind="screen-header"[^>]*data-surface-parent-id="LoginScreen"/
+  );
+});

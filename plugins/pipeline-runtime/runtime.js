@@ -37,6 +37,10 @@ export const bundleId = "bundle-pipeline-runtime";
 
 export { handlerCatalog };
 
+function applyPipelineRuntimeDeclaration() {
+  return [];
+}
+
 export const routes = Object.freeze([]);
 export const surfaces = Object.freeze([]);
 export const providers = Object.freeze([
@@ -62,7 +66,13 @@ export const providers = Object.freeze([
   })
 ]);
 export const desireExtensions = Object.freeze({
-  rvmForms: pipelineRvmForms
+  rvmForms: pipelineRvmForms,
+  runtimeDeclarations: Object.freeze([
+    Object.freeze({ kind: "sync", apply: applyPipelineRuntimeDeclaration }),
+    Object.freeze({ kind: "input_transform", apply: applyPipelineRuntimeDeclaration }),
+    Object.freeze({ kind: "output_transform", apply: applyPipelineRuntimeDeclaration }),
+    Object.freeze({ kind: "pipeline_test", apply: applyPipelineRuntimeDeclaration })
+  ])
 });
 
 export {

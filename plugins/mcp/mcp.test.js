@@ -136,6 +136,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(toolNames.includes("platform.docs"), true);
   assert.equal(toolNames.includes("platform.roadmap"), true);
   assert.equal(toolNames.includes("platform.telemetry"), true);
+  assert.equal(toolNames.includes("platform.defect"), true);
   // First-class documentation MCP tools
   assert.equal(toolNames.includes("docs.list"), true);
   assert.equal(toolNames.includes("docs.read"), true);
@@ -175,6 +176,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   const platformDocs = listSupportedMcpTools().find(tool => tool.name === "platform.docs");
   const platformRoadmap = listSupportedMcpTools().find(tool => tool.name === "platform.roadmap");
   const platformTelemetry = listSupportedMcpTools().find(tool => tool.name === "platform.telemetry");
+  const platformDefect = listSupportedMcpTools().find(tool => tool.name === "platform.defect");
   const platformBranch = listSupportedMcpTools().find(tool => tool.name === "platform.branch");
   const platformProposal = listSupportedMcpTools().find(tool => tool.name === "platform.proposal");
   const platformChangeSet = listSupportedMcpTools().find(tool => tool.name === "platform.changeSet");
@@ -185,17 +187,21 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageConvergence"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageApplyPreview"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("capabilityLegacyMigration"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("frontendLegacyMigration"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("frontendLegacyUplift"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("capabilityRevisionHistory"), true);
   assert.deepEqual(packageBundle.inputSchema.properties.operation.enum, ["preview", "previewApply"]);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("docs"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("roadmap"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("telemetry"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("defects"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("bridges"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("semantics"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("governance"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("gaps"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("proposals"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("branches"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("pushes"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("testGates"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("testRedGreen"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("testRuns"), true);
@@ -209,11 +215,17 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.deepEqual(platformDocs.inputSchema.properties.operation.enum, ["list", "read", "search", "readFull", "getRelations"]);
   assert.deepEqual(platformRoadmap.inputSchema.properties.operation.enum, ["list", "read"]);
   assert.deepEqual(platformTelemetry.inputSchema.properties.operation.enum, ["list", "read"]);
-  assert.deepEqual(platformBranch.inputSchema.properties.operation.enum, ["list", "read", "create"]);
+  assert.deepEqual(platformDefect.inputSchema.properties.operation.enum, ["list", "read"]);
+  assert.deepEqual(platformBranch.inputSchema.properties.operation.enum, ["list", "read", "create", "push", "ship"]);
   assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "parentBranchId"), true);
   assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "epic"), true);
   assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "feature"), true);
   assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "defect"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "remoteName"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "gitBranchName"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "dryRun"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "releaseChannelId"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "proposalId"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("runtimePlugin.install"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.create"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.apply"), true);
@@ -221,10 +233,13 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.deepEqual(platformProposal.inputSchema.properties.operation.enum, ["create", "approve", "reject"]);
   assert.deepEqual(platformChangeSet.inputSchema.properties.operation.enum, ["list", "read", "create", "edit", "removeEdit", "validate", "apply", "reject", "abandon"]);
   assert.deepEqual(platformTest.inputSchema.properties.operation.enum, ["list", "read", "run", "runSelected"]);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("collection.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("type.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("projection.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("message.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("boundary.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("policy.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("package.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageRevision.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageRevision.publish"), true);
@@ -235,6 +250,8 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.update"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.rollback"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.migrateLegacy"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontend.migrateLegacy"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontend.upliftLegacy"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontendProgram.create"), false);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("widget.create"), false);
 });
@@ -287,6 +304,130 @@ placement = ["context"]
     row.action === "definition.create"
     && row.capabilityId === "cap.legacyOnly"
   ), true);
+});
+
+test("mcp world.read exposes legacy frontend migration as projected first-class state", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "home_route"
+path = "/"
+serves = "home_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "page_root", frontendProgram = "landing_program" }
+`);
+
+  const result = await executeMcpTool("world.read", {
+    args: { view: "frontendLegacyMigration" },
+    appContext: {
+      project: projector => world.project(projector)
+    },
+    callHandler: async () => {
+      throw new Error("frontendLegacyMigration read should not call HTTP handlers");
+    }
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(result.structuredContent.legacyFrontendMigration.compatibilityMode, "bridge-active");
+  assert.equal(result.structuredContent.legacyFrontendMigration.pending.some(row =>
+    row.action === "route.rewrite"
+    && row.routeId === "home_route"
+  ), true);
+  assert.equal(result.structuredContent.legacyFrontendMigration.pending.some(row =>
+    row.action === "surface.define"
+    && row.surfaceId === "legacySurface.home_route"
+  ), true);
+});
+
+test("mcp world.read exposes legacy frontend native uplift as projected first-class state", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "home_route"
+path = "/"
+serves = "home_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "login_page", frontendProgram = "login_program" }
+
+[[widget]]
+actor = "system"
+id = "login_page"
+kind = "Page"
+props = { title = "Login" }
+
+[[widget]]
+actor = "system"
+id = "login_form"
+kind = "Form"
+props = { }
+
+[[widget]]
+actor = "system"
+id = "email_input"
+kind = "Input"
+props = { name = "email" }
+
+[[widget]]
+actor = "system"
+id = "submit_button"
+kind = "Button"
+props = { text = "Sign in", type = "submit" }
+
+[[attachWidget]]
+actor = "system"
+parent = "login_page"
+child = "login_form"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "login_form"
+child = "email_input"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "login_form"
+child = "submit_button"
+order = 1
+
+[[frontendProgram]]
+actor = "system"
+id = "login_program"
+rootWidget = "login_page"
+
+[[frontendStep]]
+actor = "system"
+program = "login_program"
+event = "submit:login_form"
+order = 0
+op = "readForm"
+params = { widget = "login_form", into = "credentials" }
+`);
+
+  const project = projector => world.project(projector);
+  project.allWitnesses = () => world.allWitnesses();
+  const result = await executeMcpTool("world.read", {
+    args: { view: "frontendLegacyUplift" },
+    appContext: { project },
+    callHandler: async () => {
+      throw new Error("frontendLegacyUplift read should not call HTTP handlers");
+    }
+  });
+
+  assert.equal(result.isError, false);
+  assert.equal(result.structuredContent.legacyFrontendUplift.compatibilityMode, "bridge-active");
+  assert.equal(result.structuredContent.legacyFrontendUplift.pending.some(row =>
+    row.action === "route.rewrite"
+    && row.routeId === "home_route"
+    && row.authoredId === "legacyUplift.home_route.surface.root"
+    && row.nextHandler === "page.surface"
+  ), true);
+  assert.equal(result.structuredContent.legacyFrontendUplift.blocked.length, 0);
 });
 
 test("mcp world.read exposes capability revision history as projected first-class state", async () => {
@@ -1002,6 +1143,41 @@ test("mcp authoring.write exposes authored package actions and package-aware sco
     targetIds: []
   });
   assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "frontend.migrateLegacy",
+    body: {}
+  }), {
+    contextIds: [],
+    targetIds: []
+  });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "frontend.upliftLegacy",
+    body: {}
+  }), {
+    contextIds: [],
+    targetIds: []
+  });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "boundary.create",
+    body: { id: "ReplayBoundary", context: "ctx.shared" }
+  }), {
+    contextIds: ["ctx.shared"],
+    targetIds: ["ReplayBoundary"]
+  });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "collection.create",
+    body: { id: "ReplayCollection", context: "ctx.shared" }
+  }), {
+    contextIds: ["ctx.shared"],
+    targetIds: ["ReplayCollection"]
+  });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "policy.create",
+    body: { id: "ReplayPolicy", context: "ctx.shared", subject: "ReplayFlow", stateField: "ReplayState" }
+  }), {
+    contextIds: ["ctx.shared"],
+    targetIds: ["ReplayPolicy", "ReplayFlow", "ReplayState"]
+  });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
     action: "capability.update",
     body: { id: "notes.sidebar" }
   }), {
@@ -1136,6 +1312,20 @@ test("mcp authoring.write routes package authorship actions through shared packa
       path: "/api/capability-migrations/legacy",
       handler: "capability.migrateLegacy",
       body: {}
+    },
+    {
+      action: "frontend.migrateLegacy",
+      method: "POST",
+      path: "/api/frontend-migrations/legacy",
+      handler: "frontend.migrateLegacy",
+      body: {}
+    },
+    {
+      action: "frontend.upliftLegacy",
+      method: "POST",
+      path: "/api/frontend-uplifts/legacy",
+      handler: "frontend.upliftLegacy",
+      body: {}
     }
   ];
 
@@ -1191,6 +1381,7 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   assert.equal(services.mcpToolAvailable("platform.docs"), false);
   assert.equal(services.mcpToolAvailable("platform.roadmap"), false);
   assert.equal(services.mcpToolAvailable("platform.telemetry"), false);
+  assert.equal(services.mcpToolAvailable("platform.defect"), false);
   assert.equal(services.mcpToolAvailable("platform.changeSet"), false);
   assert.equal(services.mcpToolAvailable("platform.test"), false);
   assert.equal(services.mcpToolAvailable("docs.list"), false);
@@ -1202,6 +1393,7 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   assert.equal(services.mcpToolAvailable("platform.docs"), true);
   assert.equal(services.mcpToolAvailable("platform.roadmap"), true);
   assert.equal(services.mcpToolAvailable("platform.telemetry"), true);
+  assert.equal(services.mcpToolAvailable("platform.defect"), true);
   assert.equal(services.mcpToolAvailable("platform.changeSet"), true);
   assert.equal(services.mcpToolAvailable("platform.test"), true);
   assert.equal(services.mcpToolAvailable("docs.list"), true);
@@ -1287,7 +1479,7 @@ test("current platform console mutation surfaces have MCP tool equivalents", () 
   const testOperations = byName["platform.test"].inputSchema.properties.operation.enum;
 
   assert.deepEqual(proposalOperations, ["create", "approve", "reject"]);
-  assert.deepEqual(branchOperations, ["list", "read", "create"]);
+  assert.deepEqual(branchOperations, ["list", "read", "create", "push", "ship"]);
   assert.equal(changeSetOperations.includes("create"), true);
   assert.equal(changeSetOperations.includes("edit"), true);
   assert.equal(changeSetOperations.includes("validate"), true);
@@ -1335,6 +1527,23 @@ test("platform MCP mutation tools only target human-exposed platform handlers", 
         operation: "create",
         id: "branch.guard.create",
         title: "Guard branch"
+      }
+    },
+    {
+      tool: "platform.branch",
+      args: {
+        operation: "push",
+        id: "branch.guard.create",
+        remoteName: "origin",
+        dryRun: true
+      }
+    },
+    {
+      tool: "platform.branch",
+      args: {
+        operation: "ship",
+        id: "branch.guard.create",
+        releaseChannelId: "releaseChannel:local"
       }
     },
     {
@@ -1514,14 +1723,14 @@ test("platform MCP read tool routes runtime revision view through platform model
   assert.equal(calls.at(-1).query.id, "notes.sidebar");
 });
 
-test("platform MCP read tool routes proposal, branch, change-set, candidate snapshot, telemetry, bridge, semantics, and governance views through platform model handlers", async () => {
+test("platform MCP read tool routes proposal, branch, push, ship, change-set, candidate snapshot, telemetry, defects, bridge, semantics, and governance views through platform model handlers", async () => {
   const calls = [];
   const callHandler = async request => {
     calls.push(request);
     return { status: 200, body: { ok: true, handler: request.handler, view: request.query?.view ?? null, id: request.query?.id ?? null } };
   };
 
-  for (const view of ["proposals", "branches", "changeSets", "candidateSnapshots", "telemetry", "bridges", "semantics", "governance"]) {
+  for (const view of ["proposals", "branches", "pushes", "ships", "changeSets", "candidateSnapshots", "telemetry", "defects", "bridges", "semantics", "governance"]) {
     const result = await executeMcpTool("platform.read", {
       args: { view, id: "branch.demo" },
       callHandler
@@ -1654,6 +1863,34 @@ test("platform MCP telemetry tool routes telemetry reads through platform model 
   assert.equal(calls.at(-1).query.id, "telemetryMetric:platform.self");
 });
 
+test("platform MCP defect tool routes defect reads through platform model handlers", async () => {
+  const calls = [];
+  const callHandler = async request => {
+    calls.push(request);
+    return { status: 200, body: { ok: true, handler: request.handler, view: request.query?.view ?? null, id: request.query?.id ?? null } };
+  };
+
+  const listed = await executeMcpTool("platform.defect", {
+    args: { operation: "list" },
+    callHandler
+  });
+  assert.equal(listed.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.model.read");
+  assert.equal(calls.at(-1).path, "/api/platform-model");
+  assert.equal(calls.at(-1).query.view, "defects");
+  assert.equal(calls.at(-1).query.id, undefined);
+
+  const read = await executeMcpTool("platform.defect", {
+    args: { operation: "read", id: "defect:platform.self" },
+    callHandler
+  });
+  assert.equal(read.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.model.read");
+  assert.equal(calls.at(-1).path, "/api/platform-model");
+  assert.equal(calls.at(-1).query.view, "defects");
+  assert.equal(calls.at(-1).query.id, "defect:platform.self");
+});
+
 test("platform MCP branch tool routes through platform branch handlers", async () => {
   const calls = [];
   const callHandler = async request => {
@@ -1696,6 +1933,38 @@ test("platform MCP branch tool routes through platform branch handlers", async (
   assert.equal(read.isError, false);
   assert.equal(calls.at(-1).handler, "platform.branch.read");
   assert.equal(calls.at(-1).params.id, "branch.platform.console");
+
+  const pushed = await executeMcpTool("platform.branch", {
+    args: {
+      operation: "push",
+      id: "branch.platform.console",
+      remoteName: "origin",
+      gitBranchName: "platform/console",
+      dryRun: true
+    },
+    callHandler
+  });
+  assert.equal(pushed.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.branch.push");
+  assert.equal(calls.at(-1).path, "/api/platform-branches/branch.platform.console/push");
+  assert.equal(calls.at(-1).body.remoteName, "origin");
+  assert.equal(calls.at(-1).body.gitBranchName, "platform/console");
+  assert.equal(calls.at(-1).body.dryRun, true);
+
+  const shipped = await executeMcpTool("platform.branch", {
+    args: {
+      operation: "ship",
+      id: "branch.platform.console",
+      releaseChannelId: "releaseChannel:local",
+      proposalId: "proposal.platform.console.ship"
+    },
+    callHandler
+  });
+  assert.equal(shipped.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.branch.ship");
+  assert.equal(calls.at(-1).path, "/api/platform-branches/branch.platform.console/ship");
+  assert.equal(calls.at(-1).body.releaseChannelId, "releaseChannel:local");
+  assert.equal(calls.at(-1).body.proposalId, "proposal.platform.console.ship");
 });
 
 test("platform MCP change-set tool routes through platform change-set handlers", async () => {
@@ -1912,6 +2181,19 @@ test("implemented platform MCP tools stay in parity with direct platform handler
   assert.equal(mcpTelemetry.isError, false);
   assert.deepEqual(normalizePlatformParity(mcpTelemetry.structuredContent), normalizePlatformParity(directTelemetry.body));
 
+  const directDefects = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "defects", id: "defect:platform.self" }
+  });
+  const mcpDefects = await executeMcpTool("platform.defect", {
+    args: { operation: "read", id: "defect:platform.self" },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpDefects.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpDefects.structuredContent), normalizePlatformParity(directDefects.body));
+
   const directProposalList = await direct.callHandler({
     handler: "platform.model.read",
     method: "GET",
@@ -1977,6 +2259,64 @@ test("implemented platform MCP tools stay in parity with direct platform handler
   });
   assert.equal(mcpBranchView.isError, false);
   assert.deepEqual(normalizePlatformParity(mcpBranchView.structuredContent), normalizePlatformParity(directBranchView.body));
+
+  direct.world.observe({
+    process: "platform.branch.push",
+    actor: "aaron",
+    claims: [],
+    body: {
+      id: "pushRecord:branch.parity.demo:1",
+      branchId: branchBody.id,
+      changeSetId: "changeset.parity.demo",
+      status: "dryRun",
+      remoteName: "origin",
+      provider: "github",
+      gitBranchName: "platform/parity-demo",
+      localBranchRef: "refs/heads/platform/parity-demo",
+      remoteBranchRef: "refs/heads/platform/parity-demo",
+      commitSha: "abc123",
+      commitMessage: "platform push platform/parity-demo",
+      compareUrl: "https://github.com/example/platform/compare/main...platform%2Fparity-demo?expand=1",
+      pullRequestUrl: "https://github.com/example/platform/pull/new/platform%2Fparity-demo",
+      owner: "aaron",
+      createdAt: "2026-06-18T00:00:00.000Z"
+    }
+  });
+  viaMcp.world.observe({
+    process: "platform.branch.push",
+    actor: "aaron",
+    claims: [],
+    body: {
+      id: "pushRecord:branch.parity.demo:1",
+      branchId: branchBody.id,
+      changeSetId: "changeset.parity.demo",
+      status: "dryRun",
+      remoteName: "origin",
+      provider: "github",
+      gitBranchName: "platform/parity-demo",
+      localBranchRef: "refs/heads/platform/parity-demo",
+      remoteBranchRef: "refs/heads/platform/parity-demo",
+      commitSha: "abc123",
+      commitMessage: "platform push platform/parity-demo",
+      compareUrl: "https://github.com/example/platform/compare/main...platform%2Fparity-demo?expand=1",
+      pullRequestUrl: "https://github.com/example/platform/pull/new/platform%2Fparity-demo",
+      owner: "aaron",
+      createdAt: "2026-06-18T00:00:00.000Z"
+    }
+  });
+
+  const directPushView = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "pushes", id: branchBody.id }
+  });
+  const mcpPushView = await executeMcpTool("platform.read", {
+    args: { view: "pushes", id: branchBody.id },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpPushView.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpPushView.structuredContent), normalizePlatformParity(directPushView.body));
 
   const changeSetBody = {
     id: "changeset.parity.demo",

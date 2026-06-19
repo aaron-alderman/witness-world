@@ -17,7 +17,6 @@ const SUPPORTED_FRONTEND_OPS = [
   "refreshProjection",
   "navigate",
   "setQueryParam",
-  "dispatchDomEvent",
   "reloadPage",
   "postJson",
   "patchJson",

@@ -12,6 +12,11 @@ export function renderSourceryCompanionShellFactory() {
     const COMPANION_GLOBAL_KEY = "__sourceryCompanionShell";
     const escapeHtml = ${escapeHtml.toString()};
     const appendChildren = ${appendChildren.toString()};
+    const serializeJsonDocument = ${serializeJsonDocument.toString()};
+    const sanitizeDownloadSegment = ${sanitizeDownloadSegment.toString()};
+    const triggerJsonDownload = ${triggerJsonDownload.toString()};
+    const copyTextToClipboard = ${copyTextToClipboard.toString()};
+    const buildIssueClipboardPayload = ${buildIssueClipboardPayload.toString()};
     const renderIssueListHtml = ${renderIssueListHtml.toString()};
     const renderSuggestionListHtml = ${renderSuggestionListHtml.toString()};
     const ensureSourceryCompanionShellStyles = ${ensureSourceryCompanionShellStyles.toString()};
@@ -43,6 +48,67 @@ function appendChildren(parent, ...children) {
     else parent.appendChild?.(child);
   }
   return parent;
+}
+
+function serializeJsonDocument(payload) {
+  try {
+    return JSON.stringify(payload ?? null, null, 2);
+  } catch (error) {
+    return JSON.stringify({
+      error: "Failed to serialize payload.",
+      details: String(error?.message || error || "unknown")
+    }, null, 2);
+  }
+}
+
+function sanitizeDownloadSegment(value, fallback = "snapshot") {
+  const normalized = trimString(value)
+    .replaceAll(/[\\/:*?"<>|]+/g, "-")
+    .replaceAll(/\s+/g, "-")
+    .replaceAll(/-+/g, "-")
+    .replaceAll(/^-|-$/g, "");
+  return normalized || fallback;
+}
+
+function triggerJsonDownload({ window, document, filename, payload }) {
+  if (!document?.createElement || !document?.body?.appendChild) return false;
+  const BlobCtor = window?.Blob || globalThis?.Blob;
+  const URLApi = window?.URL || globalThis?.URL;
+  if (typeof BlobCtor !== "function" || typeof URLApi?.createObjectURL !== "function") return false;
+  const blob = new BlobCtor([serializeJsonDocument(payload)], { type: "application/json" });
+  const href = URLApi.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = trimString(filename) || "sourcery-inspection.json";
+  anchor.hidden = true;
+  document.body.appendChild(anchor);
+  anchor.click?.();
+  anchor.parentNode?.removeChild?.(anchor);
+  URLApi.revokeObjectURL?.(href);
+  return true;
+}
+
+async function copyTextToClipboard(window, text) {
+  if (!window?.navigator?.clipboard?.writeText) return false;
+  try {
+    await window.navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildIssueClipboardPayload({ issues = [], window } = {}) {
+  const allIssues = Array.isArray(issues) ? issues : [];
+  const activeIssues = allIssues.filter(issue => issue?.status !== "resolved");
+  const exportedIssues = activeIssues.length > 0 ? activeIssues : allIssues;
+  return {
+    route: trimString(window?.location?.pathname) || "/",
+    activeOnly: activeIssues.length > 0,
+    issueCount: exportedIssues.length,
+    exportedAt: new Date().toISOString(),
+    issues: exportedIssues
+  };
 }
 
 export function ensureSourceryCompanionShellStyles(document) {
@@ -118,8 +184,9 @@ export function getOrCreateSourceryCompanionShell({
   inspection = null,
   issueLedger = null
 } = {}) {
+  if (window?.__sourceryCompanionEnabled === false) enabled = false;
   if (!enabled || !document?.createElement || !document?.body?.appendChild) {
-    return { render() {}, destroy() {}, updateGuidanceState() {}, setExtraSuggestions() {} };
+    return { render() {}, destroy() {}, updateGuidanceState() {}, setExtraSuggestions() {}, setPanelAction() {}, setPinned() {} };
   }
   const existing = window?.[COMPANION_GLOBAL_KEY];
   if (existing) {
@@ -159,9 +226,19 @@ export function getOrCreateSourceryCompanionShell({
   guidanceButton.id = "sourcery-companion-guidance-action";
   guidanceButton.hidden = true;
 
-  const copyButton = document.createElement("button");
-  copyButton.type = "button";
-  copyButton.textContent = "Copy JSON";
+  const panelActionButton = document.createElement("button");
+  panelActionButton.type = "button";
+  panelActionButton.id = "sourcery-companion-panel-action";
+  panelActionButton.hidden = true;
+
+  const downloadButton = document.createElement("button");
+  downloadButton.type = "button";
+  downloadButton.id = "sourcery-companion-download-json-action";
+  downloadButton.textContent = "Download JSON";
+  const copyIssuesButton = document.createElement("button");
+  copyIssuesButton.type = "button";
+  copyIssuesButton.id = "sourcery-companion-copy-issues-action";
+  copyIssuesButton.textContent = "Copy Issues";
   const clearButton = document.createElement("button");
   clearButton.type = "button";
   clearButton.textContent = "Clear";
@@ -183,7 +260,7 @@ export function getOrCreateSourceryCompanionShell({
   issues.className = "surface-runtime-diagnostics-list";
   issues.id = "sourcery-companion-issues";
 
-  appendChildren(actions, guidanceButton, copyButton, clearButton, rerunButton);
+  appendChildren(actions, guidanceButton, panelActionButton, downloadButton, copyIssuesButton, clearButton, rerunButton);
   appendChildren(panel, summary, meta, actions, suggestionsTitle, suggestions, issuesTitle, issues);
   appendChildren(root, fab, panel);
   document.body.appendChild(root);
@@ -195,6 +272,8 @@ export function getOrCreateSourceryCompanionShell({
   let shellInspection = inspection;
   let shellIssueLedger = issueLedger;
   let suggestionRunner = null;
+  let panelAction = { visible: false, label: "", onClick: null };
+  let pinned = window?.__sourceryCompanionPinned === true;
 
   const toggle = () => {
     open = !open;
@@ -205,14 +284,24 @@ export function getOrCreateSourceryCompanionShell({
   guidanceButton.addEventListener?.("click", () => {
     if (typeof guidanceState.onResume === "function") guidanceState.onResume();
   });
-  copyButton.addEventListener?.("click", async () => {
+  panelActionButton.addEventListener?.("click", () => {
+    if (typeof panelAction.onClick === "function") panelAction.onClick();
+  });
+  downloadButton.addEventListener?.("click", async () => {
     const payload = typeof shellInspection?.inspect === "function" ? shellInspection.inspect() : null;
-    const json = JSON.stringify(payload, null, 2);
-    if (window?.navigator?.clipboard?.writeText) {
-      try {
-        await window.navigator.clipboard.writeText(json);
-      } catch {}
-    }
+    const surfaceSegment = sanitizeDownloadSegment(shellInspection?.activeSurfaceId, "surface");
+    const routeSegment = sanitizeDownloadSegment(window?.location?.pathname, "route");
+    triggerJsonDownload({
+      window,
+      document,
+      filename: `sourcery-${surfaceSegment}-${routeSegment}.json`,
+      payload
+    });
+  });
+  copyIssuesButton.addEventListener?.("click", async () => {
+    const issueRows = typeof shellIssueLedger?.list === "function" ? shellIssueLedger.list() : [];
+    const payload = buildIssueClipboardPayload({ issues: issueRows, window });
+    await copyTextToClipboard(window, serializeJsonDocument(payload));
   });
   clearButton.addEventListener?.("click", () => shellInspection?.clearIssues?.());
   rerunButton.addEventListener?.("click", () => shellInspection?.rerunProbe?.());
@@ -231,12 +320,14 @@ export function getOrCreateSourceryCompanionShell({
     rerunRuntimeProbe: async () => shellInspection?.rerunProbe?.(),
     copyRuntimeInspection: async () => {
       const payload = typeof shellInspection?.inspect === "function" ? shellInspection.inspect() : null;
-      const json = JSON.stringify(payload, null, 2);
-      if (window?.navigator?.clipboard?.writeText) {
-        try {
-          await window.navigator.clipboard.writeText(json);
-        } catch {}
-      }
+      const surfaceSegment = sanitizeDownloadSegment(shellInspection?.activeSurfaceId, "surface");
+      const routeSegment = sanitizeDownloadSegment(window?.location?.pathname, "route");
+      triggerJsonDownload({
+        window,
+        document,
+        filename: `sourcery-${surfaceSegment}-${routeSegment}.json`,
+        payload
+      });
     }
   };
 
@@ -273,7 +364,7 @@ export function getOrCreateSourceryCompanionShell({
       guidance: guidanceState
     });
 
-    root.hidden = !attention.visible;
+    root.hidden = !(attention.visible || pinned);
     fab.className = `sourcery-companion-severity-${attention.worstSeverity || "info"}`;
     fab.textContent = attention.fabLabel;
 
@@ -290,6 +381,10 @@ export function getOrCreateSourceryCompanionShell({
     guidanceButton.textContent = guidanceState.label || "Resume Sourcery";
     guidanceButton.disabled = typeof guidanceState.onResume !== "function";
 
+    panelActionButton.hidden = !panelAction.visible;
+    panelActionButton.textContent = panelAction.label || "Open";
+    panelActionButton.disabled = typeof panelAction.onClick !== "function";
+
     suggestionsTitle.hidden = allSuggestions.length === 0;
     suggestions.hidden = allSuggestions.length === 0;
     suggestions.innerHTML = renderSuggestionListHtml(allSuggestions);
@@ -298,7 +393,8 @@ export function getOrCreateSourceryCompanionShell({
     issues.hidden = issueRows.length === 0;
     issues.innerHTML = renderIssueListHtml(issueRows);
 
-    copyButton.hidden = !shellInspection;
+    downloadButton.hidden = typeof shellInspection?.inspect !== "function";
+    copyIssuesButton.hidden = issueRows.length === 0;
     clearButton.hidden = !shellInspection;
     rerunButton.hidden = !shellInspection?.rerunProbe;
   };
@@ -332,6 +428,21 @@ export function getOrCreateSourceryCompanionShell({
     },
     setExtraSuggestions(rows = []) {
       extraSuggestions = Array.isArray(rows) ? [...rows] : [];
+      render();
+    },
+    setPanelAction(action = null) {
+      panelAction = action && typeof action === "object"
+        ? {
+            visible: action.visible !== false,
+            label: trimString(action.label) || "Open",
+            onClick: typeof action.onClick === "function" ? action.onClick : null
+          }
+        : { visible: false, label: "", onClick: null };
+      render();
+    },
+    setPinned(value = false) {
+      pinned = value === true;
+      if (window && typeof window === "object") window.__sourceryCompanionPinned = pinned;
       render();
     },
     destroy() {

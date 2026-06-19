@@ -68,7 +68,8 @@ export function bindBootstrapScopedSubmit({
   contractsByFamily = bootstrapScopedSubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = event => {
     const detail = event?.detail || {};
     if (!["bootstrap-scoped-controls", "bootstrap-remove-controls"].includes(detail.source)) {
@@ -83,6 +84,24 @@ export function bindBootstrapScopedSubmit({
       contractsByFamily
     });
   };
-  resolvedTarget.addEventListener("witness:bootstrap-scoped-submit", handler);
+  for (const detail of [
+    { source: "bootstrap-scoped-controls", family: "context-binding-create", formId: "context-binding-form", statusId: "context-binding-status" },
+    { source: "bootstrap-scoped-controls", family: "context-export-create", formId: "context-export-form", statusId: "context-export-status" },
+    { source: "bootstrap-scoped-controls", family: "context-import-create", formId: "context-import-form", statusId: "context-import-status" },
+    { source: "bootstrap-scoped-controls", family: "stewardship-create", formId: "stewardship-form", statusId: "stewardship-status" },
+    { source: "bootstrap-remove-controls", family: "context-binding-remove", formId: "context-binding-remove-form", statusId: "context-binding-remove-status" },
+    { source: "bootstrap-remove-controls", family: "context-export-remove", formId: "context-export-remove-form", statusId: "context-export-remove-status" },
+    { source: "bootstrap-remove-controls", family: "context-import-remove", formId: "context-import-remove-form", statusId: "context-import-remove-status" },
+    { source: "bootstrap-remove-controls", family: "stewardship-remove", formId: "stewardship-remove-form", statusId: "stewardship-remove-status" }
+  ]) {
+    const form = resolvedDocument?.getElementById?.(detail.formId);
+    if (!form || form.__bootstrapScopedSubmitBound) continue;
+    form.__bootstrapScopedSubmitBound = true;
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      void handler({ detail: { ...detail, ...data } });
+    });
+  }
   return handler;
 }

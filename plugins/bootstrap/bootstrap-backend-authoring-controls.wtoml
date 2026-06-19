@@ -375,13 +375,6 @@ into = "bootstrapBackendProgramDraft"
 schema = "backendProgram.define"
 
 [[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_backend_program_form"
-eventName = "witness:bootstrap-backend-authoring-submit"
-detail = { source = "bootstrap-backend-authoring-controls", family = "program", formId = "backend-program-form", statusId = "backend-program-status", soul = "${state.bootstrapBackendProgramDraft.soul}", label = "${state.bootstrapBackendProgramDraft.label}", context = "${state.bootstrapBackendProgramDraft.context}" }
-
-[[step]]
 order = 0
 op = "setText"
 on = "submit:bootstrap_backend_program_version_form"
@@ -397,13 +390,6 @@ into = "bootstrapBackendProgramVersionDraft"
 schema = "backendProgramVersion.define"
 
 [[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_backend_program_version_form"
-eventName = "witness:bootstrap-backend-authoring-submit"
-detail = { source = "bootstrap-backend-authoring-controls", family = "program-version", formId = "backend-program-version-form", statusId = "backend-program-version-status", soul = "${state.bootstrapBackendProgramVersionDraft.soul}", version = "${state.bootstrapBackendProgramVersionDraft.version}", index = "${state.bootstrapBackendProgramVersionDraft.index}", context = "${state.bootstrapBackendProgramVersionDraft.context}", transitionFrom = "${state.bootstrapBackendProgramVersionDraft.transitionFrom}", transitionStrategy = "${state.bootstrapBackendProgramVersionDraft.transitionStrategy}" }
-
-[[step]]
 order = 0
 op = "setText"
 on = "submit:bootstrap_backend_step_form"
@@ -417,27 +403,6 @@ on = "submit:bootstrap_backend_step_form"
 widget = "bootstrap_backend_step_form"
 into = "bootstrapBackendStepDraft"
 schema = "backendStep.define"
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_backend_step_form"
-eventName = "witness:bootstrap-backend-authoring-submit"
-detail = { source = "bootstrap-backend-authoring-controls", family = "step", formId = "backend-step-form", statusId = "backend-step-status", version = "${state.bootstrapBackendStepDraft.version}", event = "${state.bootstrapBackendStepDraft.event}", op = "${state.bootstrapBackendStepDraft.op}", order = "${state.bootstrapBackendStepDraft.order}", paramsJson = "${state.bootstrapBackendStepDraft.paramsJson}", whenJson = "${state.bootstrapBackendStepDraft.whenJson}", repeatJson = "${state.bootstrapBackendStepDraft.repeatJson}", afterJson = "${state.bootstrapBackendStepDraft.afterJson}" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_backend_program_version_soul_select"
-eventName = "witness:bootstrap-backend-authoring-sync"
-detail = { source = "bootstrap-backend-authoring-controls", family = "version-soul" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_backend_program_version_transition_from_select"
-eventName = "witness:bootstrap-backend-authoring-sync"
-detail = { source = "bootstrap-backend-authoring-controls", family = "transition-from" }
 
 [[step]]
 order = 0

@@ -283,6 +283,7 @@ function semanticWtomlShape(doc) {
         capabilityRefs: values.capabilityRefs ?? [],
         bindings: values.bindings ?? [],
         interactions: values.interactions ?? [],
+        repeat: values.repeat ?? null,
         modelRef: values.modelRef ?? values.model ?? null,
         frame: values.frame ?? null,
         encoding: normalizeChartEncoding(values.encoding ?? {}),

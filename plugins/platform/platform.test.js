@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { spawn } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createWorld } from "../../src/kernel.js";
 import { applyWitnessToml } from "../../src/dsl.js";
-import { bindContextName, moduleProjectors, updateCapability } from "../../src/modules.js";
+import { approveProposal, bindContextName, createProposal, moduleProjectors, updateCapability } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { compileRvmToDesirePlus } from "../../src/desire/index.js";
 import { bundleId, capabilities, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
@@ -52,6 +53,101 @@ async function createTempPlatformRvmApplyFixture() {
   };
 }
 
+async function runGitFixtureCommand(args, cwd) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(process.platform === "win32" ? "git.exe" : "git", args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", chunk => { stdout += chunk; });
+    child.stderr?.on("data", chunk => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", code => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+      reject(new Error(stderr.trim() || stdout.trim() || `git ${args.join(" ")} failed`));
+    });
+  });
+}
+
+async function createTempPlatformGitPushFixture() {
+  const root = path.join(process.cwd(), "test", `.platform-git-push-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`);
+  const repoRoot = path.join(root, "repo");
+  const remoteRoot = path.join(root, "remote.git");
+  const mirrorRoot = path.join(root, "mirror");
+  await mkdir(repoRoot, { recursive: true });
+  await mkdir(remoteRoot, { recursive: true });
+  await runGitFixtureCommand(["init", "--initial-branch=main"], repoRoot);
+  await runGitFixtureCommand(["config", "user.name", "Platform Test"], repoRoot);
+  await runGitFixtureCommand(["config", "user.email", "platform@example.local"], repoRoot);
+  const relativeFile = "fixture.json";
+  const absoluteFile = path.join(repoRoot, relativeFile);
+  await writeFile(absoluteFile, `${JSON.stringify({ version: 1 }, null, 2)}\n`, "utf8");
+  await runGitFixtureCommand(["add", relativeFile], repoRoot);
+  await runGitFixtureCommand(["commit", "-m", "initial"], repoRoot);
+  await runGitFixtureCommand(["init", "--bare", "--initial-branch=main"], remoteRoot);
+  await runGitFixtureCommand(["remote", "add", "origin", remoteRoot], repoRoot);
+  await runGitFixtureCommand(["push", "-u", "origin", "main"], repoRoot);
+  return {
+    root,
+    repoRoot,
+    remoteRoot,
+    mirrorRoot,
+    stagedPath: path.relative(process.cwd(), absoluteFile).replaceAll("\\", "/")
+  };
+}
+
+async function removeTempPlatformGitPushFixture(root) {
+  await rm(root, { recursive: true, force: true });
+}
+
+async function stageAppliedPushBranch({
+  handlers,
+  branchId,
+  changeSetId,
+  stagedPath,
+  content
+}) {
+  await handlers["platform.branch.create"]({
+    req: { body: { id: branchId, title: branchId } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: changeSetId, branchId } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  await handlers["platform.changeSet.edit"]({
+    req: {
+      body: {
+        edits: [{ path: stagedPath, content }]
+      }
+    },
+    res: {},
+    params: { id: changeSetId },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  await handlers["platform.changeSet.apply"]({
+    req: { body: {} },
+    res: {},
+    params: { id: changeSetId },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+}
+
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -68,6 +164,8 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.branch.list"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.branch.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.branch.create"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.branch.push"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.branch.ship"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.list"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.create"), true);
@@ -87,6 +185,8 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(routes.some(route => route.path === "/api/platform-branches" && route.handler === "platform.branch.list"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-branches" && route.handler === "platform.branch.create"), true);
   assert.equal(routes.some(route => route.handler === "platform.branch.read"), true);
+  assert.equal(routes.some(route => route.handler === "platform.branch.push"), true);
+  assert.equal(routes.some(route => route.handler === "platform.branch.ship"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-change-sets" && route.handler === "platform.changeSet.list"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-change-sets" && route.handler === "platform.changeSet.create"), true);
   assert.equal(routes.some(route => route.handler === "platform.changeSet.read"), true);
@@ -106,6 +206,8 @@ test("platform plugin exposes platform bundle ownership", async () => {
 test("platform runtime declares every change-set route with owned handler metadata", () => {
   const expectedRoutes = [
     { method: "GET", path: "/api/platform-page", handler: "platform.page.read" },
+    { method: "POST", handler: "platform.branch.push", pattern: /^\/api\/platform-branches\/([^/]+)\/push$/, paramNames: ["id"] },
+    { method: "POST", handler: "platform.branch.ship", pattern: /^\/api\/platform-branches\/([^/]+)\/ship$/, paramNames: ["id"] },
     { method: "GET", path: "/api/platform-change-sets", handler: "platform.changeSet.list" },
     { method: "GET", handler: "platform.changeSet.read", pattern: /^\/api\/platform-change-sets\/([^/]+)$/, paramNames: ["id"] },
     { method: "POST", path: "/api/platform-change-sets", handler: "platform.changeSet.create" },
@@ -650,7 +752,7 @@ test("platform console is declared through RVM and styled through WCSS", async (
   assert.equal(page?.semantic.identity, "surface:platform");
   assert.equal(page?.semantic.className, "platform-console");
   assert.equal(page?.semantic.props?.title, "Platform Console");
-  assert.equal(page?.semantic.props?.summary, "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, model inspection, and supplemental governance/model seams.");
+  assert.equal(page?.semantic.props?.summary, "RVM-authored platform pages for overview, workflow, verification, telemetry, defects, knowledge, signals compatibility, model inspection, and supplemental governance/model seams.");
   assert.equal(page?.semantic.children.includes("PlatformWorkflowPage"), true);
   assert.equal(createCommand?.semantic.route, "/api/platform-proposals");
   assert.match(css, /Generated from plugins\/platform\/platform-console\.wcss/);
@@ -671,11 +773,14 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformWorkflowPage",
     "PlatformWorkflowBranchesPage",
     "PlatformWorkflowChangeSetsPage",
+    "PlatformWorkflowPushesPage",
     "PlatformWorkflowProposalsPage",
     "PlatformVerificationPage",
     "PlatformVerificationStatusPage",
     "PlatformVerificationRunsPage",
     "PlatformVerificationRuntimePage",
+    "PlatformTelemetryPage",
+    "PlatformDefectsPage",
     "PlatformKnowledgePage",
     "PlatformKnowledgeDocsPage",
     "PlatformKnowledgeFoldersPage",
@@ -703,6 +808,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   const verificationStatusPage = layout.children.find(surface => surface.name === "PlatformVerificationStatusPage");
   const verificationRunsPage = layout.children.find(surface => surface.name === "PlatformVerificationRunsPage");
   const verificationRuntimePage = layout.children.find(surface => surface.name === "PlatformVerificationRuntimePage");
+  const telemetryPage = layout.children.find(surface => surface.name === "PlatformTelemetryPage");
+  const defectsPage = layout.children.find(surface => surface.name === "PlatformDefectsPage");
   const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
   const knowledgeDocsPage = layout.children.find(surface => surface.name === "PlatformKnowledgeDocsPage");
   const knowledgeFoldersPage = layout.children.find(surface => surface.name === "PlatformKnowledgeFoldersPage");
@@ -815,7 +922,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(workflowPrimarySurface);
   assert.equal(workflowPrimarySurface.props.longTailCardTitle, "Properties");
   assert.equal(workflowPrimarySurface.props.longTailValueKinds, "string|number|boolean|scalarList");
-  assert.equal(workflowPrimarySurface.props.branchLongTailExcludedFields, "changeSetIds|affectedSystemSummaries|telemetryImpactSummaries");
+  assert.equal(workflowPrimarySurface.props.branchLongTailExcludedFields, "changeSetIds|pushRecordIds|affectedSystemSummaries|telemetryImpactSummaries");
   assert.equal(workflowPrimarySurface.props.changeSetLongTailExcludedFields, "changedPaths");
   assert.equal(workflowPrimarySurface.props.branchCardTitle, "Branch Detail");
   assert.match(workflowPrimarySurface.props.branchFields, /Branch=id@concept/);
@@ -824,8 +931,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   const workflowRelatedSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowRelatedPanel");
   assert.ok(workflowRelatedSurface);
   assert.equal(workflowRelatedSurface.props.cardItemLimit, "12");
-  assert.equal(workflowRelatedSurface.props.branchLinkCards, "Change Sets=changeSetIds");
-  assert.equal(workflowRelatedSurface.props.branchLinkCardEmptyStates, "Change Sets=No change sets linked to this branch.");
+  assert.equal(workflowRelatedSurface.props.branchLinkCards, "Change Sets=changeSetIds|Push Records=pushRecordIds");
+  assert.equal(workflowRelatedSurface.props.branchLinkCardEmptyStates, "Change Sets=No change sets linked to this branch.|Push Records=No push records linked to this branch.");
   assert.equal(workflowRelatedSurface.props.branchTextCards, "Affected Systems=affectedSystemSummaries@label|Telemetry Impacts=telemetryImpactSummaries@label");
   assert.equal(workflowRelatedSurface.props.branchTextCardEmptyStates, "Affected Systems=No affected system summaries.|Telemetry Impacts=No telemetry impact summaries.");
   assert.equal(workflowRelatedSurface.props.changeSetLinkCards, "Changed Paths=changedPaths");
@@ -1222,6 +1329,48 @@ test("platform console layout compiles authored top-level surface metadata from 
   const signalListSurface = signalsCatalogPage.childSurfaces.find(surface => surface.name === "PlatformSignalList");
   assert.ok(signalListSurface);
   assert.equal(signalListSurface.props.listSource, "signalItems");
+  assert.ok(telemetryPage);
+  assert.equal(telemetryPage.pageId, "telemetry");
+  assert.equal(telemetryPage.props.modelView, "telemetry");
+  assert.match(telemetryPage.props.summaryCards, /Metrics=telemetryMetrics@count/);
+  assert.deepEqual(telemetryPage.children, [
+    "PlatformTelemetryList",
+    "PlatformTelemetryDetail"
+  ]);
+  const telemetryListSurface = telemetryPage.childSurfaces.find(surface => surface.name === "PlatformTelemetryList");
+  assert.ok(telemetryListSurface);
+  assert.equal(telemetryListSurface.props.listSource, "telemetryItems");
+  assert.equal(telemetryListSurface.props.pageSize, "20");
+  const telemetryDetailSurface = telemetryPage.childSurfaces.find(surface => surface.name === "PlatformTelemetryDetail");
+  assert.ok(telemetryDetailSurface);
+  assert.equal(telemetryDetailSurface.props.detailSource, "telemetry");
+  assert.equal(telemetryDetailSurface.props.detailSelectionSources, "telemetryMetrics|performanceRegressions|telemetryWindows|telemetrySamples");
+  assert.deepEqual(telemetryDetailSurface.children, [
+    "PlatformTelemetryPrimaryPanel",
+    "PlatformTelemetryRelatedPanel",
+    "PlatformTelemetryRelationships"
+  ]);
+  assert.ok(defectsPage);
+  assert.equal(defectsPage.pageId, "defects");
+  assert.equal(defectsPage.props.modelView, "defects");
+  assert.match(defectsPage.props.summaryCards, /Defects=defects@count/);
+  assert.deepEqual(defectsPage.children, [
+    "PlatformDefectList",
+    "PlatformDefectDetail"
+  ]);
+  const defectListSurface = defectsPage.childSurfaces.find(surface => surface.name === "PlatformDefectList");
+  assert.ok(defectListSurface);
+  assert.equal(defectListSurface.props.listSource, "defectItems");
+  assert.equal(defectListSurface.props.pageSize, "20");
+  const defectDetailSurface = defectsPage.childSurfaces.find(surface => surface.name === "PlatformDefectDetail");
+  assert.ok(defectDetailSurface);
+  assert.equal(defectDetailSurface.props.detailSource, "defects");
+  assert.equal(defectDetailSurface.props.detailSelectionSources, "defectClusters|defects|defectObservations|proposals");
+  assert.deepEqual(defectDetailSurface.children, [
+    "PlatformDefectPrimaryPanel",
+    "PlatformDefectRelatedPanel",
+    "PlatformDefectRelationships"
+  ]);
   assert.ok(knowledgePage);
   assert.equal(knowledgePage.props.modelView, "knowledgeOverview");
   assert.match(knowledgePage.props.summaryCards, /Governed Docs=docs@count/);
@@ -1575,6 +1724,18 @@ test("platform page views filter the model to page-scoped slices", () => {
     branchTestRedGreen: [{ id: "branchRedGreen:platform", branchId: "branch:platform", status: "green" }],
     changeSetTestRedGreen: [{ id: "changeSetRedGreen:platform", changeSetId: "changeSet:platform", status: "green" }],
     latestTestResultsByGate: { "gate:platform": { runId: "testRun:platform", status: "passed" } },
+    telemetryThresholds: [{ id: "telemetryThreshold:platform.self.http", metricId: "telemetryMetric:platform.self" }],
+    telemetrySamples: [{ id: "telemetrySample:platform", metricId: "telemetryMetric:platform.self", ownerId: "backend.readPlatformModel", status: "observed" }],
+    telemetryWindows: [{ id: "telemetryWindow:platform", metricId: "telemetryMetric:platform.self", ownerId: "backend.readPlatformModel", status: "observed" }],
+    performanceRegressions: [{ id: "performanceRegression:platform", metricId: "telemetryMetric:platform.self", ownerId: "backend.readPlatformModel", status: "open" }],
+    defects: [{ id: "defect:platform", clusterId: "defectCluster:platform", metricId: "telemetryMetric:platform.self", status: "open" }],
+    defectObservations: [{ id: "defectObservation:platform", defectId: "defect:platform", metricId: "telemetryMetric:platform.self", status: "observed" }],
+    defectClusters: [{ id: "defectCluster:platform", defectIds: ["defect:platform"], observationIds: ["defectObservation:platform"], status: "open" }],
+    gitRemotes: [{ id: "gitRemote:origin", name: "origin", remoteUrl: "https://github.com/example/platform.git", provider: "github" }],
+    gitRefs: [{ id: "gitRef:refs/heads/platform/demo", refName: "refs/heads/platform/demo", shortName: "platform/demo", scope: "localBranch", objectId: "abc123" }],
+    pushRecords: [{ id: "pushRecord:platform:1", branchId: "branch:platform", changeSetId: "changeSet:platform", status: "pushed", remoteName: "origin", gitBranchName: "platform/demo", localBranchRef: "refs/heads/platform/demo", remoteBranchRef: "refs/heads/platform/demo", commitSha: "abc123" }],
+    releaseChannels: [{ id: "releaseChannel:local", name: "local", title: "Local", executable: true }],
+    shipRecords: [{ id: "shipRecord:platform:1", branchId: "branch:platform", changeSetId: "changeSet:platform", pushRecordId: "pushRecord:platform:1", releaseChannelId: "releaseChannel:local", status: "shipped", proposalId: "proposal:platform-ship", observationStatus: "open" }],
     docSections: [{ id: "docSection:platform", doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }],
     docTasks: [{ id: "docTask:platform", doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }],
     roadmapTasks: [{ id: "roadmapTask:platform", doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }],
@@ -1594,6 +1755,10 @@ test("platform page views filter the model to page-scoped slices", () => {
   const signals = filterPlatformModel(model, "signals");
   const signalsGaps = filterPlatformModel(model, "signalsGaps");
   const signalsCatalog = filterPlatformModel(model, "signalsCatalog");
+  const telemetry = filterPlatformModel(model, "telemetry");
+  const defects = filterPlatformModel(model, "defects");
+  const pushes = filterPlatformModel(model, "pushes");
+  const ships = filterPlatformModel(model, "ships");
   const modelPage = filterPlatformModel(model, "model");
   const modelObjects = filterPlatformModel(model, "modelObjects");
   const modelProfiles = filterPlatformModel(model, "modelProfiles");
@@ -1603,7 +1768,7 @@ test("platform page views filter the model to page-scoped slices", () => {
   const semantics = filterPlatformModel(model, "semantics");
 
   assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleBoard", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
-  assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "summaries"]);
+  assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "pushRecords", "summaries"]);
   assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites", "verificationExecutions", "verificationFreshness", "verificationInvalidations", "verificationPersistence", "verificationPolicies", "verificationQueue"]);
   assert.deepEqual(Object.keys(knowledge).sort(), ["docTasks", "docs", "epics", "features", "folders", "roadmapTasks", "summaries"]);
   assert.deepEqual(Object.keys(knowledgeDocs).sort(), ["docSections", "docTasks", "docs", "summaries"]);
@@ -1612,6 +1777,10 @@ test("platform page views filter the model to page-scoped slices", () => {
   assert.deepEqual(Object.keys(signals).sort(), ["gaps", "nodes", "summaries"]);
   assert.deepEqual(Object.keys(signalsGaps).sort(), ["gaps", "summaries"]);
   assert.deepEqual(Object.keys(signalsCatalog).sort(), ["edges", "nodes", "summaries"]);
+  assert.deepEqual(Object.keys(telemetry).sort(), ["branches", "changeSets", "latestTestResultsByGate", "performanceRegressions", "summaries", "telemetryEdges", "telemetryMetrics", "telemetrySamples", "telemetryThresholds", "telemetryWindows", "testGates"]);
+  assert.deepEqual(Object.keys(defects).sort(), ["branches", "changeSets", "defectClusters", "defectObservations", "defects", "proposals", "summaries", "testGates"]);
+  assert.deepEqual(Object.keys(pushes).sort(), ["branches", "changeSets", "defects", "gitRefs", "gitRemotes", "proposals", "pushRecords", "summaries"]);
+  assert.deepEqual(Object.keys(ships).sort(), ["branches", "changeSets", "defects", "latestTestResultsByGate", "performanceRegressions", "proposals", "pushRecords", "releaseChannels", "shipRecords", "summaries", "testGates"]);
   assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
   assert.deepEqual(Object.keys(modelObjects).sort(), ["edges", "nodes", "summaries"]);
   assert.deepEqual(Object.keys(modelProfiles).sort(), ["profiles", "summaries"]);
@@ -1627,6 +1796,17 @@ test("platform page views filter the model to page-scoped slices", () => {
   assert.equal("edges" in signals, false);
   assert.equal(signalsGaps.gaps.length, 1);
   assert.equal(signalsCatalog.edges.length, 2);
+  assert.equal(telemetry.telemetryMetrics.length, 1);
+  assert.equal(telemetry.telemetrySamples.length, 1);
+  assert.equal(telemetry.performanceRegressions.length, 1);
+  assert.equal(defects.defects.length, 1);
+  assert.equal(defects.defectObservations.length, 1);
+  assert.equal(defects.defectClusters.length, 1);
+  assert.equal(pushes.pushRecords.length, 1);
+  assert.equal(pushes.gitRemotes.length, 1);
+  assert.equal(pushes.gitRefs.length, 1);
+  assert.equal(ships.shipRecords.length, 1);
+  assert.equal(ships.releaseChannels.length, 1);
   assert.equal(signals.nodes.some(node => node.id === "plugin.platform"), false);
   assert.equal(modelObjects.nodes.length, model.nodes.length);
   assert.equal(modelProfiles.profiles.length, 1);
@@ -1647,6 +1827,241 @@ test("platform delegated test-gate projectors discover gate catalog rows", async
   assert.equal(testGateIndex.byId["gate:plugins/platform/platform.test.js"].id, "gate:plugins/platform/platform.test.js");
   assert.equal(Array.isArray(testGateIndex.byProtectedObject["plugin.platform"]), true);
   assert.equal(coverageEdges.some(row => row.gateId === "gate:plugins/platform/platform.test.js" && row.coverageKind === "sourceDependency"), true);
+}));
+
+test("platform telemetry and defect projectors derive regressions, hot loops, and clusters deterministically", async () => withRegisteredPluginProjectors(providers, async () => {
+  const witnesses = [
+    {
+      id: "sample.http.1",
+      process: "backend.readPlatformModel",
+      time: "2026-06-18T00:00:00.000Z",
+      body: {
+        durationMs: 55,
+        routeId: "route:GET /platform",
+        handlerId: "backend.readPlatformModel",
+        section: "summary",
+        startedAt: "2026-06-18T00:00:00.000Z",
+        finishedAt: "2026-06-18T00:00:00.055Z"
+      }
+    },
+    {
+      id: "sample.http.2",
+      process: "backend.readPlatformModel",
+      time: "2026-06-18T00:01:00.000Z",
+      body: {
+        durationMs: 60,
+        routeId: "route:GET /platform",
+        handlerId: "backend.readPlatformModel",
+        section: "summary",
+        startedAt: "2026-06-18T00:01:00.000Z",
+        finishedAt: "2026-06-18T00:01:00.060Z"
+      }
+    },
+    {
+      id: "sample.http.3",
+      process: "backend.readPlatformModel",
+      time: "2026-06-18T00:02:00.000Z",
+      body: {
+        durationMs: 58,
+        routeId: "route:GET /platform",
+        handlerId: "backend.readPlatformModel",
+        section: "summary",
+        startedAt: "2026-06-18T00:02:00.000Z",
+        finishedAt: "2026-06-18T00:02:00.058Z"
+      }
+    },
+    {
+      id: "sample.http.4",
+      process: "backend.readPlatformModel",
+      time: "2026-06-18T00:03:00.000Z",
+      body: {
+        durationMs: 142,
+        routeId: "route:GET /platform",
+        handlerId: "backend.readPlatformModel",
+        section: "summary",
+        startedAt: "2026-06-18T00:03:00.000Z",
+        finishedAt: "2026-06-18T00:03:00.142Z"
+      }
+    },
+    {
+      id: "sample.http.5",
+      process: "backend.readPlatformModel",
+      time: "2026-06-18T00:04:00.000Z",
+      body: {
+        durationMs: 148,
+        routeId: "route:GET /platform",
+        handlerId: "backend.readPlatformModel",
+        section: "summary",
+        startedAt: "2026-06-18T00:04:00.000Z",
+        finishedAt: "2026-06-18T00:04:00.148Z"
+      }
+    },
+    {
+      id: "sample.http.6",
+      process: "backend.readPlatformModel",
+      time: "2026-06-18T00:05:00.000Z",
+      body: {
+        durationMs: 145,
+        routeId: "route:GET /platform",
+        handlerId: "backend.readPlatformModel",
+        section: "summary",
+        startedAt: "2026-06-18T00:05:00.000Z",
+        finishedAt: "2026-06-18T00:05:00.145Z"
+      }
+    },
+    {
+      id: "sample.gate.1",
+      process: "platform.test.run.finish",
+      time: "2026-06-18T00:06:00.000Z",
+      body: {
+        id: "testRun:demo-1",
+        gateId: "gate:demo",
+        branchId: "branch:demo",
+        changeSetId: "changeSet:demo",
+        candidateSnapshotId: "candidateSnapshot:demo",
+        protectedObjects: ["telemetryMetric:verification.gates"],
+        status: "failed",
+        durationMs: 70,
+        error: "boom",
+        startedAt: "2026-06-18T00:06:00.000Z",
+        finishedAt: "2026-06-18T00:06:00.070Z"
+      }
+    },
+    {
+      id: "sample.gate.2",
+      process: "platform.test.run.finish",
+      time: "2026-06-18T00:06:30.000Z",
+      body: {
+        id: "testRun:demo-2",
+        gateId: "gate:demo",
+        branchId: "branch:demo",
+        changeSetId: "changeSet:demo",
+        candidateSnapshotId: "candidateSnapshot:demo",
+        protectedObjects: ["telemetryMetric:verification.gates"],
+        status: "failed",
+        durationMs: 72,
+        error: "boom",
+        startedAt: "2026-06-18T00:06:30.000Z",
+        finishedAt: "2026-06-18T00:06:30.072Z"
+      }
+    },
+    {
+      id: "sample.gate.3",
+      process: "platform.test.run.finish",
+      time: "2026-06-18T00:07:00.000Z",
+      body: {
+        id: "testRun:demo-3",
+        gateId: "gate:demo",
+        branchId: "branch:demo",
+        changeSetId: "changeSet:demo",
+        candidateSnapshotId: "candidateSnapshot:demo",
+        protectedObjects: ["telemetryMetric:verification.gates"],
+        status: "failed",
+        durationMs: 74,
+        error: "boom",
+        startedAt: "2026-06-18T00:07:00.000Z",
+        finishedAt: "2026-06-18T00:07:00.074Z"
+      }
+    }
+  ];
+
+  const thresholds = moduleProjectors.telemetryThresholds(witnesses);
+  const samples = moduleProjectors.telemetrySamples(witnesses);
+  const windows = moduleProjectors.telemetryWindows(witnesses);
+  const regressions = moduleProjectors.performanceRegressions(witnesses);
+  const defects = moduleProjectors.defects(witnesses);
+  const observations = moduleProjectors.defectObservations(witnesses);
+  const clusters = moduleProjectors.defectClusters(witnesses);
+
+  assert.equal(thresholds.length >= 3, true);
+  assert.equal(samples.length, 9);
+  assert.equal(windows.some(row => row.metricId === "telemetryMetric:platform.self" && row.currentAggregateMs > row.previousAggregateMs), true);
+  assert.equal(regressions.some(row => row.metricId === "telemetryMetric:platform.self" && row.ownerId === "backend.readPlatformModel"), true);
+  assert.equal(defects.some(row => row.defectKind === "performanceRegression" && row.metricId === "telemetryMetric:platform.self"), true);
+  assert.equal(defects.some(row => row.defectKind === "slowSample" && row.metricId === "telemetryMetric:platform.self"), true);
+  assert.equal(defects.some(row => row.defectKind === "hotLoop" && row.gateId === "gate:demo"), true);
+  assert.equal(defects.some(row => row.defectKind === "failingGate" && row.gateId === "gate:demo"), true);
+  assert.equal(observations.some(row => row.sourceKind === "performanceRegression"), true);
+  assert.equal(observations.filter(row => row.defectId.startsWith("defect:hotLoop:")).length, 3);
+  assert.equal(clusters.some(row => row.id === "defectCluster:telemetrymetric-platform-self" && row.defectCount >= 2), true);
+  assert.equal(clusters.some(row => row.id === "defectCluster:gate-demo" && row.defectCount >= 2), true);
+}));
+
+test("platform push projectors derive deterministic push records and pushed branch state", async () => withRegisteredPluginProjectors(providers, async () => {
+  const witnesses = [
+    {
+      id: "branch.demo",
+      process: "platform.branch.create",
+      time: "2026-06-18T00:00:00.000Z",
+      body: {
+        id: "branch.demo",
+        title: "Demo Branch",
+        owner: "aaron",
+        createdAt: "2026-06-18T00:00:00.000Z"
+      }
+    },
+    {
+      id: "changeset.demo",
+      process: "platform.changeSet.create",
+      time: "2026-06-18T00:01:00.000Z",
+      body: {
+        id: "changeset.demo",
+        branchId: "branch.demo",
+        owner: "aaron",
+        createdAt: "2026-06-18T00:01:00.000Z"
+      }
+    },
+    {
+      id: "changeset.demo.apply",
+      process: "platform.changeSet.apply",
+      time: "2026-06-18T00:02:00.000Z",
+      body: {
+        id: "changeset.demo",
+        branchId: "branch.demo",
+        candidateSnapshotId: "candidateSnapshot:demo:1",
+        status: "applied",
+        appliedAt: "2026-06-18T00:02:00.000Z"
+      }
+    },
+    {
+      id: "push.demo",
+      process: "platform.branch.push",
+      time: "2026-06-18T00:03:00.000Z",
+      body: {
+        id: "pushRecord:branch.demo:1",
+        branchId: "branch.demo",
+        changeSetId: "changeset.demo",
+        status: "pushed",
+        remoteName: "origin",
+        remoteUrl: "https://github.com/example/platform.git",
+        provider: "github",
+        gitBranchName: "platform/demo",
+        localBranchRef: "refs/heads/platform/demo",
+        remoteBranchRef: "refs/heads/platform/demo",
+        commitSha: "abc123",
+        commitMessage: "platform push platform/demo",
+        compareUrl: "https://github.com/example/platform/compare/main...platform%2Fdemo?expand=1",
+        pullRequestUrl: "https://github.com/example/platform/pull/new/platform%2Fdemo",
+        owner: "aaron",
+        createdAt: "2026-06-18T00:03:00.000Z"
+      }
+    }
+  ];
+
+  const pushRecords = moduleProjectors.pushRecords(witnesses);
+  const pushRecordIndex = moduleProjectors.pushRecordIndex(witnesses);
+  const branches = moduleProjectors.branches(witnesses);
+
+  assert.equal(pushRecords.length, 1);
+  assert.equal(pushRecords[0].id, "pushRecord:branch.demo:1");
+  assert.equal(pushRecords[0].provider, "github");
+  assert.equal(pushRecords[0].compareUrl, "https://github.com/example/platform/compare/main...platform%2Fdemo?expand=1");
+  assert.equal(pushRecords[0].pullRequestUrl, "https://github.com/example/platform/pull/new/platform%2Fdemo");
+  assert.equal(pushRecordIndex.byBranch["branch.demo"][0].commitSha, "abc123");
+  assert.equal(branches[0].gitBranchName, "platform/demo");
+  assert.equal(branches[0].latestPushRecordId, "pushRecord:branch.demo:1");
+  assert.equal(branches[0].latestPushStatus, "pushed");
+  assert.equal(branches[0].status, "pushed");
 }));
 
 test("platform test gates derive flake scores from non-cached result transitions", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -2029,6 +2444,16 @@ test("platform model filters support MCP views", async () => {
     changeSets: [{ id: "changeset.demo", status: "draft" }],
     candidateSnapshots: [{ id: "candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo" }]
   }, "branches");
+  const pushes = filterPlatformModel({
+    ...model,
+    branches: [{ id: "branch.demo", status: "pushed", pushRecordIds: ["pushRecord:demo:1"] }],
+    changeSets: [{ id: "changeset.demo", branchId: "branch.demo", status: "applied" }],
+    pushRecords: [{ id: "pushRecord:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", remoteName: "origin", gitBranchName: "platform/demo", localBranchRef: "refs/heads/platform/demo", remoteBranchRef: "refs/heads/platform/demo", status: "pushed" }],
+    gitRemotes: [{ id: "gitRemote:origin", name: "origin", remoteUrl: "https://github.com/example/platform.git", provider: "github" }],
+    gitRefs: [{ id: "gitRef:refs/heads/platform/demo", refName: "refs/heads/platform/demo", shortName: "platform/demo", scope: "localBranch", objectId: "abc123" }],
+    defects: [{ id: "defect:push", pushRecordId: "pushRecord:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", status: "open" }],
+    proposals: [{ id: "proposal:push", targetId: "defect:push", status: "open" }]
+  }, "pushes", "branch.demo");
   const runtimeRevisions = filterPlatformModel({
     ...model,
     runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", frontendRevisionId: "frontendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], branchId: "branch.demo", changeSetId: "changeset.demo", candidateBranchCount: 1, buildErrorCount: 1 }],
@@ -2139,6 +2564,10 @@ test("platform model filters support MCP views", async () => {
   assert.equal(telemetry.testGates[0].id, "gate:test/runtime-profile.test.js");
   assert.equal(telemetry.latestTestResultsByGate["gate:test/runtime-profile.test.js"].status, "passed");
   assert.equal(branches.branches[0].id, "branch.demo");
+  assert.equal(pushes.pushRecords[0].id, "pushRecord:demo:1");
+  assert.equal(pushes.gitRemotes[0].id, "gitRemote:origin");
+  assert.equal(pushes.gitRefs[0].id, "gitRef:refs/heads/platform/demo");
+  assert.equal(pushes.proposals[0].id, "proposal:push");
   assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
   assert.equal(runtimeRevisions.runtimeRevisions[0].frontendRevisionId, "frontendRevision:3");
   assert.equal(runtimeRevisions.activeRuntimeRevision.revision, 3);
@@ -2288,12 +2717,12 @@ test("roadmap task projections link resolved platform targets", async () => {
     project: () => []
   });
 
-  const pluginTask = model.roadmapTasks.find(task => task.title === "Treat `plugin.platform` as the existing home for this work.");
-  const routeTask = model.roadmapTasks.find(task => task.title === "Treat `/platform` as the human surface for platform self-inspection.");
-  const sourceTask = model.roadmapTasks.find(task => task.title === "Read `plugins/platform/platform-console.rvm`.");
-  const fileTask = model.roadmapTasks.find(task => task.title === "Treat `plugins/platform/platform-page.js` as the current HTML/JS console renderer.");
-  const jsonTask = model.roadmapTasks.find(task => task.title === "Treat `store/seeds/runtime-profiles.json` as the runtime profile seed source.");
-  const testFileTask = model.roadmapTasks.find(task => task.title === "Treat `test/runtime-profile.test.js` as the profile isolation/exposure test suite.");
+  const pluginTask = model.roadmapTasks.find(task => task.targets.some(target => target.targetId === "plugin.platform"));
+  const routeTask = model.roadmapTasks.find(task => task.targets.some(target => target.targetId === "route:GET /platform"));
+  const sourceTask = model.roadmapTasks.find(task => task.targets.some(target => target.targetId === "rvm:plugins/platform/platform-console.rvm"));
+  const fileTask = model.roadmapTasks.find(task => task.targets.some(target => target.targetId === "file:plugins/platform/platform-page.js"));
+  const jsonTask = model.roadmapTasks.find(task => task.targets.some(target => target.targetId === "json:store/seeds/runtime-profiles.json"));
+  const testFileTask = model.roadmapTasks.find(task => task.targets.some(target => target.targetId === "file:plugins/platform/platform.test.js"));
 
   assert.ok(pluginTask);
   assert.equal(pluginTask.targets.some(target => target.targetId === "plugin.platform"), true);
@@ -2330,9 +2759,9 @@ test("roadmap task projections link resolved platform targets", async () => {
   assert.equal(jsonTask.evidence.gateIds.length > 0, true);
 
   assert.ok(testFileTask);
-  assert.equal(testFileTask.targets.some(target => target.targetId === "file:test/runtime-profile.test.js"), true);
+  assert.equal(testFileTask.targets.some(target => target.targetId === "file:plugins/platform/platform.test.js"), true);
   assert.equal(testFileTask.targets.some(target => target.targetKind === "testFile"), true);
-  assert.equal(model.edges.some(edge => edge.from === testFileTask.id && edge.rel === "targets" && edge.to === "file:test/runtime-profile.test.js"), true);
+  assert.equal(model.edges.some(edge => edge.from === testFileTask.id && edge.rel === "targets" && edge.to === "file:plugins/platform/platform.test.js"), true);
   assert.equal(testFileTask.evidence.status !== "unlinked", true);
   assert.equal(testFileTask.evidence.gateIds.length > 0, true);
 });
@@ -2361,10 +2790,9 @@ test("roadmap task evidence tracks linked targets, gates, and gaps without repla
     }
   });
 
-  const task = model.roadmapTasks.find(row => row.title === "Treat `plugin.platform` as the existing home for this work.");
+  const task = model.roadmapTasks.find(row => row.targets.some(target => target.targetId === "plugin.platform"));
 
   assert.ok(task);
-  assert.equal(task.status, "open");
   assert.equal(task.evidence.status !== "unlinked", true);
   assert.equal(task.derivedStatus !== "untracked", true);
   assert.equal(Array.isArray(task.evidence.gapIds), true);
@@ -3565,6 +3993,8 @@ test("platform proposal builder normalizes supported proposal bodies", () => {
   assert.equal(platformProposalTemplates().some(template => template.action === "changeSet.apply"), true);
   assert.equal(platformProposalTemplates().some(template => template.action === "branch.merge"), true);
   assert.equal(platformProposalTemplates().some(template => template.action === "branch.rebase"), true);
+  assert.equal(platformProposalTemplates().some(template => template.action === "branch.ship"), true);
+  assert.equal(platformProposalTemplates().some(template => template.action === "branch.rollback"), true);
   assert.equal(built.ok, true);
   assert.equal(built.value.targetProcess, "mcpTool.install");
   assert.equal(built.value.targetKind, "mcpServer");
@@ -5409,6 +5839,514 @@ test("platform branch handlers create, list, and read branch detail", async () =
   assert.deepEqual(sent.at(-1).body.validationHistory, []);
 }));
 
+test("platform branch push rejects branches without an applied change set", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.push.reject", title: "Reject Push" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.branch.push"]({
+    req: { body: {} },
+    res: {},
+    params: { id: "branch.push.reject" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  assert.equal(sent.at(-1).status, 409);
+  assert.match(sent.at(-1).body.error, /no applied change set/i);
+}));
+
+test("platform branch push dry runs record push state without marking the branch pushed", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformGitPushFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await stageAppliedPushBranch({
+      handlers,
+      branchId: "branch.push.dry",
+      changeSetId: "changeset.push.dry",
+      stagedPath: fixture.stagedPath,
+      content: `${JSON.stringify({ version: 2 }, null, 2)}\n`
+    });
+
+    await handlers["platform.branch.push"]({
+      req: { body: { dryRun: true } },
+      res: {},
+      params: { id: "branch.push.dry" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: {
+        runtimeProfile: "full",
+        platformGit: {
+          repoRoot: fixture.repoRoot,
+          mirrorRoot: fixture.mirrorRoot
+        }
+      }
+    });
+
+    assert.equal(sent.at(-1).status, 200);
+    assert.equal(sent.at(-1).body.pushRecord.status, "dryRun");
+    assert.equal(sent.at(-1).body.branch.status, "valid");
+    assert.equal(sent.at(-1).body.branch.latestPushStatus, "dryRun");
+
+  } finally {
+    await removeTempPlatformGitPushFixture(fixture.root);
+  }
+}));
+
+test("platform branch push creates mirror commits, updates branch state, and records pushed refs", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformGitPushFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await stageAppliedPushBranch({
+      handlers,
+      branchId: "branch.push.real",
+      changeSetId: "changeset.push.real",
+      stagedPath: fixture.stagedPath,
+      content: `${JSON.stringify({ version: 3 }, null, 2)}\n`
+    });
+
+    await handlers["platform.branch.push"]({
+      req: { body: {} },
+      res: {},
+      params: { id: "branch.push.real" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: {
+        runtimeProfile: "full",
+        platformGit: {
+          repoRoot: fixture.repoRoot,
+          mirrorRoot: fixture.mirrorRoot
+        }
+      }
+    });
+
+    const response = sent.at(-1);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.pushRecord.status, "pushed");
+    assert.equal(response.body.branch.status, "pushed");
+    assert.equal(response.body.pushRecord.remoteName, "origin");
+    assert.equal(response.body.pushRecord.provider, "generic");
+    assert.match(response.body.pushRecord.commitSha || "", /^[0-9a-f]{40}$/);
+    assert.equal(response.body.ref?.refName, "refs/remotes/origin/platform/push-real");
+
+    const remoteHead = await runGitFixtureCommand(["rev-parse", "refs/heads/platform/push-real"], fixture.remoteRoot);
+    assert.equal(remoteHead.stdout.trim(), response.body.pushRecord.commitSha);
+  } finally {
+    await removeTempPlatformGitPushFixture(fixture.root);
+  }
+}));
+
+test("platform branch push failures preserve mirror commits and emit linked defect proposals", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformGitPushFixture();
+  try {
+    const brokenRemoteRoot = path.join(fixture.root, "broken-remote");
+    await mkdir(brokenRemoteRoot, { recursive: true });
+    await runGitFixtureCommand(["remote", "add", "broken", brokenRemoteRoot], fixture.repoRoot);
+    const world = createWorld();
+    const sent = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await stageAppliedPushBranch({
+      handlers,
+      branchId: "branch.push.fail",
+      changeSetId: "changeset.push.fail",
+      stagedPath: fixture.stagedPath,
+      content: `${JSON.stringify({ version: 4 }, null, 2)}\n`
+    });
+
+    await handlers["platform.branch.push"]({
+      req: { body: { remoteName: "broken" } },
+      res: {},
+      params: { id: "branch.push.fail" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: {
+        runtimeProfile: "full",
+        platformGit: {
+          repoRoot: fixture.repoRoot,
+          mirrorRoot: fixture.mirrorRoot
+        }
+      }
+    });
+
+    const response = sent.at(-1);
+    assert.equal(response.status, 409);
+    assert.equal(response.body.pushRecord.status, "failed");
+    assert.match(response.body.pushRecord.commitSha || "", /^[0-9a-f]{40}$/);
+    assert.equal(response.body.defect.pushRecordId, response.body.pushRecord.id);
+    assert.equal(response.body.proposal.targetId, response.body.defect.id);
+
+    const mirrorHead = await runGitFixtureCommand(["rev-parse", "HEAD"], fixture.mirrorRoot);
+    assert.equal(mirrorHead.stdout.trim(), response.body.pushRecord.commitSha);
+  } finally {
+    await removeTempPlatformGitPushFixture(fixture.root);
+  }
+}));
+
+test("platform branch ship rejects branches without a successful push record", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.ship.reject", title: "Reject Ship" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.branch.ship"]({
+    req: { body: { releaseChannelId: "releaseChannel:local" } },
+    res: {},
+    params: { id: "branch.ship.reject" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: {
+      runtimeProfile: "full",
+      project: projector => world.project(projector)
+    }
+  });
+
+  assert.equal(sent.at(-1).status, 409);
+  assert.match(sent.at(-1).body.error, /no successful push record/i);
+}));
+
+test("platform branch ship records local ship state and opens an observation window", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformGitPushFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const shipProject = projector => {
+      if (projector === moduleProjectors.testGates) {
+        return [{
+          id: "gate:ship.local",
+          title: "Ship local gate",
+          sourcePath: fixture.stagedPath,
+          sourceDependencies: [fixture.stagedPath],
+          command: "node --test plugins/platform/platform.test.js",
+          protectedObjects: ["plugin.platform"]
+        }];
+      }
+      if (projector === moduleProjectors.testResults) {
+        return [{
+          id: "testResult:ship.local:1",
+          runId: "testRun:ship.local",
+          gateId: "gate:ship.local",
+          branchId: "branch.ship.local",
+          changeSetId: "changeset.ship.local",
+          status: "passed",
+          exitCode: 0,
+          durationMs: 12,
+          producedAt: "2026-06-19T00:01:00.000Z"
+        }];
+      }
+      if (projector === moduleProjectors.testRuns) {
+        return [{
+          id: "testRun:ship.local",
+          gateId: "gate:ship.local",
+          branchId: "branch.ship.local",
+          changeSetId: "changeset.ship.local",
+          status: "passed",
+          startedAt: "2026-06-19T00:00:30.000Z",
+          finishedAt: "2026-06-19T00:01:00.000Z"
+        }];
+      }
+      if (projector === moduleProjectors.latestTestResultsByGate) {
+        return {
+          byGate: {
+            "gate:ship.local": {
+              runId: "testRun:ship.local",
+              status: "passed"
+            }
+          }
+        };
+      }
+      return world.project(projector);
+    };
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await stageAppliedPushBranch({
+      handlers,
+      branchId: "branch.ship.local",
+      changeSetId: "changeset.ship.local",
+      stagedPath: fixture.stagedPath,
+      content: `${JSON.stringify({ version: 5 }, null, 2)}\n`
+    });
+
+    await handlers["platform.branch.push"]({
+      req: { body: {} },
+      res: {},
+      params: { id: "branch.ship.local" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: {
+        runtimeProfile: "full",
+        platformGit: {
+          repoRoot: fixture.repoRoot,
+          mirrorRoot: fixture.mirrorRoot
+        },
+        project: shipProject
+      }
+    });
+
+    createProposal(world, {
+      actor: "aaron",
+      id: "proposal.platform.branch.ship.local",
+      targetProcess: "branch.ship",
+      targetKind: "branch",
+      targetId: "branch.ship.local",
+      body: {
+        branchId: "branch.ship.local",
+        releaseChannelId: "releaseChannel:local"
+      },
+      reason: "Ship locally"
+    });
+    approveProposal(world, {
+      actor: "reviewer",
+      id: "proposal.platform.branch.ship.local"
+    });
+
+    await handlers["platform.branch.ship"]({
+      req: { body: { releaseChannelId: "releaseChannel:local", proposalId: "proposal.platform.branch.ship.local" } },
+      res: {},
+      params: { id: "branch.ship.local" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: {
+        runtimeProfile: "full",
+        project: shipProject
+      }
+    });
+
+    const response = sent.at(-1);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.shipRecord.status, "shipped");
+    assert.equal(response.body.releaseChannel.id, "releaseChannel:local");
+    assert.equal(response.body.branch.status, "shipped");
+    assert.equal(response.body.branch.latestShipStatus, "shipped");
+    assert.equal(response.body.pushRecord.status, "pushed");
+    assert.equal(response.body.proposal.id, "proposal.platform.branch.ship.local");
+    assert.equal(response.body.gateResults.ok, true);
+    assert.equal(typeof response.body.shipRecord.observationWindowEndsAt, "string");
+    assert.equal(response.body.shipRecord.observationStatus, "open");
+    assert.equal(world.project(moduleProjectors.shipRecords).some(row => row.id === response.body.shipRecord.id), true);
+  } finally {
+    await removeTempPlatformGitPushFixture(fixture.root);
+  }
+}));
+
+test("platform branch ship to non-local channels records intent without marking the branch shipped", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformGitPushFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const shipProject = projector => {
+      if (projector === moduleProjectors.testGates) {
+        return [{
+          id: "gate:ship.preview",
+          title: "Ship preview gate",
+          sourcePath: fixture.stagedPath,
+          sourceDependencies: [fixture.stagedPath],
+          command: "node --test plugins/platform/platform.test.js",
+          protectedObjects: ["plugin.platform"]
+        }];
+      }
+      if (projector === moduleProjectors.testResults) {
+        return [{
+          id: "testResult:ship.preview:1",
+          runId: "testRun:ship.preview",
+          gateId: "gate:ship.preview",
+          branchId: "branch.ship.preview",
+          changeSetId: "changeset.ship.preview",
+          status: "passed",
+          exitCode: 0,
+          durationMs: 12,
+          producedAt: "2026-06-19T00:01:00.000Z"
+        }];
+      }
+      if (projector === moduleProjectors.testRuns) {
+        return [{
+          id: "testRun:ship.preview",
+          gateId: "gate:ship.preview",
+          branchId: "branch.ship.preview",
+          changeSetId: "changeset.ship.preview",
+          status: "passed",
+          startedAt: "2026-06-19T00:00:30.000Z",
+          finishedAt: "2026-06-19T00:01:00.000Z"
+        }];
+      }
+      if (projector === moduleProjectors.latestTestResultsByGate) {
+        return {
+          byGate: {
+            "gate:ship.preview": {
+              runId: "testRun:ship.preview",
+              status: "passed"
+            }
+          }
+        };
+      }
+      return world.project(projector);
+    };
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await stageAppliedPushBranch({
+      handlers,
+      branchId: "branch.ship.preview",
+      changeSetId: "changeset.ship.preview",
+      stagedPath: fixture.stagedPath,
+      content: `${JSON.stringify({ version: 6 }, null, 2)}\n`
+    });
+
+    await handlers["platform.branch.push"]({
+      req: { body: {} },
+      res: {},
+      params: { id: "branch.ship.preview" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: {
+        runtimeProfile: "full",
+        platformGit: {
+          repoRoot: fixture.repoRoot,
+          mirrorRoot: fixture.mirrorRoot
+        },
+        project: shipProject
+      }
+    });
+
+    createProposal(world, {
+      actor: "aaron",
+      id: "proposal.platform.branch.ship.preview",
+      targetProcess: "branch.ship",
+      targetKind: "branch",
+      targetId: "branch.ship.preview",
+      body: {
+        branchId: "branch.ship.preview",
+        releaseChannelId: "releaseChannel:preview"
+      },
+      reason: "Record preview ship intent"
+    });
+    approveProposal(world, {
+      actor: "reviewer",
+      id: "proposal.platform.branch.ship.preview"
+    });
+
+    await handlers["platform.branch.ship"]({
+      req: { body: { releaseChannelId: "releaseChannel:preview", proposalId: "proposal.platform.branch.ship.preview" } },
+      res: {},
+      params: { id: "branch.ship.preview" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: {
+        runtimeProfile: "full",
+        project: shipProject
+      }
+    });
+
+    const response = sent.at(-1);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.shipRecord.status, "recorded");
+    assert.equal(response.body.releaseChannel.id, "releaseChannel:preview");
+    assert.notEqual(response.body.branch.status, "shipped");
+    assert.equal(response.body.branch.latestShipStatus, "recorded");
+    assert.equal(response.body.shipRecord.observationWindowEndsAt, null);
+  } finally {
+    await removeTempPlatformGitPushFixture(fixture.root);
+  }
+}));
+
 test("platform branch creation validates parent branch dependencies and preserves metadata", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const sent = [];
@@ -6198,6 +7136,18 @@ test("platform page renders required operating views", async () => {
     files: [{ path: "plugins/platform/platform-console.rvm" }],
     errors: []
   }));
+  branches[1] = {
+    ...branches[1],
+    status: "pushed",
+    gitBranchName: "platform/demo-1",
+    latestPushRecordId: "pushRecord:demo-1:1",
+    latestPushStatus: "pushed",
+    pushRecordIds: ["pushRecord:demo-1:1"],
+    latestShipRecordId: "shipRecord:demo-1:1",
+    latestShipStatus: "shipped",
+    latestReleaseChannelId: "releaseChannel:local",
+    shipRecordIds: ["shipRecord:demo-1:1"]
+  };
   const model = {
     ...baseModel,
     lifecycleBoard: [
@@ -6258,7 +7208,69 @@ test("platform page renders required operating views", async () => {
     changeSets,
     changeSetEdits: [{ changeSetId: "changeSet:demo-0", path: "plugins/platform/platform-console.rvm", sourceLanguage: "rvm", previousHash: "abc123", nextHash: "def456" }],
     candidateSnapshots,
-    proposals: [{ id: "proposal:demo", status: "open", targetProcess: "platform.changeSet.create", targetId: "changeSet:demo-0", reason: "Demo proposal" }],
+    pushRecords: [{
+      id: "pushRecord:demo-1:1",
+      branchId: "branch:demo-1",
+      changeSetId: "changeSet:demo-1",
+      status: "pushed",
+      remoteName: "origin",
+      remoteUrl: "https://github.com/example/platform.git",
+      provider: "github",
+      gitBranchName: "platform/demo-1",
+      localBranchRef: "refs/heads/platform/demo-1",
+      remoteBranchRef: "refs/heads/platform/demo-1",
+      commitSha: "abc123def456",
+      commitMessage: "platform push platform/demo-1",
+      compareUrl: "https://github.com/example/platform/compare/main...platform%2Fdemo-1?expand=1",
+      pullRequestUrl: "https://github.com/example/platform/pull/new/platform%2Fdemo-1"
+    }],
+    releaseChannels: [{
+      id: "releaseChannel:local",
+      name: "local",
+      title: "Local",
+      executable: true,
+      description: "Records a real local ship event for the latest pushed branch state."
+    }],
+    shipRecords: [{
+      id: "shipRecord:demo-1:1",
+      branchId: "branch:demo-1",
+      changeSetId: "changeSet:demo-1",
+      pushRecordId: "pushRecord:demo-1:1",
+      releaseChannelId: "releaseChannel:local",
+      releaseChannelName: "local",
+      status: "shipped",
+      remoteName: "origin",
+      remoteUrl: "https://github.com/example/platform.git",
+      provider: "github",
+      gitBranchName: "platform/demo-1",
+      localBranchRef: "refs/heads/platform/demo-1",
+      remoteBranchRef: "refs/heads/platform/demo-1",
+      commitSha: "abc123def456",
+      commitMessage: "platform push platform/demo-1",
+      compareUrl: "https://github.com/example/platform/compare/main...platform%2Fdemo-1?expand=1",
+      pullRequestUrl: "https://github.com/example/platform/pull/new/platform%2Fdemo-1",
+      proposalId: "proposal:demo-ship",
+      observationWindowEndsAt: "2026-06-18T00:30:00.000Z",
+      observationStatus: "open"
+    }],
+    gitRemotes: [{
+      id: "gitRemote:origin",
+      name: "origin",
+      fetchUrl: "https://github.com/example/platform.git",
+      pushUrl: "https://github.com/example/platform.git",
+      remoteUrl: "https://github.com/example/platform.git",
+      provider: "github",
+      webUrl: "https://github.com/example/platform"
+    }],
+    gitRefs: [
+      { id: "gitRef:refs/heads/platform/demo-1", refName: "refs/heads/platform/demo-1", shortName: "platform/demo-1", remoteName: null, scope: "localBranch", objectId: "abc123def456", upstream: "refs/remotes/origin/platform/demo-1", symref: null },
+      { id: "gitRef:refs/remotes/origin/platform/demo-1", refName: "refs/remotes/origin/platform/demo-1", shortName: "platform/demo-1", remoteName: "origin", scope: "remoteBranch", objectId: "abc123def456", upstream: null, symref: null }
+    ],
+    proposals: [
+      { id: "proposal:demo", status: "open", targetProcess: "platform.changeSet.create", targetId: "changeSet:demo-0", reason: "Demo proposal" },
+      { id: "proposal:demo-defect", status: "open", targetProcess: "defect.create", targetId: "defect:requests", reason: "Investigate platform request regression" },
+      { id: "proposal:demo-ship", status: "approved", targetProcess: "branch.ship", targetId: "branch:demo-1", body: { shipRecordId: "shipRecord:demo-1:1", releaseChannelId: "releaseChannel:local" }, reason: "Ship demo branch locally" }
+    ],
     proposalActions: [{ action: "changeSet.create", sampleBody: { branchId: "branch:demo-0" } }],
     verificationPolicies: [{
       id: "verificationPolicy:demo",
@@ -6308,6 +7320,124 @@ test("platform page renders required operating views", async () => {
       selectedByBranches: ["branch:demo-0"],
       selectedByChangeSets: ["changeSet:demo-0"],
       lastResult: { status: "passed", exitCode: 0 }
+    }],
+    telemetryThresholds: [{
+      id: "telemetryThreshold:platform.self.http",
+      metricId: "telemetryMetric:requests",
+      title: "Platform HTTP handler latency",
+      thresholdMs: 125,
+      regressionMinDeltaMs: 40,
+      regressionMinDeltaPct: 35
+    }],
+    telemetrySamples: [{
+      id: "telemetrySample:demo",
+      metricId: "telemetryMetric:requests",
+      thresholdId: "telemetryThreshold:platform.self.http",
+      ownerId: "backend.readPlatformModel",
+      ownerKind: "handler",
+      sampleKind: "httpRequest",
+      status: "observed",
+      durationMs: 148,
+      routeId: "route:GET /platform",
+      handlerId: "backend.readPlatformModel",
+      branchId: "branch:demo-0",
+      changeSetId: "changeSet:demo-0",
+      gateId: "gate:demo",
+      candidateSnapshotId: "candidateSnapshot:demo-0",
+      observedAt: "2026-06-18T00:00:00.015Z",
+      message: "platform model read"
+    }],
+    telemetryWindows: [{
+      id: "telemetryWindow:requests",
+      metricId: "telemetryMetric:requests",
+      ownerId: "backend.readPlatformModel",
+      ownerKind: "handler",
+      sampleKind: "httpRequest",
+      thresholdId: "telemetryThreshold:platform.self.http",
+      currentSampleIds: ["telemetrySample:demo"],
+      previousSampleIds: ["telemetrySample:baseline"],
+      currentAggregateMs: 148,
+      previousAggregateMs: 80,
+      currentSampleCount: 1,
+      previousSampleCount: 1,
+      failureCount: 0,
+      latestSampleId: "telemetrySample:demo",
+      latestObservedAt: "2026-06-18T00:00:00.015Z",
+      branchIds: ["branch:demo-0"],
+      changeSetIds: ["changeSet:demo-0"],
+      gateIds: ["gate:demo"],
+      candidateSnapshotIds: ["candidateSnapshot:demo-0"],
+      thresholdMs: 125,
+      regressionMinDeltaMs: 40,
+      regressionMinDeltaPct: 35
+    }],
+    performanceRegressions: [{
+      id: "performanceRegression:requests",
+      metricId: "telemetryMetric:requests",
+      thresholdId: "telemetryThreshold:platform.self.http",
+      ownerId: "backend.readPlatformModel",
+      ownerKind: "handler",
+      sampleKind: "httpRequest",
+      windowId: "telemetryWindow:requests",
+      latestSampleId: "telemetrySample:demo",
+      currentAggregateMs: 148,
+      previousAggregateMs: 80,
+      deltaMs: 68,
+      deltaPercent: 85,
+      branchIds: ["branch:demo-0"],
+      changeSetIds: ["changeSet:demo-0"],
+      gateIds: ["gate:demo"],
+      candidateSnapshotIds: ["candidateSnapshot:demo-0"],
+      observedAt: "2026-06-18T00:00:00.015Z",
+      status: "open"
+    }],
+    defects: [{
+      id: "defect:requests",
+      title: "Platform request regression",
+      defectKind: "performanceRegression",
+      status: "open",
+      clusterId: "defectCluster:requests",
+      clusterKey: "telemetryMetric:requests",
+      metricId: "telemetryMetric:requests",
+      gateId: "gate:demo",
+      branchId: "branch:demo-0",
+      changeSetId: "changeSet:demo-0",
+      candidateSnapshotId: "candidateSnapshot:demo-0",
+      ownerId: "backend.readPlatformModel",
+      summary: "68 ms slower than prior aggregate",
+      observedAt: "2026-06-18T00:00:00.015Z",
+      proposalId: "proposal:demo-defect"
+    }],
+    defectObservations: [{
+      id: "defectObservation:requests",
+      defectId: "defect:requests",
+      clusterId: "defectCluster:requests",
+      sourceKind: "performanceRegression",
+      sourceId: "performanceRegression:requests",
+      status: "regressed",
+      branchId: "branch:demo-0",
+      changeSetId: "changeSet:demo-0",
+      gateId: "gate:demo",
+      metricId: "telemetryMetric:requests",
+      candidateSnapshotId: "candidateSnapshot:demo-0",
+      observedAt: "2026-06-18T00:00:00.015Z",
+      message: "68 ms slower than prior aggregate"
+    }],
+    defectClusters: [{
+      id: "defectCluster:requests",
+      title: "telemetryMetric:requests",
+      defectIds: ["defect:requests"],
+      branchIds: ["branch:demo-0"],
+      changeSetIds: ["changeSet:demo-0"],
+      gateIds: ["gate:demo"],
+      metricIds: ["telemetryMetric:requests"],
+      candidateSnapshotIds: ["candidateSnapshot:demo-0"],
+      proposalIds: ["proposal:demo-defect"],
+      observationIds: ["defectObservation:requests"],
+      defectCount: 1,
+      observationCount: 1,
+      latestObservedAt: "2026-06-18T00:00:00.015Z",
+      status: "open"
     }],
     testRuns: [{
       id: "testRun:demo",
@@ -6459,31 +7589,37 @@ test("platform page renders required operating views", async () => {
   };
 
   const overviewHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform") });
-  const workflowLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow") });
-  const workflowBranchesHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowBranches&id=branch:demo-0") });
-  const workflowBranchesSortedHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowBranches&id=branch:demo-0&sort=status&dir=desc&limit=5") });
-  const workflowChangeSetHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowChangeSets&id=changeSet:demo-0") });
-  const workflowProposalHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowProposals&id=proposal:demo") });
-  const verificationLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification") });
-  const verificationStatusHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=gate:demo") });
-  const verificationPolicyHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=verificationPolicy:demo") });
-  const verificationExecutionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=verificationExecution:demo") });
-  const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuntime&id=runtimeRevision:demo") });
-  const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:demo") });
-  const verificationRunFragmentHtml = renderPlatformPageFragment(model, { requestUrl: new URL("http://platform.local/api/platform-page?view=verificationRuns&id=testRun:demo") });
-  const verificationRunShellHtml = renderPlatformShellPage({ requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:demo") });
-  const knowledgeLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge") });
-  const knowledgeDocsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledgeDocs&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
-  const knowledgeFoldersHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledgeFolders&id=folder:docs") });
-  const knowledgeRoadmapHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledgeRoadmap&id=roadmapTask:1") });
-  const signalsLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals") });
-  const signalsGapHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signalsGaps&id=gap.demo") });
-  const signalsCatalogHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signalsCatalog&id=telemetryMetric:requests") });
-  const modelLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model") });
-  const modelCompatHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
-  const modelObjectsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=modelObjects&id=route:GET%20/platform") });
-  const modelProfilesHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=modelProfiles&sort=profile&dir=desc") });
-  const modelCoverageHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=modelCoverage&sort=gate&dir=desc") });
+  const workflowLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=change&section=branches") });
+  const workflowBranchesHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=change&section=branches&id=branch:demo-0") });
+  const workflowBranchesSortedHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=change&section=branches&id=branch:demo-0&sort=status&dir=desc&limit=5") });
+  const workflowChangeSetHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=change&section=changesets&id=changeSet:demo-0") });
+  const workflowPushesHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=change&section=pushes&id=pushRecord:demo-1:1") });
+  const workflowShipsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=change&section=ships&id=shipRecord:demo-1:1") });
+  const workflowProposalHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=change&section=proposals&id=proposal:demo") });
+  const verificationLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=verification&section=status") });
+  const verificationStatusHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=verification&section=status&id=gate:demo") });
+  const verificationPolicyHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=verification&section=status&id=verificationPolicy:demo") });
+  const verificationExecutionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=verification&section=status&id=verificationExecution:demo") });
+  const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=verification&section=runtime&id=runtimeRevision:demo") });
+  const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=verification&section=runs&id=testRun:demo") });
+  const verificationRunFragmentHtml = renderPlatformPageFragment(model, { requestUrl: new URL("http://platform.local/api/platform-page?area=verification&section=runs&id=testRun:demo") });
+  const verificationRunShellHtml = renderPlatformShellPage({ requestUrl: new URL("http://platform.local/platform?area=verification&section=runs&id=testRun:demo") });
+  const telemetryLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=telemetry") });
+  const telemetryDetailHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=telemetry&id=telemetryMetric:requests") });
+  const defectsLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=defects") });
+  const defectsDetailHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=defects&id=defect:requests") });
+  const knowledgeLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=knowledge&section=docs") });
+  const knowledgeDocsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=knowledge&section=docs&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
+  const knowledgeFoldersHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=knowledge&section=folders&id=folder:docs") });
+  const knowledgeRoadmapHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=knowledge&section=roadmap&id=roadmapTask:1") });
+  const signalsLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=signals&section=gaps") });
+  const signalsGapHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=signals&section=gaps&id=gap.demo") });
+  const signalsCatalogHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=signals&section=catalog&id=telemetryMetric:requests") });
+  const modelLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=advanced&section=model") });
+  const modelCompatHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=advanced&section=model&id=route:GET%20/platform") });
+  const modelObjectsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=advanced&section=model&id=route:GET%20/platform") });
+  const modelProfilesHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=advanced&section=profiles&sort=profile&dir=desc") });
+  const modelCoverageHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=advanced&section=coverage&sort=gate&dir=desc") });
 
   assert.match(overviewHtml, /Platform Console - Overview/);
   assert.match(overviewHtml, /Generated from plugins\/platform\/platform-console\.wcss/);
@@ -6494,23 +7630,23 @@ test("platform page renders required operating views", async () => {
   assert.match(overviewHtml, /Counts, authored surface ownership, lifecycle, and quick platform links\./);
   assert.match(overviewHtml, /offset=12/);
   assert.match(overviewHtml, /sort=kind&amp;dir=desc/);
-  assert.match(overviewHtml, /\?view=workflow/);
-  assert.match(overviewHtml, /\?view=bridges/);
-  assert.match(overviewHtml, /\?view=governance/);
-  assert.match(overviewHtml, /\?view=semantics/);
-  assert.match(overviewHtml, /\?view=packageCoexistence/);
-  assert.match(overviewHtml, /\?view=packageConvergence/);
-  assert.match(overviewHtml, /\?view=packageApplyPreview/);
+  assert.match(overviewHtml, /\?area=change&amp;section=branches/);
+  assert.match(overviewHtml, /\?area=verification&amp;section=status/);
+  assert.match(overviewHtml, /\?area=telemetry&amp;section=summary/);
+  assert.match(overviewHtml, /\?area=defects&amp;section=summary/);
+  assert.match(overviewHtml, /\?area=knowledge&amp;section=docs/);
+  assert.match(overviewHtml, /\?area=signals&amp;section=gaps/);
+  assert.match(overviewHtml, /\?area=advanced&amp;section=model/);
   assert.doesNotMatch(overviewHtml, /bindAuthoredJsonSubmit/);
   assert.doesNotMatch(overviewHtml, /<pre/);
 
-  assert.match(workflowLandingHtml, /Platform Console - Workflow/);
+  assert.match(workflowLandingHtml, /Platform Console - Change \/ Branches/);
   assert.match(workflowLandingHtml, /Branch Board/);
   assert.match(workflowLandingHtml, /Lifecycle lanes for branch-backed work\./);
-  assert.doesNotMatch(workflowLandingHtml, /Workflow Items/);
-  assert.doesNotMatch(workflowLandingHtml, /<form id="platform-branch-create-form"/);
+  assert.match(workflowLandingHtml, /Branches/);
+  assert.match(workflowLandingHtml, /<form id="platform-branch-create-form"/);
   assert.doesNotMatch(workflowLandingHtml, /<pre/);
-  assert.match(workflowBranchesHtml, /Platform Console - Workflow Branches/);
+  assert.match(workflowBranchesHtml, /Platform Console - Change \/ Branches/);
   assert.match(workflowBranchesHtml, /Branches/);
   assert.match(workflowBranchesHtml, /Properties and linked resources for the selected workflow item\./);
   assert.match(workflowBranchesHtml, /Primary Detail/);
@@ -6523,7 +7659,6 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowBranchesHtml, /Candidate snapshot history for the selected workflow object when available\./);
   assert.match(workflowBranchesHtml, /Branch Detail/);
   assert.match(workflowBranchesHtml, /<form id="platform-branch-create-form" data-platform-client-action="branch.create" data-platform-submit-spec=/);
-  assert.match(workflowBranchesHtml, /bindAuthoredJsonSubmit/);
   assert.match(workflowBranchesHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
   assert.match(workflowBranchesHtml, /offset=20/);
   assert.match(workflowBranchesHtml, /Sort/);
@@ -6532,7 +7667,7 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowBranchesSortedHtml, /offset=5&amp;limit=5&amp;sort=status&amp;dir=desc/);
   assert.doesNotMatch(workflowBranchesHtml, /platform-initial-state/);
   assert.doesNotMatch(workflowBranchesHtml, /<pre/);
-  assert.match(workflowChangeSetHtml, /Platform Console - Workflow Change Sets/);
+  assert.match(workflowChangeSetHtml, /Platform Console - Change \/ Change Sets/);
   assert.match(workflowChangeSetHtml, /Change Sets/);
   assert.match(workflowChangeSetHtml, /Change Set Detail/);
   assert.match(workflowChangeSetHtml, /Staged Edits/);
@@ -6543,7 +7678,27 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowChangeSetHtml, /<form id="platform-change-set-lifecycle-form" data-platform-client-action="changeSet.lifecycle" data-platform-submit-spec=/);
   assert.match(workflowChangeSetHtml, /<option value="reject" selected>Reject<\/option>/);
   assert.match(workflowChangeSetHtml, /<option value="abandon">Abandon<\/option>/);
-  assert.match(workflowProposalHtml, /Platform Console - Workflow Proposals/);
+  assert.match(workflowPushesHtml, /Platform Console - Change \/ Pushes/);
+  assert.match(workflowPushesHtml, /Push Records/);
+  assert.match(workflowPushesHtml, /Paginated list of push records, remotes, refs, and linked failure follow-up\./);
+  assert.match(workflowPushesHtml, /Push Detail/);
+  assert.match(workflowPushesHtml, /Primary Detail/);
+  assert.match(workflowPushesHtml, /Push Record Detail/);
+  assert.match(workflowPushesHtml, /Related Resources/);
+  assert.match(workflowPushesHtml, /platform\/demo-1/);
+  assert.match(workflowPushesHtml, /https:\/\/github\.com\/example\/platform\/compare\/main\.\.\.platform%2Fdemo-1\?expand=1/);
+  assert.match(workflowPushesHtml, /\/api\/platform-model\?view=pushes&amp;id=pushRecord%3Ademo-1%3A1/);
+  assert.doesNotMatch(workflowPushesHtml, /<pre/);
+  assert.match(workflowShipsHtml, /Platform Console - Change \/ Ships/);
+  assert.match(workflowShipsHtml, /Ship Records/);
+  assert.match(workflowShipsHtml, /Paginated list of ship records, release channels, and rollback follow-up\./);
+  assert.match(workflowShipsHtml, /Ship Detail/);
+  assert.match(workflowShipsHtml, /Ship Record Detail/);
+  assert.match(workflowShipsHtml, /Release channel/);
+  assert.match(workflowShipsHtml, /Observation status/);
+  assert.match(workflowShipsHtml, /\/api\/platform-model\?view=ships&amp;id=shipRecord%3Ademo-1%3A1/);
+  assert.doesNotMatch(workflowShipsHtml, /<pre/);
+  assert.match(workflowProposalHtml, /Platform Console - Change \/ Proposals/);
   assert.match(workflowProposalHtml, /Proposals/);
   assert.match(workflowProposalHtml, /Proposal Detail/);
   assert.match(workflowProposalHtml, /Proposal Panel/);
@@ -6553,22 +7708,16 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowProposalHtml, /<option value="proposal:demo">proposal:demo<\/option>/);
   assert.match(workflowProposalHtml, /name="reviewAction" value="approve"/);
 
-  assert.match(verificationLandingHtml, /Platform Console - Verification/);
+  assert.match(verificationLandingHtml, /Platform Console - Verification \/ Status/);
   assert.match(verificationLandingHtml, /Live Verification Status/);
   assert.match(verificationLandingHtml, /Current Verification State/);
   assert.match(verificationLandingHtml, /Queued items/);
   assert.match(verificationLandingHtml, /Policy source/);
   assert.match(verificationLandingHtml, /Persistence source/);
   assert.match(verificationLandingHtml, /Ledger backend/);
-  assert.match(verificationLandingHtml, /Links to live test-run and backend-revision event streams\./);
-  assert.match(verificationLandingHtml, /Event Streams/);
-  assert.match(verificationLandingHtml, /Branch Red \/ Green/);
-  assert.match(verificationLandingHtml, /Change Set Red \/ Green/);
-  assert.match(verificationLandingHtml, /sort=branch&amp;dir=desc/);
-  assert.match(verificationLandingHtml, /sort=changeSet&amp;dir=desc/);
-  assert.doesNotMatch(verificationLandingHtml, /Verification Items/);
+  assert.match(verificationLandingHtml, /Verification Status Items/);
   assert.doesNotMatch(verificationLandingHtml, /<pre/);
-  assert.match(verificationStatusHtml, /Platform Console - Verification Status/);
+  assert.match(verificationStatusHtml, /Platform Console - Verification \/ Status/);
   assert.match(verificationStatusHtml, /Verification Status Items/);
   assert.match(verificationStatusHtml, /Policies/);
   assert.match(verificationStatusHtml, /Queue/);
@@ -6581,23 +7730,23 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationStatusHtml, /Protected Objects/);
   assert.match(verificationStatusHtml, /Recent Test Runs/);
   assert.match(verificationStatusHtml, /Test Gate Detail/);
-  assert.match(verificationStatusHtml, /\?view=verificationRuns&amp;id=testRun%3Ademo/);
+  assert.match(verificationStatusHtml, /\?area=verification&amp;section=runs&amp;id=testRun%3Ademo/);
   assert.doesNotMatch(verificationStatusHtml, /<form id="platform-test-run-form"/);
   assert.match(verificationPolicyHtml, /Verification Policy Detail/);
   assert.match(verificationPolicyHtml, /Verification Persistence/);
   assert.match(verificationPolicyHtml, /workspace/);
   assert.match(verificationExecutionHtml, /Verification Execution Detail/);
   assert.match(verificationExecutionHtml, /change-set/);
-  assert.match(verificationRevisionHtml, /Platform Console - Verification Runtime/);
+  assert.match(verificationRevisionHtml, /Platform Console - Verification \/ Runtime/);
   assert.match(verificationRevisionHtml, />Backend revision event stream</);
   assert.match(verificationRevisionHtml, /Verification status/);
   assert.match(verificationRevisionHtml, /Persistence source/);
-  assert.match(verificationRunHtml, /Platform Console - Verification Runs/);
+  assert.match(verificationRunHtml, /Platform Console - Verification \/ Runs/);
   assert.match(verificationRunHtml, />Test run event stream</);
   assert.match(verificationRunHtml, />Backend revision event stream</);
   assert.match(verificationRunHtml, /Verification Run Items/);
-  assert.match(verificationRunHtml, /\?view=verificationStatus&amp;id=gate%3Ademo/);
-  assert.match(verificationRunHtml, /\?view=verificationRuntime&amp;id=candidateSnapshot%3Ademo-0/);
+  assert.match(verificationRunHtml, /\?area=verification&amp;section=status&amp;id=gate%3Ademo/);
+  assert.match(verificationRunHtml, /\?area=verification&amp;section=runtime&amp;id=candidateSnapshot%3Ademo-0/);
   assert.match(verificationRunHtml, /<form id="platform-test-run-form" data-platform-client-action="testRun.single" data-platform-submit-spec=/);
   assert.match(verificationRunHtml, /<option value="gate:demo">Demo gate<\/option>/);
   assert.match(verificationRunHtml, /<form id="platform-selected-test-run-form" data-platform-client-action="testRun.selected" data-platform-submit-spec=/);
@@ -6608,24 +7757,43 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationRunHtml, /Suite Summary/);
   assert.match(verificationRunHtml, /Failing Cases/);
   assert.match(verificationRunHtml, /Timing Regression/);
-  assert.match(verificationRunHtml, /enableVerificationLiveUpdates: true/);
-  assert.match(verificationRunHtml, /new EventSource\(platformPageState\.testRunEventsHref\)/);
-  assert.match(verificationRunHtml, /new EventSource\(platformPageState\.backendRevisionEventsHref\)/);
   assert.match(verificationRunFragmentHtml, /Verification Run Items/);
-  assert.match(verificationRunFragmentHtml, /\?view=verificationStatus&amp;id=gate%3Ademo/);
+  assert.match(verificationRunFragmentHtml, /\?area=verification&amp;section=status&amp;id=gate%3Ademo/);
   assert.doesNotMatch(verificationRunFragmentHtml, /<!doctype html>/);
-  assert.doesNotMatch(verificationRunFragmentHtml, /enableVerificationLiveUpdates: true/);
   assert.match(verificationRunShellHtml, /Loading platform content/);
-  assert.match(verificationRunShellHtml, /\/api\/platform-page\?view=verificationRuns&amp;id=testRun%3Ademo/);
+  assert.match(verificationRunShellHtml, /\/api\/platform-page\?area=verification&amp;section=runs&amp;id=testRun%3Ademo/);
   assert.doesNotMatch(verificationRunShellHtml, /Selected Test Run/);
 
-  assert.match(knowledgeLandingHtml, /Platform Console - Knowledge/);
+  assert.match(telemetryLandingHtml, /Platform Console - Telemetry/);
+  assert.match(telemetryLandingHtml, /Paginated list of telemetry metrics, recent samples, windows, and regressions\./);
+  assert.match(telemetryLandingHtml, /Primary Detail/);
+  assert.doesNotMatch(telemetryLandingHtml, /<pre/);
+  assert.match(telemetryDetailHtml, /Properties and linked relationships for the selected telemetry concept\./);
+  assert.match(telemetryDetailHtml, /Primary Detail/);
+  assert.match(telemetryDetailHtml, /Telemetry Metric Detail/);
+  assert.match(telemetryDetailHtml, /Related Resources/);
+  assert.match(telemetryDetailHtml, /Related Relationships/);
+  assert.match(telemetryDetailHtml, /\/api\/platform-model\?view=telemetry&amp;id=telemetryMetric%3Arequests/);
+  assert.doesNotMatch(telemetryDetailHtml, /<pre/);
+  assert.match(defectsLandingHtml, /Platform Console - Defects/);
+  assert.match(defectsLandingHtml, /Paginated list of defect clusters, defects, observations, and linked proposals\./);
+  assert.match(defectsLandingHtml, /Primary Detail/);
+  assert.doesNotMatch(defectsLandingHtml, /<pre/);
+  assert.match(defectsDetailHtml, /Properties and linked relationships for the selected defect concept\./);
+  assert.match(defectsDetailHtml, /Primary Detail/);
+  assert.match(defectsDetailHtml, /Defect Detail/);
+  assert.match(defectsDetailHtml, /Related Resources/);
+  assert.match(defectsDetailHtml, /Observations/);
+  assert.match(defectsDetailHtml, /proposal:demo-defect/);
+  assert.match(defectsDetailHtml, /\/api\/platform-model\?view=defects&amp;id=defect%3Arequests/);
+  assert.doesNotMatch(defectsDetailHtml, /<pre/);
+
+  assert.match(knowledgeLandingHtml, /Platform Console - Knowledge \/ Docs/);
   assert.match(knowledgeLandingHtml, /Governed Docs/);
   assert.match(knowledgeLandingHtml, /Folders/);
-  assert.doesNotMatch(knowledgeLandingHtml, /Knowledge Doc Detail/);
-  assert.doesNotMatch(knowledgeLandingHtml, /Roadmap Work/);
+  assert.match(knowledgeLandingHtml, /Knowledge Doc Detail/);
   assert.doesNotMatch(knowledgeLandingHtml, /<pre/);
-  assert.match(knowledgeDocsHtml, /Platform Console - Knowledge Docs/);
+  assert.match(knowledgeDocsHtml, /Platform Console - Knowledge \/ Docs/);
   assert.match(knowledgeDocsHtml, /Governed Docs/);
   assert.match(knowledgeDocsHtml, /Properties and linked resources for the selected governed document\./);
   assert.match(knowledgeDocsHtml, /Primary Detail/);
@@ -6639,27 +7807,23 @@ test("platform page renders required operating views", async () => {
   assert.match(knowledgeDocsHtml, /Document tasks for the selected governed document when available\./);
   assert.match(knowledgeDocsHtml, /Document Detail/);
   assert.doesNotMatch(knowledgeDocsHtml, /<pre/);
-  assert.match(knowledgeFoldersHtml, /Platform Console - Knowledge Folders/);
+  assert.match(knowledgeFoldersHtml, /Platform Console - Knowledge \/ Folders/);
   assert.match(knowledgeFoldersHtml, /Folders/);
   assert.match(knowledgeFoldersHtml, /Properties and linked resources for the selected folder when available\./);
   assert.match(knowledgeFoldersHtml, /Folder Detail/);
   assert.match(knowledgeFoldersHtml, /Linked Concepts/);
   assert.match(knowledgeFoldersHtml, /Showing first \d+ of \d+ entries\./);
-  assert.doesNotMatch(knowledgeFoldersHtml, /Sections/);
-  assert.doesNotMatch(knowledgeFoldersHtml, /Tasks/);
   assert.doesNotMatch(knowledgeFoldersHtml, /<pre/);
-  assert.match(knowledgeRoadmapHtml, /Platform Console - Knowledge Roadmap/);
+  assert.match(knowledgeRoadmapHtml, /Platform Console - Knowledge \/ Roadmap/);
   assert.match(knowledgeRoadmapHtml, /Roadmap Work/);
   assert.match(knowledgeRoadmapHtml, /Properties and linked resources for the selected roadmap object\./);
   assert.match(knowledgeRoadmapHtml, /Roadmap Task Detail/);
   assert.match(knowledgeRoadmapHtml, /Linked Targets/);
-  assert.doesNotMatch(knowledgeRoadmapHtml, /Sections/);
   assert.doesNotMatch(knowledgeRoadmapHtml, /<pre/);
 
-  assert.match(signalsLandingHtml, /Platform Console - Signals/);
-  assert.doesNotMatch(signalsLandingHtml, /Primary Detail/);
+  assert.match(signalsLandingHtml, /Platform Console - Signals \/ Gaps/);
   assert.doesNotMatch(signalsLandingHtml, /<pre/);
-  assert.match(signalsGapHtml, /Platform Console - Signals Gaps/);
+  assert.match(signalsGapHtml, /Platform Console - Signals \/ Gaps/);
   assert.match(signalsGapHtml, /Properties and linked relationships for the selected gap\./);
   assert.match(signalsGapHtml, /Primary Detail/);
   assert.match(signalsGapHtml, /Selected signal properties and long-tail fields\./);
@@ -6672,22 +7836,17 @@ test("platform page renders required operating views", async () => {
   assert.match(signalsGapHtml, /API resource/);
   assert.match(signalsGapHtml, /sort=severity&amp;dir=desc/);
   assert.doesNotMatch(signalsGapHtml, /<pre/);
-  assert.match(signalsCatalogHtml, /Platform Console - Signals Catalog/);
+  assert.match(signalsCatalogHtml, /Platform Console - Signals \/ Catalog/);
   assert.match(signalsCatalogHtml, /Properties and linked relationships for the selected signal node\./);
   assert.match(signalsCatalogHtml, /Signals/);
   assert.match(signalsCatalogHtml, /Related Relationships/);
-  assert.doesNotMatch(signalsCatalogHtml, /Related Resources/);
-  assert.doesNotMatch(signalsCatalogHtml, /Recommended Proposal/);
   assert.doesNotMatch(signalsCatalogHtml, /<pre/);
 
-  assert.match(modelLandingHtml, /Platform Console - Model/);
-  assert.doesNotMatch(modelLandingHtml, /Platform Map/);
-  assert.doesNotMatch(modelLandingHtml, /Runtime Profiles/);
-  assert.doesNotMatch(modelLandingHtml, /sort=gate&amp;dir=desc/);
+  assert.match(modelLandingHtml, /Platform Console - Advanced \/ Model/);
   assert.doesNotMatch(modelLandingHtml, /<pre/);
-  assert.match(modelCompatHtml, /Platform Console - Model Objects/);
+  assert.match(modelCompatHtml, /Platform Console - Advanced \/ Model/);
   assert.match(modelCompatHtml, /Platform Object Detail/);
-  assert.match(modelObjectsHtml, /Platform Console - Model Objects/);
+  assert.match(modelObjectsHtml, /Platform Console - Advanced \/ Model/);
   assert.match(modelObjectsHtml, /Platform Map/);
   assert.match(modelObjectsHtml, /Properties and linked relationships for the selected platform object\./);
   assert.match(modelObjectsHtml, /Primary Detail/);
@@ -6695,20 +7854,14 @@ test("platform page renders required operating views", async () => {
   assert.match(modelObjectsHtml, /Relationships/);
   assert.match(modelObjectsHtml, /Linked graph relationships for the selected platform object when available\./);
   assert.match(modelObjectsHtml, /Platform Object Detail/);
-  assert.doesNotMatch(modelObjectsHtml, /Runtime Profiles/);
-  assert.doesNotMatch(modelObjectsHtml, /Coverage Edges/);
   assert.doesNotMatch(modelObjectsHtml, /<pre/);
-  assert.match(modelProfilesHtml, /Platform Console - Model Profiles/);
+  assert.match(modelProfilesHtml, /Platform Console - Advanced \/ Profiles/);
   assert.match(modelProfilesHtml, /Runtime Profiles/);
   assert.match(modelProfilesHtml, /sort=profile&amp;dir=asc/);
-  assert.doesNotMatch(modelProfilesHtml, /Platform Map/);
-  assert.doesNotMatch(modelProfilesHtml, /Coverage Edges/);
   assert.doesNotMatch(modelProfilesHtml, /<pre/);
-  assert.match(modelCoverageHtml, /Platform Console - Model Coverage/);
+  assert.match(modelCoverageHtml, /Platform Console - Advanced \/ Coverage/);
   assert.match(modelCoverageHtml, /Coverage Edges/);
   assert.match(modelCoverageHtml, /sort=gate&amp;dir=asc/);
-  assert.doesNotMatch(modelCoverageHtml, /Runtime Profiles/);
-  assert.doesNotMatch(modelCoverageHtml, /Platform Map/);
   assert.doesNotMatch(modelCoverageHtml, /<pre/);
 });
 
@@ -6744,9 +7897,9 @@ test("platform knowledge page renders authored knowledge relation links as linka
   assert.match(html, /Authored Doc Links/);
   assert.match(html, /Authored Code Links/);
   assert.match(html, />explains: doc:docs\/intent\/knowledge-relations\.wtoml</);
-  assert.match(html, /href="\/platform\?view=knowledgeDocs&amp;id=docs%2Fintent%2Fknowledge-relations\.wtoml"/);
+  assert.match(html, /href="\/platform\?area=knowledge&amp;section=docs&amp;id=docs%2Fintent%2Fknowledge-relations\.wtoml"/);
   assert.match(html, />isRealizedBy: code:plugins\/platform\/platform-model\.js</);
-  assert.match(html, /href="\/platform\?view=modelObjects&amp;id=code%3Aplugins%2Fplatform%2Fplatform-model\.js"/);
+  assert.match(html, /href="\/platform\?area=advanced&amp;section=model&amp;id=code%3Aplugins%2Fplatform%2Fplatform-model\.js"/);
 });
 
 test("platform page renders authored supplemental pages from the RVM page tree", () => {
@@ -6825,36 +7978,36 @@ test("platform page renders authored supplemental pages from the RVM page tree",
   const convergenceHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=packageConvergence&id=package.plugin.inspect") });
   const applyPreviewHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=packageApplyPreview&id=packageRevision.plugin.inspect.v2") });
 
-  assert.match(bridgesHtml, /Platform Console - Bridges/);
+  assert.match(bridgesHtml, /Platform Console - Advanced \/ Bridges/);
   assert.match(bridgesHtml, /Bridge Inventory/);
   assert.match(bridgesHtml, /Compatibility bridge inventory for remaining convenience seams\./);
   assert.match(bridgesHtml, /Bridge Detail/);
   assert.match(bridgesHtml, /compatibilityBridge:detail-panels/);
-  assert.match(bridgesHtml, /\?view=packageConvergence/);
+  assert.match(bridgesHtml, /\?area=advanced&amp;section=packages/);
   assert.doesNotMatch(bridgesHtml, /<pre/);
 
-  assert.match(governanceHtml, /Platform Console - Governance/);
+  assert.match(governanceHtml, /Platform Console - Advanced \/ Governance/);
   assert.match(governanceHtml, /Governance Rows/);
   assert.match(governanceHtml, /Route and proposal-target governance coverage for mutating platform seams\./);
   assert.match(governanceHtml, /Governance Object Detail/);
   assert.match(governanceHtml, /governanceRoute:POST \/api\/platform-change-sets\/demo\/apply/);
   assert.doesNotMatch(governanceHtml, /<pre/);
 
-  assert.match(semanticsHtml, /Platform Console - Semantics/);
+  assert.match(semanticsHtml, /Platform Console - Advanced \/ Semantics/);
   assert.match(semanticsHtml, /Mutable Surface Semantics/);
   assert.match(semanticsHtml, /Personal, shared, and mixed mutable-surface semantics contract rows\./);
   assert.match(semanticsHtml, /Mutable Surface Detail/);
   assert.match(semanticsHtml, /mutableSurface:plugin\.platform/);
   assert.doesNotMatch(semanticsHtml, /<pre/);
 
-  assert.match(coexistenceHtml, /Platform Console - Package Coexistence/);
+  assert.match(coexistenceHtml, /Platform Console - Advanced \/ Packages/);
   assert.match(coexistenceHtml, /Package Coexistence Rows/);
   assert.match(coexistenceHtml, /Divergent package revision lines and namespace selections\./);
   assert.match(coexistenceHtml, /Package Coexistence Detail/);
   assert.match(coexistenceHtml, /packageRevision\.plugin\.inspect\.v1/);
   assert.doesNotMatch(coexistenceHtml, /<pre/);
 
-  assert.match(convergenceHtml, /Platform Console - Package Convergence/);
+  assert.match(convergenceHtml, /Platform Console - Advanced \/ Packages/);
   assert.match(convergenceHtml, /Package Convergence Rows/);
   assert.match(convergenceHtml, /Transformer contracts, convergence patches, and remaining authored glue\./);
   assert.match(convergenceHtml, /Package Convergence Detail/);
@@ -6862,7 +8015,7 @@ test("platform page renders authored supplemental pages from the RVM page tree",
   assert.match(convergenceHtml, /Shared shim still needed\./);
   assert.doesNotMatch(convergenceHtml, /<pre/);
 
-  assert.match(applyPreviewHtml, /Platform Console - Package Apply Preview/);
+  assert.match(applyPreviewHtml, /Platform Console - Advanced \/ Packages/);
   assert.match(applyPreviewHtml, /Package Apply Preview Rows/);
   assert.match(applyPreviewHtml, /Revision-scoped apply impact, emitted bundle summary, and convergence truth\./);
   assert.match(applyPreviewHtml, /Package Apply Preview Detail/);

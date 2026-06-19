@@ -53,14 +53,24 @@ export function buildBootstrapRouteAuthoringView({
   const method = String(readFieldValue("route-form", "method") || "").trim().toUpperCase();
   const backendProgramSoul = String(readFieldValue("route-form", "backendProgramSoul") || "").trim();
   const rootWidget = String(readFieldValue("route-form", "rootWidget") || "").trim();
+  const rootWidgetRef = String(readFieldValue("route-form", "rootWidgetRef") || "").trim();
+  const rootSurface = String(readFieldValue("route-form", "rootSurface") || "").trim();
+  const rootSurfaceRef = String(readFieldValue("route-form", "rootSurfaceRef") || "").trim();
   const responseKind = handlerMeta?.responseKind || policy.responseKind || "json";
   const fieldSummary = policy.fieldSummary || "Backend JSON route. Page and backend-program fields are disabled.";
   const issues = [];
   if (supportedMethods.length && method && !supportedMethods.includes(method)) issues.push("selected method " + method + " is unsupported");
   if (backendRoute && !backendProgramSoul && policy.missingBackendProgramSoulIssue) issues.push(policy.missingBackendProgramSoulIssue);
-  if (handlerRule.requiresRootWidget === true && !rootWidget && handlerRule.missingRootWidgetIssue) issues.push(handlerRule.missingRootWidgetIssue);
+  if (handlerRule.requiresRootWidget === true && !rootWidget && !rootWidgetRef && handlerRule.missingRootWidgetIssue) issues.push(handlerRule.missingRootWidgetIssue);
+  if (handlerRule.requiresRootSurface === true && !rootSurface && !rootSurfaceRef && handlerRule.missingRootSurfaceIssue) issues.push(handlerRule.missingRootSurfaceIssue);
   const methodSummary = supportedMethods.length ? supportedMethods.join(", ") : "any method";
   const enabledFieldSet = new Set(Array.isArray(policy.enabledFields) ? policy.enabledFields : []);
+  for (const field of handlerRule.enabledFields || []) {
+    if (typeof field === "string" && field.trim()) enabledFieldSet.add(field.trim());
+  }
+  for (const field of handlerRule.disabledFields || []) {
+    if (typeof field === "string" && field.trim()) enabledFieldSet.delete(field.trim());
+  }
   const managedFields = Array.isArray(routeAuthoringContracts?.managedFields) ? routeAuthoringContracts.managedFields : [];
   return {
     enabledFields: Object.fromEntries(managedFields.map(field => [field, enabledFieldSet.has(field)])),
@@ -123,9 +133,18 @@ export function bindBootstrapRouteAuthoringSync({
   buildDeps = () => ({})
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = createBootstrapRouteAuthoringSyncHandler({ buildDeps });
-  resolvedTarget.addEventListener("witness:bootstrap-route-authoring-sync", handler);
+  const form = resolvedDocument?.getElementById?.("route-form");
+  if (form && !form.__bootstrapRouteAuthoringSyncBound) {
+    form.__bootstrapRouteAuthoringSyncBound = true;
+    const trigger = () => handler({
+      detail: { source: "bootstrap-app-authoring-controls", family: "route-authoring" }
+    });
+    form.addEventListener("change", trigger);
+    form.addEventListener("input", trigger);
+  }
   return handler;
 }
 

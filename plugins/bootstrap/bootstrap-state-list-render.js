@@ -1,13 +1,19 @@
-import path from "node:path";
-
 export function renderBootstrapStateListRenderFactory() {
   return String.raw`
+    const bootstrapStatePortableBasename = ${bootstrapStatePortableBasename.toString()};
     const renderBootstrapStateItems = ${renderBootstrapStateItems.toString()};
     const renderBootstrapStateList = ${renderBootstrapStateList.toString()};
     const mcpServerInventoryLabel = ${mcpServerInventoryLabel.toString()};
     const mcpToolInventoryLabel = ${mcpToolInventoryLabel.toString()};
     const renderBootstrapStateInventory = ${renderBootstrapStateInventory.toString()};
   `;
+}
+
+function bootstrapStatePortableBasename(value = "") {
+  const text = String(value || "");
+  if (!text) return "";
+  const pieces = text.split(/[\\/]+/);
+  return pieces[pieces.length - 1] || "";
 }
 
 export function renderBootstrapStateItems({
@@ -175,13 +181,13 @@ export function renderBootstrapStateInventory({
   renderList("state-mcp-servers", authored.mcp?.servers || [], mcpServerInventoryLabel);
   renderList("state-mcp-tool-installs", (authored.mcp?.servers || []).filter(row => (row.tools || []).length), mcpToolInventoryLabel);
   renderList("state-operator-backups", operator.inventory?.backups || [], row => {
-    const lineage = row.lineage?.worldHome ? ` (from ${path.basename(row.lineage.worldHome)})` : "";
+    const lineage = row.lineage?.worldHome ? ` (from ${bootstrapStatePortableBasename(row.lineage.worldHome)})` : "";
     const comp = row.compatibility?.platformVersion ? ` [v:${row.compatibility.platformVersion}]` : "";
     const warning = row.compatibility?.platformVersion !== "v1" ? " [WARN: Incompatible]" : "";
     return `${row.id}${lineage}${comp}${warning} / ${row.createdAt?.slice(0, 10) || "unknown"} / ${row.witnessCount}w ${row.observationCount}o`;
   });
   renderList("state-operator-exports", operator.inventory?.exports || [], row => {
-    const lineage = row.lineage?.worldHome ? ` (from ${path.basename(row.lineage.worldHome)})` : "";
+    const lineage = row.lineage?.worldHome ? ` (from ${bootstrapStatePortableBasename(row.lineage.worldHome)})` : "";
     const comp = row.compatibility?.platformVersion ? ` [v:${row.compatibility.platformVersion}]` : "";
     const warning = row.compatibility?.platformVersion !== "v1" ? " [WARN: Incompatible]" : "";
     return `${row.id}${lineage}${comp}${warning} / ${row.createdAt?.slice(0, 10) || "unknown"} / ${row.witnessCount}w ${row.observationCount}o`;

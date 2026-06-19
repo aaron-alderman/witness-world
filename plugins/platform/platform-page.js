@@ -7,11 +7,15 @@ const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
   Object.freeze({ id: "workflow", title: "Workflow", subtitle: "Workflow landing page for branch activity and links into narrower authored workflow pages.", modelView: "workflowOverview" }),
   Object.freeze({ id: "workflowBranches", title: "Workflow Branches", subtitle: "Branch lifecycle, linked change sets, and branch authoring.", modelView: "workflowBranches" }),
   Object.freeze({ id: "workflowChangeSets", title: "Workflow Change Sets", subtitle: "Staged change sets, overlays, candidate snapshots, and change-set operations.", modelView: "workflowChangeSets" }),
+  Object.freeze({ id: "workflowPushes", title: "Workflow Pushes", subtitle: "Git push records, remotes, refs, and branch push state.", modelView: "pushes" }),
+  Object.freeze({ id: "workflowShips", title: "Workflow Ships", subtitle: "Ship records, release channels, observation windows, and rollback follow-up.", modelView: "ships" }),
   Object.freeze({ id: "workflowProposals", title: "Workflow Proposals", subtitle: "Proposal intake, review, and proposal-linked workflow detail.", modelView: "workflowProposals" }),
   Object.freeze({ id: "verification", title: "Verification", subtitle: "Verification landing page for live health, red/green state, and links into narrower authored verification pages.", modelView: "verificationOverview" }),
   Object.freeze({ id: "verificationStatus", title: "Verification Status", subtitle: "Policies, freshness, invalidations, queue state, and test-gate detail.", modelView: "verificationStatus" }),
   Object.freeze({ id: "verificationRuns", title: "Verification Runs", subtitle: "Test runs, authored reports, artifacts, suites, failures, and run execution commands.", modelView: "verificationRuns" }),
   Object.freeze({ id: "verificationRuntime", title: "Verification Runtime", subtitle: "Candidate snapshots, runtime revisions, snapshot builds, and runtime rebuild diagnostics.", modelView: "verificationRuntime" }),
+  Object.freeze({ id: "telemetry", title: "Telemetry", subtitle: "Metrics, live samples, detector windows, and regressions.", modelView: "telemetry" }),
+  Object.freeze({ id: "defects", title: "Defects", subtitle: "Defect records, observations, clusters, and linked proposals.", modelView: "defects" }),
   Object.freeze({ id: "knowledge", title: "Knowledge", subtitle: "Knowledge landing page with links into narrower docs, folders (this.folder.wtoml), and roadmap views.", modelView: "knowledgeOverview" }),
   Object.freeze({ id: "knowledgeDocs", title: "Knowledge Docs", subtitle: "Governed documents, authored references, and document detail.", modelView: "knowledgeDocs" }),
   Object.freeze({ id: "knowledgeFolders", title: "Knowledge Folders", subtitle: "Folders with this.folder.wtoml metadata and their linked platform concepts.", modelView: "knowledgeFolders" }),
@@ -64,7 +68,8 @@ function parsePlatformPageRequest(requestUrl) {
   const limitParam = optionalText(url.searchParams.get("limit"));
   return {
     url,
-    requestedArea: optionalText(url.searchParams.get("area")) || "overview",
+    requestedView: optionalText(url.searchParams.get("view")),
+    requestedArea: optionalText(url.searchParams.get("area")),
     requestedSection: optionalText(url.searchParams.get("section")),
     id: optionalText(url.searchParams.get("id")),
     context: optionalText(url.searchParams.get("context")),
@@ -121,6 +126,26 @@ const PLATFORM_IA = Object.freeze([
         emptyDetailMessage: "Select a change set to inspect edits, validation results, and apply state."
       }),
       Object.freeze({
+        id: "pushes",
+        title: "Pushes",
+        subtitle: "Git push records, remote metadata, and push detail.",
+        pageIds: Object.freeze(["workflowPushes"]),
+        modelView: "pushes",
+        sliceKey: "pushes",
+        emptyDetailTitle: "Push Detail",
+        emptyDetailMessage: "Select a push record, remote, or ref to inspect push detail."
+      }),
+      Object.freeze({
+        id: "ships",
+        title: "Ships",
+        subtitle: "Ship records, release channels, and rollback follow-up.",
+        pageIds: Object.freeze(["workflowShips"]),
+        modelView: "ships",
+        sliceKey: "ships",
+        emptyDetailTitle: "Ship Detail",
+        emptyDetailMessage: "Select a ship record or release channel to inspect ship detail."
+      }),
+      Object.freeze({
         id: "proposals",
         title: "Proposals",
         subtitle: "Proposal intake, review, and proposal detail.",
@@ -170,6 +195,40 @@ const PLATFORM_IA = Object.freeze([
     ])
   }),
   Object.freeze({
+    id: "telemetry",
+    title: "Telemetry",
+    defaultSection: "summary",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "summary",
+        title: "Telemetry",
+        subtitle: "Metrics, recent samples, windows, and performance regressions.",
+        pageIds: Object.freeze(["telemetry"]),
+        modelView: "telemetry",
+        sliceKey: "telemetry",
+        emptyDetailTitle: "Telemetry Detail",
+        emptyDetailMessage: "Select a metric, sample, window, or regression to inspect telemetry detail."
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "defects",
+    title: "Defects",
+    defaultSection: "summary",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "summary",
+        title: "Defects",
+        subtitle: "Defect records, observations, clusters, and linked proposals.",
+        pageIds: Object.freeze(["defects"]),
+        modelView: "defects",
+        sliceKey: "defects",
+        emptyDetailTitle: "Defect Detail",
+        emptyDetailMessage: "Select a defect, cluster, observation, or proposal to inspect defect detail."
+      })
+    ])
+  }),
+  Object.freeze({
     id: "knowledge",
     title: "Knowledge",
     defaultSection: "docs",
@@ -207,6 +266,33 @@ const PLATFORM_IA = Object.freeze([
     ])
   }),
   Object.freeze({
+    id: "signals",
+    title: "Signals",
+    defaultSection: "gaps",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "gaps",
+        title: "Gaps",
+        subtitle: "Gap inventory, selector drift, and compatibility signal detail.",
+        pageIds: Object.freeze(["signalsGaps"]),
+        modelView: "signalsGaps",
+        sliceKey: "overview",
+        emptyDetailTitle: "Gap Detail",
+        emptyDetailMessage: "Select a gap to inspect compatibility signal detail."
+      }),
+      Object.freeze({
+        id: "catalog",
+        title: "Catalog",
+        subtitle: "Compatibility catalog for gaps, boundaries, and signal nodes.",
+        pageIds: Object.freeze(["signalsCatalog"]),
+        modelView: "signalsCatalog",
+        sliceKey: "overview",
+        emptyDetailTitle: "Signal Detail",
+        emptyDetailMessage: "Select a signal node to inspect compatibility signal detail."
+      })
+    ])
+  }),
+  Object.freeze({
     id: "advanced",
     title: "Advanced",
     defaultSection: "model",
@@ -230,6 +316,16 @@ const PLATFORM_IA = Object.freeze([
         sliceKey: "advancedCoverage",
         emptyDetailTitle: "Coverage Detail",
         emptyDetailMessage: "Select a coverage edge target or gate to inspect verification coverage."
+      }),
+      Object.freeze({
+        id: "profiles",
+        title: "Profiles",
+        subtitle: "Runtime profile exposure and composition evidence.",
+        pageIds: Object.freeze(["modelProfiles"]),
+        modelView: "modelProfiles",
+        sliceKey: "advancedProfiles",
+        emptyDetailTitle: "Profile Detail",
+        emptyDetailMessage: "Select a runtime profile row to inspect composition and exposure detail."
       }),
       Object.freeze({
         id: "governance",
@@ -316,12 +412,38 @@ function platformSectionConfig(areaId, sectionId = null) {
   return { area, section };
 }
 
+function destinationForRequestedView(rawView) {
+  const requestedView = optionalText(rawView);
+  if (!requestedView) return null;
+  const legacyLandingMap = {
+    overview: { area: "overview", section: "summary" },
+    workflow: { area: "change", section: "branches" },
+    pushes: { area: "change", section: "pushes" },
+    verification: { area: "verification", section: "status" },
+    telemetry: { area: "telemetry", section: "summary" },
+    defects: { area: "defects", section: "summary" },
+    knowledge: { area: "knowledge", section: "docs" },
+    signals: { area: "signals", section: "gaps" },
+    model: { area: "advanced", section: "model" }
+  };
+  if (legacyLandingMap[requestedView]) return legacyLandingMap[requestedView];
+  for (const area of PLATFORM_IA) {
+    for (const section of area.sections) {
+      if (section.modelView === requestedView || section.pageIds.includes(requestedView)) {
+        return { area: area.id, section: section.id };
+      }
+    }
+  }
+  return null;
+}
+
 export function resolvePlatformLocation(requestUrl) {
   const consoleLayout = readPlatformConsoleLayout();
   const rawCtx = parsePlatformPageRequest(requestUrl);
   const fallbackDestination = rawCtx.id ? conceptDestination(rawCtx.id) : null;
-  const resolvedArea = rawCtx.requestedArea || fallbackDestination?.area || "overview";
-  const resolvedSection = rawCtx.requestedSection || fallbackDestination?.section || null;
+  const requestedViewDestination = destinationForRequestedView(rawCtx.requestedView);
+  const resolvedArea = requestedViewDestination?.area || rawCtx.requestedArea || fallbackDestination?.area || "overview";
+  const resolvedSection = requestedViewDestination?.section || rawCtx.requestedSection || fallbackDestination?.section || null;
   const { area, section } = platformSectionConfig(resolvedArea, resolvedSection);
   const ctx = {
     ...rawCtx,
@@ -528,7 +650,9 @@ function conceptDestination(value) {
   if (!raw) return null;
   if (raw.startsWith("branch:")) return { area: "change", section: "branches", id: raw };
   if (raw.startsWith("changeSet:") || raw.startsWith("changeset.")) return { area: "change", section: "changesets", id: raw };
-  if (raw.startsWith("proposal:")) return { area: "change", section: "proposals", id: raw };
+  if (raw.startsWith("pushRecord:") || raw.startsWith("gitRemote:") || raw.startsWith("gitRef:")) return { area: "change", section: "pushes", id: raw };
+  if (raw.startsWith("shipRecord:") || raw.startsWith("releaseChannel:")) return { area: "change", section: "ships", id: raw };
+  if (raw.startsWith("proposal:") || raw.startsWith("proposal.")) return { area: "change", section: "proposals", id: raw };
   if (raw.startsWith("candidateSnapshot:")) return { area: "verification", section: "runtime", id: raw };
   if (raw.startsWith("runtimeRevision:") || raw.startsWith("backendRevision:") || raw.startsWith("frontendRevision:") || raw.startsWith("snapshotBuild:") || raw.startsWith("snapshotBuildError:")) {
     return { area: "verification", section: "runtime", id: raw };
@@ -547,8 +671,14 @@ function conceptDestination(value) {
   if (raw.startsWith("folder:")) return { area: "knowledge", section: "folders", id: raw };
   if (raw.startsWith("doc:")) return { area: "knowledge", section: "docs", id: raw.slice(4) };
   if (raw.endsWith(".md")) return { area: "knowledge", section: "docs", id: raw };
-  if (raw.startsWith("gap.")) return { area: "overview", section: "summary", id: raw };
-  if (raw.startsWith("telemetryMetric:") || raw.startsWith("defectCluster:") || raw.startsWith("boundary:")) return { area: "advanced", section: "model", id: raw };
+  if (raw.startsWith("gap.")) return { area: "signals", section: "gaps", id: raw };
+  if (raw.startsWith("telemetryMetric:") || raw.startsWith("telemetrySample:") || raw.startsWith("telemetryWindow:") || raw.startsWith("performanceRegression:")) {
+    return { area: "telemetry", section: "summary", id: raw };
+  }
+  if (raw.startsWith("defectCluster:") || raw.startsWith("defect:") || raw.startsWith("defectObservation:")) {
+    return { area: "defects", section: "summary", id: raw };
+  }
+  if (raw.startsWith("boundary:")) return { area: "signals", section: "catalog", id: raw };
   if (raw.startsWith("compatibilityBridge:")) return { area: "advanced", section: "bridges", id: raw };
   if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return { area: "advanced", section: "governance", id: raw };
   if (raw.startsWith("mutableSurface:")) return { area: "advanced", section: "semantics", id: raw };
@@ -580,6 +710,8 @@ function conceptApiHref(value) {
   if (!raw) return null;
   if (raw.startsWith("branch:")) return `/api/platform-branches/${encodeURIComponent(raw)}`;
   if (raw.startsWith("changeSet:") || raw.startsWith("changeset.")) return `/api/platform-change-sets/${encodeURIComponent(raw)}`;
+  if (raw.startsWith("pushRecord:") || raw.startsWith("gitRemote:") || raw.startsWith("gitRef:")) return `/api/platform-model?view=pushes&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("shipRecord:") || raw.startsWith("releaseChannel:")) return `/api/platform-model?view=ships&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("candidateSnapshot:") || raw.startsWith("runtimeRevision:") || raw.startsWith("backendRevision:") || raw.startsWith("frontendRevision:") || raw.startsWith("snapshotBuild:") || raw.startsWith("snapshotBuildError:")) {
     return `/api/platform-model?area=verification&section=runtime&id=${encodeURIComponent(raw)}`;
   }
@@ -594,7 +726,14 @@ function conceptApiHref(value) {
   if (raw.startsWith("folder:")) return `/api/platform-model?area=knowledge&section=folders&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("doc:")) return `/api/platform-model?area=knowledge&section=docs&id=${encodeURIComponent(raw.slice(4))}`;
   if (raw.endsWith(".md")) return `/api/platform-model?area=knowledge&section=docs&id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("telemetryMetric:")) return `/api/platform-model?area=advanced&section=model&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("gap.")) return `/api/platform-model?view=signalsGaps&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("boundary:")) return `/api/platform-model?view=signalsCatalog&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("telemetryMetric:") || raw.startsWith("telemetrySample:") || raw.startsWith("telemetryWindow:") || raw.startsWith("performanceRegression:")) {
+    return `/api/platform-model?view=telemetry&id=${encodeURIComponent(raw)}`;
+  }
+  if (raw.startsWith("defectCluster:") || raw.startsWith("defect:") || raw.startsWith("defectObservation:")) {
+    return `/api/platform-model?view=defects&id=${encodeURIComponent(raw)}`;
+  }
   if (raw.startsWith("compatibilityBridge:")) return `/api/platform-model?area=advanced&section=bridges&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return `/api/platform-model?area=advanced&section=governance&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("mutableSurface:")) return `/api/platform-model?area=advanced&section=semantics&id=${encodeURIComponent(raw)}`;
@@ -607,8 +746,7 @@ function conceptApiHref(value) {
   if (raw.startsWith("package.") || raw.startsWith("packageRevision.") || raw.startsWith("packageNamespace:") || raw.startsWith("packageConflict:")) {
     return `/api/platform-model?area=advanced&section=packages&id=${encodeURIComponent(raw)}`;
   }
-  if (raw.startsWith("gap.")) return "/api/platform-model?area=overview&section=summary";
-  if (raw.startsWith("proposal:")) return "/api/platform-model?area=change&section=proposals";
+  if (raw.startsWith("proposal:") || raw.startsWith("proposal.")) return `/api/platform-model?view=workflowProposals&id=${encodeURIComponent(raw)}`;
   return "/api/platform-model";
 }
 
@@ -1089,6 +1227,8 @@ function sectionDetailRecords(section, model) {
       return model.branches ?? [];
     case "workflowChangeSets":
       return model.changeSets ?? [];
+    case "pushes":
+      return model.pushRecords ?? [];
     case "workflowProposals":
       return model.proposals ?? [];
     case "verificationStatus":
@@ -2135,6 +2275,201 @@ function signalItems(model) {
   );
 }
 
+function telemetryItems(model) {
+  const metrics = (model.telemetryMetrics ?? model.nodes ?? [])
+    .filter(node => node.kind === "telemetryMetric")
+    .map(node => ({
+      pageKind: "telemetryMetric",
+      id: node.id,
+      title: node.title || node.id,
+      status: node.status || "known",
+      scope: node.source || "",
+      summary: node.owner || ""
+    }));
+  const regressions = (model.performanceRegressions ?? []).map(row => ({
+    pageKind: "performanceRegression",
+    id: row.id,
+    title: row.ownerId || row.id,
+    status: row.status || "open",
+    scope: row.metricId || "",
+    summary: `${Math.round(row.deltaMs || 0)} ms (${Math.round(row.deltaPercent || 0)}%) slower`
+  }));
+  const windows = (model.telemetryWindows ?? []).map(row => ({
+    pageKind: "telemetryWindow",
+    id: row.id,
+    title: row.ownerId || row.id,
+    status: row.failureCount > 0 ? "failing" : "observed",
+    scope: row.metricId || "",
+    summary: `${Math.round(row.currentAggregateMs || 0)} ms over ${row.currentSampleCount || 0} samples`
+  }));
+  const samples = (model.telemetrySamples ?? []).map(row => ({
+    pageKind: "telemetrySample",
+    id: row.id,
+    title: row.ownerId || row.id,
+    status: row.status || "observed",
+    scope: row.metricId || "",
+    summary: `${Math.round(row.durationMs || row.value || 0)} ms${row.gateId ? `, ${row.gateId}` : ""}`
+  }));
+  return [...metrics, ...regressions, ...windows, ...samples].sort((left, right) =>
+    left.pageKind.localeCompare(right.pageKind)
+    || left.id.localeCompare(right.id)
+  );
+}
+
+function defectItems(model) {
+  const clusters = (model.defectClusters ?? []).map(row => ({
+    pageKind: "defectCluster",
+    id: row.id,
+    title: row.title || row.id,
+    status: row.defectCount > 1 ? "recurring" : "open",
+    scope: `${row.defectCount || 0} defects`,
+    summary: `${row.observationCount || 0} observations`
+  }));
+  const defects = (model.defects ?? []).map(row => ({
+    pageKind: "defect",
+    id: row.id,
+    title: row.title || row.id,
+    status: row.status || "open",
+    scope: row.defectKind || "",
+    summary: row.summary || row.metricId || row.gateId || ""
+  }));
+  const observations = (model.defectObservations ?? []).map(row => ({
+    pageKind: "defectObservation",
+    id: row.id,
+    title: row.sourceKind || row.id,
+    status: row.status || "observed",
+    scope: row.defectId || "",
+    summary: row.message || row.sourceId || ""
+  }));
+  const proposals = (model.proposals ?? [])
+    .filter(row => row.targetProcess === "defect.create" || String(row.targetId || "").startsWith("defect:"))
+    .map(row => ({
+      pageKind: "proposal",
+      id: row.id,
+      title: row.id,
+      status: row.status || "open",
+      scope: row.targetProcess || "",
+      summary: row.reason || row.targetId || ""
+    }));
+  return [...clusters, ...defects, ...observations, ...proposals].sort((left, right) =>
+    left.pageKind.localeCompare(right.pageKind)
+    || left.id.localeCompare(right.id)
+  );
+}
+
+function pushItems(model) {
+  const pushRecords = (model.pushRecords ?? []).map(row => ({
+    pageKind: "pushRecord",
+    id: row.id,
+    title: row.gitBranchName || row.branchId || row.id,
+    status: row.status || "failed",
+    scope: row.remoteName || "",
+    summary: row.commitSha
+      ? `${String(row.commitSha).slice(0, 12)}${row.dryRun ? ", dry run" : ""}`
+      : (row.error || row.provider || "")
+  }));
+  const remotes = (model.gitRemotes ?? []).map(row => ({
+    pageKind: "gitRemote",
+    id: row.id,
+    title: row.name || row.id,
+    status: row.provider || "generic",
+    scope: row.pushUrl || row.fetchUrl || "",
+    summary: row.remoteUrl || ""
+  }));
+  const refs = (model.gitRefs ?? []).map(row => ({
+    pageKind: "gitRef",
+    id: row.id,
+    title: row.shortName || row.refName || row.id,
+    status: row.scope || "ref",
+    scope: row.remoteName || "",
+    summary: row.refName || ""
+  }));
+  const defects = (model.defects ?? [])
+    .filter(row => row.pushRecordId)
+    .map(row => ({
+      pageKind: "defect",
+      id: row.id,
+      title: row.title || row.id,
+      status: row.status || "open",
+      scope: row.defectKind || "",
+      summary: row.summary || ""
+    }));
+  const proposals = (model.proposals ?? [])
+    .filter(row => row.targetProcess === "defect.create" && (row.body?.defectId || row.targetId))
+    .map(row => ({
+      pageKind: "proposal",
+      id: row.id,
+      title: row.id,
+      status: row.status || "open",
+      scope: row.targetProcess || "",
+      summary: row.reason || row.targetId || ""
+    }));
+  return [...pushRecords, ...remotes, ...refs, ...defects, ...proposals].sort((left, right) =>
+    left.pageKind.localeCompare(right.pageKind)
+    || left.id.localeCompare(right.id)
+  );
+}
+
+function shipItems(model) {
+  const shipRecords = (model.shipRecords ?? []).map(row => ({
+    pageKind: "shipRecord",
+    id: row.id,
+    title: row.gitBranchName || row.branchId || row.id,
+    status: row.status || "recorded",
+    scope: row.releaseChannelName || row.releaseChannelId || "",
+    summary: row.commitSha
+      ? `${String(row.commitSha).slice(0, 12)}${row.observationStatus === "open" ? ", observation open" : ""}`
+      : (row.releaseChannelId || "")
+  }));
+  const releaseChannels = (model.releaseChannels ?? []).map(row => ({
+    pageKind: "releaseChannel",
+    id: row.id,
+    title: row.title || row.name || row.id,
+    status: row.executable ? "executable" : "record-only",
+    scope: row.name || "",
+    summary: row.description || ""
+  }));
+  const pushes = (model.pushRecords ?? []).map(row => ({
+    pageKind: "pushRecord",
+    id: row.id,
+    title: row.gitBranchName || row.id,
+    status: row.status || "failed",
+    scope: row.remoteName || "",
+    summary: row.commitSha ? String(row.commitSha).slice(0, 12) : (row.error || "")
+  }));
+  const defects = (model.defects ?? []).map(row => ({
+    pageKind: "defect",
+    id: row.id,
+    title: row.title || row.id,
+    status: row.status || "open",
+    scope: row.defectKind || "",
+    summary: row.summary || ""
+  }));
+  const regressions = (model.performanceRegressions ?? []).map(row => ({
+    pageKind: "performanceRegression",
+    id: row.id,
+    title: row.id,
+    status: row.status || "open",
+    scope: row.ownerId || "",
+    summary: row.deltaMs == null ? "" : `${Math.round(row.deltaMs)} ms`
+  }));
+  const proposals = (model.proposals ?? []).filter(row =>
+    row.targetProcess === "branch.ship"
+    || row.targetProcess === "branch.rollback"
+  ).map(row => ({
+    pageKind: "proposal",
+    id: row.id,
+    title: row.id,
+    status: row.status || "open",
+    scope: row.targetProcess || "",
+    summary: row.reason || row.targetId || ""
+  }));
+  return [...shipRecords, ...releaseChannels, ...pushes, ...defects, ...regressions, ...proposals].sort((left, right) =>
+    left.pageKind.localeCompare(right.pageKind)
+    || left.id.localeCompare(right.id)
+  );
+}
+
 function modelItems(model) {
   return [...(model.nodes ?? [])].sort((left, right) =>
     left.kind.localeCompare(right.kind)
@@ -2201,6 +2536,32 @@ function detailRecordsForSource(source, model) {
       return model.testReports ?? [];
     case "candidateSnapshots":
       return model.candidateSnapshots ?? [];
+    case "pushRecords":
+      return model.pushRecords ?? [];
+    case "shipRecords":
+      return model.shipRecords ?? [];
+    case "releaseChannels":
+      return model.releaseChannels ?? [];
+    case "gitRemotes":
+      return model.gitRemotes ?? [];
+    case "gitRefs":
+      return model.gitRefs ?? [];
+    case "telemetryMetrics":
+      return (model.telemetryMetrics ?? model.nodes ?? []).filter(node => node.kind === "telemetryMetric");
+    case "telemetrySamples":
+      return model.telemetrySamples ?? [];
+    case "telemetryWindows":
+      return model.telemetryWindows ?? [];
+    case "performanceRegressions":
+      return model.performanceRegressions ?? [];
+    case "telemetryThresholds":
+      return model.telemetryThresholds ?? [];
+    case "defects":
+      return model.defects ?? [];
+    case "defectObservations":
+      return model.defectObservations ?? [];
+    case "defectClusters":
+      return model.defectClusters ?? [];
     case "nodes":
       return model.nodes ?? [];
     case "docs":
@@ -3093,6 +3454,299 @@ function renderSignalDetail(surface, detail, model, ctx) {
   return renderAuthoredDetailLayout(surface, sections);
 }
 
+function renderTelemetryDetail(surface, detail, model, ctx) {
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related");
+  const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships");
+  const emptyDetail = () => renderSurfaceEmptyCard(surface, {
+    title: surfacePropText(surface, "emptyTitle", "Detail"),
+    message: surfaceEmptyState(surface, "No telemetry rows are projected yet.")
+  });
+  if (!detail) return emptyDetail();
+  const relatedEdges = (model.edges ?? []).filter(edge => edge.from === detail.id || edge.to === detail.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
+  const kind = optionalText(detail.kind) || optionalText(detail.pageKind) || (String(detail.id || "").split(":")[0] || "telemetry");
+  const sections = new Map();
+  if (kind === "telemetryMetric") {
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "telemetryMetricCardTitle", "telemetryMetricFields", ctx, detail, "Telemetry Metric Detail");
+    const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "telemetryMetricFields").length
+      ? rootKeysFromSurfaceSchema(primarySurface, "telemetryMetricFields")
+      : ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
+    setAuthoredDetailSection(sections, primarySurface, kind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
+    `);
+  } else if (kind === "performanceRegression") {
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "performanceRegressionCardTitle", "performanceRegressionFields", ctx, detail, "Performance Regression Detail");
+    const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "performanceRegressionFields").length
+      ? rootKeysFromSurfaceSchema(primarySurface, "performanceRegressionFields")
+      : ["id", "metricId", "ownerId", "sampleKind", "currentAggregateMs", "previousAggregateMs", "deltaMs", "deltaPercent", "status"];
+    setAuthoredDetailSection(sections, primarySurface, kind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
+    `);
+  } else if (kind === "telemetryWindow") {
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "telemetryWindowCardTitle", "telemetryWindowFields", ctx, detail, "Telemetry Window Detail");
+    const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "telemetryWindowFields").length
+      ? rootKeysFromSurfaceSchema(primarySurface, "telemetryWindowFields")
+      : ["id", "metricId", "ownerId", "sampleKind", "currentAggregateMs", "previousAggregateMs", "currentSampleCount", "previousSampleCount", "failureCount"];
+    setAuthoredDetailSection(sections, primarySurface, kind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
+    `);
+  } else {
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "telemetrySampleCardTitle", "telemetrySampleFields", ctx, detail, "Telemetry Sample Detail");
+    const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "telemetrySampleFields").length
+      ? rootKeysFromSurfaceSchema(primarySurface, "telemetrySampleFields")
+      : ["id", "metricId", "ownerId", "sampleKind", "status", "durationMs", "gateId", "branchId", "changeSetId", "candidateSnapshotId", "observedAt"];
+    setAuthoredDetailSection(sections, primarySurface, "telemetrySample", `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
+    `);
+  }
+  setAuthoredDetailSection(sections, relatedSurface, kind, `
+    ${renderCardSpecs(relatedSurface, "linkCards", "linkCardEmptyStates", ctx, detail, "links")}
+    ${renderCardSpecs(relatedSurface, "textCards", "textCardEmptyStates", ctx, detail, "text")}
+  `);
+  setAuthoredDetailSection(sections, relationshipsSurface, kind, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+    <tr>
+      <td>${renderConceptLink(ctx, edge.from)}</td>
+      <td>${esc(edge.rel || "")}</td>
+      <td>${renderConceptLink(ctx, edge.to)}</td>
+    </tr>
+  `)));
+  return renderAuthoredDetailLayout(surface, sections);
+}
+
+function renderPushDetail(surface, detail, model, ctx) {
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related");
+  const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships");
+  const emptyDetail = () => renderSurfaceEmptyCard(surface, {
+    title: surfacePropText(surface, "emptyTitle", "Detail"),
+    message: surfaceEmptyState(surface, "No push rows are projected yet.")
+  });
+  if (!detail) return emptyDetail();
+  const relatedEdges = (model.edges ?? []).filter(edge => edge.from === detail.id || edge.to === detail.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
+  const inferredKind = optionalText(detail.kind)
+    || optionalText(detail.pageKind)
+    || (detail.targetProcess ? "proposal" : null)
+    || (String(detail.id || "").startsWith("gitRemote:") ? "gitRemote" : null)
+    || (String(detail.id || "").startsWith("gitRef:") ? "gitRef" : null)
+    || (String(detail.id || "").startsWith("branch:") ? "branch" : null)
+    || (String(detail.id || "").startsWith("defect:") ? "defect" : null)
+    || "pushRecord";
+  const enrichedDetail = (() => {
+    if (inferredKind === "pushRecord") {
+      return {
+        ...detail,
+        remoteId: detail.remoteName ? `gitRemote:${detail.remoteName}` : null,
+        localRefId: detail.localBranchRef ? `gitRef:${detail.localBranchRef}` : null,
+        remoteRefId: detail.remoteName && detail.gitBranchName
+          ? `gitRef:refs/remotes/${detail.remoteName}/${detail.gitBranchName}`
+          : (detail.remoteBranchRef ? `gitRef:${detail.remoteBranchRef}` : null)
+      };
+    }
+    if (inferredKind === "gitRemote") {
+      return {
+        ...detail,
+        pushRecordIds: (model.pushRecords ?? []).filter(row => row.remoteName === detail.name).map(row => row.id),
+        refIds: (model.gitRefs ?? []).filter(row => row.remoteName === detail.name).map(row => row.id)
+      };
+    }
+    if (inferredKind === "gitRef") {
+      return {
+        ...detail,
+        remoteId: detail.remoteName ? `gitRemote:${detail.remoteName}` : null
+      };
+    }
+    return detail;
+  })();
+  const fieldsProp = inferredKind === "gitRemote"
+    ? "gitRemoteFields"
+    : inferredKind === "gitRef"
+      ? "gitRefFields"
+      : inferredKind === "branch"
+        ? "branchFields"
+        : inferredKind === "proposal"
+          ? "proposalFields"
+          : inferredKind === "defect"
+            ? "defectFields"
+            : "pushRecordFields";
+  const titleProp = inferredKind === "gitRemote"
+    ? "gitRemoteCardTitle"
+    : inferredKind === "gitRef"
+      ? "gitRefCardTitle"
+      : inferredKind === "branch"
+        ? "branchCardTitle"
+        : inferredKind === "proposal"
+          ? "proposalCardTitle"
+          : inferredKind === "defect"
+            ? "defectCardTitle"
+            : "pushRecordCardTitle";
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, titleProp, fieldsProp, ctx, enrichedDetail, "Push Detail");
+  const usedKeys = rootKeysFromSurfaceSchema(primarySurface, fieldsProp).length
+    ? rootKeysFromSurfaceSchema(primarySurface, fieldsProp)
+    : ["id", "status", "branchId", "changeSetId", "remoteName", "gitBranchName"];
+  const sections = new Map();
+  setAuthoredDetailSection(sections, primarySurface, inferredKind, `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, enrichedDetail, usedKeys)}
+  `);
+  setAuthoredDetailSection(sections, relatedSurface, inferredKind, `
+    ${renderCardSpecs(relatedSurface, `${inferredKind}LinkCards`, `${inferredKind}LinkCardEmptyStates`, ctx, enrichedDetail, "links")}
+    ${renderCardSpecs(relatedSurface, `${inferredKind}TextCards`, `${inferredKind}TextCardEmptyStates`, ctx, enrichedDetail, "text")}
+  `);
+  setAuthoredDetailSection(sections, relationshipsSurface, inferredKind, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+    <tr>
+      <td>${renderConceptLink(ctx, edge.from)}</td>
+      <td>${esc(edge.rel || "")}</td>
+      <td>${renderConceptLink(ctx, edge.to)}</td>
+    </tr>
+  `)));
+  return renderAuthoredDetailLayout(surface, sections);
+}
+
+function renderShipDetail(surface, detail, model, ctx) {
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related");
+  const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships");
+  const emptyDetail = () => renderSurfaceEmptyCard(surface, {
+    title: surfacePropText(surface, "emptyTitle", "Detail"),
+    message: surfaceEmptyState(surface, "No ship rows are projected yet.")
+  });
+  if (!detail) return emptyDetail();
+  const relatedEdges = (model.edges ?? []).filter(edge => edge.from === detail.id || edge.to === detail.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
+  const inferredKind = optionalText(detail.kind)
+    || optionalText(detail.pageKind)
+    || (detail.targetProcess ? "proposal" : null)
+    || (String(detail.id || "").startsWith("releaseChannel:") ? "releaseChannel" : null)
+    || (String(detail.id || "").startsWith("shipRecord:") ? "shipRecord" : null)
+    || (String(detail.id || "").startsWith("pushRecord:") ? "pushRecord" : null)
+    || (String(detail.id || "").startsWith("branch:") ? "branch" : null)
+    || (String(detail.id || "").startsWith("defect:") ? "defect" : null)
+    || (String(detail.id || "").startsWith("performanceRegression:") ? "performanceRegression" : null)
+    || "shipRecord";
+  const enrichedDetail = (() => {
+    if (inferredKind === "shipRecord") {
+      return {
+        ...detail,
+        shipRecordId: detail.id
+      };
+    }
+    if (inferredKind === "releaseChannel") {
+      return {
+        ...detail,
+        shipRecordIds: (model.shipRecords ?? []).filter(row => row.releaseChannelId === detail.id).map(row => row.id)
+      };
+    }
+    if (inferredKind === "proposal") {
+      return {
+        ...detail,
+        shipRecordId: detail.body?.shipRecordId || null
+      };
+    }
+    return detail;
+  })();
+  const fieldsProp = inferredKind === "releaseChannel"
+    ? "releaseChannelFields"
+    : inferredKind === "branch"
+      ? "branchFields"
+      : inferredKind === "pushRecord"
+        ? "pushRecordFields"
+        : inferredKind === "proposal"
+          ? "proposalFields"
+          : inferredKind === "defect"
+            ? "defectFields"
+            : inferredKind === "performanceRegression"
+              ? "performanceRegressionFields"
+              : "shipRecordFields";
+  const titleProp = inferredKind === "releaseChannel"
+    ? "releaseChannelCardTitle"
+    : inferredKind === "branch"
+      ? "branchCardTitle"
+      : inferredKind === "pushRecord"
+        ? "pushRecordCardTitle"
+        : inferredKind === "proposal"
+          ? "proposalCardTitle"
+          : inferredKind === "defect"
+            ? "defectCardTitle"
+            : inferredKind === "performanceRegression"
+              ? "performanceRegressionCardTitle"
+              : "shipRecordCardTitle";
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, titleProp, fieldsProp, ctx, enrichedDetail, "Ship Detail");
+  const usedKeys = rootKeysFromSurfaceSchema(primarySurface, fieldsProp).length
+    ? rootKeysFromSurfaceSchema(primarySurface, fieldsProp)
+    : ["id", "status", "branchId", "releaseChannelId"];
+  const sections = new Map();
+  setAuthoredDetailSection(sections, primarySurface, inferredKind, `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, enrichedDetail, usedKeys)}
+  `);
+  setAuthoredDetailSection(sections, relatedSurface, inferredKind, `
+    ${renderCardSpecs(relatedSurface, `${inferredKind}LinkCards`, `${inferredKind}LinkCardEmptyStates`, ctx, enrichedDetail, "links")}
+    ${renderCardSpecs(relatedSurface, `${inferredKind}TextCards`, `${inferredKind}TextCardEmptyStates`, ctx, enrichedDetail, "text")}
+  `);
+  setAuthoredDetailSection(sections, relationshipsSurface, inferredKind, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+    <tr>
+      <td>${renderConceptLink(ctx, edge.from)}</td>
+      <td>${esc(edge.rel || "")}</td>
+      <td>${renderConceptLink(ctx, edge.to)}</td>
+    </tr>
+  `)));
+  return renderAuthoredDetailLayout(surface, sections);
+}
+
+function renderDefectDetail(surface, detail, model, ctx) {
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related");
+  const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships");
+  const emptyDetail = () => renderSurfaceEmptyCard(surface, {
+    title: surfacePropText(surface, "emptyTitle", "Detail"),
+    message: surfaceEmptyState(surface, "No defect rows are projected yet.")
+  });
+  if (!detail) return emptyDetail();
+  const relatedEdges = (model.edges ?? []).filter(edge => edge.from === detail.id || edge.to === detail.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
+  const kind = optionalText(detail.kind)
+    || optionalText(detail.pageKind)
+    || (detail.targetProcess ? "proposal" : null)
+    || (String(detail.id || "").split(":")[0] || "defect");
+  const fieldsProp = kind === "defectCluster"
+    ? "defectClusterFields"
+    : kind === "defectObservation"
+      ? "defectObservationFields"
+      : kind === "proposal"
+        ? "proposalFields"
+        : "defectFields";
+  const titleProp = kind === "defectCluster"
+    ? "defectClusterCardTitle"
+    : kind === "defectObservation"
+      ? "defectObservationCardTitle"
+      : kind === "proposal"
+        ? "proposalCardTitle"
+        : "defectCardTitle";
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, titleProp, fieldsProp, ctx, detail, "Defect Detail");
+  const usedKeys = rootKeysFromSurfaceSchema(primarySurface, fieldsProp).length
+    ? rootKeysFromSurfaceSchema(primarySurface, fieldsProp)
+    : ["id", "title", "status"];
+  const sections = new Map();
+  setAuthoredDetailSection(sections, primarySurface, kind, `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
+  `);
+  setAuthoredDetailSection(sections, relatedSurface, kind, `
+    ${renderCardSpecs(relatedSurface, "linkCards", "linkCardEmptyStates", ctx, detail, "links")}
+    ${renderCardSpecs(relatedSurface, "textCards", "textCardEmptyStates", ctx, detail, "text")}
+  `);
+  setAuthoredDetailSection(sections, relationshipsSurface, kind, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+    <tr>
+      <td>${renderConceptLink(ctx, edge.from)}</td>
+      <td>${esc(edge.rel || "")}</td>
+      <td>${renderConceptLink(ctx, edge.to)}</td>
+    </tr>
+  `)));
+  return renderAuthoredDetailLayout(surface, sections);
+}
+
 function renderModelDetail(surface, node, model, ctx) {
   const detailKind = "object";
   const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformModelPrimaryPanel");
@@ -3155,6 +3809,14 @@ function recordsForAuthoredListSource(source, model) {
       return knowledgeItems(model);
     case "signalItems":
       return signalItems(model);
+    case "telemetryItems":
+      return telemetryItems(model);
+    case "defectItems":
+      return defectItems(model);
+    case "pushItems":
+      return pushItems(model);
+    case "shipItems":
+      return shipItems(model);
     case "modelItems":
       return modelItems(model);
     case "bridges":
@@ -3266,6 +3928,34 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
       ));
     case "signals":
       return renderSurfaceFrame(surface, renderSignalDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id),
+        model,
+        ctx
+      ));
+    case "telemetry":
+      return renderSurfaceFrame(surface, renderTelemetryDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id),
+        model,
+        ctx
+      ));
+    case "defects":
+      return renderSurfaceFrame(surface, renderDefectDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id),
+        model,
+        ctx
+      ));
+    case "pushes":
+      return renderSurfaceFrame(surface, renderPushDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id),
+        model,
+        ctx
+      ));
+    case "ships":
+      return renderSurfaceFrame(surface, renderShipDetail(
         surface,
         findAuthoredDetailBySources(surface, model, ctx.id),
         model,

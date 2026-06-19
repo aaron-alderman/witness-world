@@ -93,6 +93,9 @@ export function createBootstrapRenderRuntime({
     const model = state.model || {};
     const authored = state.bootstrapState || {};
     const operator = authored.operator || {};
+    const resolvedSuggestions = typeof currentSuggestions === "function"
+      ? (currentSuggestions() || [])
+      : (currentSuggestions || []);
 
     applyBootstrapShellStatusViewFn({
       view: buildBootstrapShellStatusViewFn({
@@ -138,7 +141,7 @@ export function createBootstrapRenderRuntime({
       tutorialProgress: state.tutorialProgress,
       guidanceState: activeGuidanceState,
       tutorialState: tutorialState ?? activeGuidanceState,
-      currentSuggestions,
+      currentSuggestions: resolvedSuggestions,
       scopeInventoryRows: tutorialScopeInventoryRows(state.guidanceProgress ?? state.tutorialProgress),
       guidanceStep: activeGuidanceStep,
       currentSurfacePage,

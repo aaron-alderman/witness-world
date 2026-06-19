@@ -1,4 +1,8 @@
 import { createAuthoringCoreBundleHandlers } from "./authoring-core-handlers.js";
+import {
+  LEGACY_FRONTEND_SURFACE_CAPABILITY_ID,
+  legacyFrontendBridgeConfigFromSurface
+} from "../../src/legacy-frontend-bridge.js";
 
 function exactRoute(method, path, handler, params = {}) {
   return Object.freeze({ kind: "exact", method, path, handler, params });
@@ -25,10 +29,13 @@ const authoringHandlerCatalog = Object.freeze({
     "stewardship.create",
     "stewardship.remove",
     "surface.create",
+    "collection.create",
     "process.create",
     "type.create",
     "projection.create",
     "message.create",
+    "boundary.create",
+    "policy.create",
     "package.create",
     "packageRevision.create",
     "packageRevision.publish",
@@ -36,8 +43,12 @@ const authoringHandlerCatalog = Object.freeze({
     "packageNamespace.create",
     "packageDependency.create",
     "packageTransformer.create",
+    "frontend.migrateLegacy",
+    "frontend.upliftLegacy",
     "widgets.create",
     "widgets.update",
+    "widgets.replace",
+    "widgets.replace.rollback",
     "route.create",
     "serve.create"
   ]),
@@ -56,10 +67,13 @@ const authoringRoutes = Object.freeze([
   exactRoute("POST", "/api/stewardships", "stewardship.create"),
   exactRoute("DELETE", "/api/stewardships", "stewardship.remove"),
   exactRoute("POST", "/api/surfaces", "surface.create"),
+  exactRoute("POST", "/api/collections", "collection.create"),
   exactRoute("POST", "/api/processes", "process.create"),
   exactRoute("POST", "/api/types", "type.create"),
   exactRoute("POST", "/api/projections", "projection.create"),
   exactRoute("POST", "/api/messages", "message.create"),
+  exactRoute("POST", "/api/boundaries", "boundary.create"),
+  exactRoute("POST", "/api/policies", "policy.create"),
   exactRoute("POST", "/api/packages", "package.create"),
   exactRoute("POST", "/api/package-revisions", "packageRevision.create"),
   patternRoute("POST", /^\/api\/package-revisions\/([^/]+)\/publish$/, "packageRevision.publish", Object.freeze(["id"])),
@@ -67,8 +81,12 @@ const authoringRoutes = Object.freeze([
   exactRoute("POST", "/api/package-namespaces", "packageNamespace.create"),
   exactRoute("POST", "/api/package-dependencies", "packageDependency.create"),
   exactRoute("POST", "/api/package-transformers", "packageTransformer.create"),
+  exactRoute("POST", "/api/frontend-migrations/legacy", "frontend.migrateLegacy"),
+  exactRoute("POST", "/api/frontend-uplifts/legacy", "frontend.upliftLegacy"),
   exactRoute("POST", "/api/widgets", "widgets.create"),
   patternRoute("PATCH", /^\/api\/widgets\/([^/]+)$/, "widgets.update", Object.freeze(["id"])),
+  patternRoute("POST", /^\/api\/widgets\/([^/]+)\/replace$/, "widgets.replace", Object.freeze(["id"])),
+  patternRoute("POST", /^\/api\/widgets\/([^/]+)\/replace\/rollback$/, "widgets.replace.rollback", Object.freeze(["id"])),
   exactRoute("POST", "/api/identities", "identity.create"),
   patternRoute("PATCH", /^\/api\/identities\/([^/]+)$/, "identity.update", Object.freeze(["id"])),
   exactRoute("POST", "/api/routes", "route.create"),
@@ -76,12 +94,40 @@ const authoringRoutes = Object.freeze([
 ]);
 
 const authoringSurfaces = Object.freeze([]);
+const authoringProviders = Object.freeze([
+  {
+    kind: "capabilityDefinitions",
+    id: "authoring-core.legacyFrontendCapability",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: LEGACY_FRONTEND_SURFACE_CAPABILITY_ID,
+        label: "Legacy Widget-Program Compatibility Bridge"
+      })
+    ])
+  },
+  {
+    kind: "surfaceCapabilityRenderer",
+    id: "authoring-core.legacyFrontendSurfaceRenderer",
+    capability: LEGACY_FRONTEND_SURFACE_CAPABILITY_ID,
+    factory() {
+      return {
+        capability: LEGACY_FRONTEND_SURFACE_CAPABILITY_ID,
+        renderSurface(surface) {
+          const bridge = legacyFrontendBridgeConfigFromSurface(surface);
+          if (!bridge) return null;
+          return `<section data-legacy-frontend-bridge="${surface.id}" data-root-widget="${bridge.rootWidget}"></section>`;
+        }
+      };
+    }
+  }
+]);
 
 export const bundles = Object.freeze({
   "bundle-authoring-core": Object.freeze({
     handlerCatalog: authoringHandlerCatalog,
     routes: authoringRoutes,
     surfaces: authoringSurfaces,
+    providers: authoringProviders,
     createHandlers: createAuthoringCoreBundleHandlers
   })
 });

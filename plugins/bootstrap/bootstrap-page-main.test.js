@@ -19,7 +19,7 @@ test("bootstrap authored page main renders shell structure and replaces authored
   assert.match(html, /surface-state-list/);
   assert.match(html, /id="runtime-plugin-review-runner"/);
   assert.match(html, /witness-bootstrap-page-main-program/);
-  assert.match(html, /witness:bootstrap-runtime-plugin-review-sync/);
+  assert.doesNotMatch(html, /witness:bootstrap-runtime-plugin-review-sync/);
   assert.match(html, /id="mcp-server-inventory"/);
   assert.match(html, /id="state-contexts"/);
   assert.match(html, /id="state-packages"/);

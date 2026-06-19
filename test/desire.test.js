@@ -1736,6 +1736,14 @@ targetKind = "widget"
 targetId = "owned_thing"
 body = { id = "shared_note" }
 reason = "Need a shared note"
+
+[[materializedView]]
+id = "platform.view.overview.summary"
+title = "Platform overview summary"
+kind = "platformSlice"
+sliceKey = "overview"
+modelView = "summary"
+ttlMs = 1500
 `).map(doc => ({ ...doc, file: "C:/demo/native-plain-runtime.wtoml" }));
   const desire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(docs));
 
@@ -1745,10 +1753,11 @@ reason = "Need a shared note"
   assert.equal(world.project(moduleProjectors.perspectives).some(row => row.id === "shared.board" && row.context === "ctx.shared"), true);
   assert.equal(world.project(moduleProjectors.stewardships).some(row => row.steward === "callan" && row.target === "ctx.shared"), true);
   assert.equal(world.project(moduleProjectors.proposals).some(row => row.id === "proposal.widget.shared-note" && row.targetProcess === "widget.define" && row.status === "open"), true);
+  assert.equal(world.project(moduleProjectors.materializedViews).some(row => row.id === "platform.view.overview.summary" && row.kind === "platformSlice"), true);
   assert.equal(world.project(projectors.currentRelations).some(row => row.from === "owned_clone" && row.rel === "cloneOf" && row.to === "owned_thing"), true);
   assert.equal(world.project(projectors.owners).get("owned_thing"), "callan");
 
-  for (const target of ["demo_app", "shared.board", "ctx.shared", "proposal.widget.shared-note"]) {
+  for (const target of ["demo_app", "shared.board", "ctx.shared", "proposal.widget.shared-note", "platform.view.overview.summary"]) {
     assert.equal(world.allWitnesses().some(w =>
       w.process === "dsl.source.annotate"
       && w.body?.file === "C:/demo/native-plain-runtime.wtoml"

@@ -307,10 +307,26 @@ export function createBootstrapProposalAdjacentSyncHandler({
 
 export function bindBootstrapProposalAdjacentSync({
   target = null,
-  eventName = "witness:bootstrap-proposal-adjacent-sync",
   ...deps
 } = {}) {
+  const resolvedTarget = target || globalThis?.window || globalThis || null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
   const handler = createBootstrapProposalAdjacentSyncHandler(deps);
-  target?.addEventListener?.(eventName, handler);
+  for (const [formId, family] of [
+    ["runtime-plugin-install-proposal-form", "runtime-plugin-install"],
+    ["runtime-plugin-remove-proposal-form", "runtime-plugin-remove"],
+    ["mcp-server-proposal-form", "mcp-server"],
+    ["mcp-tool-install-proposal-form", "mcp-tool-install"],
+    ["mcp-tool-remove-proposal-form", "mcp-tool-remove"]
+  ]) {
+    const form = resolvedDocument?.getElementById?.(formId);
+    if (!form || form.__bootstrapProposalAdjacentSyncBound) continue;
+    form.__bootstrapProposalAdjacentSyncBound = true;
+    const trigger = () => handler({
+      detail: { source: "bootstrap-proposal-adjacent-controls", family }
+    });
+    form.addEventListener("change", trigger);
+    form.addEventListener("input", trigger);
+  }
   return handler;
 }

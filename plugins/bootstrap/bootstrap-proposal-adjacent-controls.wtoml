@@ -108,22 +108,6 @@ rootWidget = "bootstrap_runtime_plugin_install_proposal_controls_root"
 [[step]]
 program = "bootstrap_runtime_plugin_install_proposal_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_install_proposal_runner_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "runtime-plugin-install", trigger = "server-runner" }
-
-[[step]]
-program = "bootstrap_runtime_plugin_install_proposal_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_install_proposal_plugin_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "runtime-plugin-install", trigger = "plugin" }
-
-[[step]]
-program = "bootstrap_runtime_plugin_install_proposal_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_runtime_plugin_install_proposal_form"
 widget = "bootstrap_runtime_plugin_install_proposal_status"
@@ -136,14 +120,6 @@ op = "readForm"
 on = "submit:bootstrap_runtime_plugin_install_proposal_form"
 widget = "bootstrap_runtime_plugin_install_proposal_form"
 into = "bootstrapRuntimePluginInstallProposalDraft"
-
-[[step]]
-program = "bootstrap_runtime_plugin_install_proposal_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_runtime_plugin_install_proposal_form"
-eventName = "witness:bootstrap-proposal-adjacent-submit"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "runtime-plugin-install", formId = "runtime-plugin-install-proposal-form", statusId = "runtime-plugin-install-proposal-status", id = "${state.bootstrapRuntimePluginInstallProposalDraft.id}", serverRunner = "${state.bootstrapRuntimePluginInstallProposalDraft.serverRunner}", plugin = "${state.bootstrapRuntimePluginInstallProposalDraft.plugin}", reason = "${state.bootstrapRuntimePluginInstallProposalDraft.reason}" }
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_proposal_controls_root"
@@ -251,22 +227,6 @@ rootWidget = "bootstrap_runtime_plugin_remove_proposal_controls_root"
 [[step]]
 program = "bootstrap_runtime_plugin_remove_proposal_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_remove_proposal_runner_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "runtime-plugin-remove", trigger = "server-runner" }
-
-[[step]]
-program = "bootstrap_runtime_plugin_remove_proposal_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_remove_proposal_plugin_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "runtime-plugin-remove", trigger = "plugin" }
-
-[[step]]
-program = "bootstrap_runtime_plugin_remove_proposal_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_runtime_plugin_remove_proposal_form"
 widget = "bootstrap_runtime_plugin_remove_proposal_status"
@@ -279,14 +239,6 @@ op = "readForm"
 on = "submit:bootstrap_runtime_plugin_remove_proposal_form"
 widget = "bootstrap_runtime_plugin_remove_proposal_form"
 into = "bootstrapRuntimePluginRemoveProposalDraft"
-
-[[step]]
-program = "bootstrap_runtime_plugin_remove_proposal_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_runtime_plugin_remove_proposal_form"
-eventName = "witness:bootstrap-proposal-adjacent-submit"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "runtime-plugin-remove", formId = "runtime-plugin-remove-proposal-form", statusId = "runtime-plugin-remove-proposal-status", id = "${state.bootstrapRuntimePluginRemoveProposalDraft.id}", serverRunner = "${state.bootstrapRuntimePluginRemoveProposalDraft.serverRunner}", plugin = "${state.bootstrapRuntimePluginRemoveProposalDraft.plugin}", reason = "${state.bootstrapRuntimePluginRemoveProposalDraft.reason}" }
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_controls_root"
@@ -455,30 +407,6 @@ rootWidget = "bootstrap_mcp_server_proposal_controls_root"
 [[step]]
 program = "bootstrap_mcp_server_proposal_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_server_proposal_runner_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-server", trigger = "server-runner" }
-
-[[step]]
-program = "bootstrap_mcp_server_proposal_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "input:bootstrap_mcp_server_proposal_service_identity_input"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-server", trigger = "service-identity" }
-
-[[step]]
-program = "bootstrap_mcp_server_proposal_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "input:bootstrap_mcp_server_proposal_transports_input"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-server", trigger = "transports-json" }
-
-[[step]]
-program = "bootstrap_mcp_server_proposal_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_mcp_server_proposal_form"
 widget = "bootstrap_mcp_server_proposal_status"
@@ -491,14 +419,6 @@ op = "readForm"
 on = "submit:bootstrap_mcp_server_proposal_form"
 widget = "bootstrap_mcp_server_proposal_form"
 into = "bootstrapMcpServerProposalDraft"
-
-[[step]]
-program = "bootstrap_mcp_server_proposal_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_mcp_server_proposal_form"
-eventName = "witness:bootstrap-proposal-adjacent-submit"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-server", formId = "mcp-server-proposal-form", statusId = "mcp-server-proposal-status", id = "${state.bootstrapMcpServerProposalDraft.id}", serverId = "${state.bootstrapMcpServerProposalDraft.serverId}", label = "${state.bootstrapMcpServerProposalDraft.label}", serverRunner = "${state.bootstrapMcpServerProposalDraft.serverRunner}", context = "${state.bootstrapMcpServerProposalDraft.context}", serviceIdentity = "${state.bootstrapMcpServerProposalDraft.serviceIdentity}", transportsJson = "${state.bootstrapMcpServerProposalDraft.transportsJson}", reason = "${state.bootstrapMcpServerProposalDraft.reason}" }
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_controls_root"
@@ -648,30 +568,6 @@ rootWidget = "bootstrap_mcp_tool_install_proposal_controls_root"
 [[step]]
 program = "bootstrap_mcp_tool_install_proposal_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_install_proposal_server_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-tool-install", trigger = "server" }
-
-[[step]]
-program = "bootstrap_mcp_tool_install_proposal_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_install_proposal_tool_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-tool-install", trigger = "tool" }
-
-[[step]]
-program = "bootstrap_mcp_tool_install_proposal_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_install_proposal_acting_mode_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-tool-install", trigger = "acting-mode" }
-
-[[step]]
-program = "bootstrap_mcp_tool_install_proposal_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_mcp_tool_install_proposal_form"
 widget = "bootstrap_mcp_tool_install_proposal_status"
@@ -684,14 +580,6 @@ op = "readForm"
 on = "submit:bootstrap_mcp_tool_install_proposal_form"
 widget = "bootstrap_mcp_tool_install_proposal_form"
 into = "bootstrapMcpToolInstallProposalDraft"
-
-[[step]]
-program = "bootstrap_mcp_tool_install_proposal_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_mcp_tool_install_proposal_form"
-eventName = "witness:bootstrap-proposal-adjacent-submit"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-tool-install", formId = "mcp-tool-install-proposal-form", statusId = "mcp-tool-install-proposal-status", id = "${state.bootstrapMcpToolInstallProposalDraft.id}", server = "${state.bootstrapMcpToolInstallProposalDraft.server}", tool = "${state.bootstrapMcpToolInstallProposalDraft.tool}", actingMode = "${state.bootstrapMcpToolInstallProposalDraft.actingMode}", scopeContextsJson = "${state.bootstrapMcpToolInstallProposalDraft.scopeContextsJson}", scopeTargetsJson = "${state.bootstrapMcpToolInstallProposalDraft.scopeTargetsJson}", reason = "${state.bootstrapMcpToolInstallProposalDraft.reason}" }
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_proposal_controls_root"
@@ -799,22 +687,6 @@ rootWidget = "bootstrap_mcp_tool_remove_proposal_controls_root"
 [[step]]
 program = "bootstrap_mcp_tool_remove_proposal_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_remove_proposal_server_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-tool-remove", trigger = "server" }
-
-[[step]]
-program = "bootstrap_mcp_tool_remove_proposal_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_mcp_tool_remove_proposal_tool_select"
-eventName = "witness:bootstrap-proposal-adjacent-sync"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-tool-remove", trigger = "tool" }
-
-[[step]]
-program = "bootstrap_mcp_tool_remove_proposal_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_mcp_tool_remove_proposal_form"
 widget = "bootstrap_mcp_tool_remove_proposal_status"
@@ -827,11 +699,3 @@ op = "readForm"
 on = "submit:bootstrap_mcp_tool_remove_proposal_form"
 widget = "bootstrap_mcp_tool_remove_proposal_form"
 into = "bootstrapMcpToolRemoveProposalDraft"
-
-[[step]]
-program = "bootstrap_mcp_tool_remove_proposal_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_mcp_tool_remove_proposal_form"
-eventName = "witness:bootstrap-proposal-adjacent-submit"
-detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-tool-remove", formId = "mcp-tool-remove-proposal-form", statusId = "mcp-tool-remove-proposal-status", id = "${state.bootstrapMcpToolRemoveProposalDraft.id}", server = "${state.bootstrapMcpToolRemoveProposalDraft.server}", tool = "${state.bootstrapMcpToolRemoveProposalDraft.tool}", reason = "${state.bootstrapMcpToolRemoveProposalDraft.reason}" }

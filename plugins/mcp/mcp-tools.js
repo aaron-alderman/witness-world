@@ -12,6 +12,8 @@ import {
   legacyCapabilityCompatibilityModeFromProject,
   previewLegacyCapabilityMigrationFromProject
 } from "../../src/capability-legacy-migration.js";
+import { previewLegacyFrontendMigrationFromProject } from "../../src/frontend-legacy-migration.js";
+import { previewLegacyFrontendUpliftFromProject } from "../../src/frontend-legacy-uplift.js";
 import { contextNamingStateFromProject } from "../../src/context-naming-world.js";
 import { moduleProjectors } from "../../src/modules.js";
 import { PLATFORM_PROPOSAL_ACTIONS } from "../platform/platform-proposals.js";
@@ -151,7 +153,7 @@ const TOOL_DEFINITIONS = [
     title: "World Read",
     description: "Read bootstrap state, witnesses, source, world graph, process projections, contextual naming state, authored package coexistence, or authoring capability state.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "capabilityRevisionHistory", "authoringMatrix"] },
+      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "frontendLegacyMigration", "frontendLegacyUplift", "capabilityRevisionHistory", "authoringMatrix"] },
       id: { type: "string" },
       context: { type: "string" },
       name: { type: "string" },
@@ -171,7 +173,7 @@ const TOOL_DEFINITIONS = [
           ? [args.runId]
           : (args?.view === "contextNaming"
               ? [args?.id, args?.target].filter(Boolean)
-              : ((args?.view === "packageCoexistence" || args?.view === "packageConvergence" || args?.view === "packageApplyPreview" || args?.view === "capabilityLegacyMigration" || args?.view === "capabilityRevisionHistory") && args?.id ? [args.id] : []))
+              : ((args?.view === "packageCoexistence" || args?.view === "packageConvergence" || args?.view === "packageApplyPreview" || args?.view === "capabilityLegacyMigration" || args?.view === "frontendLegacyUplift" || args?.view === "capabilityRevisionHistory") && args?.id ? [args.id] : []))
       });
     },
     async run({ args, callHandler, appContext }) {
@@ -300,6 +302,34 @@ const TOOL_DEFINITIONS = [
               id: args.id ?? null
             });
           }
+        case "frontendLegacyMigration":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("frontendLegacyMigration read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              legacyFrontendMigration: previewLegacyFrontendMigrationFromProject(appContext.project)
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "frontendLegacyUplift":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("frontendLegacyUplift read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              legacyFrontendUplift: previewLegacyFrontendUpliftFromProject(appContext.project)
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
         case "capabilityRevisionHistory":
           if (typeof appContext?.project !== "function") {
             return errorToolResult("capabilityRevisionHistory read requires projected world access");
@@ -381,10 +411,13 @@ const TOOL_DEFINITIONS = [
           "stewardship.create",
           "stewardship.remove",
           "surface.create",
+          "collection.create",
           "process.create",
           "type.create",
           "projection.create",
           "message.create",
+          "boundary.create",
+          "policy.create",
           "package.create",
           "packageRevision.create",
           "packageRevision.publish",
@@ -395,6 +428,8 @@ const TOOL_DEFINITIONS = [
           "route.create",
           "serve.create",
           "serverRunner.create",
+          "frontend.migrateLegacy",
+          "frontend.upliftLegacy",
           "capability.create",
           "capability.update",
           "capability.install",
@@ -425,6 +460,8 @@ const TOOL_DEFINITIONS = [
           doc.server,
           doc.serverRunner,
           doc.id,
+          doc.subject,
+          doc.stateField,
           doc.package,
           doc.revision,
           doc.sourcePackage,
@@ -471,6 +508,8 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "stewardship.remove", method: "DELETE", path: "/api/stewardships", body });
         case "surface.create":
           return runJsonHandler(callHandler, { handler: "surface.create", method: "POST", path: "/api/surfaces", body });
+        case "collection.create":
+          return runJsonHandler(callHandler, { handler: "collection.create", method: "POST", path: "/api/collections", body });
         case "process.create":
           return runJsonHandler(callHandler, { handler: "process.create", method: "POST", path: "/api/processes", body });
         case "type.create":
@@ -479,6 +518,10 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "projection.create", method: "POST", path: "/api/projections", body });
         case "message.create":
           return runJsonHandler(callHandler, { handler: "message.create", method: "POST", path: "/api/messages", body });
+        case "boundary.create":
+          return runJsonHandler(callHandler, { handler: "boundary.create", method: "POST", path: "/api/boundaries", body });
+        case "policy.create":
+          return runJsonHandler(callHandler, { handler: "policy.create", method: "POST", path: "/api/policies", body });
         case "package.create":
           return runJsonHandler(callHandler, { handler: "package.create", method: "POST", path: "/api/packages", body });
         case "packageRevision.create":
@@ -510,6 +553,10 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "serve.create", method: "POST", path: "/api/serve-mounts", body });
         case "serverRunner.create":
           return runJsonHandler(callHandler, { handler: "serverRunner.create", method: "POST", path: "/api/server-runners", body });
+        case "frontend.migrateLegacy":
+          return runJsonHandler(callHandler, { handler: "frontend.migrateLegacy", method: "POST", path: "/api/frontend-migrations/legacy", body });
+        case "frontend.upliftLegacy":
+          return runJsonHandler(callHandler, { handler: "frontend.upliftLegacy", method: "POST", path: "/api/frontend-uplifts/legacy", body });
         case "capability.create":
           return runJsonHandler(callHandler, { handler: "capability.create", method: "POST", path: "/api/capabilities", body });
         case "capability.update":
@@ -612,9 +659,9 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.read",
     title: "Platform Read",
-    description: "Read the platform self-model (including first-class docs with knowledge relations, and folders from this.folder.wtoml), gaps, docs, folders, roadmap, telemetry, profiles, compatibility bridges, mutable-surface semantics, governance, branches, change sets, package coexistence, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
+    description: "Read the platform self-model (including first-class docs with knowledge relations, and folders from this.folder.wtoml), gaps, docs, folders, roadmap, telemetry, defects, profiles, compatibility bridges, mutable-surface semantics, governance, branches, change sets, package coexistence, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["model", "gaps", "docs", "folders", "roadmap", "telemetry", "profiles", "plugin", "bundle", "capability", "mcp", "bridges", "semantics", "governance", "gates", "proposals", "branches", "changeSets", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityRevisionHistory", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
+      view: { type: "string", enum: ["model", "gaps", "docs", "folders", "roadmap", "telemetry", "defects", "pushes", "ships", "profiles", "plugin", "bundle", "capability", "mcp", "bridges", "semantics", "governance", "gates", "proposals", "branches", "changeSets", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityRevisionHistory", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
       id: { type: "string" },
       context: { type: "string" },
       name: { type: "string" },
@@ -865,7 +912,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.telemetry",
     title: "Platform Telemetry",
-    description: "Inspect the current telemetry-metric platform model through the shared platform handlers.",
+    description: "Inspect the current telemetry platform model, including metrics, live samples, windows, regressions, and linked gate context through the shared platform handlers.",
     inputSchema: jsonSchemaObject({
       operation: { type: "string", enum: ["list", "read"] },
       id: { type: "string" }
@@ -892,17 +939,51 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: "platform.defect",
+    title: "Platform Defect",
+    description: "Inspect defect rows, observations, clusters, and linked proposals through the shared platform handlers.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["list", "read"] },
+      id: { type: "string" }
+    }),
+    scope(args) {
+      return scopeResult({ targets: args?.id ? [args.id] : [] });
+    },
+    async run({ args, callHandler }) {
+      const operation = args.operation || "list";
+      if (operation !== "list" && operation !== "read") {
+        return errorToolResult("unknown platform defect operation", { operation });
+      }
+      const defectId = operation === "read" ? (args.id || "") : (args.id || "");
+      if (operation === "read" && !defectId) return errorToolResult("defect id is required", { operation });
+      return runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query: {
+          view: "defects",
+          ...(defectId ? { id: defectId } : {})
+        }
+      });
+    }
+  },
+  {
     name: "platform.branch",
     title: "Platform Branch",
     description: "Inspect platform branches or create a new branch through the shared platform handlers.",
     inputSchema: jsonSchemaObject({
-      operation: { type: "string", enum: ["list", "read", "create"] },
+      operation: { type: "string", enum: ["list", "read", "create", "push", "ship"] },
       id: { type: "string" },
       title: { type: "string" },
       parentBranchId: { type: "string" },
       epic: { type: "string" },
       feature: { type: "string" },
-      defect: { type: "string" }
+      defect: { type: "string" },
+      remoteName: { type: "string" },
+      gitBranchName: { type: "string" },
+      dryRun: { type: "boolean" },
+      releaseChannelId: { type: "string" },
+      proposalId: { type: "string" }
     }),
     scope(args) {
       return scopeResult({
@@ -940,6 +1021,31 @@ const TOOL_DEFINITIONS = [
             epic: args.epic ?? null,
             feature: args.feature ?? null,
             defect: args.defect ?? null
+          }
+        });
+      }
+      if (operation === "push") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.branch.push",
+          method: "POST",
+          path: `/api/platform-branches/${encodeURIComponent(branchId)}/push`,
+          params: { id: branchId },
+          body: {
+            remoteName: args.remoteName ?? null,
+            gitBranchName: args.gitBranchName ?? null,
+            dryRun: args.dryRun === true
+          }
+        });
+      }
+      if (operation === "ship") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.branch.ship",
+          method: "POST",
+          path: `/api/platform-branches/${encodeURIComponent(branchId)}/ship`,
+          params: { id: branchId },
+          body: {
+            releaseChannelId: args.releaseChannelId ?? "releaseChannel:local",
+            proposalId: args.proposalId ?? null
           }
         });
       }

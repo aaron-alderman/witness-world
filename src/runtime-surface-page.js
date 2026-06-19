@@ -78,10 +78,22 @@ function buildSurfaceRuntimeSupportAssets(assetProviders = [], context = {}) {
 }
 
 function capabilityAssetsForRenderers(renderers = []) {
-  const stylesheetHrefs = uniqueStrings(renderers.flatMap(renderer => renderer.stylesheetHrefs ?? []));
-  const scriptSrcs = uniqueStrings(renderers.flatMap(renderer => renderer.scriptSrcs ?? []));
-  const inlineCss = uniqueStrings(renderers.map(renderer => renderer.inlineCss ?? ""));
-  const scriptBodies = uniqueStrings(renderers.map(renderer => String(renderer.scriptBody ?? "").trim()).filter(Boolean));
+  const stylesheetHrefs = uniqueStrings(renderers.flatMap(renderer => (
+    Array.isArray(renderer?.stylesheetHrefs) ? renderer.stylesheetHrefs : []
+  )));
+  const scriptSrcs = uniqueStrings(renderers.flatMap(renderer => (
+    Array.isArray(renderer?.scriptSrcs) ? renderer.scriptSrcs : []
+  )));
+  const inlineCss = uniqueStrings(renderers.flatMap(renderer => {
+    if (Array.isArray(renderer?.inlineCss)) return renderer.inlineCss;
+    const inlineCss = String(renderer?.inlineCss ?? "").trim();
+    return inlineCss ? [inlineCss] : [];
+  }));
+  const scriptBodies = uniqueStrings(renderers.flatMap(renderer => {
+    const inlineModules = Array.isArray(renderer?.scriptBodies) ? renderer.scriptBodies : [];
+    const scriptBody = String(renderer?.scriptBody ?? "").trim();
+    return scriptBody ? [...inlineModules, scriptBody] : inlineModules;
+  }));
   if (!stylesheetHrefs.length && !scriptSrcs.length && !inlineCss.length && !scriptBodies.length) return null;
   return {
     stylesheetHrefs,
@@ -89,6 +101,93 @@ function capabilityAssetsForRenderers(renderers = []) {
     inlineCss,
     scriptBodies
   };
+}
+
+function mergeManifestPayload(base, patch) {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return base;
+  const next = { ...(base ?? {}) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (
+      value
+      && typeof value === "object"
+      && !Array.isArray(value)
+      && next[key]
+      && typeof next[key] === "object"
+      && !Array.isArray(next[key])
+    ) {
+      next[key] = { ...next[key], ...value };
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
+}
+
+function manifestPayloadForRenderers(renderers = []) {
+  return renderers.reduce((payload, renderer) => {
+    if (typeof renderer?.buildManifest !== "function") return payload;
+    return mergeManifestPayload(payload, renderer.buildManifest());
+  }, {});
+}
+
+function buildCapabilityPreloadAssetsMap(preloadProviders = [], context = {}) {
+  const assetsByCapability = {};
+  for (const provider of preloadProviders) {
+    if (typeof provider?.factory !== "function") continue;
+    const capability = String(provider.capability || "").trim();
+    if (!capability) continue;
+    const assets = provider.factory(context);
+    const normalized = capabilityAssetsForRenderers([assets]);
+    if (!normalized) continue;
+    assetsByCapability[capability] = normalized;
+  }
+  return assetsByCapability;
+}
+
+function collectRootSurfaceCapabilityRefs(surfaces, rootSurfaceId) {
+  const required = new Set();
+  const queue = [String(rootSurfaceId || "").trim()];
+  const seen = new Set();
+  while (queue.length) {
+    const surfaceId = queue.shift();
+    if (!surfaceId || seen.has(surfaceId)) continue;
+    seen.add(surfaceId);
+    const surface = surfaces.get(surfaceId);
+    if (!surface) continue;
+    for (const capability of Array.isArray(surface.capabilityRefs) ? surface.capabilityRefs : []) {
+      const value = String(capability || "").trim();
+      if (value) required.add(value);
+    }
+    for (const childId of Array.isArray(surface.children) ? surface.children : []) {
+      const value = String(childId || "").trim();
+      if (value) queue.push(value);
+    }
+  }
+  return required;
+}
+
+function routeKeysReferencedByPolicy(policy = {}) {
+  const routeKeys = [];
+  const whenRoute = String(policy?.when?.route || "").trim();
+  if (whenRoute) routeKeys.push(whenRoute);
+  for (const target of policy?.targets ?? []) {
+    const route = String(target?.route || "").trim();
+    if (route) routeKeys.push(route);
+  }
+  return [...new Set(routeKeys)];
+}
+
+function filterRuntimePreloadsForRoot(runtimePreloads = [], { routeTargets = [], rootCapabilities = new Set() } = {}) {
+  const routeKeys = new Set((routeTargets ?? []).map(target => String(target?.key || "").trim()).filter(Boolean));
+  return (runtimePreloads ?? []).filter(policy => {
+    const referencedRoutes = routeKeysReferencedByPolicy(policy);
+    if (referencedRoutes.length) return referencedRoutes.every(routeKey => routeKeys.has(routeKey));
+    const capabilityTargets = (policy?.targets ?? [])
+      .filter(target => target?.kind === "capability")
+      .map(target => String(target?.capability || "").trim())
+      .filter(Boolean);
+    return capabilityTargets.every(capability => rootCapabilities.has(capability));
+  });
 }
 
 function activeSurfaceCapabilityRefs(surfaces, activeSurfaceId) {
@@ -144,8 +243,11 @@ export function renderSurfacePage(world, {
   requestPathname = "/",
   route = null,
   browserRuntimeCapabilities = [],
+  runtimePreloads = [],
   routeStateDescriptor = null,
+  queryBindings = [],
   surfaceCapabilityRenderers = [],
+  capabilityPreloadProviders = [],
   surfaceRuntimeSupportAssets = [],
   devMode = false,
   initialStateOverrides = null,
@@ -208,6 +310,28 @@ export function renderSurfacePage(world, {
     ...surfaceRenderers,
     ...runtimeSupportAssets
   ]);
+  const rootCapabilityRefs = collectRootSurfaceCapabilityRefs(surfaces, rootSurfaceId);
+  const routeTargets = Array.from(shell.surfaces.values())
+    .flatMap(surface => {
+      const routeKey = String(surface?.props?.routeKey || "").trim();
+      const routePath = String(surface?.props?.routePath || "").trim();
+      return routeKey && routePath ? [{ key: routeKey, path: routePath, surfaceId: surface.id }] : [];
+    });
+  const preloadPolicies = filterRuntimePreloadsForRoot(runtimePreloads, {
+    routeTargets,
+    rootCapabilities: rootCapabilityRefs
+  });
+  const capabilityPreloadAssets = buildCapabilityPreloadAssetsMap(capabilityPreloadProviders, {
+    world,
+    rootSurface: shell.rootSurface,
+    activeSurface: shell.activeSurface,
+    surfaces: shell.surfaces,
+    browserRuntimeCapabilities,
+    initialState: mergedInitialState,
+    requestPathname,
+    route,
+    devMode
+  });
   const manifest = buildSurfaceRuntimeManifest({
     world,
     root: shell.rootSurface,
@@ -219,13 +343,22 @@ export function renderSurfacePage(world, {
     ]),
     capabilityAssets,
     rootSurfaceId,
+    route,
     requestPathname: shell.requestPathname,
     routeStateDescriptor,
+    queryBindings,
+    preloadPolicies,
+    capabilityPreloadAssets,
     surfaceRenderers,
     initialState: mergedInitialState,
     projectionState,
     initialStateOverrides
   });
+  const rendererManifest = manifestPayloadForRenderers(surfaceRenderers);
+  Object.assign(manifest, rendererManifest);
+  if (manifest?.diagnostics) {
+    manifest.diagnostics.serializedBytes = Buffer.byteLength(JSON.stringify(manifest), "utf8");
+  }
   return injectInteractionRuntime(injectCapabilityAssets(shell.html, [
     ...surfaceRenderers,
     ...runtimeSupportAssets

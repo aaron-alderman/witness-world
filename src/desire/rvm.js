@@ -24,7 +24,10 @@ const RVM_SOURCE_ONLY_SEMANTIC_KINDS = new Set([
 
 export async function compileRvmFileToDesirePlus(file, options = {}) {
   const resolved = path.resolve(file);
-  const source = await fs.readFile(resolved, "utf8");
+  const readFile = typeof options?.readFile === "function"
+    ? options.readFile
+    : (target, encoding) => fs.readFile(target, encoding);
+  const source = await readFile(resolved, "utf8");
   return compileRvmToDesirePlus(source, { ...options, file: resolved });
 }
 
@@ -72,6 +75,10 @@ export function compileRvmToDesirePlus(source, { file = null, rvmFormRegistry = 
     });
   });
   return createDesirePlusDocument(nodes, { file });
+}
+
+export function parseRvmInlineValue(value) {
+  return parseScalarValue(value);
 }
 
 export function auditRvmDesirePlus(desirePlus) {
@@ -830,7 +837,35 @@ function splitAssignment(tail) {
 
 function splitCommaList(value) {
   if (value == null || value === "") return [];
-  return String(value).split(",").map(item => cleanRvmValue(item)).filter(Boolean);
+  const items = [];
+  let current = "";
+  let quote = null;
+  let squareDepth = 0;
+  let braceDepth = 0;
+  for (let index = 0; index < String(value).length; index += 1) {
+    const ch = String(value)[index];
+    if ((ch === "\"" || ch === "'") && String(value)[index - 1] !== "\\") {
+      quote = quote === ch ? null : (quote ?? ch);
+      current += ch;
+      continue;
+    }
+    if (!quote) {
+      if (ch === "[") squareDepth += 1;
+      else if (ch === "]") squareDepth = Math.max(0, squareDepth - 1);
+      else if (ch === "{") braceDepth += 1;
+      else if (ch === "}") braceDepth = Math.max(0, braceDepth - 1);
+      else if (ch === "," && squareDepth === 0 && braceDepth === 0) {
+        const trimmed = cleanRvmValue(current);
+        if (trimmed) items.push(trimmed);
+        current = "";
+        continue;
+      }
+    }
+    current += ch;
+  }
+  const trimmed = cleanRvmValue(current);
+  if (trimmed) items.push(trimmed);
+  return items;
 }
 
 function semanticActorShape(name, { owns = null, attrs = {}, target = null } = {}) {
@@ -1501,6 +1536,23 @@ function parseScalarValue(value) {
     const inner = cleaned.slice(1, -1).trim();
     if (!inner) return [];
     return splitCommaList(inner).map(parseScalarValue);
+  }
+  if (cleaned.startsWith("{") && cleaned.endsWith("}")) {
+    const inner = cleaned.slice(1, -1).trim();
+    if (!inner) return {};
+    return Object.fromEntries(
+      splitCommaList(inner)
+        .map(entry => {
+          const eq = entry.indexOf("=");
+          const colon = entry.indexOf(":");
+          const splitAt = eq >= 0 ? eq : colon;
+          if (splitAt <= 0) return null;
+          const key = cleanRvmValue(entry.slice(0, splitAt));
+          if (!key) return null;
+          return [key, parseScalarValue(entry.slice(splitAt + 1))];
+        })
+        .filter(Boolean)
+    );
   }
   if (cleaned === "true") return true;
   if (cleaned === "false") return false;

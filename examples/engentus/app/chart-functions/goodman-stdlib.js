@@ -83,7 +83,9 @@ export const goodmanFunctions = {
     return numeric.toFixed(3);
   },
 
-  goodman_tooltip_markup: ({ readout = {}, plan = {} } = {}) => {
+  goodman_tooltip_markup: payload => {
+    const { readout: rawReadout = {}, plan = {} } = payload && typeof payload === "object" ? payload : {};
+    const readout = rawReadout && typeof rawReadout === "object" ? rawReadout : {};
     const readings = Array.isArray(readout.readings) ? readout.readings : [];
     const primary = readings.find(reading => reading?.layer === "curves") ?? null;
     const maintenance = readings.find(reading => reading?.layer === "curve_jemtec") ?? null;

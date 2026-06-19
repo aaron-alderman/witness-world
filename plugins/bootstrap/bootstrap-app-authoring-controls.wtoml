@@ -189,27 +189,11 @@ text = "Saving..."
 
 [[step]]
 program = "bootstrap_context_authoring_controls_program"
-order = 1
-op = "dispatchDomEvent"
-on = "submit:bootstrap_context_form"
-eventName = "witness:bootstrap-app-authoring-submit"
-detail = { source = "bootstrap-app-authoring-controls", family = "context", formId = "context-form", statusId = "context-status" }
-
-[[step]]
-program = "bootstrap_context_authoring_controls_program"
 order = 0
 op = "setText"
 on = "submit:bootstrap_perspective_form"
 widget = "bootstrap_perspective_status"
 text = "Saving..."
-
-[[step]]
-program = "bootstrap_context_authoring_controls_program"
-order = 1
-op = "dispatchDomEvent"
-on = "submit:bootstrap_perspective_form"
-eventName = "witness:bootstrap-app-authoring-submit"
-detail = { source = "bootstrap-app-authoring-controls", family = "perspective", formId = "perspective-form", statusId = "perspective-status" }
 
 [[box]]
 id = "bootstrap_widget_authoring_controls_root"
@@ -705,14 +689,6 @@ on = "submit:bootstrap_widget_form"
 widget = "bootstrap_widget_status"
 text = "Saving..."
 
-[[step]]
-program = "bootstrap_widget_authoring_controls_program"
-order = 1
-op = "dispatchDomEvent"
-on = "submit:bootstrap_widget_form"
-eventName = "witness:bootstrap-app-authoring-submit"
-detail = { source = "bootstrap-app-authoring-controls", family = "widget", formId = "widget-form", statusId = "widget-status" }
-
 [[box]]
 id = "bootstrap_frontend_program_authoring_controls_root"
 class = "surface-stack"
@@ -991,27 +967,11 @@ text = "Saving..."
 
 [[step]]
 program = "bootstrap_frontend_program_authoring_controls_program"
-order = 1
-op = "dispatchDomEvent"
-on = "submit:bootstrap_program_form"
-eventName = "witness:bootstrap-app-authoring-submit"
-detail = { source = "bootstrap-app-authoring-controls", family = "program", formId = "program-form", statusId = "program-status" }
-
-[[step]]
-program = "bootstrap_frontend_program_authoring_controls_program"
 order = 0
 op = "setText"
 on = "submit:bootstrap_step_form"
 widget = "bootstrap_step_status"
 text = "Saving..."
-
-[[step]]
-program = "bootstrap_frontend_program_authoring_controls_program"
-order = 1
-op = "dispatchDomEvent"
-on = "submit:bootstrap_step_form"
-eventName = "witness:bootstrap-app-authoring-submit"
-detail = { source = "bootstrap-app-authoring-controls", family = "step", formId = "step-form", statusId = "step-status" }
 
 [[box]]
 id = "bootstrap_route_mount_authoring_controls_root"
@@ -1229,6 +1189,40 @@ text = "Root Widget Ref"
 [[input]]
 id = "bootstrap_route_root_widget_ref_input"
 name = "rootWidgetRef"
+placeholder = "context name"
+
+[[box]]
+id = "bootstrap_route_grid_frontend_program"
+class = "surface-grid-2"
+children = ["bootstrap_route_root_surface_field", "bootstrap_route_root_surface_ref_field"]
+
+[[box]]
+id = "bootstrap_route_root_surface_field"
+class = "surface-stack"
+children = ["bootstrap_route_root_surface_text", "bootstrap_route_root_surface_select"]
+
+[[text]]
+id = "bootstrap_route_root_surface_text"
+text = "Root Surface"
+
+[[select]]
+id = "bootstrap_route_root_surface_select"
+domId = "route-root-surface"
+name = "rootSurface"
+guidanceTarget = "route-root-surface"
+
+[[box]]
+id = "bootstrap_route_root_surface_ref_field"
+class = "surface-stack"
+children = ["bootstrap_route_root_surface_ref_text", "bootstrap_route_root_surface_ref_input"]
+
+[[text]]
+id = "bootstrap_route_root_surface_ref_text"
+text = "Root Surface Ref"
+
+[[input]]
+id = "bootstrap_route_root_surface_ref_input"
+name = "rootSurfaceRef"
 placeholder = "context name"
 
 [[box]]
@@ -1495,50 +1489,10 @@ rootWidget = "bootstrap_route_mount_authoring_controls_root"
 [[step]]
 program = "bootstrap_route_mount_authoring_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_route_handler_select"
-eventName = "witness:bootstrap-route-authoring-sync"
-detail = { source = "bootstrap-app-authoring-controls", family = "route-authoring", trigger = "handler" }
-
-[[step]]
-program = "bootstrap_route_mount_authoring_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_route_method_select"
-eventName = "witness:bootstrap-route-authoring-sync"
-detail = { source = "bootstrap-app-authoring-controls", family = "route-authoring", trigger = "method" }
-
-[[step]]
-program = "bootstrap_route_mount_authoring_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_route_backend_program_select"
-eventName = "witness:bootstrap-route-authoring-sync"
-detail = { source = "bootstrap-app-authoring-controls", family = "route-authoring", trigger = "backend-program-soul" }
-
-[[step]]
-program = "bootstrap_route_mount_authoring_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_route_root_widget_select"
-eventName = "witness:bootstrap-route-authoring-sync"
-detail = { source = "bootstrap-app-authoring-controls", family = "route-authoring", trigger = "root-widget" }
-
-[[step]]
-program = "bootstrap_route_mount_authoring_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_route_form"
 widget = "bootstrap_route_status"
 text = "Saving..."
-
-[[step]]
-program = "bootstrap_route_mount_authoring_controls_program"
-order = 1
-op = "dispatchDomEvent"
-on = "submit:bootstrap_route_form"
-eventName = "witness:bootstrap-app-authoring-submit"
-detail = { source = "bootstrap-app-authoring-controls", family = "route", formId = "route-form", statusId = "route-status" }
 
 [[step]]
 program = "bootstrap_route_mount_authoring_controls_program"
@@ -1547,14 +1501,6 @@ op = "setText"
 on = "submit:bootstrap_serve_form"
 widget = "bootstrap_serve_status"
 text = "Saving..."
-
-[[step]]
-program = "bootstrap_route_mount_authoring_controls_program"
-order = 1
-op = "dispatchDomEvent"
-on = "submit:bootstrap_serve_form"
-eventName = "witness:bootstrap-app-authoring-submit"
-detail = { source = "bootstrap-app-authoring-controls", family = "serve", formId = "serve-form", statusId = "serve-status" }
 
 [[box]]
 id = "bootstrap_runner_authoring_controls_root"
@@ -1758,10 +1704,3 @@ on = "submit:bootstrap_runner_form"
 widget = "bootstrap_runner_status"
 text = "Saving..."
 
-[[step]]
-program = "bootstrap_runner_authoring_controls_program"
-order = 1
-op = "dispatchDomEvent"
-on = "submit:bootstrap_runner_form"
-eventName = "witness:bootstrap-app-authoring-submit"
-detail = { source = "bootstrap-app-authoring-controls", family = "runner", formId = "runner-form", statusId = "runner-status" }

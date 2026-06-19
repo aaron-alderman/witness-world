@@ -225,14 +225,6 @@ schema = "capability.define"
 
 [[step]]
 program = "bootstrap_capability_create_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_capability_create_form"
-eventName = "witness:bootstrap-capability-submit"
-detail = { source = "bootstrap-capability-controls", family = "capability-create", formId = "capability-form", statusId = "capability-status", id = "${state.bootstrapCapabilityCreateDraft.id}", label = "${state.bootstrapCapabilityCreateDraft.label}", version = "${state.bootstrapCapabilityCreateDraft.version}", provenanceJson = "${state.bootstrapCapabilityCreateDraft.provenanceJson}", dependsOnJson = "${state.bootstrapCapabilityCreateDraft.dependsOnJson}", publicApiJson = "${state.bootstrapCapabilityCreateDraft.publicApiJson}", configJson = "${state.bootstrapCapabilityCreateDraft.configJson}", internalsJson = "${state.bootstrapCapabilityCreateDraft.internalsJson}", authorityJson = "${state.bootstrapCapabilityCreateDraft.authorityJson}", placementJson = "${state.bootstrapCapabilityCreateDraft.placementJson}", context = "${state.bootstrapCapabilityCreateDraft.context}" }
-
-[[step]]
-program = "bootstrap_capability_create_controls_program"
 order = 0
 op = "setText"
 on = "error"
@@ -328,30 +320,6 @@ rootWidget = "bootstrap_capability_install_controls_root"
 [[step]]
 program = "bootstrap_capability_install_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_capability_install_capability_select"
-eventName = "witness:bootstrap-capability-controls-sync"
-detail = { source = "bootstrap-capability-controls", family = "capability-install", trigger = "capability" }
-
-[[step]]
-program = "bootstrap_capability_install_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_capability_install_kind_select"
-eventName = "witness:bootstrap-capability-controls-sync"
-detail = { source = "bootstrap-capability-controls", family = "capability-install", trigger = "target-kind" }
-
-[[step]]
-program = "bootstrap_capability_install_controls_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_capability_install_target_select"
-eventName = "witness:bootstrap-capability-controls-sync"
-detail = { source = "bootstrap-capability-controls", family = "capability-install", trigger = "target" }
-
-[[step]]
-program = "bootstrap_capability_install_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_capability_install_form"
 widget = "bootstrap_capability_install_status"
@@ -365,14 +333,6 @@ on = "submit:bootstrap_capability_install_form"
 widget = "bootstrap_capability_install_form"
 into = "bootstrapCapabilityInstallDraft"
 schema = "capability.install"
-
-[[step]]
-program = "bootstrap_capability_install_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_capability_install_form"
-eventName = "witness:bootstrap-capability-submit"
-detail = { source = "bootstrap-capability-controls", family = "capability-install", formId = "capability-install-form", statusId = "capability-install-status", capability = "${state.bootstrapCapabilityInstallDraft.capability}", target = "${state.bootstrapCapabilityInstallDraft.target}", targetKind = "${state.bootstrapCapabilityInstallDraft.targetKind}" }
 
 [[step]]
 program = "bootstrap_capability_install_controls_program"

@@ -453,6 +453,7 @@ export function renderSurfaceInspectorPanelView({
   runtimeCorrelationRows = [],
   runtimeCorrelationOps = [],
   runtimeCorrelationUnavailableReason = "",
+  evolutionHtml = "",
   childCreateHtml = "",
   editorHtml = "",
   escapeHtml = value => String(value ?? "")
@@ -558,6 +559,7 @@ export function renderSurfaceInspectorPanelView({
       currentActorPresent,
       escapeHtml
     })
+    + evolutionHtml
     + childCreateHtml
     + editorHtml
   + "</aside>";

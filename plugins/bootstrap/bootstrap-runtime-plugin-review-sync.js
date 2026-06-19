@@ -136,7 +136,8 @@ export function bindBootstrapRuntimePluginReviewSync({
   setStatus = () => {}
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = createBootstrapRuntimePluginReviewSyncHandler({
     byId,
     request,
@@ -147,6 +148,16 @@ export function bindBootstrapRuntimePluginReviewSync({
     renderPage,
     setStatus
   });
-  resolvedTarget.addEventListener("witness:bootstrap-runtime-plugin-review-sync", handler);
+  for (const [id, trigger] of [
+    ["runtime-plugin-review-runner", "server-runner"],
+    ["runtime-plugin-review-plugin", "plugin"]
+  ]) {
+    const field = resolvedDocument?.getElementById?.(id);
+    if (!field || field.__bootstrapRuntimePluginReviewSyncBound) continue;
+    field.__bootstrapRuntimePluginReviewSyncBound = true;
+    field.addEventListener("change", () => handler({
+      detail: { source: "bootstrap-page-main", family: "runtime-plugin-review", trigger }
+    }));
+  }
   return handler;
 }

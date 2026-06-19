@@ -8,13 +8,15 @@
  *       (from dataflow-eval) into a concrete render plan: scales + per-layer
  *       mark primitives with resolved geometry.
  *
- *   drawChart(container, renderPlan, d3) -> SVGElement       [browser/D3]
- *       paints a render plan into an SVG. d3 is injected (global in the page).
+ *   drawChart(container, renderPlan) -> SVGElement           [browser/SVG]
+ *       paints a render plan into an SVG using the local DOM runtime.
  *
  * The plan is the contract between "what to draw" (honest, witnessed, from the
- * IR) and "how to rasterize" (the lowered D3 leaf). This module is reusable
+ * IR) and "how to rasterize" (the lowered SVG leaf). This module is reusable
  * verbatim by any scientific app — it knows nothing about Goodman or fatigue.
  */
+import { renderScene } from "./ports/render-port.js";
+import { buildScene } from "./scene/build-scene.js";
 
 export const DEFAULT_BAND_FILLS = ["#bbf7d0", "#d9f99d", "#fef08a", "#fde68a"];
 
@@ -77,7 +79,9 @@ export function planChart(viewBody, evaluated, opts = {}) {
       showGrid: viewBody.showGrid !== false,
       showAnnotations: viewBody.showAnnotations !== false,
       pointSize: Number(viewBody.pointSize) || 4,
-      annotations: Array.isArray(viewBody.annotations) ? viewBody.annotations : []
+      annotations: Array.isArray(viewBody.annotations) ? viewBody.annotations : [],
+      chrome: viewBody.chrome ?? {},
+      typography: viewBody.typography ?? {}
     }
   };
 }
@@ -327,6 +331,10 @@ function planPolarChart(viewBody, evaluated, opts = {}) {
       theta: { domain: thetaDomain, field: enc.theta?.field ?? "theta", label: enc.theta?.label ?? "" }
     },
     layers,
+    presentation: {
+      chrome: viewBody.chrome ?? {},
+      typography: viewBody.typography ?? {}
+    },
     editable: viewBody.editable ?? []
   };
 }
@@ -555,8 +563,8 @@ function planDiscChart(viewBody, evaluated, opts = {}) {
   return {
     frame: "disc", width, height, margin, maxRadius, discRadius, scale, playback,
     presentation: {
-      discBackground: props.discBackground ?? "#0d1a2e",
-      shellStroke: props.shellStroke ?? "#64748b"
+      chrome: viewBody.chrome ?? {},
+      typography: viewBody.typography ?? {}
     },
     center: { x: margin.left + innerW / 2, y: margin.top + innerH / 2 },
     scales: {
@@ -965,7 +973,7 @@ function linearScale(domain, range) {
   return scale;
 }
 
-// ── drawing (browser/D3) ─────────────────────────────────────────────────────────
+// ── drawing (browser/SVG) ────────────────────────────────────────────────────────
 
 function niceTickStep(span, targetCount) {
   const raw = Math.abs(span) / Math.max(1, targetCount);
@@ -997,253 +1005,71 @@ function formatTick(value) {
   return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : String(Number(n.toFixed(2)));
 }
 
-export function drawChart(container, plan, d3) {
-  if (!d3) throw new Error("drawChart requires d3");
-  if (plan.frame === "polar") return drawPolarChart(container, plan, d3);
-  if (plan.frame === "disc") return drawDiscChart(container, plan, d3);
-  const { width, height, margin, scales } = plan;
-  const svg = selectChartSvg(container, d3, width, height);
-  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-  const clipId = `${container?.id || "chart"}-plot-clip`;
-  svg.append("defs")
-    .append("clipPath")
-    .attr("id", clipId)
-    .append("rect")
-    .attr("x", 0)
-    .attr("y", 0)
-    .attr("width", plan.innerW)
-    .attr("height", plan.innerH);
-  const plotG = g.append("g").attr("clip-path", `url(#${clipId})`);
-  const presentation = plan.presentation ?? {};
+const SVG_NS = "http://www.w3.org/2000/svg";
 
-  const x = v => (v - scales.x.domain[0]) / ((scales.x.domain[1] - scales.x.domain[0]) || 1) * plan.innerW;
-  const y = v => plan.innerH - (v - scales.y.domain[0]) / ((scales.y.domain[1] - scales.y.domain[0]) || 1) * plan.innerH;
-  const clampY = v => {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return n;
-    const min = Math.min(scales.y.domain[0], scales.y.domain[1]);
-    const max = Math.max(scales.y.domain[0], scales.y.domain[1]);
-    return Math.max(min, Math.min(max, n));
-  };
-  const yFill = v => y(clampY(v));
-  const xTickValues = linearTicks(scales.x.domain, 8);
-  const yTickValues = linearTicks(scales.y.domain, 7);
-
-  if (presentation.showGrid !== false) {
-    const gridStroke = "#f1f5f9";
-    for (const tick of xTickValues) {
-      const px = x(tick);
-      if (px <= 0 || px >= plan.innerW) continue;
-      plotG.append("line")
-        .attr("x1", px).attr("x2", px)
-        .attr("y1", 0).attr("y2", plan.innerH)
-        .attr("stroke", gridStroke)
-        .attr("stroke-width", 1);
-    }
-    for (const tick of yTickValues) {
-      const py = y(tick);
-      if (py <= 0 || py >= plan.innerH) continue;
-      plotG.append("line")
-        .attr("x1", 0).attr("x2", plan.innerW)
-        .attr("y1", py).attr("y2", py)
-        .attr("stroke", gridStroke)
-        .attr("stroke-width", 1);
-    }
-  }
-
-  for (const layer of plan.layers) {
-    if (layer.mark === "screen-rect" || layer.mark === "screen-text") {
-      drawScreenLayer(svg, layer);
-    } else if (layer.mark === "area") {
-      for (const prim of layer.primitives) {
-        const top = prim.points.map(p => `${x(p.x)},${yFill(p.y1)}`);
-        const bottom = prim.points.slice().reverse().map(p => `${x(p.x)},${yFill(p.y0)}`);
-        plotG.append("polygon")
-          .attr("points", [...top, ...bottom].join(" "))
-          .attr("fill", prim.fill).attr("opacity", layer.encode?.opacity ?? 0.9);
-      }
-    } else if (layer.mark === "line") {
-      for (const prim of layer.primitives) {
-        plotG.append("polyline")
-          .attr("points", prim.points.filter(p => Number.isFinite(p.y)).map(p => `${x(p.x)},${y(p.y)}`).join(" "))
-          .attr("fill", "none").attr("stroke", layer.stroke).attr("stroke-width", layer.width)
-          .attr("stroke-dasharray", layer.dash ? "5 3" : null)
-          .attr("opacity", layer.opacity ?? 1);
-      }
-    } else if (layer.mark === "band") {
-      for (const prim of layer.primitives) {
-        const top = prim.points.filter(p => Number.isFinite(p.y1)).map(p => `${x(p.x)},${yFill(p.y1)}`);
-        const bottom = prim.points.filter(p => Number.isFinite(p.y0)).slice().reverse().map(p => `${x(p.x)},${yFill(p.y0)}`);
-        plotG.append("polygon").attr("points", [...top, ...bottom].join(" "))
-          .attr("fill", prim.fill ?? layer.fill).attr("opacity", layer.opacity);
-      }
-    } else if (layer.mark === "x-band") {
-      for (const prim of layer.primitives) {
-        const x0 = x(prim.x0);
-        const x1 = x(prim.x1);
-        plotG.append("rect")
-          .attr("x", Math.min(x0, x1))
-          .attr("y", 0)
-          .attr("width", Math.abs(x1 - x0))
-          .attr("height", plan.innerH)
-          .attr("fill", layer.fill)
-          .attr("stroke", layer.stroke ?? "none")
-          .attr("stroke-width", layer.width ?? 0)
-          .attr("opacity", layer.opacity ?? 0.25);
-      }
-    } else if (layer.mark === "cloud") {
-      for (const prim of layer.primitives) {
-        plotG.append("polyline")
-          .attr("points", prim.points.filter(p => Number.isFinite(p.y)).map(p => `${x(p.x)},${y(p.y)}`).join(" "))
-          .attr("fill", "none").attr("stroke", layer.stroke).attr("stroke-width", 0.6).attr("opacity", layer.opacity);
-      }
-    } else if (layer.mark === "rule") {
-      for (const prim of layer.primitives) {
-        plotG.append("line")
-          .attr("x1", x(prim.x)).attr("x2", x(prim.x)).attr("y1", 0).attr("y2", plan.innerH)
-          .attr("stroke", layer.stroke)
-          .attr("stroke-width", layer.width ?? 1)
-          .attr("stroke-dasharray", layer.dash ? "4 3" : null)
-          .attr("opacity", layer.opacity ?? 1);
-      }
-    } else if (layer.mark === "h-rule") {
-      for (const prim of layer.primitives) {
-        plotG.append("line")
-          .attr("x1", 0).attr("x2", plan.innerW).attr("y1", y(prim.y)).attr("y2", y(prim.y))
-          .attr("stroke", layer.stroke)
-          .attr("stroke-width", layer.width ?? 1)
-          .attr("stroke-dasharray", layer.dash ? "4 3" : null)
-          .attr("opacity", layer.opacity ?? 1);
-      }
-    } else if (layer.mark === "point") {
-      for (const prim of layer.primitives) {
-        if (!Number.isFinite(prim.y)) continue;
-        plotG.append("circle")
-          .attr("cx", x(prim.x))
-          .attr("cy", y(prim.y))
-          .attr("r", layer.size ?? presentation.pointSize ?? 4)
-          .attr("fill", layer.fill ?? "#5AAABF")
-          .attr("stroke", layer.stroke ?? "none")
-          .attr("stroke-width", layer.width ?? 1)
-          .attr("opacity", layer.opacity ?? 1);
-      }
-    } else if (layer.mark === "text") {
-      for (const prim of layer.primitives) {
-        if (!Number.isFinite(prim.x) || !Number.isFinite(prim.y)) continue;
-        plotG.append("text")
-          .attr("x", x(prim.x))
-          .attr("y", y(prim.y))
-          .attr("text-anchor", layer.anchor ?? "middle")
-          .attr("dominant-baseline", layer.baseline ?? "middle")
-          .attr("font-size", `${layer.size ?? 11}px`)
-          .attr("font-weight", layer.weight ?? "normal")
-          .attr("fill", layer.fill ?? "#475569")
-          .attr("opacity", layer.opacity ?? 1)
-          .text(prim.label ?? "");
-      }
-    }
-  }
-
-  // axes
-  const axisStroke = "#cbd5e1";
-  const tickStroke = "#e2e8f0";
-  const tickText = "#64748b";
-  g.append("line").attr("x1", 0).attr("y1", plan.innerH).attr("x2", plan.innerW).attr("y2", plan.innerH).attr("stroke", axisStroke);
-  g.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", plan.innerH).attr("stroke", axisStroke);
-  for (const tick of xTickValues) {
-    const px = x(tick);
-    g.append("line")
-      .attr("x1", px).attr("x2", px)
-      .attr("y1", plan.innerH).attr("y2", plan.innerH + 6)
-      .attr("stroke", tickStroke);
-    g.append("text")
-      .attr("x", px)
-      .attr("y", plan.innerH + 18)
-      .attr("text-anchor", "middle")
-      .attr("font-size", "11px")
-      .attr("fill", tickText)
-      .text(formatTick(tick));
-  }
-  for (const tick of yTickValues) {
-    const py = y(tick);
-    g.append("line")
-      .attr("x1", -6).attr("x2", 0)
-      .attr("y1", py).attr("y2", py)
-      .attr("stroke", tickStroke);
-    g.append("text")
-      .attr("x", -8)
-      .attr("y", py + 4)
-      .attr("text-anchor", "end")
-      .attr("font-size", "11px")
-      .attr("fill", tickText)
-      .text(formatTick(tick));
-  }
-  g.append("text")
-    .attr("x", plan.innerW / 2)
-    .attr("y", plan.innerH + 42)
-    .attr("text-anchor", "middle")
-    .attr("font-size", `${presentation.axisSize ?? 12}px`)
-    .attr("fill", "#64748b")
-    .text(presentation.xLabel ?? "");
-  g.append("text")
-    .attr("transform", "rotate(-90)")
-    .attr("x", -plan.innerH / 2)
-    .attr("y", -52)
-    .attr("text-anchor", "middle")
-    .attr("font-size", `${presentation.axisSize ?? 12}px`)
-    .attr("fill", "#64748b")
-    .text(presentation.yLabel ?? "");
-  g.append("text")
-    .attr("x", plan.innerW / 2)
-    .attr("y", -10)
-    .attr("text-anchor", "middle")
-    .attr("font-size", `${presentation.titleSize ?? 13}px`)
-    .attr("font-weight", "600")
-    .attr("fill", "#0f172a")
-    .text(presentation.title ?? "");
-
-  if (presentation.showAnnotations !== false) for (const annotation of presentation.annotations ?? []) {
-    if (!annotation?.text || !Number.isFinite(annotation.xMPa) || !Number.isFinite(annotation.yMPa)) continue;
-    g.append("text")
-      .attr("x", x(annotation.xMPa))
-      .attr("y", y(annotation.yMPa))
-      .attr("text-anchor", "middle")
-      .attr("font-size", `${annotation.fontSize ?? 11}px`)
-      .attr("font-weight", annotation.fontWeight ?? "600")
-      .attr("fill", annotation.color ?? "#1e293b")
-      .text(annotation.text);
-  }
-
-  // Probe readout is data-only. Visual probe marks must be authored chart layers.
-  const renderProbe = xVal => Number.isFinite(xVal) ? probeReadout(plan, xVal) : null;
-  const invertX = px => scales.x.domain[0] + (px / (plan.innerW || 1)) * (scales.x.domain[1] - scales.x.domain[0]);
-  g.append("rect").attr("width", plan.innerW).attr("height", plan.innerH)
-    .attr("fill", "transparent").style("cursor", "default");
-
-  const node = svg.node();
-  node.probeAt = renderProbe; // host hook: programmatic local rebind -> returns the readout
-  node.probeAtPoint = (xPx, yPx) => {
-    const plotX = Number(xPx) - margin.left;
-    const plotY = Number(yPx) - margin.top;
-    if (!Number.isFinite(plotX) || !Number.isFinite(plotY)) return null;
-    if (plotX < 0 || plotX > plan.innerW || plotY < 0 || plotY > plan.innerH) return null;
-    return renderProbe(invertX(plotX));
-  };
-  node.projectPoint = (xVal, yVal) => ({
-    x: x(xVal) + margin.left,
-    y: y(yVal) + margin.top
-  });
-  node.destroy = () => {
-    svg.selectAll("*").remove();
-  };
-  return node;
+function ownerDocumentFor(node) {
+  return node?.ownerDocument ?? globalThis.document ?? null;
 }
 
-function drawPolarChart(container, plan, d3) {
+function createSvgElement(doc, tagName) {
+  if (!doc?.createElementNS) throw new Error("SVG rendering requires a document with createElementNS");
+  return doc.createElementNS(SVG_NS, tagName);
+}
+
+function clearElement(node) {
+  while (node?.firstChild) node.removeChild(node.firstChild);
+}
+
+function removeMatchingDescendants(node, selector) {
+  if (!node?.querySelectorAll) return;
+  for (const match of Array.from(node.querySelectorAll(selector))) match.remove();
+}
+
+function wrapSvgNode(node) {
+  return {
+    append(tagName) {
+      const child = createSvgElement(ownerDocumentFor(node), tagName);
+      node.appendChild(child);
+      return wrapSvgNode(child);
+    },
+    attr(name, value) {
+      if (value == null) node.removeAttribute?.(name);
+      else node.setAttribute?.(name, String(value));
+      return this;
+    },
+    style(name, value) {
+      if (node?.style) node.style[name] = value == null ? "" : String(value);
+      return this;
+    },
+    text(value) {
+      node.textContent = value == null ? "" : String(value);
+      return this;
+    },
+    node() {
+      return node;
+    },
+    selectAll(selector) {
+      return {
+        remove() {
+          removeMatchingDescendants(node, selector);
+        }
+      };
+    }
+  };
+}
+
+export function drawChart(container, plan) {
+  const scene = buildScene(plan, {
+    mountTag: String(container?.tagName ?? "").toLowerCase()
+  });
+  return renderScene(container, scene, { plan });
+}
+
+function drawPolarChart(container, plan) {
   const { width, height, center, maxRadius, scales } = plan;
   const rScale = v => (v - scales.r.domain[0]) / ((scales.r.domain[1] - scales.r.domain[0]) || 1) * maxRadius;
   const toXY = (theta, r) => [center.x + rScale(r) * Math.sin(theta), center.y - rScale(r) * Math.cos(theta)];
-  const svg = selectChartSvg(container, d3, width, height);
+  const svg = selectChartSvg(container, width, height);
   // grid rings
   for (const frac of [0.25, 0.5, 0.75, 1]) {
     svg.append("circle").attr("cx", center.x).attr("cy", center.y).attr("r", maxRadius * frac)
@@ -1331,7 +1157,7 @@ function drawPolarChart(container, plan, d3) {
   const node = svg.node();
   node.probeAtPoint = (x, y) => polarProbeReadout(plan, x, y);
   node.destroy = () => {
-    svg.selectAll("*").remove();
+    clearElement(node);
   };
   return node;
 }
@@ -1501,12 +1327,12 @@ function polarQuadPath(prim, { center, rScale }) {
   ].join(" ");
 }
 
-function drawDiscChart(container, plan, d3) {
+function drawDiscChart(container, plan) {
   const tag = String(container?.tagName ?? "").toLowerCase();
   if (tag === "canvas") return drawDiscChartCanvas(container, plan);
   const { width, height, center, scale, discRadius } = plan;
   const toPx = (x, y) => [center.x + x * scale, center.y - y * scale]; // data y-up → screen y-down
-  const svg = selectChartSvg(container, d3, width, height);
+  const svg = selectChartSvg(container, width, height);
 
   // bounding disc
   svg.append("circle").attr("cx", center.x).attr("cy", center.y).attr("r", discRadius * scale)
@@ -1541,15 +1367,21 @@ function drawDiscChart(container, plan, d3) {
   const node = svg.node();
   if (particleLayer && particleLayer.frames?.length) {
     const dots = svg.append("g");
+    const dotsNode = dots.node();
     const colour = particleLayer.stroke ?? "#EC7424";
     const playback = plan.playback ?? {};
     const frames = particleLayer.frames;
     const tValues = frames.map(f => f.t);
     const draw = frame => {
-      const sel = dots.selectAll("circle").data(frame.points.filter(p => p.inDisc !== false && Number.isFinite(p.x) && Number.isFinite(p.y)));
-      sel.enter().append("circle").attr("r", 3).attr("fill", colour)
-        .merge(sel).attr("cx", p => toPx(p.x, p.y)[0]).attr("cy", p => toPx(p.x, p.y)[1]);
-      sel.exit().remove();
+      clearElement(dotsNode);
+      for (const point of frame.points.filter(p => p.inDisc !== false && Number.isFinite(p.x) && Number.isFinite(p.y))) {
+        const [cx, cy] = toPx(point.x, point.y);
+        dots.append("circle")
+          .attr("r", 3)
+          .attr("fill", colour)
+          .attr("cx", cx)
+          .attr("cy", cy);
+      }
     };
     let playing = true;
     let destroyed = false;
@@ -1561,7 +1393,7 @@ function drawDiscChart(container, plan, d3) {
     node.pause = () => { playing = false; };
     node.destroy = () => {
       destroyed = true;
-      svg.selectAll("*").remove();
+      clearElement(node);
     };
     if (frames.length === 1 || tValues[0] == null || typeof requestAnimationFrame !== "function") {
       draw(frames[0]);
@@ -1578,7 +1410,7 @@ function drawDiscChart(container, plan, d3) {
   }
   if (typeof node.destroy !== "function") {
     node.destroy = () => {
-      svg.selectAll("*").remove();
+      clearElement(node);
     };
   }
   return node;
@@ -1802,19 +1634,20 @@ function forceColour(v, min, max) {
   return `rgb(${lerp(52, 236)},${lerp(76, 116)},${lerp(108, 36)})`; // #344C6C → #EC7424
 }
 
-function selectChartSvg(container, d3, width, height) {
+function selectChartSvg(container, width, height) {
   const tag = String(container?.tagName ?? "").toLowerCase();
   if (tag === "svg") {
-    const svg = d3.select(container);
-    svg.selectAll("*").remove();
-    return svg
+    clearElement(container);
+    return wrapSvgNode(container)
       .attr("class", "gog")
       .attr("width", "100%")
       .attr("height", "100%")
       .attr("viewBox", `0 0 ${width} ${height}`);
   }
-  d3.select(container).selectAll("svg.gog").remove();
-  return d3.select(container).append("svg")
+  removeMatchingDescendants(container, "svg.gog");
+  const svg = createSvgElement(ownerDocumentFor(container), "svg");
+  container.appendChild(svg);
+  return wrapSvgNode(svg)
     .attr("class", "gog")
     .attr("width", "100%")
     .attr("height", "100%")

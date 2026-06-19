@@ -77,8 +77,21 @@ export function createSurfaceInspectionPoint({ window, manifest, runtime }) {
     get browserRuntimeCapabilities() {
       return cloneInspectionValue(manifest?.browserRuntimeCapabilities ?? []);
     },
+    get preloadPolicies() {
+      return cloneInspectionValue(typeof runtime?.preloadPolicies !== "undefined"
+        ? runtime.preloadPolicies
+        : (manifest?.preloadPolicies ?? []));
+    },
+    get capabilityPreloadAssets() {
+      return cloneInspectionValue(typeof runtime?.capabilityPreloadAssets !== "undefined"
+        ? runtime.capabilityPreloadAssets
+        : (manifest?.capabilityPreloadAssets ?? {}));
+    },
     get capabilityAssets() {
       return cloneInspectionValue(manifest?.capabilityAssets ?? null);
+    },
+    get preloadTasks() {
+      return cloneInspectionValue(typeof runtime?.preloadTasks !== "undefined" ? runtime.preloadTasks : []);
     },
     get loadedCapabilityAssets() {
       return surfaceAssetRegistrySnapshot(window);
@@ -138,7 +151,10 @@ export function createSurfaceInspectionPoint({ window, manifest, runtime }) {
         routeTargets: this.routeTargets,
         runtimeIds: this.runtimeIds,
         browserRuntimeCapabilities: this.browserRuntimeCapabilities,
+        preloadPolicies: this.preloadPolicies,
+        capabilityPreloadAssets: this.capabilityPreloadAssets,
         capabilityAssets: this.capabilityAssets,
+        preloadTasks: this.preloadTasks,
         loadedCapabilityAssets: this.loadedCapabilityAssets,
         capabilityBootHookCount: this.capabilityBootHookCount,
         lastRouteSwap: this.lastRouteSwap,
@@ -533,6 +549,14 @@ export function createSurfaceRuntimeProbe({
   const missingCapabilities = [];
   const missingCapabilityControllers = [];
   const missingCapabilityOutputs = [];
+  const execution = cloneInspectionValue(typeof executionRunner?.settledSnapshot === "function"
+    ? executionRunner.settledSnapshot()
+    : null);
+  const capabilityBootPending = Object.entries(execution?.pendingByKind ?? {})
+    .some(([kind, count]) =>
+      Number(count || 0) > 0
+      && (kind === "capability-assets" || kind === "capability-mount")
+    );
   const capabilityOutputs = collectCapabilityOutputsFromDom(document);
   const capabilityMarkers = new Map(
     activeSurfaces.map(surface => [surface.id, mountedCapabilityMarkersForSurface(document, surface)])
@@ -557,7 +581,7 @@ export function createSurfaceRuntimeProbe({
       missingCapabilities.push({ surfaceId: surface.id, capabilities: capabilities.missing });
     }
     const marker = capabilityMarkers.get(surface.id) ?? mountedCapabilityMarkersForSurface(document, surface);
-    if (present && (surface?.runtime?.capabilityRefs?.length ?? 0) > 0 && !marker.controller) {
+    if (!capabilityBootPending && present && (surface?.runtime?.capabilityRefs?.length ?? 0) > 0 && !marker.controller) {
       missingCapabilityControllers.push({ surfaceId: surface.id, rootId: marker.rootId ?? null });
     }
     if (!present) continue;
@@ -600,7 +624,7 @@ export function createSurfaceRuntimeProbe({
     for (const source of capabilitySources) {
       const sourceMarker = capabilityMarkers.get(source.sourceSurfaceId)
         ?? mountedCapabilityMarkersForSurface(document, surfaceById.get(source.sourceSurfaceId) ?? { id: source.sourceSurfaceId });
-      if (!sourceMarker.outputs) {
+      if (!capabilityBootPending && !sourceMarker.outputs) {
         missingCapabilityOutputs.push({
           surfaceId: surface.id,
           rootId: sourceMarker.rootId,
@@ -640,9 +664,7 @@ export function createSurfaceRuntimeProbe({
     processDerives: cloneInspectionValue(typeof processRuntime?.derives === "function" ? processRuntime.derives() : null),
     runtimeBridgeCount: Number(runtimeBridgeCount || 0),
     routeState: cloneInspectionValue(resolveRouteStateDescriptor(manifest)),
-    execution: cloneInspectionValue(typeof executionRunner?.settledSnapshot === "function"
-      ? executionRunner.settledSnapshot()
-      : null),
+    execution,
     boundInteractionCount: Number(boundInteractionCount || 0),
     missingInteractionTargets,
     missingBindingTargets,

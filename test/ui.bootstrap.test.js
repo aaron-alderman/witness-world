@@ -50,6 +50,92 @@ async function openStarterDetails(page) {
   });
 }
 
+test("bootstrap UI establishes the canonical app boundary and then opens the authored app", async () => {
+  const { server, close: closeServer } = await startBlankUiServer();
+  const { page, runtime, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+    await page.waitForFunction(() => document.getElementById("bootstrap-app-boundary-status")?.textContent.includes("App boundary status: missing."));
+
+    await page.locator("#establish-app-boundary").click();
+    await page.waitForFunction(() => document.getElementById("bootstrap-status")?.textContent.includes("Authored app boundary established."));
+    await page.waitForFunction(() => document.getElementById("bootstrap-summary")?.textContent.includes("canonical authored app boundary is active"));
+
+    await page.locator("#open-app-link").click();
+    await page.waitForFunction(() => document.body.textContent.includes("Authored App Boundary"));
+
+    await page.goto(`${server.url}/_bootstrap`);
+    await page.waitForFunction(() => document.body.textContent.includes("Semi-Internal Bootstrap Seam"));
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("bootstrap UI shows proposal fallback truthfully when shared authority blocks direct app-boundary establishment", async () => {
+  const { server, close: closeServer } = await startBlankUiServer();
+  const { page, context, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+
+    await page.fill('#identity-form input[name="id"]', "identity.aaron");
+    await page.fill('#identity-form input[name="actor"]', "aaron");
+    await page.fill('#identity-form input[name="label"]', "Aaron");
+    await page.fill('#identity-form input[name="username"]', "aaron");
+    await page.fill('#identity-form input[name="password"]', "aaron");
+    await page.fill('#identity-form input[name="homePerspective"]', "aaron:personal");
+    await page.locator('#identity-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("identity-status")?.textContent.includes("Identity created."));
+
+    await page.fill('#session-form input[name="username"]', "aaron");
+    await page.fill('#session-form input[name="password"]', "aaron");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
+
+    const aaronCookie = await cookieHeaderFor(context, server.url);
+    const createCallan = await fetch(`${server.url}/api/identities`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaronCookie },
+      body: JSON.stringify({
+        id: "identity.callan",
+        actor: "callan",
+        label: "Callan",
+        username: "callan",
+        password: "callan",
+        homePerspective: "callan:personal"
+      })
+    });
+    assert.equal(createCallan.status, 201);
+    const createContext = await fetch(`${server.url}/api/contexts`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaronCookie },
+      body: JSON.stringify({
+        id: "bootstrap.app",
+        label: "Authored App Boundary"
+      })
+    });
+    assert.equal(createContext.status, 201);
+
+    await page.locator("#logout-session").click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Sign in to continue editing"));
+    await page.fill('#session-form input[name="username"]', "callan");
+    await page.fill('#session-form input[name="password"]', "callan");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Callan"));
+
+    await page.locator("#establish-app-boundary").click();
+    await page.waitForFunction(() => document.getElementById("bootstrap-status")?.textContent.includes("Proposed authored app-boundary establishment for review."));
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
 test("blank world can bootstrap into a working todo app purely through the UI", async () => {
   const { server, close: closeServer } = await startBlankUiServer();
   const { page, context, runtime, close: closeBrowser } = await launchBrowser();

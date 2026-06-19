@@ -168,7 +168,8 @@ export function bindBootstrapAppAuthoringSubmit({
   readFormData = payload => readBootstrapAuthoringFormDataFromDocument(payload)
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = event => runBootstrapAppAuthoringSubmit({
     detail: event?.detail || {},
     postJson,
@@ -178,6 +179,23 @@ export function bindBootstrapAppAuthoringSubmit({
     contractsByFamily,
     readFormData
   });
-  resolvedTarget.addEventListener("witness:bootstrap-app-authoring-submit", handler);
+  for (const detail of [
+    { source: "bootstrap-app-authoring-controls", family: "context", formId: "context-form", statusId: "context-status" },
+    { source: "bootstrap-app-authoring-controls", family: "perspective", formId: "perspective-form", statusId: "perspective-status" },
+    { source: "bootstrap-app-authoring-controls", family: "widget", formId: "widget-form", statusId: "widget-status" },
+    { source: "bootstrap-app-authoring-controls", family: "program", formId: "program-form", statusId: "program-status" },
+    { source: "bootstrap-app-authoring-controls", family: "step", formId: "step-form", statusId: "step-status" },
+    { source: "bootstrap-app-authoring-controls", family: "route", formId: "route-form", statusId: "route-status" },
+    { source: "bootstrap-app-authoring-controls", family: "serve", formId: "serve-form", statusId: "serve-status" },
+    { source: "bootstrap-app-authoring-controls", family: "runner", formId: "runner-form", statusId: "runner-status" }
+  ]) {
+    const form = resolvedDocument?.getElementById?.(detail.formId);
+    if (!form || form.__bootstrapAppAuthoringSubmitBound) continue;
+    form.__bootstrapAppAuthoringSubmitBound = true;
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      void handler({ detail });
+    });
+  }
   return handler;
 }

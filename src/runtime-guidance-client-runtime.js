@@ -257,12 +257,27 @@ export function startTutorialClientRuntimeApp({
       copyRuntimeInspection: async () => {
         const inspection = windowTarget?.world || windowTarget?.__surfaceRuntimeInspection || null;
         const payload = typeof inspection?.inspect === "function" ? inspection.inspect() : null;
-        const json = JSON.stringify(payload, null, 2);
-        if (windowTarget?.navigator?.clipboard?.writeText) {
-          try {
-            await windowTarget.navigator.clipboard.writeText(json);
-          } catch {}
-        }
+        const shell = windowTarget?.__sourceryCompanionShell || null;
+        const surfaceSegment = typeof shell?.inspection?.activeSurfaceId === "string" && shell.inspection.activeSurfaceId.trim()
+          ? shell.inspection.activeSurfaceId.trim().replace(/[\\/:*?"<>|]+/g, "-")
+          : "surface";
+        const routeSegment = typeof windowTarget?.location?.pathname === "string" && windowTarget.location.pathname.trim()
+          ? windowTarget.location.pathname.trim().replace(/[\\/:*?"<>|]+/g, "-")
+          : "route";
+        if (!documentTarget?.createElement || !documentTarget?.body?.appendChild) return;
+        const BlobCtor = windowTarget?.Blob || globalThis?.Blob;
+        const URLApi = windowTarget?.URL || globalThis?.URL;
+        if (typeof BlobCtor !== "function" || typeof URLApi?.createObjectURL !== "function") return;
+        const blob = new BlobCtor([JSON.stringify(payload ?? null, null, 2)], { type: "application/json" });
+        const href = URLApi.createObjectURL(blob);
+        const anchor = documentTarget.createElement("a");
+        anchor.href = href;
+        anchor.download = `sourcery-${surfaceSegment || "surface"}-${routeSegment || "route"}.json`;
+        anchor.hidden = true;
+        documentTarget.body.appendChild(anchor);
+        anchor.click?.();
+        anchor.parentNode?.removeChild?.(anchor);
+        URLApi.revokeObjectURL?.(href);
       }
     });
   };

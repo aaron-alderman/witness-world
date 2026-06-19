@@ -77,9 +77,11 @@ test("bootstrap shell render runtime sequences extracted render helpers and publ
     renderGuidanceOverlay: () => {
       calls.push("guidance-overlay");
     },
-    buildBootstrapGuidanceRuntimeViewFn: ({ guidanceProgress, currentSurfacePage }) => ({
+    currentSuggestions: () => [{ id: "open-live-app", title: "Open The Live App", action: { kind: "navigate" } }],
+    buildBootstrapGuidanceRuntimeViewFn: ({ guidanceProgress, currentSurfacePage, currentSuggestions }) => ({
       stepId: guidanceProgress.stepId,
-      surfacePage: currentSurfacePage
+      surfacePage: currentSurfacePage,
+      suggestionIds: currentSuggestions.map(row => row.id)
     }),
     publishGuidanceRuntimeView: snapshot => {
       publishedSnapshots.push(snapshot);
@@ -120,7 +122,8 @@ test("bootstrap shell render runtime sequences extracted render helpers and publ
   ]);
   assert.deepEqual(publishedSnapshots, [{
     stepId: "step.open",
-    surfacePage: "bootstrap"
+    surfacePage: "bootstrap",
+    suggestionIds: ["open-live-app"]
   }]);
 });
 

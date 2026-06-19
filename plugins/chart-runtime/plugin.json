@@ -2,7 +2,7 @@
   "id": "plugin.chart-runtime",
   "version": "0.1.0",
   "displayName": "Chart Runtime",
-  "description": "Generic product-type dataflow evaluator + grammar-of-graphics (D3) renderer. Resolves a witnessed `chart` view over its `model` and paints it. Reusable by any scientific module; carries no domain logic.",
+  "description": "Generic product-type dataflow evaluator + grammar-of-graphics SVG renderer. Resolves a witnessed `chart` view over its `model` and paints it. Reusable by any scientific module; carries no domain logic.",
   "kind": "plugin",
   "runtime": {
     "entry": "./runtime.js"

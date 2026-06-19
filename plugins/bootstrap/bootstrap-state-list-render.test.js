@@ -130,6 +130,35 @@ test("bootstrap state inventory render fans authored and operator rows into the 
   assert.equal(roots.get("state-operator-backups").children[0].children[0].textContent, "backup-1 [v:v1] / 2026-06-19 / 3w 4o");
 });
 
+test("bootstrap state inventory render derives operator lineage basenames without node path at browser runtime", () => {
+  const document = createDocument();
+  const roots = new Map([
+    ["state-operator-exports", createRoot()]
+  ]);
+
+  renderBootstrapStateInventory({
+    authored: {},
+    operator: {
+      inventory: {
+        exports: [{
+          id: "export-1",
+          witnessCount: 2,
+          observationCount: 1,
+          createdAt: "2026-06-19T00:00:00Z",
+          lineage: { worldHome: "C:\\tmp\\world-home" },
+          compatibility: { platformVersion: "v1" }
+        }]
+      }
+    },
+    byId: id => roots.get(id) || null,
+    document,
+    stateSnapshots: new Map(),
+    rowKey: row => row.id || JSON.stringify(row)
+  });
+
+  assert.equal(roots.get("state-operator-exports").children[0].children[0].textContent, "export-1 (from world-home) [v:v1] / 2026-06-19 / 2w 1o");
+});
+
 test("bootstrap state list helpers expose inventory labels and browser factory source", () => {
   assert.equal(
     mcpServerInventoryLabel({ id: "mcp.demo", serverRunner: "demo_server", transports: ["stdio"], attachedToActiveRuntime: true }),
@@ -142,6 +171,7 @@ test("bootstrap state list helpers expose inventory labels and browser factory s
 
   const factory = renderBootstrapStateListRenderFactory();
   assert.equal(factory.includes("const renderBootstrapStateItems ="), true);
+  assert.equal(factory.includes("const bootstrapStatePortableBasename ="), true);
   assert.equal(factory.includes("const renderBootstrapStateList ="), true);
   assert.equal(factory.includes("const mcpServerInventoryLabel ="), true);
   assert.equal(factory.includes("const mcpToolInventoryLabel ="), true);

@@ -39,6 +39,10 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+function applySqlRuntimeDeclaration() {
+  return [];
+}
+
 export const providers = Object.freeze([
   {
     kind: "capabilityDefinitions",
@@ -90,7 +94,13 @@ export const providers = Object.freeze([
 ]);
 
 export const desireExtensions = Object.freeze({
-  rvmForms: sqlRvmForms
+  rvmForms: sqlRvmForms,
+  runtimeDeclarations: Object.freeze([
+    Object.freeze({
+      kind: "sql_table",
+      apply: applySqlRuntimeDeclaration
+    })
+  ])
 });
 
 export function createHandlers(deps) {

@@ -2,10 +2,14 @@ export const PLATFORM_PROPOSAL_ACTIONS = Object.freeze([
   "branch.create",
   "branch.merge",
   "branch.rebase",
+  "branch.push",
+  "branch.ship",
+  "branch.rollback",
   "changeSet.create",
   "changeSet.edit",
   "changeSet.validate",
   "changeSet.apply",
+  "defect.create",
   "runtimePlugin.install",
   "runtimePlugin.remove",
   "mcpServer.define",
@@ -54,6 +58,38 @@ export const PLATFORM_PROPOSAL_TEMPLATES = Object.freeze({
       reason: "Refresh branch against latest parent"
     })
   }),
+  "branch.push": Object.freeze({
+    action: "branch.push",
+    title: "Push branch",
+    targetKind: "branch",
+    requiredBodyFields: Object.freeze(["branchId"]),
+    sampleBody: Object.freeze({
+      branchId: "branch.platform.console",
+      remoteName: "origin",
+      gitBranchName: "platform/platform-console"
+    })
+  }),
+  "branch.ship": Object.freeze({
+    action: "branch.ship",
+    title: "Ship branch",
+    targetKind: "branch",
+    requiredBodyFields: Object.freeze(["branchId", "releaseChannelId"]),
+    sampleBody: Object.freeze({
+      branchId: "branch.platform.console",
+      releaseChannelId: "releaseChannel:local"
+    })
+  }),
+  "branch.rollback": Object.freeze({
+    action: "branch.rollback",
+    title: "Rollback branch ship",
+    targetKind: "branch",
+    requiredBodyFields: Object.freeze(["branchId", "shipRecordId", "releaseChannelId"]),
+    sampleBody: Object.freeze({
+      branchId: "branch.platform.console",
+      shipRecordId: "shipRecord:branch.platform.console:1",
+      releaseChannelId: "releaseChannel:local"
+    })
+  }),
   "changeSet.create": Object.freeze({
     action: "changeSet.create",
     title: "Create change set",
@@ -84,6 +120,18 @@ export const PLATFORM_PROPOSAL_TEMPLATES = Object.freeze({
     targetKind: "changeSet",
     requiredBodyFields: Object.freeze(["changeSetId"]),
     sampleBody: Object.freeze({ changeSetId: "changeset.platform.console" })
+  }),
+  "defect.create": Object.freeze({
+    action: "defect.create",
+    title: "Create defect follow-up",
+    targetKind: "defect",
+    requiredBodyFields: Object.freeze(["defectId"]),
+    sampleBody: Object.freeze({
+      defectId: "defect:gate:plugins-platform-platform-test-js",
+      clusterId: "defectCluster:gate-plugins-platform-platform-test-js",
+      gateId: "gate:plugins/platform/platform.test.js",
+      reason: "Track recurring platform test failures through the proposal lane"
+    })
   }),
   "runtimePlugin.install": Object.freeze({
     action: "runtimePlugin.install",
@@ -224,6 +272,9 @@ export function platformProposalTarget(action, body, explicit = {}) {
       return { targetKind: "branch", targetId: String(body.id || "") };
     case "branch.merge":
     case "branch.rebase":
+    case "branch.push":
+    case "branch.ship":
+    case "branch.rollback":
       return { targetKind: "branch", targetId: String(body.branchId || "") };
     case "changeSet.create":
       return { targetKind: "changeSet", targetId: String(body.id || "") };

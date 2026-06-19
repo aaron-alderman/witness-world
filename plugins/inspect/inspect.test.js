@@ -171,7 +171,7 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(pluginWidgetPage.includes("const processTraceEnabled = config.traceProcessEvents !== false;"), true);
   assert.equal(pluginWidgetPage.includes("if (checkboxes === 'boolean')"), true);
   assert.equal(pluginWidgetPage.includes("setQueryParam"), true);
-  assert.equal(pluginWidgetPage.includes("dispatchDomEvent"), true);
+  assert.equal(pluginWidgetPage.includes("dispatchDomEvent has been retired"), true);
   assert.equal(pluginWidgetPage.includes("const syncInitialState ="), true);
   assert.equal(pluginWidgetPage.includes("const setHidden ="), true);
   assert.equal(pluginWidgetPage.includes("const setDisabled ="), true);

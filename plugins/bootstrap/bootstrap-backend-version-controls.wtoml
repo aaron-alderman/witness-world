@@ -126,13 +126,6 @@ rootWidget = "bootstrap_backend_version_controls_root"
 
 [[step]]
 order = 0
-op = "dispatchDomEvent"
-on = "load"
-eventName = "witness:bootstrap-backend-help-sync"
-detail = { source = "bootstrap-backend-version-controls", family = "load" }
-
-[[step]]
-order = 0
 op = "setText"
 on = "submit:bootstrap_backend_activate_form"
 widget = "bootstrap_backend_activate_status"
@@ -144,13 +137,6 @@ op = "readForm"
 on = "submit:bootstrap_backend_activate_form"
 widget = "bootstrap_backend_activate_form"
 into = "bootstrapBackendActivateDraft"
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_backend_activate_form"
-eventName = "witness:bootstrap-backend-version-submit"
-detail = { source = "bootstrap-backend-version-controls", family = "activate", statusId = "backend-program-activate-status", soul = "${state.bootstrapBackendActivateDraft.soul}", version = "${state.bootstrapBackendActivateDraft.version}" }
 
 [[step]]
 order = 0
@@ -165,34 +151,6 @@ op = "readForm"
 on = "submit:bootstrap_backend_rollback_form"
 widget = "bootstrap_backend_rollback_form"
 into = "bootstrapBackendRollbackDraft"
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_backend_rollback_form"
-eventName = "witness:bootstrap-backend-version-submit"
-detail = { source = "bootstrap-backend-version-controls", family = "rollback", statusId = "backend-program-rollback-status", soul = "${state.bootstrapBackendRollbackDraft.soul}" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_backend_activate_soul_select"
-eventName = "witness:bootstrap-backend-help-sync"
-detail = { source = "bootstrap-backend-version-controls", family = "activate-soul" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_backend_activate_version_select"
-eventName = "witness:bootstrap-backend-help-sync"
-detail = { source = "bootstrap-backend-version-controls", family = "activate-version" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_backend_rollback_soul_select"
-eventName = "witness:bootstrap-backend-help-sync"
-detail = { source = "bootstrap-backend-version-controls", family = "rollback-soul" }
 
 [[step]]
 order = 0

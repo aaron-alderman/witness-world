@@ -44,6 +44,12 @@ followUp = "refresh"
 omitBody = true
 
 [[bootstrapTopCardsSubmit]]
+family = "bootstrap-app-boundary"
+url = "/api/bootstrap/app-boundary"
+followUp = "refresh"
+omitBody = true
+
+[[bootstrapTopCardsSubmit]]
 family = "operator-backup"
 url = "/api/operator/backups"
 followUp = "reload"

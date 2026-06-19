@@ -13,22 +13,121 @@ import { appendQueryParamsToHref } from "../../src/runtime-url-utils.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-// Strip ES import/export so the generic runtime modules concatenate into one inline script.
-function inlineModule(file) {
-  const src = fs.readFileSync(path.join(here, file), "utf8");
-  return src
-    .replace(/^\s*import\s+[^;]*;?\s*$/gm, "")
-    .replace(/^\s*export\s+default\s+/gm, "const __default_unused = ")
-    .replace(/^\s*export\s+(const|function|let|class)\s/gm, "$1 ");
+const CHART_RUNTIME_MODULE_FILES = [
+  "presentation/chart-chrome.js",
+  "presentation/resolve-presentation.js",
+  "graphics/scales.js",
+  "graphics/geometry.js",
+  "graphics/axes.js",
+  "graphics/svg-dom.js",
+  "graphics/canvas-runtime.js",
+  "graphics/hit-testing.js",
+  "graphics/timeline.js",
+  "ports/svg-port.js",
+  "ports/canvas-port.js",
+  "ports/render-port.js",
+  "scene/build-scene.js",
+  "dataflow-eval.js",
+  "gog-runtime.js",
+  "plan/evaluate-model.js",
+  "plan/chart-plan.js",
+  "chart-presentation-patch.js",
+  "chart-client.js"
+];
+
+function moduleIdForFile(file) {
+  return `./${file.replace(/\\/g, "/")}`;
+}
+
+function resolveRuntimeModuleId(fromId, specifier) {
+  if (!specifier.startsWith(".")) {
+    throw new Error(`chart runtime bundle only supports relative imports: ${specifier}`);
+  }
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(fromId), specifier));
+  return resolved.startsWith(".") ? resolved : `./${resolved}`;
+}
+
+function parseNamedBindings(source) {
+  return source
+    .split(",")
+    .map(part => part.trim())
+    .filter(Boolean)
+    .map(part => {
+      const match = part.match(/^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/);
+      if (!match) throw new Error(`Unsupported chart runtime binding syntax: ${part}`);
+      return {
+        imported: match[1],
+        local: match[2] ?? match[1]
+      };
+    });
+}
+
+function destructureBindings(bindings) {
+  return bindings.map(binding =>
+    binding.imported === binding.local
+      ? binding.imported
+      : `${binding.imported}: ${binding.local}`
+  ).join(", ");
+}
+
+function bundleModuleSource(file) {
+  const id = moduleIdForFile(file);
+  let source = fs.readFileSync(path.join(here, file), "utf8");
+  const exports = [];
+  const pushExport = (exported, local = exported) => {
+    if (!exports.some(entry => entry.exported === exported)) exports.push({ exported, local });
+  };
+
+  source = source.replace(/^\s*import\s*\{([\s\S]*?)\}\s*from\s*["']([^"']+)["'];?\s*$/gm, (_match, bindingsSource, specifier) => {
+    const bindings = parseNamedBindings(bindingsSource);
+    return `const { ${destructureBindings(bindings)} } = __chartRequire("${resolveRuntimeModuleId(id, specifier)}");`;
+  });
+
+  source = source.replace(/^\s*export\s*\{([\s\S]*?)\}\s*from\s*["']([^"']+)["'];?\s*$/gm, (_match, bindingsSource, specifier) => {
+    const bindings = parseNamedBindings(bindingsSource);
+    for (const binding of bindings) pushExport(binding.local);
+    return `const { ${destructureBindings(bindings)} } = __chartRequire("${resolveRuntimeModuleId(id, specifier)}");`;
+  });
+
+  source = source.replace(/^\s*export\s+default\s+/gm, () => {
+    pushExport("default", "__default_export__");
+    return "const __default_export__ = ";
+  });
+
+  source = source.replace(/^\s*export\s+(const|function|let|class)\s+([A-Za-z_$][\w$]*)/gm, (_match, kind, name) => {
+    pushExport(name);
+    return `${kind} ${name}`;
+  });
+
+  source = source.replace(/^\s*export\s*\{([\s\S]*?)\};?\s*$/gm, (_match, bindingsSource) => {
+    for (const binding of parseNamedBindings(bindingsSource)) pushExport(binding.local, binding.imported);
+    return "";
+  });
+
+  const returnBody = exports.length
+    ? `return { ${exports.map(entry => entry.exported === entry.local ? entry.exported : `${entry.exported}: ${entry.local}`).join(", ")} };`
+    : "return {};";
+
+  return `__chartModules[${JSON.stringify(id)}] = __chartRequire => {\n${source}\n${returnBody}\n};`;
 }
 
 export function chartRuntimeBundleSource() {
   return [
     "// inlined generic chart runtime",
-    inlineModule("dataflow-eval.js"),
-    inlineModule("gog-runtime.js"),
-    inlineModule("chart-presentation-patch.js"),
-    inlineModule("chart-client.js")
+    "const __chartModules = Object.create(null);",
+    "const __chartModuleCache = Object.create(null);",
+    "function __chartRequire(id) {",
+    "  if (__chartModuleCache[id]) return __chartModuleCache[id];",
+    "  const factory = __chartModules[id];",
+    "  if (!factory) throw new Error(`chart runtime module not found: ${id}`);",
+    "  const exports = factory(__chartRequire);",
+    "  __chartModuleCache[id] = exports;",
+    "  return exports;",
+    "}",
+    ...CHART_RUNTIME_MODULE_FILES.map(bundleModuleSource),
+    "const { evaluateModel } = __chartRequire(\"./plan/evaluate-model.js\");",
+    "const { planChart } = __chartRequire(\"./plan/chart-plan.js\");",
+    "const { bootChartsFromDom, registerChartSurfaceCapabilityBoot } = __chartRequire(\"./chart-client.js\");"
   ].join("\n\n");
 }
 
@@ -52,6 +151,10 @@ function styleMarkup(entries) {
     .map(([key, value]) => `${key}:${value.trim()}`)
     .join(";");
   return text ? ` style="${escapeAttr(text)}"` : "";
+}
+
+function escapeScriptBody(source) {
+  return String(source ?? "").replaceAll("</script", "<\\/script");
 }
 
 function tagName(value, fallback = "div") {
@@ -89,6 +192,7 @@ function uniqueFunctionDeps(entries = []) {
 function normalizePageProps(pageProps = {}) {
   return {
     stylesheetHref: firstNonEmpty(pageProps.pageStylesheetHref),
+    chartSurfaceId: firstNonEmpty(pageProps.chartSurfaceId),
     htmlClass: firstNonEmpty(pageProps.htmlClass),
     bodyClass: firstNonEmpty(pageProps.bodyClass),
     viewportId: firstNonEmpty(pageProps.viewportId),
@@ -168,7 +272,7 @@ export function renderChartMountMarkup({
 } = {}) {
   const page = normalizePageProps(pageProps);
   const mountTagName = page.mountTag;
-  const specJson = JSON.stringify(spec ?? {});
+  const chartSurfaceId = firstNonEmpty(page.chartSurfaceId, spec?.view?.id);
   const overlayCanvas = includeOverlayCanvas
     ? renderChartOverlayMarkup({
         pageProps,
@@ -183,7 +287,7 @@ export function renderChartMountMarkup({
         includeOverlayCanvas: false
       })
     : "";
-  return `<${mountTagName}${attrMarkup("id", firstNonEmpty(mountIdOverride, page.mountId))}${attrMarkup("class", page.mountClass)}${attrsMarkup({ "data-chart-spec": specJson, ...mountAttributes })}></${mountTagName}>${overlayCanvas}${tooltip}`;
+  return `<${mountTagName}${attrMarkup("id", firstNonEmpty(mountIdOverride, page.mountId))}${attrMarkup("class", page.mountClass)}${attrsMarkup({ "data-chart-id": chartSurfaceId, ...mountAttributes })}></${mountTagName}>${overlayCanvas}${tooltip}`;
 }
 
 export function renderChartOverlayMarkup({
@@ -205,8 +309,12 @@ export function renderChartOverlayMarkup({
 
 export function chartRuntimeInlineCss({ standalone = true } = {}) {
   return `${standalone ? "html,body{margin:0;height:100%;overflow:hidden}body{font-family:-apple-system,Segoe UI,sans-serif}" : ""}
-[data-chart-spec]{display:block;width:100%;height:100%}
+.chart-page__mount{display:block;width:100%;height:100%}
 svg.gog{display:block;width:100%;height:100%}`;
+}
+
+function renderChartRuntimeManifestScript(chartSpecs = {}) {
+  return `<script type="application/json" id="chart-runtime-manifest">${escapeScriptBody(JSON.stringify({ chartSpecs }))}</script>`;
 }
 
 export function chartRuntimeAssets({
@@ -216,7 +324,7 @@ export function chartRuntimeAssets({
 } = {}) {
   const deps = chartRuntimeDeps(pagePropsList);
   return {
-    scriptSrcs: ["https://d3js.org/d3.v7.min.js"],
+    scriptSrcs: [],
     stylesheetHrefs: deps.stylesheetHrefs,
     inlineCss: chartRuntimeInlineCss({ standalone }),
     scriptBody: `${chartRuntimeBundleSource()}\n\n${chartRuntimeFunctionsLoaderSource(deps.functionDeps)}\nconst __surfaceCapabilityReadyPromises = Array.isArray(globalThis.__surfaceCapabilityReadyPromises) ? globalThis.__surfaceCapabilityReadyPromises : (globalThis.__surfaceCapabilityReadyPromises = []);\nconst __chartRuntimeReady = (async () => {\n  registerChartSurfaceCapabilityBoot(__chartRuntimeFunctions);\n})();\n__surfaceCapabilityReadyPromises.push(__chartRuntimeReady);\nawait __chartRuntimeReady;${autoBoot ? "\nbootChartsFromDom(document, __chartRuntimeFunctions);" : ""}`
@@ -225,6 +333,7 @@ export function chartRuntimeAssets({
 
 export function renderChartHtml({ title = "Chart", spec, pageProps = {} } = {}) {
   const page = normalizePageProps(pageProps);
+  const chartSurfaceId = firstNonEmpty(page.chartSurfaceId, spec?.view?.id);
   const stylesheetQuery = pageProps?.stylesheetQuery && typeof pageProps.stylesheetQuery === "object"
     ? pageProps.stylesheetQuery
     : null;
@@ -248,10 +357,11 @@ ${assets.stylesheetHrefs.map(href => `<link rel="stylesheet" href="${escapeAttr(
 </head>
 <body${attrMarkup("class", page.bodyClass)}>
 <div${attrMarkup("id", page.viewportId)}${attrMarkup("class", page.viewportClass)} data-chart-page-viewport>
-  <div${attrMarkup("id", page.hostId)}${attrMarkup("class", page.hostClass)} data-chart-page-host${styleMarkup({ background: page.pageBackground })}>
+  <div${attrMarkup("id", page.hostId)}${attrMarkup("class", page.hostClass)}${attrMarkup("data-chart-id", firstNonEmpty(page.chartSurfaceId, spec?.view?.id))} data-chart-page-host${styleMarkup({ background: page.pageBackground })}>
     ${renderChartMountMarkup({ spec, pageProps })}
   </div>
 </div>
+${renderChartRuntimeManifestScript(chartSurfaceId ? { [chartSurfaceId]: spec ?? {} } : {})}
 <script type="module">
 ${assets.scriptBody}
 </script>

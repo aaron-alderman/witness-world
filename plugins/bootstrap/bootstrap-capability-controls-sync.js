@@ -210,11 +210,12 @@ export function createBootstrapCapabilityControlsRuntimeFromBootstrap({
 
 export function bindBootstrapCapabilityControlsSync({
   target,
-  eventName = "witness:bootstrap-capability-controls-sync",
   allowedSources = ["bootstrap-capability-controls", "bootstrap-remove-controls"],
   buildDeps = () => ({})
 } = {}) {
-  target.addEventListener(eventName, event => {
+  const resolvedTarget = target || globalThis?.window || globalThis || null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  const handler = event => {
     const detail = event?.detail || {};
     if (!allowedSources.includes(detail.source)) return;
     if (detail.family !== "capability-install" && detail.family !== "capability-remove") return;
@@ -222,8 +223,19 @@ export function bindBootstrapCapabilityControlsSync({
       ...buildDeps(),
       family: detail.family
     });
-  });
-  return target;
+  };
+  for (const [formId, source, family] of [
+    ["capability-install-form", "bootstrap-capability-controls", "capability-install"],
+    ["capability-remove-form", "bootstrap-remove-controls", "capability-remove"]
+  ]) {
+    const form = resolvedDocument?.getElementById?.(formId);
+    if (!form || form.__bootstrapCapabilitySyncBound) continue;
+    form.__bootstrapCapabilitySyncBound = true;
+    const trigger = () => handler({ detail: { source, family } });
+    form.addEventListener("change", trigger);
+    form.addEventListener("input", trigger);
+  }
+  return resolvedTarget;
 }
 
 export function buildBootstrapCapabilityControlsSyncDeps({

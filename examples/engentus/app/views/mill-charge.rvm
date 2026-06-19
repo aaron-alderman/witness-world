@@ -21,8 +21,6 @@ chart MillChargeCrossSection of MillCharge {
   prop functionsModules = "/app-static/app/chart-functions/mill-charge-kernels.js"
   prop functionsExports = "millChargeKernels"
   prop pageBackground = "transparent"
-  prop discBackground = "#0d1a2e"
-  prop shellStroke = "#64748b"
 
   bindings {
     param.speedFrac from state MillChargeSpeedFrac

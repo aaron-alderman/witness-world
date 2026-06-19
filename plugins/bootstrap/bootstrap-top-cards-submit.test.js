@@ -18,10 +18,12 @@ test("top-cards submit contracts load from authored WTOML", async () => {
 
   assert.equal(source.includes('family = "identity-submit"'), true);
   assert.equal(source.includes('strategy = "identityId"'), true);
+  assert.equal(source.includes('family = "bootstrap-app-boundary"'), true);
   assert.equal(source.includes('family = "operator-import"'), true);
   assert.equal(Array.isArray(contracts["identity-submit"]), true);
   assert.equal(contracts["identity-submit"].length, 2);
   assert.equal(contracts["session-logout"][0].omitBody, true);
+  assert.equal(contracts["bootstrap-app-boundary"][0].omitBody, true);
 });
 
 test("top-cards submit request builder preserves identity, session, and operator contracts", () => {
@@ -84,6 +86,20 @@ test("top-cards submit request builder preserves identity, session, and operator
       },
       successText: "Identity updated.",
       resetOnSuccess: false,
+      followUp: "refresh"
+    }
+  );
+
+  assert.deepEqual(
+    buildBootstrapTopCardsSubmitRequest({
+      detail: {
+        family: "bootstrap-app-boundary"
+      },
+      contractsByFamily: bootstrapTopCardsSubmitContractsByFamily
+    }),
+    {
+      url: "/api/bootstrap/app-boundary",
+      body: undefined,
       followUp: "refresh"
     }
   );
@@ -176,6 +192,33 @@ test("top-cards submit helper refreshes identity/session flows and resets create
   assert.deepEqual(resets, ["identity-form"]);
   assert.equal(refreshed, 1);
   assert.equal(reloaded, 0);
+});
+
+test("top-cards submit helper prefers server status messages for bootstrap-boundary actions", async () => {
+  const statuses = [];
+  let refreshed = 0;
+
+  const ok = await runBootstrapTopCardsSubmit({
+    detail: {
+      family: "bootstrap-app-boundary",
+      statusId: "bootstrap-status"
+    },
+    contractsByFamily: bootstrapTopCardsSubmitContractsByFamily,
+    postJson: async () => ({
+      statusMessage: "Proposed authored app-boundary establishment for review."
+    }),
+    setStatus: (id, text) => statuses.push({ id, text }),
+    refresh: async () => {
+      refreshed += 1;
+    }
+  });
+
+  assert.equal(ok, true);
+  assert.deepEqual(statuses, [{
+    id: "bootstrap-status",
+    text: "Proposed authored app-boundary establishment for review."
+  }]);
+  assert.equal(refreshed, 1);
 });
 
 test("top-cards submit helper reloads operator flows without resetting forms", async () => {

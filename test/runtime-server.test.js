@@ -29,6 +29,8 @@ function createWitnessWorld({ routes = [], runtimePluginInstalls = [] } = {}) {
     allWitnesses() {
       return witnesses;
     },
+    async commitBufferedPersistence() {},
+    async flushPersistence() {},
     project(projector) {
       if (projector === moduleProjectors.servedRoutes) return routes;
       if (projector === moduleProjectors.runtimePluginInstallIndex) {
@@ -401,6 +403,257 @@ test("runtime server exposes startup telemetry and defers app snapshot boot behi
   assert.equal(startup.phases.find(phase => phase.id === "runtime.appSnapshot.initialBuild")?.status, "completed");
   assert.equal(startup.phases.find(phase => phase.id === "runtime.verificationPersistence")?.status, "completed");
 
+  await server.close();
+});
+
+test("runtime server waits for pre-ready startup persistence flush before returning", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let resolveFlush = null;
+  let flushCalled = false;
+  let flushed = false;
+  world.flushPersistence = () => {
+    flushCalled = true;
+    if (flushed) return Promise.resolve();
+    return new Promise(resolve => {
+      resolveFlush = () => {
+        flushed = true;
+        resolve();
+      };
+    });
+  };
+  let resolved = false;
+  const started = startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    runtimeProfile: "full",
+    startupPersistenceCommitMode: "pre-ready",
+    backgroundStartupPolicy: {
+      verificationPersistence: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 },
+      testMonitor: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 }
+    },
+    logger: { info() {}, error() {} }
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: (_world, hostId) => hostId === "backendHost"
+      ? new Set(["http.serve", "runtime.config"])
+      : new Set(["dom.render", "http.fetch"]),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    readRuntimePluginCatalog: async input => ({
+      pluginRoot: input.pluginRoot,
+      activeProfile: input.runtimeProfile,
+      packages: [],
+      summary: {},
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: [],
+      configuredPluginIds: [],
+      activePluginIds: [],
+      rejectedPlugins: [],
+      addedBundleIds: [],
+      selection: { hasBlockingErrors: false }
+    }),
+    loadRuntimePluginModules: async () => ({
+      bundleOverrides: {},
+      failures: [],
+      hasBlockingErrors: false
+    }),
+    applyRuntimePluginLoadState: catalog => catalog,
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: [] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render", "http.fetch"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      runtimeConfig: {},
+      providerRuntimes: {
+        "platform.testMonitor": {
+          async initialize() {},
+          close() {}
+        }
+      },
+      close() {},
+      visibleWitnesses: () => []
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map(),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    createRuntimeVerificationPersistence: async () => ({
+      inspect: () => ({ diagnostics: [] }),
+      close() {}
+    }),
+    httpModule: {
+      createServer() {
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+  started.then(() => {
+    resolved = true;
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(flushCalled, true);
+  assert.equal(resolved, false);
+
+  resolveFlush();
+  const server = await started;
+  assert.equal(server.ok, true);
+  await server.close();
+});
+
+test("runtime server defers post-ready startup persistence commit into background startup", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let resolveCommit = null;
+  let commitCalled = false;
+  world.commitBufferedPersistence = () => {
+    commitCalled = true;
+    return new Promise(resolve => {
+      resolveCommit = resolve;
+    });
+  };
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    runtimeProfile: "full",
+    startupPersistenceCommitMode: "post-ready",
+    backgroundStartupPolicy: {
+      verificationPersistence: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 },
+      testMonitor: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 }
+    },
+    logger: { info() {}, error() {} }
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: (_world, hostId) => hostId === "backendHost"
+      ? new Set(["http.serve", "runtime.config"])
+      : new Set(["dom.render", "http.fetch"]),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    readRuntimePluginCatalog: async input => ({
+      pluginRoot: input.pluginRoot,
+      activeProfile: input.runtimeProfile,
+      packages: [],
+      summary: {},
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: [],
+      configuredPluginIds: [],
+      activePluginIds: [],
+      rejectedPlugins: [],
+      addedBundleIds: [],
+      selection: { hasBlockingErrors: false }
+    }),
+    loadRuntimePluginModules: async () => ({
+      bundleOverrides: {},
+      failures: [],
+      hasBlockingErrors: false
+    }),
+    applyRuntimePluginLoadState: catalog => catalog,
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: [] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render", "http.fetch"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      runtimeConfig: {},
+      providerRuntimes: {
+        "platform.testMonitor": {
+          async initialize() {},
+          close() {}
+        }
+      },
+      close() {},
+      visibleWitnesses: () => []
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map(),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    createRuntimeVerificationPersistence: async () => ({
+      inspect: () => ({ diagnostics: [] }),
+      close() {}
+    }),
+    httpModule: {
+      createServer() {
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(server.getStartupTelemetry().meaningfulReadyAtMs != null, true);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(commitCalled, true);
+
+  let startupReadyResolved = false;
+  const startupReady = server.startupReady.then(snapshot => {
+    startupReadyResolved = true;
+    return snapshot;
+  });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(startupReadyResolved, false);
+
+  resolveCommit();
+  const snapshot = await startupReady;
+  assert.equal(snapshot.phases.find(phase => phase.id === "runtime.persistence.commit")?.status, "completed");
   await server.close();
 });
 

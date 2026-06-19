@@ -13,10 +13,13 @@ import {
   requestBootstrapStewardshipRevoke,
   resolveStewardshipTargetInput,
   requestSurfaceDefine,
+  requestCollectionDefine,
   requestProcessDefine,
   requestTypeDefine,
   requestProjectionDefine,
   requestMessageDefine,
+  requestBoundaryDefine,
+  requestPolicyDefine,
   requestPackageDefine,
   requestPackageRevisionDefine,
   requestPackageRevisionPublish,
@@ -28,10 +31,17 @@ import {
   requireCoveredAuthoringRefInput,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
+  requestBootstrapFrontendMigrateLegacy,
+  requestBootstrapFrontendUpliftLegacy,
   requestWidgetDefine,
+  requestWidgetReplace,
+  requestWidgetReplaceRollback,
   requestWidgetUpdate
 } from "./authoring-core-processes.js";
 import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
+import { frontendLegacyMigrationAuthorityTargets } from "../../src/frontend-legacy-migration.js";
+import { frontendLegacyUpliftAuthorityTargets } from "../../src/frontend-legacy-uplift.js";
+import { resolveAuthoringHandlerSupport } from "../../src/runtime-authoring-handler-support.js";
 
 function proposalIdPart(value, fallback = "target") {
   const normalized = String(value || "")
@@ -51,6 +61,7 @@ export function createAuthoringCoreBundleHandlers({
   world,
   backendHost,
   runtimeBundleSummary,
+  runtimeProfile,
   readJson,
   authoringServices,
   sendGateFailure,
@@ -65,6 +76,7 @@ export function createAuthoringCoreBundleHandlers({
   frontendHosts,
   send,
   sendJson,
+  getRuntimePluginCatalog = async () => ({ packages: [] }),
   buildPluginCapabilitySourceIndex,
   getRuntimeOperatorState = async () => null
 }) {
@@ -114,6 +126,18 @@ export function createAuthoringCoreBundleHandlers({
       ...(statusMessage ? { statusMessage } : {})
     });
   };
+  const currentRouteAuthoringSupport = async activeProfile => resolveAuthoringHandlerSupport({
+      supportedHandlerSets: [],
+      supportedHandlers,
+      supportedPageHandlers,
+      supportedHandlerMetadata,
+    pluginCatalog: await getRuntimePluginCatalog({
+      activeProfile: activeProfile ?? runtimeProfile,
+      serverRunnerId: null,
+      configuredPluginIds: [],
+      authoredPluginIds: []
+    })
+  });
   return {
     "identity.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
@@ -544,6 +568,41 @@ export function createAuthoringCoreBundleHandlers({
       });
     },
 
+    "collection.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const context = body && typeof body === "object" && !Array.isArray(body)
+        ? (body.context ?? null)
+        : null;
+      const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "collection.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Define a collection through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestCollectionDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { collection: result.collection, witness: result.witness });
+    },
+
     "process.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
@@ -682,6 +741,76 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       sendJson(res, result.status, { message: result.message, witness: result.witness });
+    },
+
+    "boundary.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const context = body && typeof body === "object" && !Array.isArray(body)
+        ? (body.context ?? null)
+        : null;
+      const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "boundary.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Define a boundary through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBoundaryDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { boundary: result.boundary, witness: result.witness });
+    },
+
+    "policy.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const context = body && typeof body === "object" && !Array.isArray(body)
+        ? (body.context ?? null)
+        : null;
+      const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "policy.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Define a policy through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestPolicyDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { policy: result.policy, witness: result.witness });
     },
 
     "package.create": async ({ req, res, requestActor }) => {
@@ -985,7 +1114,7 @@ export function createAuthoringCoreBundleHandlers({
       sendJson(res, result.status, { packageTransformer: result.packageTransformer, witness: result.witness });
     },
 
-    "route.create": async ({ req, res, requestActor }) => {
+    "route.create": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
         sendGateFailure(res, gate);
@@ -1009,12 +1138,141 @@ export function createAuthoringCoreBundleHandlers({
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapRouteDefine(world, { actor: gate.actor, backendHost, body, allowedHandlers: supportedHandlers, handlerMetadataById: supportedHandlerMetadata });
+      const routeAuthoringSupport = await currentRouteAuthoringSupport(appContext?.runtimeProfile);
+      const result = requestBootstrapRouteDefine(world, {
+        actor: gate.actor,
+        backendHost,
+        body,
+        allowedHandlers: routeAuthoringSupport.supportedHandlers,
+        handlerMetadataById: routeAuthoringSupport.supportedHandlerMetadata
+      });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
       }
       sendJson(res, result.status, { route: result.route, witness: result.witness });
+    },
+
+    "frontend.migrateLegacy": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const migration = frontendLegacyMigrationAuthorityTargets(world);
+      let denied = null;
+      for (const entry of migration.targets) {
+        const auth = ensureTargetAuthority(gate.actor, entry.target);
+        if (auth.ok) continue;
+        if (auth.status === 403) {
+          denied = entry;
+          break;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      if (denied) {
+        const proposal = requestAuthoringCoreProposalCreate({
+          actor: gate.actor,
+          targetProcess: "frontend.migrateLegacy",
+          targetKind: denied.targetKind,
+          targetId: denied.target,
+          body,
+          reason: "Migrate legacy frontend routes through witnessed proposal"
+        });
+        if (!proposal.ok) {
+          sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+          return;
+        }
+        sendJson(res, 202, {
+          ok: true,
+          status: "proposed",
+          proposal: proposal.proposal,
+          witness: proposal.witness,
+          preview: migration.preview
+        });
+        return;
+      }
+      const result = requestBootstrapFrontendMigrateLegacy(world, {
+        actor: gate.actor,
+        backendHost
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, {
+        ok: true,
+        actions: result.actions,
+        previewBefore: result.previewBefore,
+        previewAfter: result.previewAfter,
+        witness: result.witness
+      });
+    },
+
+    "frontend.upliftLegacy": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const uplift = frontendLegacyUpliftAuthorityTargets(world);
+      let denied = null;
+      for (const entry of uplift.targets) {
+        const auth = ensureTargetAuthority(gate.actor, entry.target);
+        if (auth.ok) continue;
+        if (auth.status === 403) {
+          denied = entry;
+          break;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      if (denied) {
+        const proposal = requestAuthoringCoreProposalCreate({
+          actor: gate.actor,
+          targetProcess: "frontend.upliftLegacy",
+          targetKind: denied.targetKind,
+          targetId: denied.target,
+          body,
+          reason: "Uplift legacy frontend routes through witnessed proposal"
+        });
+        if (!proposal.ok) {
+          sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+          return;
+        }
+        sendJson(res, 202, {
+          ok: true,
+          status: "proposed",
+          proposal: proposal.proposal,
+          witness: proposal.witness,
+          preview: uplift.preview
+        });
+        return;
+      }
+      const result = requestBootstrapFrontendUpliftLegacy(world, {
+        actor: gate.actor,
+        backendHost
+      });
+      if (!result.ok) {
+        sendJson(res, result.status ?? 400, {
+          error: result.error,
+          blocked: result.blocked ?? [],
+          previewBefore: result.previewBefore ?? uplift.preview,
+          previewAfter: result.previewAfter ?? null,
+          witness: result.witness ?? null
+        });
+        return;
+      }
+      sendJson(res, result.status, {
+        ok: true,
+        actions: result.actions,
+        previewBefore: result.previewBefore,
+        previewAfter: result.previewAfter,
+        witness: result.witness
+      });
     },
 
     "serve.create": async ({ req, res, requestActor }) => {
@@ -1122,6 +1380,85 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       sendJson(res, result.status, { widget: result.widget, witness: result.witness });
+    },
+
+    "widgets.replace": async ({ req, res, requestActor, params }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+      const widgetBody = body && typeof body === "object" && !Array.isArray(body)
+        ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "reason"))
+        : {};
+      const auth = ensureTargetAuthority(gate.actor, params.id || "");
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "widget.replace",
+            targetKind: "widget",
+            targetId: params.id || "",
+            body: { ...widgetBody, id: params.id || "" },
+            reason: reason || "Replace a widget through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal, "Proposed widget replacement for review.");
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestWidgetReplace(world, { actor: gate.actor, backendHost, body: { ...widgetBody, id: params.id || "" } });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, {
+        widget: result.widget,
+        migrationStatus: result.migrationStatus,
+        witness: result.witness,
+        witnesses: result.witnesses
+      });
+    },
+
+    "widgets.replace.rollback": async ({ req, res, requestActor, params }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+      const auth = ensureTargetAuthority(gate.actor, params.id || "");
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "widget.replace.rollback",
+            targetKind: "widget",
+            targetId: params.id || "",
+            body: { id: params.id || "" },
+            reason: reason || "Rollback a widget replacement through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal, "Proposed widget replacement rollback for review.");
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestWidgetReplaceRollback(world, { actor: gate.actor, backendHost, body: { id: params.id || "" } });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, {
+        widget: result.widget,
+        migrationStatus: result.migrationStatus,
+        witness: result.witness,
+        witnesses: result.witnesses
+      });
     }
   };
 }

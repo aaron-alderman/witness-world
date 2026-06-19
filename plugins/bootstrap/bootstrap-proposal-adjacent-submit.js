@@ -117,7 +117,8 @@ export function bindBootstrapProposalAdjacentSubmit({
   contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = event => {
     const detail = event?.detail || {};
     if (detail.source !== "bootstrap-proposal-adjacent-controls") return false;
@@ -134,6 +135,21 @@ export function bindBootstrapProposalAdjacentSubmit({
       contractsByFamily
     });
   };
-  resolvedTarget.addEventListener("witness:bootstrap-proposal-adjacent-submit", handler);
+  for (const detail of [
+    { source: "bootstrap-proposal-adjacent-controls", family: "runtime-plugin-install", formId: "runtime-plugin-install-proposal-form", statusId: "runtime-plugin-install-proposal-status" },
+    { source: "bootstrap-proposal-adjacent-controls", family: "runtime-plugin-remove", formId: "runtime-plugin-remove-proposal-form", statusId: "runtime-plugin-remove-proposal-status" },
+    { source: "bootstrap-proposal-adjacent-controls", family: "mcp-server", formId: "mcp-server-proposal-form", statusId: "mcp-server-proposal-status" },
+    { source: "bootstrap-proposal-adjacent-controls", family: "mcp-tool-install", formId: "mcp-tool-install-proposal-form", statusId: "mcp-tool-install-proposal-status" },
+    { source: "bootstrap-proposal-adjacent-controls", family: "mcp-tool-remove", formId: "mcp-tool-remove-proposal-form", statusId: "mcp-tool-remove-proposal-status" }
+  ]) {
+    const form = resolvedDocument?.getElementById?.(detail.formId);
+    if (!form || form.__bootstrapProposalAdjacentSubmitBound) continue;
+    form.__bootstrapProposalAdjacentSubmitBound = true;
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      void handler({ detail: { ...detail, ...data } });
+    });
+  }
   return handler;
 }

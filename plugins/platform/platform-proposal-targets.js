@@ -5,6 +5,8 @@ import {
   stagePlatformChangeSetEdits,
   validatePlatformChangeSet
 } from "./change-sets.js";
+import { pushPlatformBranch } from "./git-push.js";
+import { reviewPlatformRollbackProposal, shipPlatformBranch } from "./git-ship.js";
 import { moduleProjectors } from "../../src/modules.js";
 
 function failure(result, fallback) {
@@ -39,7 +41,8 @@ export async function executePlatformProposalTarget({
   world,
   actor,
   proposal,
-  body
+  body,
+  appContext = null
 }) {
   switch (proposal.targetProcess) {
     case "branch.create": {
@@ -74,6 +77,32 @@ export async function executePlatformProposalTarget({
         }
       });
       return { ok: true, witnessIds: [witness?.id].filter(Boolean) };
+    }
+    case "branch.push": {
+      const result = await pushPlatformBranch(world, {
+        actor,
+        branchId: body.branchId || proposal.targetId || "",
+        remoteName: body.remoteName ?? "origin",
+        dryRun: body.dryRun === true,
+        gitBranchName: body.gitBranchName ?? null
+      });
+      if (!result.ok) return failure(result, "platform branch push failed");
+      return { ok: true, witnessIds: [result.witness?.id].filter(Boolean) };
+    }
+    case "branch.ship": {
+      const result = await shipPlatformBranch(world, {
+        actor,
+        branchId: body.branchId || proposal.targetId || "",
+        releaseChannelId: body.releaseChannelId ?? "releaseChannel:local",
+        proposalId: proposal.id ?? null,
+        appContext,
+        allowPendingProposal: true
+      });
+      if (!result.ok) return failure(result, "platform branch ship failed");
+      return { ok: true, witnessIds: [result.witness?.id].filter(Boolean) };
+    }
+    case "branch.rollback": {
+      return reviewPlatformRollbackProposal(world, { actor, proposal, body });
     }
     case "changeSet.create": {
       const result = createPlatformChangeSet(world, {
@@ -111,6 +140,25 @@ export async function executePlatformProposalTarget({
       });
       if (!result.ok) return failure(result, "platform change set apply failed");
       return { ok: true, witnessIds: [result.witness?.id].filter(Boolean) };
+    }
+    case "defect.create": {
+      const defectId = String(body.defectId || proposal.targetId || "").trim();
+      if (!defectId) return failure({ status: 400, error: "defectId is required" }, "platform defect proposal failed");
+      const witness = world.observe({
+        process: "platform.defect.create.reviewed",
+        actor,
+        claims: [],
+        body: {
+          proposalId: proposal.id ?? null,
+          defectId,
+          clusterId: body.clusterId ? String(body.clusterId) : null,
+          gateId: body.gateId ? String(body.gateId) : null,
+          branchId: body.branchId ? String(body.branchId) : null,
+          changeSetId: body.changeSetId ? String(body.changeSetId) : null,
+          reviewedAt: nowIso()
+        }
+      });
+      return { ok: true, witnessIds: [witness?.id].filter(Boolean) };
     }
     default:
       return null;

@@ -282,6 +282,8 @@ function renderClientEngine(program) {
     'defineWidget',
     'updateWidget',
     'widget.update',
+    'widget.replace',
+    'widget.replace.rollback',
     'attachWidget',
     'defineWidgetVersion',
     'activateWidgetVersion',
@@ -515,6 +517,14 @@ function renderClientEngine(program) {
   };
   const selectedSurfaceWidgetVersionState = () => selectedSurfaceWidgetNode()?.widgetVersionState || null;
   const selectedSurfaceWidgetVersions = () => selectedSurfaceWidgetNode()?.widgetVersions || [];
+  const selectedSurfaceWidgetEvolution = () => selectedSurfaceWidgetNode()?.widgetEvolution || null;
+  const currentPreviewSessionId = () => {
+    try {
+      return new URL(window.location.href).searchParams.get('previewSessionId')?.trim() || '';
+    } catch {
+      return '';
+    }
+  };
   const currentSurfaceIdentityNode = () => {
     const identityId = typeof state.session?.identity === 'string' ? state.session.identity : '';
     return identityId ? (state.surfaceInspectorGraphById?.[identityId] || null) : null;
@@ -1299,6 +1309,163 @@ function renderClientEngine(program) {
     const body = await response.json().catch(() => ({}));
     return { ok: response.ok, status: response.status, body };
   };
+  const createAppPreviewSession = async () => {
+    const url = '/api/runtime/app-preview-sessions';
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
+      method: 'POST'
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body };
+  };
+  const patchAppPreviewSessionCandidates = async ({ sessionId, candidates }) => {
+    const url = '/api/runtime/app-preview-sessions/' + encodeURIComponent(sessionId) + '/candidates';
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ candidates: Array.isArray(candidates) ? candidates : [] })
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body };
+  };
+  const deleteAppPreviewSession = async ({ sessionId }) => {
+    const url = '/api/runtime/app-preview-sessions/' + encodeURIComponent(sessionId);
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
+      method: 'DELETE'
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body };
+  };
+  const replaceSurfaceWidget = async ({ id, input }) => {
+    const url = '/api/widgets/' + encodeURIComponent(id) + '/replace';
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input || {})
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body };
+  };
+  const rollbackSurfaceWidgetReplace = async ({ id, reason = '' }) => {
+    const url = '/api/widgets/' + encodeURIComponent(id) + '/replace/rollback';
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(reason ? { reason } : {})
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body };
+  };
+  const evolutionReplaceFieldDefs = [
+    { name: 'text', label: 'Text', control: 'textarea' },
+    { name: 'title', label: 'Title', control: 'text' },
+    { name: 'class', label: 'Class', control: 'text' },
+    { name: 'hidden', label: 'Hidden', control: 'checkbox' },
+    { name: 'role', label: 'Role', control: 'text' },
+    { name: 'href', label: 'Href', control: 'text' },
+    { name: 'name', label: 'Name', control: 'text' },
+    { name: 'placeholder', label: 'Placeholder', control: 'text' },
+    { name: 'autocomplete', label: 'Autocomplete', control: 'text' },
+    { name: 'type', label: 'Type', control: 'text' },
+    { name: 'action', label: 'Action', control: 'text' },
+    { name: 'label', label: 'Label', control: 'text' },
+    { name: 'valueType', label: 'Value Type', control: 'text' },
+    { name: 'eventSoul', label: 'Event Soul', control: 'text' },
+    { name: 'eventVersion', label: 'Event Version', control: 'text' },
+    { name: 'dataId', label: 'Data Id', control: 'text', propKey: 'data-id' },
+    { name: 'dataDone', label: 'Data Done', control: 'text', propKey: 'data-done' },
+    { name: 'guidanceTarget', label: 'Guidance Target', control: 'text', propKey: 'data-guidance-target' },
+    { name: 'template', label: 'Template', control: 'checkbox' },
+    { name: 'level', label: 'Level', control: 'number' }
+  ];
+  const readSurfaceInspectorReplaceInput = form => {
+    const formData = new FormData(form);
+    const input = {
+      kind: String(formData.get('kind') ?? '').trim()
+    };
+    for (const field of evolutionReplaceFieldDefs) {
+      if (field.control === 'checkbox') {
+        input[field.name] = form.querySelector('[name="' + CSS.escape(field.name) + '"]')?.checked === true;
+        continue;
+      }
+      const value = String(formData.get(field.name) ?? '');
+      if (field.control === 'number') {
+        input[field.name] = value === '' ? '' : Number(value);
+        continue;
+      }
+      input[field.name] = value;
+    }
+    return input;
+  };
+  const renderSurfaceInspectorEvolution = () => {
+    const widgetId = selectedSurfaceWidgetId();
+    const authoredWidget = selectedSurfaceWidgetAuthored();
+    const evolution = selectedSurfaceWidgetEvolution();
+    if (!widgetId || !authoredWidget || !evolution) return '';
+    const authority = selectedSurfaceWidgetEditAuthority();
+    const currentActorPresent = Boolean(currentActor());
+    const previewSessionId = currentPreviewSessionId();
+    const evolutionDraft = state.surfaceInspectorEvolutionDraft?.widgetId === widgetId
+      ? state.surfaceInspectorEvolutionDraft
+      : null;
+    const replaceFieldsHtml = evolutionReplaceFieldDefs.map(field => {
+      const propKey = field.propKey || field.name;
+      const value = Object.prototype.hasOwnProperty.call(evolutionDraft?.input || {}, field.name)
+        ? evolutionDraft.input[field.name]
+        : authoredWidget?.props?.[propKey];
+      if (field.control === 'checkbox') {
+        return '<label class="surface-field"><span>' + escapeHtml(field.label) + '</span><input name="' + escapeHtml(field.name) + '" type="checkbox"' + (value === true ? ' checked' : '') + ' /></label>';
+      }
+      if (field.control === 'textarea') {
+        return '<label class="surface-field"><span>' + escapeHtml(field.label) + '</span><textarea name="' + escapeHtml(field.name) + '" rows="3">' + escapeHtml(String(value ?? '')) + '</textarea></label>';
+      }
+      return '<label class="surface-field"><span>' + escapeHtml(field.label) + '</span><input name="' + escapeHtml(field.name) + '"' + (field.control === 'number' ? ' type="number"' : '') + ' value="' + escapeHtml(String(value ?? '')) + '" /></label>';
+    }).join('');
+    if (evolution.mode === 'versioned') {
+      const rows = Array.isArray(evolution.versionCandidates) ? evolution.versionCandidates.filter(row => !row.isActive) : [];
+      if (!rows.length) return '<section><div class="surface-inspector-meta">Replace / Upgrade</div><div class="surface-inspector-summary">No authored upgrade targets are available for this versioned widget yet.</div></section>';
+      const selectedVersion = typeof evolutionDraft?.input?.version === 'string' && evolutionDraft.input.version
+        ? evolutionDraft.input.version
+        : (rows[0]?.version || '');
+      const options = rows.map(row => '<option value="' + escapeHtml(row.version || '') + '"' + (row.version === selectedVersion ? ' selected' : '') + '>' + escapeHtml((row.version || '') + (row.migrationStatus ? ' [' + row.migrationStatus + ']' : '')) + '</option>').join('');
+      const selected = rows.find(row => row.version === selectedVersion) || rows[0] || null;
+      const blocked = selected && (selected.migrationStatus === 'blocked' || selected.migrationStatus === 'forkRequired');
+      return '<section><div class="surface-inspector-meta">Replace / Upgrade</div>'
+        + (previewSessionId ? '<div class="surface-inspector-summary">Rendering from preview session ' + escapeHtml(previewSessionId) + '.</div>' : '')
+        + '<form class="surface-form" data-surface-inspector-evolution-form data-surface-inspector-evolution-mode="versioned" data-widget-id="' + escapeHtml(widgetId) + '" data-widget-soul="' + escapeHtml(widgetId) + '">'
+        + '<label class="surface-field"><span>Target Version</span><select name="version">' + options + '</select></label>'
+        + (currentActorPresent && !authority.ok ? '<label class="surface-field"><span>Reason</span><input name="reason" placeholder="Why should this version change?" /></label>' : '')
+        + '<div class="surface-inspector-summary">' + escapeHtml(blocked ? 'This authored transition is deferred and cannot be applied directly from the inspector.' : 'Preview or apply the authored version transition through shared widget-version rules.') + '</div>'
+        + '<div class="surface-actions-compact">'
+        + (!blocked ? '<button type="submit" data-surface-inspector-evolution-preview>Preview Upgrade</button>' : '')
+        + (!blocked ? '<button type="button" data-surface-inspector-evolution-apply>' + escapeHtml(authority.ok ? 'Apply Upgrade' : 'Propose Upgrade') + '</button>' : '')
+        + (previewSessionId ? '<button type="button" data-surface-inspector-evolution-discard>Discard Preview</button>' : '')
+        + '</div>'
+        + '</form>'
+        + (selectedSurfaceWidgetVersionState()?.rollbackAvailable
+          ? '<div class="surface-actions-compact"><button type="button" data-surface-inspector-evolution-version-rollback="' + escapeHtml(widgetId) + '">' + escapeHtml(authority.ok ? ('Rollback To ' + (selectedSurfaceWidgetVersionState()?.rollbackVersion || 'previous')) : ('Propose Rollback To ' + (selectedSurfaceWidgetVersionState()?.rollbackVersion || 'previous'))) + '</button></div>'
+          : '')
+        + '</section>';
+    }
+    const kindOptions = Array.isArray(evolution.kindOptions) ? evolution.kindOptions : [];
+    const selectedKind = typeof evolutionDraft?.input?.kind === 'string' && evolutionDraft.input.kind
+      ? evolutionDraft.input.kind
+      : authoredWidget.kind;
+    return '<section><div class="surface-inspector-meta">Replace / Upgrade</div>'
+      + (previewSessionId ? '<div class="surface-inspector-summary">Rendering from preview session ' + escapeHtml(previewSessionId) + '.</div>' : '')
+      + '<form class="surface-form" data-surface-inspector-evolution-form data-surface-inspector-evolution-mode="replace" data-widget-id="' + escapeHtml(widgetId) + '">'
+      + '<label class="surface-field"><span>Replacement Kind</span><select name="kind">' + kindOptions.map(kind => '<option value="' + escapeHtml(kind) + '"' + (kind === selectedKind ? ' selected' : '') + '>' + escapeHtml(kind) + '</option>').join('') + '</select></label>'
+      + replaceFieldsHtml
+      + (currentActorPresent && !authority.ok ? '<label class="surface-field"><span>Reason</span><input name="reason" placeholder="Why should this shared widget change?" /></label>' : '')
+      + '<div class="surface-actions-compact"><button type="submit" data-surface-inspector-evolution-preview>Preview Replace</button><button type="button" data-surface-inspector-evolution-apply>' + escapeHtml(authority.ok ? 'Apply Replace' : 'Propose Replace') + '</button>' + (previewSessionId ? '<button type="button" data-surface-inspector-evolution-discard>Discard Preview</button>' : '') + '</div>'
+      + '</form>'
+      + (evolution.rollbackAvailable
+        ? '<div class="surface-actions-compact"><button type="button" data-surface-inspector-evolution-replace-rollback="' + escapeHtml(widgetId) + '">' + escapeHtml(authority.ok ? 'Rollback Replace' : 'Propose Rollback Replace') + '</button></div>'
+        : '')
+      + (evolution.latestReplaceWitness?.migrationStatus
+        ? '<div class="surface-inspector-summary">Latest replace status: ' + escapeHtml(evolution.latestReplaceWitness.migrationStatus) + '.</div>'
+        : '')
+      + '</section>';
+  };
   const renderSurfaceInspectorEditor = () => renderSurfaceInspectorEditorView({
     widgetId: selectedSurfaceWidgetId(),
     authoredWidget: selectedSurfaceWidgetAuthored(),
@@ -1380,9 +1547,219 @@ function renderClientEngine(program) {
       runtimeCorrelationRows: runtimeCorrelation?.rows || [],
       runtimeCorrelationOps: runtimeCorrelation?.ops || [],
       runtimeCorrelationUnavailableReason: runtimeCorrelation?.unavailableReason || '',
+      evolutionHtml: renderSurfaceInspectorEvolution(),
       childCreateHtml: renderSurfaceInspectorChildCreate(),
       editorHtml: renderSurfaceInspectorEditor(),
       escapeHtml
+    });
+  };
+  const clearSurfaceInspectorPreview = async ({ widgetId, statusMessage = 'Discarded preview.' } = {}) => {
+    const previewSessionId = currentPreviewSessionId();
+    if (previewSessionId) await deleteAppPreviewSession({ sessionId: previewSessionId });
+    state.surfaceInspectorEvolutionDraft = null;
+    setQueryParam({ name: 'previewSessionId', value: '' });
+    invalidateSurfaceInspectorGraph();
+    invalidateSurfaceInspectorWidgets();
+    await refreshProjection();
+    if (widgetId) {
+      await selectSurfaceInspectorWidget(widgetId, {
+        refreshGraph: true,
+        statusMessage
+      });
+    }
+  };
+  const ensureSurfaceInspectorPreviewSession = async () => {
+    const existing = currentPreviewSessionId();
+    if (existing) return existing;
+    const created = await createAppPreviewSession();
+    if (!created?.ok) throw new Error(created?.body?.error || 'Preview session creation failed.');
+    const sessionId = created?.body?.previewSession?.id || '';
+    if (!sessionId) throw new Error('Preview session id missing.');
+    setQueryParam({ name: 'previewSessionId', value: sessionId });
+    return sessionId;
+  };
+  const storeSurfaceInspectorEvolutionDraft = form => {
+    if (!form) return;
+    const widgetId = form.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
+    const mode = form.getAttribute('data-surface-inspector-evolution-mode') || 'replace';
+    if (!widgetId) return;
+    const input = mode === 'versioned'
+      ? { version: String(new FormData(form).get('version') ?? '').trim() }
+      : readSurfaceInspectorReplaceInput(form);
+    state.surfaceInspectorEvolutionDraft = {
+      widgetId,
+      mode,
+      input
+    };
+  };
+  const bindSurfaceInspectorEvolutionActions = overlay => {
+    overlay?.querySelectorAll?.('[data-surface-inspector-evolution-form]')?.forEach?.(form => {
+      if (!form.__surfaceInspectorEvolutionDraftBound) {
+        form.__surfaceInspectorEvolutionDraftBound = true;
+        const syncDraft = () => storeSurfaceInspectorEvolutionDraft(form);
+        form.addEventListener?.('input', syncDraft);
+        form.addEventListener?.('change', syncDraft);
+      }
+      form.addEventListener?.('submit', async event => {
+        event.preventDefault?.();
+        const widgetId = form.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
+        const mode = form.getAttribute('data-surface-inspector-evolution-mode') || 'replace';
+        const authority = selectedSurfaceWidgetEditAuthority();
+        try {
+          const previewSessionId = await ensureSurfaceInspectorPreviewSession();
+          storeSurfaceInspectorEvolutionDraft(form);
+          const candidate = mode === 'versioned'
+            ? {
+                kind: 'widget.version.activate',
+                input: {
+                  soul: form.getAttribute('data-widget-soul') || widgetId,
+                  version: String(new FormData(form).get('version') ?? '').trim()
+                }
+              }
+            : {
+                kind: 'widget.replace',
+                input: {
+                  id: widgetId,
+                  ...readSurfaceInspectorReplaceInput(form)
+                }
+              };
+          state.surfaceInspectorEvolutionDraft = {
+            widgetId,
+            mode,
+            input: structuredClone(candidate.input)
+          };
+          setSurfaceInspectorStatus('Preparing preview for ' + widgetId + '...', 'ok');
+          updateSurfaceInspectorUi();
+          const result = await patchAppPreviewSessionCandidates({ sessionId: previewSessionId, candidates: [candidate] });
+          if (!result?.ok) throw new Error(result?.body?.error || 'Preview update failed.');
+          const previewResult = Array.isArray(result?.body?.results) ? result.body.results[0] : null;
+          setQueryParam({ name: 'previewSessionId', value: previewSessionId });
+          invalidateSurfaceInspectorGraph();
+          invalidateSurfaceInspectorWidgets();
+          await refreshProjection();
+          await selectSurfaceInspectorWidget(widgetId, {
+            refreshGraph: true,
+            statusMessage: previewResult?.ok
+              ? ('Preview active for ' + widgetId + (previewResult?.migrationStatus ? ' [' + previewResult.migrationStatus + '].' : '.'))
+              : (previewResult?.reason || 'Preview candidate blocked.')
+          });
+          if (!previewResult?.ok) {
+            setSurfaceInspectorStatus(previewResult?.reason || 'Preview candidate blocked.', 'error');
+            updateSurfaceInspectorUi();
+          } else if (!authority.ok) {
+            setSurfaceInspectorStatus('Preview active. Apply will create a proposal because direct mutation is blocked here.', 'ok');
+            updateSurfaceInspectorUi();
+          }
+        } catch (error) {
+          setSurfaceInspectorStatus(error instanceof Error ? error.message : String(error), 'error');
+          updateSurfaceInspectorUi();
+        }
+      });
+    });
+    overlay?.querySelectorAll?.('[data-surface-inspector-evolution-apply]')?.forEach?.(button => {
+      button.addEventListener?.('click', async event => {
+        event.preventDefault?.();
+        const form = button.closest('[data-surface-inspector-evolution-form]');
+        if (!form) return;
+        const widgetId = form.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
+        const mode = form.getAttribute('data-surface-inspector-evolution-mode') || 'replace';
+        const authority = selectedSurfaceWidgetEditAuthority();
+        const formData = new FormData(form);
+        const reason = String(formData.get('reason') ?? '').trim();
+        setSurfaceInspectorStatus((authority.ok ? 'Applying ' : 'Proposing ') + widgetId + '...', 'ok');
+        updateSurfaceInspectorUi();
+        const result = mode === 'versioned'
+          ? (authority.ok
+            ? await activateSurfaceWidgetVersion({
+                soul: form.getAttribute('data-widget-soul') || widgetId,
+                version: String(formData.get('version') ?? '').trim()
+              })
+            : await proposeSurfaceWidgetVersionAction({
+                targetProcess: 'widgetVersion.activate',
+                soul: form.getAttribute('data-widget-soul') || widgetId,
+                version: String(formData.get('version') ?? '').trim(),
+                reason
+              }))
+          : await replaceSurfaceWidget({
+              id: widgetId,
+              input: {
+                id: widgetId,
+                ...readSurfaceInspectorReplaceInput(form),
+                ...(authority.ok ? {} : { reason })
+              }
+            });
+        if (!result?.ok) {
+          setSurfaceInspectorStatus(result?.body?.error || 'Widget evolution apply failed.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        if (result.status === 202) {
+          setSurfaceInspectorStatus('Created proposal ' + (result?.body?.proposal?.id || result?.proposalId || 'proposal') + '.', 'ok');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        await clearSurfaceInspectorPreview({
+          widgetId,
+          statusMessage: mode === 'versioned'
+            ? ('Applied version change for ' + widgetId + '.')
+            : ('Applied replacement for ' + widgetId + '.')
+        });
+      });
+    });
+    overlay?.querySelectorAll?.('[data-surface-inspector-evolution-discard]')?.forEach?.(button => {
+      button.addEventListener?.('click', async event => {
+        event.preventDefault?.();
+        const widgetId = button.closest('[data-surface-inspector-evolution-form]')?.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
+        await clearSurfaceInspectorPreview({ widgetId, statusMessage: 'Discarded preview for ' + widgetId + '.' });
+      });
+    });
+    overlay?.querySelectorAll?.('[data-surface-inspector-evolution-replace-rollback]')?.forEach?.(button => {
+      button.addEventListener?.('click', async event => {
+        event.preventDefault?.();
+        const widgetId = button.getAttribute('data-surface-inspector-evolution-replace-rollback') || selectedSurfaceWidgetId();
+        const authority = selectedSurfaceWidgetEditAuthority();
+        const result = authority.ok
+          ? await rollbackSurfaceWidgetReplace({ id: widgetId })
+          : await rollbackSurfaceWidgetReplace({ id: widgetId, reason: 'Rollback latest widget replacement' });
+        if (!result?.ok) {
+          setSurfaceInspectorStatus(result?.body?.error || 'Widget replacement rollback failed.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        if (result.status === 202) {
+          setSurfaceInspectorStatus('Created proposal ' + (result?.body?.proposal?.id || result?.proposalId || 'proposal') + '.', 'ok');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        await clearSurfaceInspectorPreview({ widgetId, statusMessage: 'Rolled back replacement for ' + widgetId + '.' });
+      });
+    });
+    overlay?.querySelectorAll?.('[data-surface-inspector-evolution-version-rollback]')?.forEach?.(button => {
+      button.addEventListener?.('click', async event => {
+        event.preventDefault?.();
+        const soul = button.getAttribute('data-surface-inspector-evolution-version-rollback') || selectedSurfaceWidgetId();
+        const authority = selectedSurfaceWidgetEditAuthority();
+        const versionState = selectedSurfaceWidgetVersionState();
+        const result = authority.ok
+          ? await rollbackSurfaceWidgetVersion({ soul })
+          : await proposeSurfaceWidgetVersionAction({
+              targetProcess: 'widgetVersion.rollback',
+              soul,
+              version: versionState?.rollbackVersion || '',
+              reason: 'Rollback widget version'
+            });
+        if (!result?.ok) {
+          setSurfaceInspectorStatus(result?.body?.error || 'Widget version rollback failed.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        if (result.status === 202) {
+          setSurfaceInspectorStatus('Created proposal ' + (result?.body?.proposal?.id || result?.proposalId || 'proposal') + '.', 'ok');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        await clearSurfaceInspectorPreview({ widgetId: soul, statusMessage: 'Rolled back version for ' + soul + '.' });
+      });
     });
   };
   const renderSurfaceInspectorMenu = () => {
@@ -1820,6 +2197,7 @@ function renderClientEngine(program) {
       installSurfaceCapability,
       removeSurfaceCapability
     });
+    bindSurfaceInspectorEvolutionActions(overlay);
     if (state.surfaceCommandOpen && state.surfaceCommandFocusRequested !== false) {
       const input = overlay.querySelector('[data-surface-command-input]');
       if (input) {
@@ -3238,12 +3616,27 @@ function renderClientEngine(program) {
         copyRuntimeInspection: async () => {
           const inspection = window.world || window.__surfaceRuntimeInspection || null;
           const payload = typeof inspection?.inspect === 'function' ? inspection.inspect() : null;
-          const json = JSON.stringify(payload, null, 2);
-          if (window.navigator?.clipboard?.writeText) {
-            try {
-              await window.navigator.clipboard.writeText(json);
-            } catch {}
-          }
+          const shell = window.__sourceryCompanionShell || null;
+          const surfaceSegment = typeof shell?.inspection?.activeSurfaceId === 'string' && shell.inspection.activeSurfaceId.trim()
+            ? shell.inspection.activeSurfaceId.trim().replace(/[\\/:*?"<>|]+/g, '-')
+            : 'surface';
+          const routeSegment = typeof window.location?.pathname === 'string' && window.location.pathname.trim()
+            ? window.location.pathname.trim().replace(/[\\/:*?"<>|]+/g, '-')
+            : 'route';
+          if (!document?.createElement || !document.body?.appendChild) return;
+          const BlobCtor = window.Blob || globalThis?.Blob;
+          const URLApi = window.URL || globalThis?.URL;
+          if (typeof BlobCtor !== 'function' || typeof URLApi?.createObjectURL !== 'function') return;
+          const blob = new BlobCtor([JSON.stringify(payload ?? null, null, 2)], { type: 'application/json' });
+          const href = URLApi.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = href;
+          anchor.download = 'sourcery-' + (surfaceSegment || 'surface') + '-' + (routeSegment || 'route') + '.json';
+          anchor.hidden = true;
+          document.body.appendChild(anchor);
+          anchor.click?.();
+          anchor.parentNode?.removeChild?.(anchor);
+          URLApi.revokeObjectURL?.(href);
         }
       });
     };
@@ -3586,21 +3979,6 @@ function renderClientEngine(program) {
     if (replace === false) window.history.pushState({}, '', url.toString());
     else window.history.replaceState({}, '', url.toString());
   };
-  const dispatchDomEvent = ({ event, eventName, detail = null, target = 'window', bubbles = false, cancelable = false, composed = false }) => {
-    const name = String(eventName || event || '').trim();
-    if (!name) throw new Error('dispatchDomEvent requires an event name');
-    const resolvedTarget = target === 'document'
-      ? document
-      : target === 'body'
-        ? document.body
-        : window;
-    resolvedTarget?.dispatchEvent?.(new CustomEvent(name, {
-      detail,
-      bubbles: Boolean(bubbles),
-      cancelable: Boolean(cancelable),
-      composed: Boolean(composed)
-    }));
-  };
   const domEventPayload = target => {
     const data = { ...(target?.dataset || {}) };
     if (target && 'name' in target && target.name) data.name = target.name;
@@ -3813,7 +4191,7 @@ function renderClientEngine(program) {
         if (step.op === 'refreshProjection') await refreshProjection();
         if (step.op === 'navigate') window.location.assign(p.url || p.href || window.location.href);
         if (step.op === 'setQueryParam') setQueryParam(p);
-        if (step.op === 'dispatchDomEvent') dispatchDomEvent(p);
+        if (step.op === 'dispatchDomEvent') throw new Error('dispatchDomEvent has been retired; use native page.surface refresh, navigation, boundary, policy, or capability semantics instead');
         if (step.op === 'reloadPage') window.location.reload();
         if (step.op === 'postJson' || step.op === 'patchJson' || step.op === 'deleteJson') {
           const method = step.op === 'postJson' ? (p.method || 'POST') : step.op === 'patchJson' ? (p.method || 'PATCH') : (p.method || 'DELETE');

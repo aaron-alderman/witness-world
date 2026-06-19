@@ -105,6 +105,67 @@ test("bootstrap read models expose governance route and proposal-target ledgers 
   }]);
 });
 
+test("bootstrap read models expose canonical app-boundary status and plan summary", async () => {
+  const world = createWorld();
+
+  const { getBootstrapState } = createBootstrapReadModels({
+    world,
+    runtimeProfile: "minimal",
+    runtimeBundleSummary: {
+      routes: [{ method: "GET", path: "/_bootstrap", handler: "bootstrap.page" }]
+    },
+    supportedHandlers: [],
+    supportedHandlerMetadata: {},
+    supportedPageHandlers: [],
+    supportedHandlerSets: [],
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    backendHosts: ["backendHost"],
+    frontendHosts: ["frontendHost"],
+    getRuntimePluginCatalog: async () => ({
+      packages: [
+        {
+          id: "plugin.authoring",
+          validation: { ok: true, errors: [] },
+          execution: { executable: true },
+          compatibility: { compatible: true }
+        },
+        {
+          id: "plugin.inspect",
+          validation: { ok: true, errors: [] },
+          execution: { executable: true },
+          compatibility: { compatible: true }
+        }
+      ],
+      addedBundleIds: [],
+      summary: null
+    }),
+    buildPluginCapabilitySourceIndex: ({ capabilityCatalog = [] } = {}) => ({
+      capabilityCatalog,
+      capabilityPackageSources: []
+    })
+  });
+
+  const state = await getBootstrapState("aaron", {
+    runtimeStartupMode: "bootstrap",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    bootstrapOnly: true
+  });
+  assert.equal(state.appBoundary.status, "missing");
+  assert.deepEqual(state.appBoundary.missingKinds, [
+    "serverRunner",
+    "runtimePluginInstall",
+    "surface",
+    "route",
+    "serveMount"
+  ]);
+  assert.equal(state.appBoundary.planSummary.serverRunners[0].id, "demo_server");
+  assert.equal(state.appBoundary.planSummary.routes[0].handler, "page.surface");
+  assert.equal(state.appBoundary.composition.root.source, "bootstrap-fallback");
+  assert.equal(state.appBoundary.composition.bootstrap.path, "/_bootstrap");
+});
+
 test("bootstrap read models expose legacy capability migration state as first-class authored nouns", async () => {
   const world = createWorld();
   applyWitnessToml(world, `
@@ -170,6 +231,156 @@ placement = ["context"]
     row.action === "definition.create"
     && row.capabilityId === "cap.legacyOnly"
   ), true);
+});
+
+test("bootstrap read models expose legacy frontend migration state and compatibility bridge inventory", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "home_route"
+path = "/"
+serves = "home_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "page_root", frontendProgram = "landing_program" }
+`);
+
+  const { getBootstrapState } = createBootstrapReadModels({
+    world,
+    runtimeProfile: "minimal",
+    runtimeBundleSummary: null,
+    supportedHandlers: [],
+    supportedHandlerMetadata: {},
+    supportedPageHandlers: [],
+    supportedHandlerSets: [],
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    backendHosts: [],
+    frontendHosts: [],
+    getRuntimePluginCatalog: async () => ({
+      packages: [],
+      addedBundleIds: [],
+      summary: null
+    }),
+    buildPluginCapabilitySourceIndex: ({ capabilityCatalog = [] } = {}) => ({
+      capabilityCatalog,
+      capabilityPackageSources: []
+    })
+  });
+
+  const state = await getBootstrapState("aaron", null);
+  assert.equal(state.legacyFrontendMigration.compatibilityMode, "bridge-active");
+  assert.equal(state.legacyFrontendMigration.pending.some(row =>
+    row.action === "route.rewrite"
+    && row.routeId === "home_route"
+  ), true);
+  assert.equal(state.compatibilityBridges.some(row =>
+    row.id === "compatibilityBridge:legacyFrontend.pageHomeShim"
+    && row.status === "active"
+  ), true);
+});
+
+test("bootstrap read models expose legacy frontend native uplift state as first-class authored nouns", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "home_route"
+path = "/"
+serves = "home_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "login_page", frontendProgram = "login_program" }
+
+[[widget]]
+actor = "system"
+id = "login_page"
+kind = "Page"
+props = { title = "Login" }
+
+[[widget]]
+actor = "system"
+id = "login_form"
+kind = "Form"
+props = { }
+
+[[widget]]
+actor = "system"
+id = "email_input"
+kind = "Input"
+props = { name = "email" }
+
+[[widget]]
+actor = "system"
+id = "submit_button"
+kind = "Button"
+props = { text = "Sign in", type = "submit" }
+
+[[attachWidget]]
+actor = "system"
+parent = "login_page"
+child = "login_form"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "login_form"
+child = "email_input"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "login_form"
+child = "submit_button"
+order = 1
+
+[[frontendProgram]]
+actor = "system"
+id = "login_program"
+rootWidget = "login_page"
+
+[[frontendStep]]
+actor = "system"
+program = "login_program"
+event = "submit:login_form"
+order = 0
+op = "readForm"
+params = { widget = "login_form", into = "credentials" }
+`);
+
+  const { getBootstrapState } = createBootstrapReadModels({
+    world,
+    runtimeProfile: "minimal",
+    runtimeBundleSummary: null,
+    supportedHandlers: [],
+    supportedHandlerMetadata: {},
+    supportedPageHandlers: [],
+    supportedHandlerSets: [],
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    backendHosts: [],
+    frontendHosts: [],
+    getRuntimePluginCatalog: async () => ({
+      packages: [],
+      addedBundleIds: [],
+      summary: null
+    }),
+    buildPluginCapabilitySourceIndex: ({ capabilityCatalog = [] } = {}) => ({
+      capabilityCatalog,
+      capabilityPackageSources: []
+    })
+  });
+
+  const state = await getBootstrapState("aaron", null);
+  assert.equal(state.legacyFrontendUplift.compatibilityMode, "bridge-active");
+  assert.equal(state.legacyFrontendUplift.pending.some(row =>
+    row.action === "route.rewrite"
+    && row.routeId === "home_route"
+    && row.authoredId === "legacyUplift.home_route.surface.root"
+    && row.nextHandler === "page.surface"
+  ), true);
+  assert.equal(state.legacyFrontendUplift.blocked.length, 0);
 });
 
 test("bootstrap read models expose capability revision history rows for explicit update and rollback review", async () => {
@@ -338,6 +549,57 @@ targetId = "dom.render"
   assert.equal(preview.status, "glue-required");
   assert.deepEqual(preview.relatedTransformerIds, ["packageTransformer.inspect.v1-to-v2"]);
   assert.equal(preview.bundle.revisionRecord.id, "packageRevision.plugin.inspect.v2");
+});
+
+test("bootstrap read models expose collections in authored state and context-bindable targets", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.collections"
+`);
+  world.emit({
+    process: "desire.defineCollection",
+    actor: "system",
+    claims: [],
+    body: {
+      id: "collection.search.results",
+      context: "ctx.collections"
+    }
+  });
+
+  const { getBootstrapState, getBootstrapModel } = createBootstrapReadModels({
+    world,
+    runtimeProfile: "minimal",
+    runtimeBundleSummary: null,
+    supportedHandlers: [],
+    supportedHandlerMetadata: {},
+    supportedPageHandlers: [],
+    supportedHandlerSets: [],
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    backendHosts: [],
+    frontendHosts: [],
+    getRuntimePluginCatalog: async () => ({
+      packages: [],
+      addedBundleIds: [],
+      summary: null
+    }),
+    buildPluginCapabilitySourceIndex: ({ capabilityCatalog = [] } = {}) => ({
+      capabilityCatalog,
+      capabilityPackageSources: []
+    })
+  });
+
+  const state = await getBootstrapState("aaron", null);
+  assert.equal(state.collections.length, 1);
+  assert.equal(state.collections[0].id, "collection.search.results");
+  assert.equal(state.collections[0].context, "ctx.collections");
+
+  const model = await getBootstrapModel(null);
+  assert.equal(model.contextBindableTargets.some(row =>
+    row.id === "collection.search.results" && row.context === "ctx.collections"
+  ), true);
 });
 
 test("bootstrap model exposes authored package nouns as context-bindable composition targets", async () => {

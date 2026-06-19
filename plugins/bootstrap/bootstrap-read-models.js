@@ -5,6 +5,15 @@ import {
   previewLegacyCapabilityMigrationFromProject
 } from "../../src/capability-legacy-migration.js";
 import {
+  previewLegacyFrontendMigrationFromProject
+} from "../../src/frontend-legacy-migration.js";
+import {
+  previewLegacyFrontendUpliftFromProject
+} from "../../src/frontend-legacy-uplift.js";
+import {
+  legacyFrontendCompatibilityBridgeObservationsFromProject
+} from "../../src/legacy-frontend-bridge.js";
+import {
   packageApplyPreviewRowsFromProject,
   packageCoexistenceFromProject,
   packageConvergenceFromProject
@@ -41,6 +50,8 @@ import {
   proposalTargetGovernanceRows,
   proposalTargetProcessIds
 } from "../../src/runtime-governance.js";
+import { resolveAuthoringHandlerSupport } from "../../src/runtime-authoring-handler-support.js";
+import { readBootstrapAppBoundaryState } from "./bootstrap-app-boundary.js";
 
 export function createBootstrapReadModels({
   world,
@@ -52,8 +63,8 @@ export function createBootstrapReadModels({
   supportedHandlerSets,
   supportedFrontendOps,
   supportedBackendOps,
-  backendHosts,
-  frontendHosts,
+  backendHosts = [],
+  frontendHosts = [],
   getRuntimePluginCatalog,
   buildPluginCapabilitySourceIndex,
   getRuntimeOperatorState = async () => null
@@ -157,9 +168,13 @@ export function createBootstrapReadModels({
 
   const bootstrapState = async (requestActor = null, appContext = null) => {
     const project = appContext?.project ?? (projector => world.project(projector));
+    if (typeof project.allWitnesses !== "function") {
+      project.allWitnesses = () => world.allWitnesses();
+    }
     const routes = project(moduleProjectors.routes);
     const servedRoutes = project(moduleProjectors.servedRoutes);
     const serverRunners = project(moduleProjectors.serverRunners);
+    const collections = project(moduleProjectors.collections);
     const contexts = project(moduleProjectors.contexts);
     const contextBindings = project(moduleProjectors.contextBindings);
     const contextExports = project(moduleProjectors.contextExports);
@@ -186,9 +201,12 @@ export function createBootstrapReadModels({
     const capabilityRevisionHistory = project(moduleProjectors.capabilityRevisionHistory);
     const legacyCapabilityCompatibilityMode = legacyCapabilityCompatibilityModeFromProject(project);
     const legacyCapabilityMigration = previewLegacyCapabilityMigrationFromProject(project);
+    const legacyFrontendMigration = previewLegacyFrontendMigrationFromProject(project);
+    const legacyFrontendUplift = previewLegacyFrontendUpliftFromProject(project);
     const compatibilityBridges = buildCompatibilityBridgeLedger({
       capabilities,
-      capabilityInstalls
+      capabilityInstalls,
+      additionalObservedBridges: legacyFrontendCompatibilityBridgeObservationsFromProject(project)
     });
     const governanceRoutes = runtimeBundleSummary?.governanceRoutes
       ?? buildGovernanceRouteInventory(runtimeBundleSummary?.routes ?? []);
@@ -235,6 +253,17 @@ export function createBootstrapReadModels({
     );
     const bootstrapContributionState = buildBootstrapContributionState(appContext?.runtimeContributions);
     const operator = await getRuntimeOperatorState(appContext);
+    const appBoundary = await readBootstrapAppBoundaryState({
+      world,
+      runtimeBundleSummary,
+      bootstrapModel: {
+        backendHosts: backendHosts.map(id => ({ id })),
+        frontendHosts: frontendHosts.map(id => ({ id }))
+      },
+      runtimeProfile,
+      getRuntimePluginCatalog,
+      appContext
+    });
     return {
       contexts,
       contextBindings,
@@ -265,6 +294,8 @@ export function createBootstrapReadModels({
       capabilityRevisionHistory,
       legacyCapabilityCompatibilityMode,
       legacyCapabilityMigration,
+      legacyFrontendMigration,
+      legacyFrontendUplift,
       compatibilityBridges,
       governanceRoutes,
       proposalTargetGovernance,
@@ -272,6 +303,7 @@ export function createBootstrapReadModels({
       runtimePluginAvailability,
       authoringPolicy,
       pluginCatalog,
+      appBoundary,
       ...bootstrapContributionState,
       operator,
       mcp: mcpBootstrapState({ mcpServers, mcpToolInstalls, appContext }),
@@ -279,6 +311,7 @@ export function createBootstrapReadModels({
       mcpToolInstalls,
       identities,
       identityActorAssumptionGrants,
+      collections,
       widgets,
       widgetVersions: widgetVersionRows,
       widgetVersionTransitions: widgetTransitions,
@@ -298,9 +331,28 @@ export function createBootstrapReadModels({
 
   const bootstrapModel = async (appContext = null) => {
     const authored = await bootstrapState(null, appContext);
+    const pluginCatalog = await getRuntimePluginCatalog({
+      activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
+      serverRunnerId: null,
+      configuredPluginIds: [],
+      authoredPluginIds: []
+    });
+    const handlerSupport = await resolveAuthoringHandlerSupport({
+      supportedHandlerSets,
+      supportedHandlers,
+      supportedPageHandlers,
+      supportedHandlerMetadata,
+      pluginCatalog
+    });
     const proposalTargetGovernance = proposalTargetGovernanceRows({ bootstrapSelectableOnly: true });
-    const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
-    const appReady = Boolean(homeRoute && homeRoute.params?.rootWidget);
+    const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/");
+    const appReady = Boolean(
+      homeRoute
+      && (
+        (homeRoute.handler === "page.home" && homeRoute.params?.rootWidget)
+        || (homeRoute.handler === "page.surface" && homeRoute.params?.rootSurface)
+      )
+    );
     const typeModel = world.project(typeModelProjection);
     const pageRoutes = (authored.routes || []).filter(route => {
       if (!String(route.handler || "").startsWith("page.")) return false;
@@ -313,10 +365,10 @@ export function createBootstrapReadModels({
       homeReason: appReady ? "reachable home route" : "no reachable app home route",
       widgetKinds: ["Page", "Box", "Section", "Heading", "Text", "Form", "Input", "Select", "Option", "Button", "Link", "List", "ValueEditor"],
       supportedMethods: ["GET", "POST", "PATCH", "DELETE"],
-      supportedHandlers,
-      supportedHandlerMetadata,
-      supportedPageHandlers,
-      supportedHandlerSets,
+      supportedHandlers: handlerSupport.supportedHandlers,
+      supportedHandlerMetadata: handlerSupport.supportedHandlerMetadata,
+      supportedPageHandlers: handlerSupport.supportedPageHandlers,
+      supportedHandlerSets: handlerSupport.supportedHandlerSets,
       supportedFrontendOps,
       supportedBackendOps,
       supportedMcpTransports: ["stdio", "http"],
@@ -349,6 +401,7 @@ export function createBootstrapReadModels({
         ...(authored.packageNamespaces || []),
         ...(authored.packageDependencies || []),
         ...(authored.packageTransformers || []),
+        ...(authored.collections || []),
         ...(authored.widgets || []),
         ...(authored.frontendPrograms || []),
         ...(authored.backendPrograms || []),

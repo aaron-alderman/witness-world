@@ -1,13 +1,17 @@
 /**
  * chart-client.js — browser boot for the chart runtime. Generic.
  *
- * Walks [data-chart-spec] elements, evaluates the embedded model spec into a
- * product tensor, plans the chart, and paints it with D3. Domain functions
- * (e.g. the Goodman std-lib) are injected by the page — this stays generic.
+ * Walks chart mount elements, resolves their manifest-backed model spec into a
+ * product tensor, lowers it through the private chart plan/scene/port seam,
+ * and mounts the resulting runtime node. Domain functions (e.g. the Goodman
+ * std-lib) are injected by the page — this stays generic.
  */
-import { evaluateModel } from "./dataflow-eval.js";
-import { planChart, drawChart } from "./gog-runtime.js";
+import { evaluateModel } from "./plan/evaluate-model.js";
+import { planChart } from "./plan/chart-plan.js";
+import { buildScene } from "./scene/build-scene.js";
+import { renderScene } from "./ports/render-port.js";
 import { assignChartPresentationPatchValue, applyChartPresentationPatch, readChartPresentationPatchValue } from "./chart-presentation-patch.js";
+import { resolvePresentationView } from "./presentation/resolve-presentation.js";
 
 function normalizeMountSpec(spec = {}) {
   return {
@@ -32,6 +36,55 @@ function mergedMountSpec(base, patch = {}) {
 }
 
 export { applyChartPresentationPatch };
+
+function trimString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function classListContains(node, className) {
+  const classes = String(node?.getAttribute?.("class") ?? node?.className ?? "")
+    .split(/\s+/)
+    .filter(Boolean);
+  return classes.includes(className);
+}
+
+function isChartMount(node) {
+  return Boolean(node)
+    && classListContains(node, "chart-page__mount")
+    && Boolean(trimString(node?.getAttribute?.("data-chart-id")));
+}
+
+function jsonNodeText(root, id) {
+  const candidates = [
+    root,
+    root?.ownerDocument,
+    globalThis.document
+  ];
+  for (const candidate of candidates) {
+    const node = typeof candidate?.getElementById === "function"
+      ? candidate.getElementById(id)
+      : null;
+    if (typeof node?.textContent === "string") return node.textContent;
+  }
+  return "";
+}
+
+function readJsonManifest(root, id) {
+  const text = jsonNodeText(root, id);
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function readChartSpecs(root) {
+  return {
+    ...(readJsonManifest(root, "surface-runtime-manifest")?.chartSpecs ?? {}),
+    ...(readJsonManifest(root, "chart-runtime-manifest")?.chartSpecs ?? {})
+  };
+}
 
 function chartViewportSize(container, view = {}) {
   const rawWidth = Number(container?.clientWidth || 0) > 0 ? container.clientWidth : 800;
@@ -131,8 +184,12 @@ function tooltipMarkup(readout = {}, { view = {}, functions = {}, plan = null, s
     ? functions?.[formatterKey.trim()]
     : null;
   if (typeof formatter === "function") {
-    const rendered = formatter({ readout, view, plan, spec });
-    if (typeof rendered === "string") return rendered;
+    try {
+      const rendered = formatter({ readout, view, plan, spec });
+      if (typeof rendered === "string") return rendered;
+    } catch (error) {
+      globalThis.console?.error?.("chart tooltip formatter error", error);
+    }
   }
   const readingTooltip = Array.isArray(readout.readings)
     ? readout.readings.find(reading => reading?.tooltip && Object.keys(reading.tooltip).length)?.tooltip
@@ -196,24 +253,28 @@ export function mountChart(container, initialSpec = {}) {
   let cancelResizeFrame = null;
 
   const render = () => {
+    const resolvedView = resolvePresentationView(mountSpec.view, container);
     const evaluated = evaluateModel(mountSpec.model, {
       functions: mountSpec.functions,
       params: mountSpec.params,
       axisValues: mountSpec.axisValues
     });
     evaluatedModel = evaluated;
-    const viewport = chartViewportSize(container, mountSpec.view);
-    const plan = planChart(mountSpec.view, evaluated, {
+    const viewport = chartViewportSize(container, resolvedView);
+    const plan = planChart(resolvedView, evaluated, {
       width: viewport.width,
       height: viewport.height
     });
     renderedPlan = plan;
+    const scene = buildScene(plan, {
+      mountTag: String(container?.tagName ?? "").toLowerCase()
+    });
     cleanupTooltip?.();
     cleanupTooltip = null;
     if (renderedNode && typeof renderedNode.destroy === "function") renderedNode.destroy();
-    renderedNode = drawChart(container, plan, globalThis.d3);
+    renderedNode = renderScene(container, scene, { plan });
     cleanupTooltip = attachChartTooltip(container, renderedNode, {
-      view: mountSpec.view,
+      view: resolvedView,
       functions: mountSpec.functions,
       plan,
       spec: mountSpec
@@ -302,20 +363,43 @@ export function mountChart(container, initialSpec = {}) {
 function chartElementsIn(root) {
   const queryRoot = root ?? globalThis.document;
   const elements = [];
-  if (typeof queryRoot?.matches === "function" && queryRoot.matches("[data-chart-spec]")) {
+  if (isChartMount(queryRoot)) {
     elements.push(queryRoot);
   }
   if (typeof queryRoot?.querySelectorAll === "function") {
-    elements.push(...queryRoot.querySelectorAll("[data-chart-spec]"));
+    elements.push(...[...queryRoot.querySelectorAll("*")].filter(isChartMount));
   }
   return elements;
 }
 
 export function bootChartsFromDom(doc, functions = {}) {
+  const chartSpecs = readChartSpecs(doc);
   for (const el of chartElementsIn(doc)) {
-    if (el.__chartController) continue;
+    const chartId = trimString(el.getAttribute?.("data-chart-id"));
+    if (el.__chartController) {
+      const currentFunctions = el.__chartController.spec?.functions ?? {};
+      const nextFunctions = functions ?? {};
+      const currentKeys = Object.keys(currentFunctions);
+      const nextKeys = Object.keys(nextFunctions);
+      const needsFunctionRefresh = nextKeys.some(key => currentFunctions[key] !== nextFunctions[key]);
+      if (needsFunctionRefresh || nextKeys.length !== currentKeys.length) {
+        try {
+          el.__chartController.update({ functions: nextFunctions });
+        } catch (error) {
+          publishCapabilityError(el, {
+            phase: "refresh",
+            message: "Chart capability failed during function refresh",
+            error
+          });
+        }
+      }
+      continue;
+    }
     try {
-      const spec = JSON.parse(el.getAttribute("data-chart-spec"));
+      const spec = chartId ? chartSpecs[chartId] : null;
+      if (!spec || typeof spec !== "object") {
+        throw new Error(`chart spec missing from manifest for ${chartId || "unknown chart"}`);
+      }
       el.__chartController = mountChart(el, {
         model: spec.model,
         view: spec.view,
@@ -381,12 +465,18 @@ export function bootChartsFromDom(doc, functions = {}) {
 }
 
 export function registerChartSurfaceCapabilityBoot(functions = {}) {
-  const boot = root => bootChartsFromDom(root ?? globalThis.document, functions);
+  const registry = globalThis.__chartRuntimeFunctions = {
+    ...(globalThis.__chartRuntimeFunctions ?? {}),
+    ...(functions ?? {})
+  };
+  const boot = globalThis.__chartSurfaceCapabilityBoot
+    ?? (globalThis.__chartSurfaceCapabilityBoot = (root => bootChartsFromDom(root ?? globalThis.document, globalThis.__chartRuntimeFunctions ?? {})));
   globalThis.__surfaceCapabilityBootHooks = Array.isArray(globalThis.__surfaceCapabilityBootHooks)
     ? globalThis.__surfaceCapabilityBootHooks
     : [];
   if (!globalThis.__surfaceCapabilityBootHooks.includes(boot)) {
     globalThis.__surfaceCapabilityBootHooks.push(boot);
   }
+  if (globalThis.document) bootChartsFromDom(globalThis.document, registry);
   return boot;
 }

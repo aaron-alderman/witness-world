@@ -37,6 +37,7 @@ export async function startServer(world, {
   runtimeStartupMode = "serve",
   runtimeOperatorContract = null,
   devMode = null,
+  startupPersistenceCommitMode = "post-ready",
   startupTelemetry = null
 }) {
   const selectedRuntimeProfile = runtimeProfile ?? (
@@ -58,6 +59,7 @@ export async function startServer(world, {
     runtimeStartupMode,
     runtimeOperatorContract,
     devMode: devMode ?? (runtimeStartupMode === "serve" && appProject != null),
+    startupPersistenceCommitMode,
     startupTelemetry
   }, {
     createGenericRouteHandlers,

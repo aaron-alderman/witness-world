@@ -1303,6 +1303,7 @@ export function createIdentity(world, {
   displayName = null,
   jobTitle = null,
   initials = null,
+  sourceryMuteRules = null,
   homePerspective = null,
   homeContext = null,
   owner = actor
@@ -1326,8 +1327,53 @@ export function createIdentity(world, {
       displayName: displayName ? String(displayName) : null,
       jobTitle: jobTitle ? String(jobTitle) : null,
       initials: initials ? String(initials) : null,
+      sourceryMuteRules: Array.isArray(sourceryMuteRules) ? structuredClone(sourceryMuteRules) : [],
       homeContext: homeContext ? String(homeContext) : null,
       homePerspective: homePerspective ? String(homePerspective) : null
+    }
+  });
+}
+
+export function createMaterializedView(world, {
+  actor,
+  id,
+  title = id,
+  kind = "generic",
+  sliceKey = null,
+  modelView = null,
+  maintenance = "on-demand",
+  storageClass = "memory",
+  resourceBudgetClass = null,
+  blocking = true,
+  ttlMs = 0,
+  sourceProjectors = [],
+  sourceWitnessProcesses = [],
+  invalidation = null,
+  owner = actor,
+  values = null
+}) {
+  createThing(world, { actor, id, owner });
+  return world.emit({
+    process: "materializedView.define",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "materializedView")
+    ],
+    body: {
+      id: String(id),
+      title: String(title ?? id),
+      kind: String(kind || "generic"),
+      sliceKey: typeof sliceKey === "string" && sliceKey.trim() ? sliceKey.trim() : null,
+      modelView: typeof modelView === "string" && modelView.trim() ? modelView.trim() : null,
+      maintenance: typeof maintenance === "string" && maintenance.trim() ? maintenance.trim() : "on-demand",
+      storageClass: typeof storageClass === "string" && storageClass.trim() ? storageClass.trim() : "memory",
+      resourceBudgetClass: typeof resourceBudgetClass === "string" && resourceBudgetClass.trim() ? resourceBudgetClass.trim() : null,
+      blocking: blocking !== false,
+      ttlMs: Number(ttlMs || 0),
+      sourceProjectors: Array.isArray(sourceProjectors) ? [...new Set(sourceProjectors.map(String).filter(Boolean))] : [],
+      sourceWitnessProcesses: Array.isArray(sourceWitnessProcesses) ? [...new Set(sourceWitnessProcesses.map(String).filter(Boolean))] : [],
+      invalidation: invalidation && typeof invalidation === "object" ? structuredClone(invalidation) : null,
+      values: values && typeof values === "object" ? structuredClone(values) : null
     }
   });
 }
@@ -1341,6 +1387,7 @@ export function updateIdentity(world, {
   displayName = null,
   jobTitle = null,
   initials = null,
+  sourceryMuteRules = null,
   homeContext = null,
   homePerspective = null
 }) {
@@ -1372,6 +1419,9 @@ export function updateIdentity(world, {
       displayName: displayName ? String(displayName) : null,
       jobTitle: jobTitle ? String(jobTitle) : null,
       initials: initials ? String(initials) : null,
+      sourceryMuteRules: Array.isArray(sourceryMuteRules)
+        ? structuredClone(sourceryMuteRules)
+        : (existing?.sourceryMuteRules ? structuredClone(existing.sourceryMuteRules) : []),
       homeContext: nextHomeContext,
       homePerspective: nextHomePerspective
     }
@@ -1844,6 +1894,314 @@ function contextImportExists(witnesses, {
     );
 }
 
+const CONTEXT_MODEL_INDEX_NAME = "module.contextModel";
+const CONTEXT_NAMING_INDEX_NAME = "module.contextNaming";
+
+function cloneContextRow(row) {
+  return {
+    ...row,
+    imports: Array.isArray(row?.imports) ? row.imports.map(spec => ({ ...spec })) : row?.imports,
+    targets: Array.isArray(row?.targets) ? [...row.targets] : row?.targets,
+    sourceKinds: Array.isArray(row?.sourceKinds) ? [...row.sourceKinds] : row?.sourceKinds,
+    localTargets: Array.isArray(row?.localTargets) ? [...row.localTargets] : row?.localTargets,
+    importedTargets: Array.isArray(row?.importedTargets) ? [...row.importedTargets] : row?.importedTargets,
+    witnesses: Array.isArray(row?.witnesses) ? [...row.witnesses] : row?.witnesses,
+    rows: Array.isArray(row?.rows) ? row.rows.map(spec => ({ ...spec })) : row?.rows
+  };
+}
+
+function worldContextIndexState(world) {
+  if (typeof world?.registerIndex !== "function" || typeof world?.readIndex !== "function") return null;
+  world.registerIndex(CONTEXT_MODEL_INDEX_NAME, contextModelIndexSpec);
+  world.registerIndex(CONTEXT_NAMING_INDEX_NAME, contextNamingIndexSpec);
+  return {
+    model: world.readIndex(CONTEXT_MODEL_INDEX_NAME, { snapshot: false }),
+    naming: world.readIndex(CONTEXT_NAMING_INDEX_NAME, { snapshot: false })
+  };
+}
+
+function contextKey(context, name) {
+  return `${context}${CONTEXT_REF_SEP}${name}`;
+}
+
+function collectVisibleContextScopeRowsFromState(state, {
+  context,
+  name
+}) {
+  const key = contextKey(context, name);
+  const rows = [];
+  for (const row of state.naming.bindingsByKey.get(key)?.values() ?? []) {
+    rows.push({
+      context: row.context,
+      name: row.name,
+      target: row.target,
+      sourceKind: "local",
+      sourceContext: null,
+      exportName: null,
+      witness: row.witness
+    });
+  }
+  for (const row of state.naming.importsByKey.get(key)?.values() ?? []) {
+    const exported = state.naming.exportsByKey.get(contextKey(row.sourceContext, row.exportName));
+    if (!exported?.size) continue;
+    for (const exportRow of exported.values()) {
+      rows.push({
+        context: row.context,
+        name: row.name,
+        target: exportRow.target,
+        sourceKind: "import",
+        sourceContext: row.sourceContext,
+        exportName: row.exportName,
+        witness: row.witness
+      });
+    }
+  }
+  return rows.sort((a, b) =>
+    String(a.context).localeCompare(String(b.context))
+    || String(a.name).localeCompare(String(b.name))
+    || String(a.sourceKind).localeCompare(String(b.sourceKind))
+    || String(a.target).localeCompare(String(b.target))
+  );
+}
+
+function explainContextualNameFromState(state, {
+  context,
+  name
+}) {
+  const wantedContext = typeof context === "string" && context.trim() ? context.trim() : "";
+  const wantedName = typeof name === "string" && name.trim() ? name.trim() : "";
+  if (!wantedContext || !wantedName) {
+    return {
+      ok: false,
+      context: wantedContext || null,
+      name: wantedName || null,
+      resolution: "invalid",
+      target: null,
+      targets: [],
+      rows: [],
+      reason: "context and name are required for contextual resolution"
+    };
+  }
+  const rows = collectVisibleContextScopeRowsFromState(state, { context: wantedContext, name: wantedName });
+  if (!rows.length) {
+    return {
+      ok: false,
+      context: wantedContext,
+      name: wantedName,
+      resolution: "missing",
+      target: null,
+      targets: [],
+      rows: [],
+      reason: `name not visible in context: ${wantedName}`
+    };
+  }
+  const targets = uniqueSortedStrings(rows.map(row => row.target));
+  if (targets.length !== 1) {
+    return {
+      ok: false,
+      context: wantedContext,
+      name: wantedName,
+      resolution: "ambiguous",
+      target: null,
+      targets,
+      rows: rows.map(row => ({ ...row })),
+      reason: `name resolves ambiguously in context: ${wantedName}`
+    };
+  }
+  const sourceKinds = uniqueSortedStrings(rows.map(row => row.sourceKind));
+  return {
+    ok: true,
+    context: wantedContext,
+    name: wantedName,
+    resolution: sourceKinds.includes("local") ? "local" : "import",
+    target: targets[0],
+    targets,
+    rows: rows.map(row => ({ ...row })),
+    reason: sourceKinds.includes("local")
+      ? `name resolves through a local binding in context: ${wantedName}`
+      : `name resolves through an imported binding in context: ${wantedName}`
+  };
+}
+
+function explainContextualTargetVisibilityFromState(state, {
+  context,
+  target
+}) {
+  const authoringContext = typeof context === "string" && context.trim() ? context.trim() : "";
+  const canonicalTarget = typeof target === "string" && target.trim() ? target.trim() : "";
+  if (!authoringContext || !canonicalTarget) {
+    return {
+      ok: false,
+      context: authoringContext || null,
+      target: canonicalTarget || null,
+      visible: false,
+      visibility: "invalid",
+      targetContext: null,
+      names: [],
+      rows: [],
+      reason: "context and target are required for visibility explanation"
+    };
+  }
+  if (!state.model.thingIds.has(canonicalTarget)) {
+    return {
+      ok: false,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: false,
+      visibility: "missing-target",
+      targetContext: null,
+      names: [],
+      rows: [],
+      reason: `target not found: ${canonicalTarget}`
+    };
+  }
+  const rows = [];
+  for (const row of state.naming.bindingsByKey.values()) {
+    for (const spec of row.values()) {
+      if (spec.context === authoringContext && spec.target === canonicalTarget) {
+        rows.push({
+          context: spec.context,
+          name: spec.name,
+          target: spec.target,
+          sourceKind: "local",
+          sourceContext: null,
+          exportName: null,
+          witness: spec.witness
+        });
+      }
+    }
+  }
+  for (const row of state.naming.importsByKey.values()) {
+    for (const spec of row.values()) {
+      if (spec.context !== authoringContext) continue;
+      const exported = state.naming.exportsByKey.get(contextKey(spec.sourceContext, spec.exportName));
+      if (!exported?.size) continue;
+      for (const exportRow of exported.values()) {
+        if (exportRow.target !== canonicalTarget) continue;
+        rows.push({
+          context: spec.context,
+          name: spec.name,
+          target: exportRow.target,
+          sourceKind: "import",
+          sourceContext: spec.sourceContext,
+          exportName: spec.exportName,
+          witness: spec.witness
+        });
+      }
+    }
+  }
+  const names = uniqueSortedStrings(rows.map(row => row.name));
+  const targetContext = state.model.objectContexts.get(canonicalTarget) ?? null;
+  if (!targetContext && rows.length) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: rows.some(row => row.sourceKind === "import") ? "import" : "local",
+      targetContext,
+      names,
+      rows,
+      reason: rows.some(row => row.sourceKind === "import")
+        ? `target is visible in context ${authoringContext} through explicit import or binding`
+        : `target is locally bound in context ${authoringContext}`
+    };
+  }
+  if (!targetContext) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: "unscoped",
+      targetContext,
+      names,
+      rows,
+      reason: `target is unscoped and remains canonically visible in context ${authoringContext}`
+    };
+  }
+  if (targetContext === authoringContext) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: rows.some(row => row.sourceKind === "local") ? "local" : "same-context",
+      targetContext,
+      names,
+      rows,
+      reason: rows.some(row => row.sourceKind === "local")
+        ? `target is locally bound in context ${authoringContext}`
+        : `target belongs to authoring context ${authoringContext}`
+    };
+  }
+  if (rows.length) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: "import",
+      targetContext,
+      names,
+      rows,
+      reason: `target is visible in context ${authoringContext} through explicit import or binding`
+    };
+  }
+  return {
+    ok: false,
+    context: authoringContext,
+    target: canonicalTarget,
+    visible: false,
+    visibility: "hidden",
+    targetContext,
+    names,
+    rows,
+    reason: `target ${canonicalTarget} belongs to context ${targetContext} and is not visible in authoring context ${authoringContext}`
+  };
+}
+
+function classifyCanonicalIdPolicyFromState(state, {
+  context,
+  target
+}) {
+  const visibility = explainContextualTargetVisibilityFromState(state, { context, target });
+  if (!visibility.ok) {
+    return {
+      ok: false,
+      policyClass: null,
+      reason: visibility.reason,
+      visibility
+    };
+  }
+  if (visibility.targetContext === context) {
+    return {
+      ok: true,
+      policyClass: "same-context-convenience",
+      visibility
+    };
+  }
+  if (visibility.targetContext) {
+    return {
+      ok: true,
+      policyClass: "imported-target-reference",
+      visibility
+    };
+  }
+  if (visibility.visibility === "unscoped") {
+    return {
+      ok: true,
+      policyClass: "legacy-only-path",
+      visibility
+    };
+  }
+  return {
+    ok: true,
+    policyClass: null,
+    visibility
+  };
+}
+
 export function validateContextBinding(witnesses, {
   context,
   name,
@@ -1936,6 +2294,96 @@ export function validateContextImport(witnesses, {
     };
   }
   return { ok: true, name: localName, target: exported.target };
+}
+
+export function validateContextBindingInWorld(world, input) {
+  const state = worldContextIndexState(world);
+  if (!state) return validateContextBinding(world.allWitnesses(), input);
+  const { context, name, target } = input;
+  if (!state.model.contextIds.has(context)) {
+    return { ok: false, status: 404, error: "context not found", details: { context } };
+  }
+  if (!state.model.thingIds.has(target)) {
+    return { ok: false, status: 404, error: "target not found", details: { target } };
+  }
+  const targetContext = state.model.objectContexts.get(target) ?? null;
+  if (targetContext && targetContext !== context) {
+    return {
+      ok: false,
+      status: 400,
+      error: "target belongs to a different context",
+      details: { context, target, targetContext }
+    };
+  }
+  if (collectVisibleContextScopeRowsFromState(state, { context, name }).length) {
+    return { ok: false, status: 409, error: "name already visible in context", details: { context, name } };
+  }
+  const existing = state.naming.bindingsByKey.get(contextKey(context, name));
+  if (existing?.has(target)) {
+    return { ok: false, status: 409, error: "binding already exists", details: { context, name, target } };
+  }
+  return { ok: true };
+}
+
+export function validateContextExportInWorld(world, input) {
+  const state = worldContextIndexState(world);
+  if (!state) return validateContextExport(world.allWitnesses(), input);
+  const { context, name, target } = input;
+  if (!state.model.contextIds.has(context)) {
+    return { ok: false, status: 404, error: "context not found", details: { context } };
+  }
+  if (!state.model.thingIds.has(target)) {
+    return { ok: false, status: 404, error: "target not found", details: { target } };
+  }
+  if (!state.naming.bindingTargetCountsByContext.get(context)?.has(target)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "target is not locally bound in context",
+      details: { context, target }
+    };
+  }
+  const existing = state.naming.exportsByKey.get(contextKey(context, name));
+  if (existing?.size) {
+    return { ok: false, status: 409, error: "export name already exists", details: { context, name } };
+  }
+  return { ok: true };
+}
+
+export function validateContextImportInWorld(world, input) {
+  const state = worldContextIndexState(world);
+  if (!state) return validateContextImport(world.allWitnesses(), input);
+  const { context, sourceContext, exportName } = input;
+  const localName = String(input.name ?? exportName);
+  if (!state.model.contextIds.has(context)) {
+    return { ok: false, status: 404, error: "context not found", details: { context } };
+  }
+  if (!state.model.contextIds.has(sourceContext)) {
+    return { ok: false, status: 404, error: "source context not found", details: { sourceContext } };
+  }
+  const exported = state.naming.exportsByKey.get(contextKey(sourceContext, exportName));
+  const exportRow = exported?.values()?.next?.().value ?? null;
+  if (!exportRow) {
+    return {
+      ok: false,
+      status: 400,
+      error: "exported name not found",
+      details: { sourceContext, exportName }
+    };
+  }
+  if (collectVisibleContextScopeRowsFromState(state, { context, name: localName }).length) {
+    return { ok: false, status: 409, error: "name already visible in context", details: { context, name: localName } };
+  }
+  const identity = `${context}${CONTEXT_REF_SEP}${localName}${CONTEXT_REF_SEP}${sourceContext}${CONTEXT_REF_SEP}${exportName}`;
+  if (state.naming.importsByKey.get(contextKey(context, localName))?.has(identity)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "import already exists",
+      details: { context, sourceContext, exportName, name: localName }
+    };
+  }
+  return { ok: true, name: localName, target: exportRow.target };
 }
 
 function contextBindingRows(witnesses) {
@@ -2163,6 +2611,11 @@ export function explainContextualName(witnesses, {
   };
 }
 
+export function explainContextualNameInWorld(world, input) {
+  const state = worldContextIndexState(world);
+  return state ? explainContextualNameFromState(state, input) : explainContextualName(world.allWitnesses(), input);
+}
+
 export function explainContextualTargetVisibility(witnesses, {
   context,
   target
@@ -2269,6 +2722,13 @@ export function explainContextualTargetVisibility(witnesses, {
   };
 }
 
+export function explainContextualTargetVisibilityInWorld(world, input) {
+  const state = worldContextIndexState(world);
+  return state
+    ? explainContextualTargetVisibilityFromState(state, input)
+    : explainContextualTargetVisibility(world.allWitnesses(), input);
+}
+
 export const CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES = Object.freeze([
   "same-context-convenience",
   "imported-target-reference",
@@ -2338,6 +2798,13 @@ export function classifyCanonicalIdPolicy(witnesses, {
   };
 }
 
+export function classifyCanonicalIdPolicyInWorld(world, input) {
+  const state = worldContextIndexState(world);
+  return state
+    ? classifyCanonicalIdPolicyFromState(state, input)
+    : classifyCanonicalIdPolicy(world.allWitnesses(), input);
+}
+
 export function resolveContextualRef(witnesses, {
   context,
   id = null,
@@ -2394,8 +2861,72 @@ export function resolveContextualRef(witnesses, {
   return { ok: true, target: resolved.target, source: "contextual", row: resolved.row };
 }
 
+export function resolveContextualRefInWorld(world, {
+  context,
+  id = null,
+  ref = null,
+  label = "reference",
+  allowedCanonicalIdPolicyClasses = null
+}) {
+  const canonical = typeof id === "string" && id.trim() ? id.trim() : null;
+  const contextual = typeof ref === "string" && ref.trim() ? ref.trim() : null;
+  const allowedPolicyClasses = normalizeCanonicalIdPolicyClasses(allowedCanonicalIdPolicyClasses);
+  if (canonical && contextual) {
+    return { ok: false, error: `provide either ${label} id or ${label} ref, not both` };
+  }
+  if (canonical) {
+    const authoringContext = typeof context === "string" && context.trim() ? context.trim() : null;
+    if (!authoringContext) return { ok: true, target: canonical, source: "canonical" };
+    const state = worldContextIndexState(world);
+    if (!state?.model.thingIds.has(canonical)) {
+      return { ok: true, target: canonical, source: "canonical", canonicalIdPolicyClass: null, visibility: null };
+    }
+    const classified = classifyCanonicalIdPolicyInWorld(world, {
+      context: authoringContext,
+      target: canonical
+    });
+    if (!classified.ok) {
+      const targetContext = classified.visibility?.targetContext ?? state?.model.objectContexts.get(canonical) ?? null;
+      if (targetContext) {
+        return {
+          ok: false,
+          error: `${label} id targets ${canonical} in context ${targetContext} and is not visible in authoring context ${authoringContext}`
+        };
+      }
+      return { ok: false, error: `${label} id ${classified.reason}` };
+    }
+    if (classified.policyClass && Array.isArray(allowedPolicyClasses) && !allowedPolicyClasses.includes(classified.policyClass)) {
+      return {
+        ok: false,
+        error: `${label} id uses canonical-id compatibility class ${classified.policyClass}, which is not allowed here`
+      };
+    }
+    return {
+      ok: true,
+      target: canonical,
+      source: "canonical",
+      canonicalIdPolicyClass: classified.policyClass ?? null,
+      visibility: classified.visibility ?? null
+    };
+  }
+  if (!contextual) return { ok: true, target: null, source: "empty" };
+  if (!(typeof context === "string" && context.trim())) {
+    return { ok: false, error: `${label} ref requires an explicit authoring context` };
+  }
+  const resolved = explainContextualNameInWorld(world, { context, name: contextual });
+  if (!resolved.ok) return { ok: false, error: `${label} ref ${resolved.reason}` };
+  return { ok: true, target: resolved.target, source: "contextual", row: resolved.rows[0] ?? null };
+}
+
 export function resolveCoveredContextualRef(witnesses, options = {}) {
   return resolveContextualRef(witnesses, {
+    ...options,
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+  });
+}
+
+export function resolveCoveredContextualRefInWorld(world, options = {}) {
+  return resolveContextualRefInWorld(world, {
     ...options,
     allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
@@ -2413,6 +2944,24 @@ export function defineRoute(world, { actor, id, path, serves, method = "GET", ha
       ...(context ? [relation(id, "inContext", context)] : [])
     ],
     body: { id, path, serves, method: String(method || "GET").toUpperCase(), handler: handler ? String(handler) : null, params: params && typeof params === "object" ? params : null, context: context ? String(context) : null }
+  });
+}
+
+export function defineRuntimePreload(world, { actor, id, when, targets, owner = actor, context = null }) {
+  createThing(world, { actor, id, owner });
+  return world.emit({
+    process: "defineRuntimePreload",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "runtimePreload"),
+      ...(context ? [relation(id, "inContext", context)] : [])
+    ],
+    body: {
+      id,
+      when: when && typeof when === "object" && !Array.isArray(when) ? structuredClone(when) : null,
+      targets: Array.isArray(targets) ? structuredClone(targets) : [],
+      context: context ? String(context) : null
+    }
   });
 }
 
@@ -2781,6 +3330,38 @@ export const moduleProjectors = {
       byServerRunnerPlugin[`${row.serverRunner}\u0000${row.plugin}`] = row;
     }
     return { rows, byServerRunner, byServerRunnerPlugin };
+  },
+
+  runtimePreloads(witnesses) {
+    const rows = new Map();
+    const contexts = moduleProjectors.objectContexts(witnesses);
+    for (const witness of witnesses) {
+      if (witness.process !== "defineRuntimePreload" || !witness.body?.id) continue;
+      rows.set(witness.body.id, {
+        id: String(witness.body.id),
+        when: witness.body.when && typeof witness.body.when === "object" && !Array.isArray(witness.body.when)
+          ? structuredClone(witness.body.when)
+          : null,
+        targets: Array.isArray(witness.body.targets) ? structuredClone(witness.body.targets) : [],
+        context: contexts.get(witness.body.id) ?? (witness.body.context ? String(witness.body.context) : null),
+        witness: witness.id
+      });
+    }
+    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  },
+
+  collections(witnesses) {
+    const rows = new Map();
+    const contexts = moduleProjectors.objectContexts(witnesses);
+    for (const witness of witnesses) {
+      if (witness.process !== "desire.defineCollection" || !witness.body?.id) continue;
+      rows.set(witness.body.id, {
+        id: String(witness.body.id),
+        context: contexts.get(witness.body.id) ?? (witness.body.context ? String(witness.body.context) : null),
+        witness: witness.id
+      });
+    }
+    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
   },
 
   packages(witnesses) {
@@ -3173,6 +3754,25 @@ export const moduleProjectors = {
 
   branchIndex: delegatedModuleProjector("branchIndex", emptyIndex),
 
+  pushRecords: delegatedModuleProjector("pushRecords", emptyRows),
+
+  pushRecordIndex: delegatedModuleProjector("pushRecordIndex", () => ({
+    rows: [],
+    byId: Object.create(null),
+    byBranch: Object.create(null)
+  })),
+
+  releaseChannels: delegatedModuleProjector("releaseChannels", emptyRows),
+
+  shipRecords: delegatedModuleProjector("shipRecords", emptyRows),
+
+  shipRecordIndex: delegatedModuleProjector("shipRecordIndex", () => ({
+    rows: [],
+    byId: Object.create(null),
+    byBranch: Object.create(null),
+    byReleaseChannel: Object.create(null)
+  })),
+
   candidateSnapshots: delegatedModuleProjector("candidateSnapshots", emptyRows),
 
   candidateSnapshotIndex: delegatedModuleProjector("candidateSnapshotIndex", () => ({
@@ -3182,6 +3782,24 @@ export const moduleProjectors = {
     byBranch: Object.create(null),
     activeByBranch: Object.create(null)
   })),
+
+  telemetryThresholds: delegatedModuleProjector("telemetryThresholds", emptyRows),
+
+  materializedViewStates: delegatedModuleProjector("materializedViewStates", emptyRows),
+
+  resourceProbeOperations: delegatedModuleProjector("resourceProbeOperations", emptyRows),
+
+  telemetrySamples: delegatedModuleProjector("telemetrySamples", emptyRows),
+
+  telemetryWindows: delegatedModuleProjector("telemetryWindows", emptyRows),
+
+  performanceRegressions: delegatedModuleProjector("performanceRegressions", emptyRows),
+
+  defects: delegatedModuleProjector("defects", emptyRows),
+
+  defectObservations: delegatedModuleProjector("defectObservations", emptyRows),
+
+  defectClusters: delegatedModuleProjector("defectClusters", emptyRows),
 
   testGates: delegatedModuleProjector("testGates", emptyRows),
 
@@ -3331,6 +3949,30 @@ export const moduleProjectors = {
     return [...runnerMap.values()];
   },
 
+  materializedViews(witnesses) {
+    const rows = new Map();
+    for (const witness of witnesses) {
+      if (witness.process !== "materializedView.define" || !witness.body?.id) continue;
+      rows.set(String(witness.body.id), {
+        id: String(witness.body.id),
+        title: typeof witness.body.title === "string" && witness.body.title.trim() ? witness.body.title.trim() : String(witness.body.id),
+        kind: typeof witness.body.kind === "string" && witness.body.kind.trim() ? witness.body.kind.trim() : "generic",
+        sliceKey: typeof witness.body.sliceKey === "string" && witness.body.sliceKey.trim() ? witness.body.sliceKey.trim() : null,
+        modelView: typeof witness.body.modelView === "string" && witness.body.modelView.trim() ? witness.body.modelView.trim() : null,
+        maintenance: typeof witness.body.maintenance === "string" && witness.body.maintenance.trim() ? witness.body.maintenance.trim() : "on-demand",
+        storageClass: typeof witness.body.storageClass === "string" && witness.body.storageClass.trim() ? witness.body.storageClass.trim() : "memory",
+        resourceBudgetClass: typeof witness.body.resourceBudgetClass === "string" && witness.body.resourceBudgetClass.trim() ? witness.body.resourceBudgetClass.trim() : null,
+        blocking: witness.body.blocking !== false,
+        ttlMs: Number(witness.body.ttlMs || 0),
+        sourceProjectors: Array.isArray(witness.body.sourceProjectors) ? [...witness.body.sourceProjectors.map(String)] : [],
+        sourceWitnessProcesses: Array.isArray(witness.body.sourceWitnessProcesses) ? [...witness.body.sourceWitnessProcesses.map(String)] : [],
+        invalidation: witness.body.invalidation && typeof witness.body.invalidation === "object" ? structuredClone(witness.body.invalidation) : null,
+        values: witness.body.values && typeof witness.body.values === "object" ? structuredClone(witness.body.values) : null
+      });
+    }
+    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  },
+
   identities(witnesses) {
     const identityMap = new Map();
     for (const w of witnesses) {
@@ -3345,6 +3987,9 @@ export const moduleProjectors = {
         displayName: w.body.displayName == null ? (previous?.displayName ?? null) : String(w.body.displayName),
         jobTitle: w.body.jobTitle == null ? (previous?.jobTitle ?? null) : String(w.body.jobTitle),
         initials: w.body.initials == null ? (previous?.initials ?? null) : String(w.body.initials),
+        sourceryMuteRules: Array.isArray(w.body.sourceryMuteRules)
+          ? structuredClone(w.body.sourceryMuteRules)
+          : (previous?.sourceryMuteRules ? structuredClone(previous.sourceryMuteRules) : []),
         homeContext: w.body.homeContext ? String(w.body.homeContext) : null,
         homePerspective: w.body.homePerspective ? String(w.body.homePerspective) : null
       });
@@ -3523,3 +4168,458 @@ export const moduleProjectors = {
     return mounted;
   }
 };
+
+function mapClone(map) {
+  return new Map(map);
+}
+
+function setClone(set) {
+  return new Set(set);
+}
+
+function contextRowsSnapshot(state) {
+  return [...state.contextIds]
+    .map(id => ({
+      id,
+      label: state.contextBodies.get(id)?.label ?? id,
+      actor: state.contextActors.get(id) ?? state.contextBodies.get(id)?.actor ?? null,
+      parent: state.parentContexts.get(id) ?? state.contextBodies.get(id)?.parent ?? null,
+      owner: state.owners.get(id) ?? null,
+      stewards: [...(state.stewards.get(id) ?? new Set())].sort(),
+      capabilities: [...(state.contextCapabilities.get(id) ?? new Set())].sort()
+    }))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
+const contextModelIndexSpec = {
+  seed(witnesses) {
+    const state = {
+      thingIds: new Set(),
+      moduleKinds: new Map(),
+      objectContexts: new Map(),
+      owners: new Map(),
+      stewards: new Map(),
+      contextIds: new Set(),
+      contextBodies: new Map(),
+      contextActors: new Map(),
+      parentContexts: new Map(),
+      contextCapabilities: new Map()
+    };
+    for (const witness of witnesses) contextModelIndexSpec.apply(state, witness);
+    return state;
+  },
+  apply(state, witness) {
+    if (witness.process === "defineContext" && witness.body?.id) {
+      state.contextIds.add(witness.body.id);
+      state.contextBodies.set(witness.body.id, {
+        label: typeof witness.body.label === "string" && witness.body.label.trim() ? witness.body.label.trim() : witness.body.id,
+        actor: typeof witness.body.actor === "string" && witness.body.actor.trim() ? witness.body.actor.trim() : null,
+        parent: typeof witness.body.parent === "string" && witness.body.parent.trim() ? witness.body.parent.trim() : null
+      });
+    }
+    for (const claim of witness.claims ?? []) {
+      if (claim.op === "thing") {
+        state.thingIds.add(claim.id);
+        continue;
+      }
+      if (claim.op !== "relation" && claim.op !== "retract") continue;
+      const isRelation = claim.op === "relation";
+      if (claim.rel === "hasModuleKind") {
+        if (isRelation) {
+          state.moduleKinds.set(claim.from, claim.to);
+          if (claim.to === "context") state.contextIds.add(claim.from);
+        } else if (state.moduleKinds.get(claim.from) === claim.to) {
+          state.moduleKinds.delete(claim.from);
+          if (claim.to === "context") state.contextIds.delete(claim.from);
+        }
+      }
+      if (claim.rel === "inContext") {
+        if (isRelation) state.objectContexts.set(claim.from, claim.to);
+        else if (state.objectContexts.get(claim.from) === claim.to) state.objectContexts.delete(claim.from);
+      }
+      if (claim.rel === "owns") {
+        if (isRelation) state.owners.set(claim.to, claim.from);
+        else if (state.owners.get(claim.to) === claim.from) state.owners.delete(claim.to);
+      }
+      if (claim.rel === "stewards") {
+        const current = state.stewards.get(claim.to) ?? new Set();
+        if (isRelation) current.add(claim.from);
+        else current.delete(claim.from);
+        if (current.size) state.stewards.set(claim.to, current);
+        else state.stewards.delete(claim.to);
+      }
+      if (claim.rel === "contextActor") {
+        if (isRelation) state.contextActors.set(claim.from, claim.to);
+        else if (state.contextActors.get(claim.from) === claim.to) state.contextActors.delete(claim.from);
+      }
+      if (claim.rel === "parentContext") {
+        if (isRelation) state.parentContexts.set(claim.from, claim.to);
+        else if (state.parentContexts.get(claim.from) === claim.to) state.parentContexts.delete(claim.from);
+      }
+      if (claim.rel === "installsCapability" && String(claim.meta?.targetKind || "") === "context") {
+        const current = state.contextCapabilities.get(claim.from) ?? new Set();
+        if (isRelation) current.add(claim.to);
+        else current.delete(claim.to);
+        if (current.size) state.contextCapabilities.set(claim.from, current);
+        else state.contextCapabilities.delete(claim.from);
+      }
+      if (claim.rel === "contextCapability") {
+        const current = state.contextCapabilities.get(claim.from) ?? new Set();
+        if (isRelation) current.add(claim.to);
+        else current.delete(claim.to);
+        if (current.size) state.contextCapabilities.set(claim.from, current);
+        else state.contextCapabilities.delete(claim.from);
+      }
+    }
+  },
+  snapshot(state) {
+    return {
+      thingIds: setClone(state.thingIds),
+      moduleKinds: mapClone(state.moduleKinds),
+      objectContexts: mapClone(state.objectContexts),
+      owners: mapClone(state.owners),
+      stewards: new Map([...state.stewards.entries()].map(([key, value]) => [key, setClone(value)])),
+      contextIds: setClone(state.contextIds),
+      contexts: contextRowsSnapshot(state)
+    };
+  }
+};
+
+function createContextNamingState() {
+  return {
+    bindingsByKey: new Map(),
+    bindingTargetCountsByContext: new Map(),
+    exportsByKey: new Map(),
+    importsByKey: new Map()
+  };
+}
+
+function ensureRowMap(map, key) {
+  const current = map.get(key) ?? new Map();
+  if (!map.has(key)) map.set(key, current);
+  return current;
+}
+
+function importIdentity(row) {
+  return `${row.context}${CONTEXT_REF_SEP}${row.name}${CONTEXT_REF_SEP}${row.sourceContext}${CONTEXT_REF_SEP}${row.exportName}`;
+}
+
+function contextBindingRowsFromState(state) {
+  const rows = [];
+  for (const rowMap of state.bindingsByKey.values()) {
+    rows.push(...rowMap.values());
+  }
+  return rows
+    .map(row => ({ ...row }))
+    .sort((a, b) =>
+      String(a.context).localeCompare(String(b.context))
+      || String(a.name).localeCompare(String(b.name))
+      || String(a.target).localeCompare(String(b.target))
+    );
+}
+
+function contextExportRowsFromState(state) {
+  const rows = [];
+  for (const rowMap of state.exportsByKey.values()) {
+    rows.push(...rowMap.values());
+  }
+  return rows
+    .map(row => ({ ...row }))
+    .sort((a, b) =>
+      String(a.context).localeCompare(String(b.context))
+      || String(a.name).localeCompare(String(b.name))
+      || String(a.target).localeCompare(String(b.target))
+    );
+}
+
+function contextImportRowsFromState(state) {
+  const rows = [];
+  for (const rowMap of state.importsByKey.values()) {
+    rows.push(...rowMap.values());
+  }
+  return rows
+    .map(row => ({ ...row }))
+    .sort((a, b) =>
+      String(a.context).localeCompare(String(b.context))
+      || String(a.name).localeCompare(String(b.name))
+      || String(a.sourceContext).localeCompare(String(b.sourceContext))
+      || String(a.exportName).localeCompare(String(b.exportName))
+    );
+}
+
+function contextScopesFromState(state) {
+  return [...new Map(
+    collectVisibleRowsForNamingState(state).map(row => [`${row.context}${CONTEXT_REF_SEP}${row.name}${CONTEXT_REF_SEP}${row.sourceKind}${CONTEXT_REF_SEP}${row.target}`, row])
+  ).values()].sort((a, b) =>
+    String(a.context).localeCompare(String(b.context))
+    || String(a.name).localeCompare(String(b.name))
+    || String(a.sourceKind).localeCompare(String(b.sourceKind))
+    || String(a.target).localeCompare(String(b.target))
+  );
+}
+
+function collectVisibleRowsForNamingState(state) {
+  const rows = [];
+  for (const rowMap of state.bindingsByKey.values()) {
+    for (const row of rowMap.values()) {
+      rows.push({
+        context: row.context,
+        name: row.name,
+        target: row.target,
+        sourceKind: "local",
+        sourceContext: null,
+        exportName: null,
+        witness: row.witness
+      });
+    }
+  }
+  for (const rowMap of state.importsByKey.values()) {
+    for (const row of rowMap.values()) {
+      const exported = state.exportsByKey.get(contextKey(row.sourceContext, row.exportName));
+      if (!exported?.size) continue;
+      for (const exportRow of exported.values()) {
+        rows.push({
+          context: row.context,
+          name: row.name,
+          target: exportRow.target,
+          sourceKind: "import",
+          sourceContext: row.sourceContext,
+          exportName: row.exportName,
+          witness: row.witness
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+function contextNameResolutionsFromState(state) {
+  const grouped = new Map();
+  for (const row of collectVisibleRowsForNamingState(state)) {
+    const key = contextKey(row.context, row.name);
+    const current = grouped.get(key) ?? {
+      context: row.context,
+      name: row.name,
+      resolution: "resolved",
+      target: null,
+      targets: [],
+      sourceKinds: [],
+      localTargets: [],
+      importedTargets: [],
+      imports: [],
+      witnesses: [],
+      rows: []
+    };
+    current.targets.push(row.target);
+    current.sourceKinds.push(row.sourceKind);
+    if (row.sourceKind === "local") current.localTargets.push(row.target);
+    if (row.sourceKind === "import") {
+      current.importedTargets.push(row.target);
+      current.imports.push({
+        sourceContext: row.sourceContext ?? null,
+        exportName: row.exportName ?? null,
+        target: row.target
+      });
+    }
+    if (row.witness) current.witnesses.push(row.witness);
+    current.rows.push({ ...row });
+    grouped.set(key, current);
+  }
+  return [...grouped.values()]
+    .map(row => {
+      const targets = uniqueSortedStrings(row.targets);
+      const sourceKinds = uniqueSortedStrings(row.sourceKinds);
+      const localTargets = uniqueSortedStrings(row.localTargets);
+      const importedTargets = uniqueSortedStrings(row.importedTargets);
+      const witnesses = uniqueSortedStrings(row.witnesses);
+      const imports = row.imports
+        .map(spec => ({ ...spec }))
+        .sort((a, b) =>
+          String(a.sourceContext).localeCompare(String(b.sourceContext))
+          || String(a.exportName).localeCompare(String(b.exportName))
+          || String(a.target).localeCompare(String(b.target))
+        );
+      return {
+        context: row.context,
+        name: row.name,
+        resolution: targets.length === 1 ? "resolved" : "ambiguous",
+        target: targets.length === 1 ? targets[0] : null,
+        targets,
+        sourceKinds,
+        localTargets,
+        importedTargets,
+        imports,
+        witnesses,
+        rows: row.rows
+      };
+    })
+    .sort((a, b) =>
+      String(a.context).localeCompare(String(b.context))
+      || String(a.name).localeCompare(String(b.name))
+    );
+}
+
+function contextNameConflictsFromState(state) {
+  return contextNameResolutionsFromState(state)
+    .filter(row => row.resolution === "ambiguous")
+    .map(row => cloneContextRow(row));
+}
+
+const contextNamingIndexSpec = {
+  seed(witnesses) {
+    const state = createContextNamingState();
+    for (const witness of witnesses) contextNamingIndexSpec.apply(state, witness);
+    return state;
+  },
+  apply(state, witness) {
+    for (const claim of witness.claims ?? []) {
+      if (claim.op !== "relation" && claim.op !== "retract") continue;
+      const isRelation = claim.op === "relation";
+      const bindingName = parseNamedRelation(NAME_REL_PREFIX, claim.rel);
+        if (bindingName) {
+          const key = contextKey(claim.from, bindingName);
+          const rows = ensureRowMap(state.bindingsByKey, key);
+          if (isRelation) {
+            const existed = rows.has(claim.to);
+            rows.set(claim.to, {
+              context: claim.from,
+              name: bindingName,
+              target: claim.to,
+              witness: witness.id
+            });
+            if (!existed) {
+              const counts = state.bindingTargetCountsByContext.get(claim.from) ?? new Map();
+              counts.set(claim.to, (counts.get(claim.to) ?? 0) + 1);
+              state.bindingTargetCountsByContext.set(claim.from, counts);
+            }
+          } else {
+            const existed = rows.delete(claim.to);
+            if (!rows.size) state.bindingsByKey.delete(key);
+            const counts = state.bindingTargetCountsByContext.get(claim.from);
+            if (existed && counts?.has(claim.to)) {
+              const next = Math.max(0, (counts.get(claim.to) ?? 0) - 1);
+              if (next > 0) counts.set(claim.to, next);
+              else counts.delete(claim.to);
+              if (!counts.size) state.bindingTargetCountsByContext.delete(claim.from);
+            }
+          }
+          continue;
+        }
+      const exportName = parseNamedRelation(EXPORT_REL_PREFIX, claim.rel);
+      if (exportName) {
+        const key = contextKey(claim.from, exportName);
+        const rows = ensureRowMap(state.exportsByKey, key);
+        if (isRelation) {
+          rows.set(claim.to, {
+            context: claim.from,
+            name: exportName,
+            target: claim.to,
+            witness: witness.id
+          });
+        } else {
+          rows.delete(claim.to);
+          if (!rows.size) state.exportsByKey.delete(key);
+        }
+        continue;
+      }
+      const importName = parseNamedRelation(IMPORT_REL_PREFIX, claim.rel);
+      if (!importName) continue;
+      const parsed = parseImportTargetValue(claim.to);
+      if (!parsed) continue;
+      const row = {
+        context: claim.from,
+        name: importName,
+        sourceContext: parsed.sourceContext,
+        exportName: parsed.exportName,
+        witness: witness.id
+      };
+      const identity = importIdentity(row);
+      const rows = ensureRowMap(state.importsByKey, contextKey(claim.from, importName));
+      if (isRelation) {
+        rows.set(identity, row);
+      } else {
+        rows.delete(identity);
+        if (!rows.size) state.importsByKey.delete(contextKey(claim.from, importName));
+      }
+    }
+  },
+  snapshot(state) {
+    return {
+      contextBindings: contextBindingRowsFromState(state),
+      contextExports: contextExportRowsFromState(state),
+      contextImports: contextImportRowsFromState(state),
+      contextScopes: contextScopesFromState(state),
+      contextNameResolutions: contextNameResolutionsFromState(state),
+      contextNameConflicts: contextNameConflictsFromState(state)
+    };
+  }
+};
+
+function assignWorldIndex(projector, metadata) {
+  Object.defineProperty(projector, "worldIndex", { value: metadata });
+}
+
+assignWorldIndex(moduleProjectors.modules, {
+  name: CONTEXT_MODEL_INDEX_NAME,
+  spec: contextModelIndexSpec,
+  select: state => new Map(state.moduleKinds)
+});
+
+assignWorldIndex(moduleProjectors.objectContexts, {
+  name: CONTEXT_MODEL_INDEX_NAME,
+  spec: contextModelIndexSpec,
+  select: state => new Map(state.objectContexts)
+});
+
+assignWorldIndex(moduleProjectors.contextualTargets, {
+  name: CONTEXT_MODEL_INDEX_NAME,
+  spec: contextModelIndexSpec,
+  select: state => [...state.objectContexts.entries()]
+    .map(([id, context]) => ({ id, context }))
+    .sort((a, b) =>
+      String(a.context).localeCompare(String(b.context))
+      || String(a.id).localeCompare(String(b.id))
+    )
+});
+
+assignWorldIndex(moduleProjectors.contexts, {
+  name: CONTEXT_MODEL_INDEX_NAME,
+  spec: contextModelIndexSpec,
+  select: state => contextRowsSnapshot(state)
+});
+
+assignWorldIndex(moduleProjectors.contextBindings, {
+  name: CONTEXT_NAMING_INDEX_NAME,
+  spec: contextNamingIndexSpec,
+  select: state => contextBindingRowsFromState(state)
+});
+
+assignWorldIndex(moduleProjectors.contextExports, {
+  name: CONTEXT_NAMING_INDEX_NAME,
+  spec: contextNamingIndexSpec,
+  select: state => contextExportRowsFromState(state)
+});
+
+assignWorldIndex(moduleProjectors.contextImports, {
+  name: CONTEXT_NAMING_INDEX_NAME,
+  spec: contextNamingIndexSpec,
+  select: state => contextImportRowsFromState(state)
+});
+
+assignWorldIndex(moduleProjectors.contextScopes, {
+  name: CONTEXT_NAMING_INDEX_NAME,
+  spec: contextNamingIndexSpec,
+  select: state => contextScopesFromState(state)
+});
+
+assignWorldIndex(moduleProjectors.contextNameResolutions, {
+  name: CONTEXT_NAMING_INDEX_NAME,
+  spec: contextNamingIndexSpec,
+  select: state => contextNameResolutionsFromState(state)
+});
+
+assignWorldIndex(moduleProjectors.contextNameConflicts, {
+  name: CONTEXT_NAMING_INDEX_NAME,
+  spec: contextNamingIndexSpec,
+  select: state => contextNameConflictsFromState(state)
+});

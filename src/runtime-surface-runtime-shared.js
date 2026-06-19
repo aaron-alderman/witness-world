@@ -78,6 +78,29 @@ export function normalizeRouteStateDescriptor(value) {
   return processRef && stateRef ? { processRef, stateRef, process: processRef, state: stateRef } : null;
 }
 
+export function normalizeQueryBindings(value) {
+  return (Array.isArray(value) ? value : [])
+    .map(binding => {
+      const normalized = binding && typeof binding === "object" && !Array.isArray(binding) ? binding : null;
+      const param = trimString(normalized?.param);
+      const processRef = trimString(normalized?.processRef ?? normalized?.process);
+      const stateRef = trimString(normalized?.stateRef ?? normalized?.state);
+      if (!param || !processRef || !stateRef) return null;
+      const next = {
+        param,
+        processRef,
+        process: processRef,
+        stateRef,
+        state: stateRef
+      };
+      if (Object.prototype.hasOwnProperty.call(normalized ?? {}, "defaultValue")) {
+        next.defaultValue = cloneInspectionValue(normalized.defaultValue);
+      }
+      return next;
+    })
+    .filter(Boolean);
+}
+
 export function resolveRouteStateDescriptor(manifest) {
   return normalizeRouteStateDescriptor(manifest?.routeState);
 }

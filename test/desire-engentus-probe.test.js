@@ -5,11 +5,11 @@ import {
   compileRvmFileToDesirePlus,
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
-import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
+import { evaluateModel } from "../plugins/chart-runtime/plan/evaluate-model.js";
 import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodman-stdlib.js";
 import { samplingFunctions } from "../examples/engentus/app/chart-functions/sampling.js";
 import { millChargeKernels } from "../examples/engentus/app/chart-functions/mill-charge-kernels.js";
-import { planChart, probeReadout, frameIndexForValue } from "../plugins/chart-runtime/gog-runtime.js";
+import { frameIndexForValue, planChart, probeReadout } from "../plugins/chart-runtime/plan/chart-plan.js";
 
 // Probe / scrubber: the axis-binding logic behind drawChart interactivity.
 // The DOM drag/hover wiring is browser-only, but the pure binding contracts are
@@ -102,6 +102,11 @@ test("Goodman tooltip helper emits oracle-shaped rows with layer-derived colours
   assert.match(markup, /2,496 N/);
   assert.match(markup, /2\.574&times;10<sup>-6<\/sup>/);
   assert.match(markup, /&asymp;0&times;10<sup>-6<\/sup>/);
+});
+
+test("Goodman tooltip helper tolerates null readouts outside probe targets", () => {
+  assert.equal(goodmanFunctions.goodman_tooltip_markup(null), "");
+  assert.equal(goodmanFunctions.goodman_tooltip_markup({ readout: null, plan: null }), "");
 });
 
 test("probeReadout reads the p10/p90 band and per-sample cloud at x", async () => {

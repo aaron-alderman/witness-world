@@ -195,10 +195,27 @@ export function createBootstrapScopedControlsSyncHandler({
 
 export function bindBootstrapScopedControlsSync({
   target = null,
-  eventName = "witness:bootstrap-dependent-select-sync",
   ...deps
 } = {}) {
+  const resolvedTarget = target || globalThis?.window || globalThis || null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
   const handler = createBootstrapScopedControlsSyncHandler(deps);
-  target?.addEventListener?.(eventName, handler);
+  for (const [formId, source, family] of [
+    ["context-binding-form", "bootstrap-scoped-controls", "context-binding-target"],
+    ["context-export-form", "bootstrap-scoped-controls", "context-export-target"],
+    ["context-import-form", "bootstrap-scoped-controls", "context-import-export"],
+    ["stewardship-form", "bootstrap-scoped-controls", "stewardship-target"],
+    ["context-binding-remove-form", "bootstrap-remove-controls", "context-binding-target"],
+    ["context-export-remove-form", "bootstrap-remove-controls", "context-export-target"],
+    ["context-import-remove-form", "bootstrap-remove-controls", "context-import-export"],
+    ["stewardship-remove-form", "bootstrap-remove-controls", "stewardship-target"]
+  ]) {
+    const form = resolvedDocument?.getElementById?.(formId);
+    if (!form || form.__bootstrapScopedControlsSyncBound) continue;
+    form.__bootstrapScopedControlsSyncBound = true;
+    const trigger = () => handler({ detail: { source, family } });
+    form.addEventListener("change", trigger);
+    form.addEventListener("input", trigger);
+  }
   return handler;
 }

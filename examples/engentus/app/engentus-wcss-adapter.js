@@ -1,10 +1,9 @@
 import {
   applyEngentusDocumentPatch,
-  applyEngentusStyleFieldBindingsToCssBundle,
-  applyEngentusTokenBindingsToCssBundle,
   buildEngentusAuthoringSchema,
   buildEngentusTokenCatalog,
   createEngentusAppliedWcssFromDocument,
+  finalizeEngentusCssBundleFiles,
   loadEngentusCanonicalWcss,
   loadEngentusGeneratedCssBundle,
   loadEngentusStyleSwitchManifest
@@ -19,10 +18,7 @@ async function buildFilesForDocument(document) {
     authoredPlan,
     switchManifest
   });
-  return applyEngentusStyleFieldBindingsToCssBundle(
-    applyEngentusTokenBindingsToCssBundle(bundle.files, document),
-    document
-  );
+  return finalizeEngentusCssBundleFiles(bundle.baseFiles ?? bundle.files, document);
 }
 
 export async function loadEngentusWcssAuthoringAdapter(_context = {}) {

@@ -130,6 +130,27 @@ export function startBootstrapClientRuntime({
     mcpToolProposalBodyFn: globalThis?.mcpToolProposalBody || mcpToolProposalBody,
     syncGuidanceProgressAliasFn: syncGuidanceProgressAlias
   });
+  const rerenderAfterStartup = () => {
+    try {
+      render();
+    } catch (error) {
+      setStatus("bootstrap-status", error?.message || String(error));
+    }
+  };
+  Promise.resolve(startupPromise).finally(() => {
+    const schedule = () => {
+      if (typeof windowTarget?.requestAnimationFrame === "function") {
+        windowTarget.requestAnimationFrame(() => rerenderAfterStartup());
+        return;
+      }
+      setTimeout(rerenderAfterStartup, 0);
+    };
+    if (documentTarget?.readyState === "complete") {
+      schedule();
+      return;
+    }
+    windowTarget?.addEventListener?.("load", schedule, { once: true });
+  });
   return {
     guidance: activeGuidance,
     state,

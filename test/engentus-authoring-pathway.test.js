@@ -185,7 +185,16 @@ test("canonical authoring pathway probe proves interactive page.surface routing 
   try {
     const result = await runCanonicalAuthoringPathwayProbe(server.url);
     assert.equal(result.ok, true);
-    assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, ["surface", "process", "projection", "capability"]);
+    assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, [
+      "surface",
+      "collection",
+      "process",
+      "projection",
+      "message",
+      "boundary",
+      "policy",
+      "capability"
+    ]);
     assert.equal(result.capabilityChecks.publicSurfaceCreate, true);
     assert.equal(result.capabilityChecks.publicProcessCreate, true);
     assert.equal(result.capabilityChecks.publicTypeCreate, true);
@@ -290,7 +299,16 @@ test("live constrained MCP keeps canonical authoring actions available while pag
       view: "authoringMatrix"
     }, 3);
     assert.equal(matrix.isError, false);
-    assert.deepEqual(matrix.structuredContent.baseline.publicFrontendModel, ["surface", "process", "projection", "capability"]);
+    assert.deepEqual(matrix.structuredContent.baseline.publicFrontendModel, [
+      "surface",
+      "collection",
+      "process",
+      "projection",
+      "message",
+      "boundary",
+      "policy",
+      "capability"
+    ]);
 
     const processCreate = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
       action: "process.create",

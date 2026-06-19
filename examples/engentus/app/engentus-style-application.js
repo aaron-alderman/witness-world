@@ -17,7 +17,7 @@ const DEFAULT_SWITCH_MANIFEST_FILE = path.join(MODULE_DIR, "engentus-style-switc
 const REQUIRED_CORE_TOP_LEVEL_SECTIONS = ["tokens", "styles", "views", "application"];
 const DEFAULT_BROWSER_BACKEND = "browser";
 const KNOWN_STYLE_ASSETS = new Set(["shell", "chart"]);
-const CANONICAL_TOKEN_DOMAINS = Object.freeze(["color", "size", "radius", "font", "shadow"]);
+const CANONICAL_TOKEN_DOMAINS = Object.freeze(["color", "size", "radius", "font", "shadow", "chart"]);
 const CANONICAL_STYLE_DOMAINS = Object.freeze(["chrome", "interactive", "surface", "auth", "goodman", "platform", "chart"]);
 const CANONICAL_SLICE_FAMILY_DOMAINS = Object.freeze({
   "shell-base": Object.freeze(["chrome", "interactive"]),
@@ -67,6 +67,50 @@ const ENGENTUS_PREVIEWABLE_TOKEN_BINDINGS = Object.freeze({
 const ENGENTUS_PREVIEWABLE_STYLE_FIELD_BINDINGS = Object.freeze({
   "chrome.toolbar\u0000base\u0000layout.height": Object.freeze([{ asset: "shell", cssVariable: "--th" }])
 });
+const CHART_RUNTIME_TOKEN_FIELDS = Object.freeze([
+  Object.freeze({ tokenSuffix: "chrome.grid.stroke", cssVariable: "--chart-grid-stroke", defaultValue: "#f1f5f9" }),
+  Object.freeze({ tokenSuffix: "chrome.axis.stroke", cssVariable: "--chart-axis-stroke", defaultValue: "#cbd5e1" }),
+  Object.freeze({ tokenSuffix: "chrome.tick.stroke", cssVariable: "--chart-tick-stroke", defaultValue: "#e2e8f0" }),
+  Object.freeze({ tokenSuffix: "chrome.tickLabel.fill", cssVariable: "--chart-tick-label-fill", defaultValue: "#64748b" }),
+  Object.freeze({ tokenSuffix: "chrome.axisLabel.fill", cssVariable: "--chart-axis-label-fill", defaultValue: "#64748b" }),
+  Object.freeze({ tokenSuffix: "chrome.title.fill", cssVariable: "--chart-title-fill", defaultValue: "#0f172a" }),
+  Object.freeze({ tokenSuffix: "chrome.annotation.fill", cssVariable: "--chart-annotation-fill", defaultValue: "#1e293b" }),
+  Object.freeze({ tokenSuffix: "chrome.polarGrid.stroke", cssVariable: "--chart-polar-grid-stroke", defaultValue: "#e2e8f0" }),
+  Object.freeze({ tokenSuffix: "chrome.disc.background", cssVariable: "--chart-disc-background", defaultValue: "#0d1a2e" }),
+  Object.freeze({ tokenSuffix: "chrome.disc.shellStroke", cssVariable: "--chart-disc-shell-stroke", defaultValue: "#64748b" }),
+  Object.freeze({ tokenSuffix: "chrome.disc.centerFill", cssVariable: "--chart-disc-center-fill", defaultValue: "#475569" }),
+  Object.freeze({ tokenSuffix: "typography.bodyFontFamily", cssVariable: "--chart-body-font-family", defaultValue: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }),
+  Object.freeze({ tokenSuffix: "typography.headingFontFamily", cssVariable: "--chart-heading-font-family", defaultValue: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' })
+]);
+const CHART_RUNTIME_OVERRIDE_SCOPES = Object.freeze([
+  Object.freeze({
+    tokenPrefix: "chart.goodman",
+    selectors: Object.freeze(['.chart-page__host.chart-page__host--goodman', '[data-chart-id="GoodmanDiagram"]'])
+  }),
+  Object.freeze({
+    tokenPrefix: "chart.millCharge",
+    selectors: Object.freeze(['.chart-page__host.chart-page__host--mill-charge', '[data-chart-id="MillChargeCrossSection"]'])
+  }),
+  Object.freeze({
+    tokenPrefix: "chart.millForceAngle",
+    selectors: Object.freeze(['#mill-force-svg-force', '[data-chart-id="MillForceAngle"]'])
+  }),
+  Object.freeze({
+    tokenPrefix: "chart.millForceRose",
+    selectors: Object.freeze(['#mill-force-svg-rose', '[data-chart-id="MillForceRose"]'])
+  }),
+  Object.freeze({
+    tokenPrefix: "chart.millForceCross",
+    selectors: Object.freeze(['#mill-force-svg-cross', '[data-chart-id="MillForceCross"]'])
+  })
+]);
+const CHART_RUNTIME_SHARED_SELECTORS = Object.freeze([
+  ":root",
+  "body.chart-page",
+  "[data-chart-page-host]",
+  ".chart-page__mount",
+  "[data-chart-id]"
+]);
 const WCSS_AUTHORING_OPERATION_KINDS = Object.freeze([
   "token.create",
   "token.remove",
@@ -95,6 +139,31 @@ function splitClassTokens(value) {
 function uniqueSorted(values) {
   return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
 }
+
+function chartTokenName(prefix, tokenSuffix) {
+  return `${prefix}.${tokenSuffix}`;
+}
+
+function buildChartPreviewableTokenBindings() {
+  const bindings = {};
+  for (const field of CHART_RUNTIME_TOKEN_FIELDS) {
+    bindings[chartTokenName("chart", field.tokenSuffix)] = Object.freeze([{
+      asset: "chart",
+      cssVariable: field.cssVariable,
+      kind: "chart-runtime-var"
+    }]);
+    for (const scope of CHART_RUNTIME_OVERRIDE_SCOPES) {
+      bindings[chartTokenName(scope.tokenPrefix, field.tokenSuffix)] = Object.freeze([{
+        asset: "chart",
+        cssVariable: field.cssVariable,
+        kind: "chart-runtime-var"
+      }]);
+    }
+  }
+  return bindings;
+}
+
+const ENGENTUS_PREVIEWABLE_CHART_TOKEN_BINDINGS = Object.freeze(buildChartPreviewableTokenBindings());
 
 function escapeRegExp(value) {
   return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1994,9 +2063,13 @@ function buildStyleFieldValueIndex(document) {
 
 export function buildEngentusTokenCatalog(document) {
   const values = tokenValueByName(document);
+  const bindingsByToken = {
+    ...ENGENTUS_PREVIEWABLE_TOKEN_BINDINGS,
+    ...ENGENTUS_PREVIEWABLE_CHART_TOKEN_BINDINGS
+  };
   return {
     theme: ENGENTUS_STYLE_THEME,
-    tokens: Object.entries(ENGENTUS_PREVIEWABLE_TOKEN_BINDINGS)
+    tokens: Object.entries(bindingsByToken)
       .map(([name, bindings]) => {
         if (!values.has(name)) return null;
         return {
@@ -3087,20 +3160,25 @@ export async function loadEngentusGeneratedCssBundle({
   authoredPlan = null,
   switchManifest = null
 } = {}) {
-  const resolvedAuthoredPlan = authoredPlan ?? await loadEngentusAppliedWcss();
+  const [resolvedAuthoredPlan, canonicalDocument] = await Promise.all([
+    authoredPlan ?? loadEngentusAppliedWcss(),
+    loadEngentusCanonicalWcss()
+  ]);
   const resolvedSwitchManifest = switchManifest ?? await loadEngentusStyleSwitchManifest();
   const stylesheets = await composeEngentusStylesheets({
     authoredPlan: resolvedAuthoredPlan,
     switchManifest: resolvedSwitchManifest
   });
+  const baseFiles = {
+    [styleAssetName("shell")]: renderOracleStylesheet(stylesheets.shell),
+    [styleAssetName("chart")]: renderOracleStylesheet(stylesheets.chart)
+  };
   return {
     authoredPlan: resolvedAuthoredPlan,
     switchManifest: resolvedSwitchManifest,
     stylesheets,
-    files: {
-      [styleAssetName("shell")]: renderOracleStylesheet(stylesheets.shell),
-      [styleAssetName("chart")]: renderOracleStylesheet(stylesheets.chart)
-    }
+    baseFiles,
+    files: finalizeEngentusCssBundleFiles(baseFiles, canonicalDocument)
   };
 }
 
@@ -3121,6 +3199,47 @@ export function applyEngentusTokenBindingsToCssBundle(files, document) {
   return nextFiles;
 }
 
+function renderChartTokenRule(selectors, declarations) {
+  if (!selectors.length || !declarations.length) return "";
+  return `${selectors.join(", ")} {\n${declarations.map(([property, value]) => `  ${property}: ${value};`).join("\n")}\n}`;
+}
+
+function sharedChartTokenDeclarations(tokenValues) {
+  return CHART_RUNTIME_TOKEN_FIELDS.map(field => {
+    const tokenName = chartTokenName("chart", field.tokenSuffix);
+    return [field.cssVariable, tokenValues.get(tokenName) ?? field.defaultValue];
+  });
+}
+
+function scopedChartTokenDeclarations(tokenValues, tokenPrefix) {
+  const declarations = [];
+  for (const field of CHART_RUNTIME_TOKEN_FIELDS) {
+    const tokenName = chartTokenName(tokenPrefix, field.tokenSuffix);
+    const value = tokenValues.get(tokenName);
+    if (typeof value !== "string" || !value.trim()) continue;
+    if (value.trim() === field.defaultValue) continue;
+    declarations.push([field.cssVariable, value.trim()]);
+  }
+  return declarations;
+}
+
+export function applyEngentusChartTokenBindingsToCssBundle(files, document) {
+  const tokenValues = tokenValueByName(document);
+  const source = files[styleAssetName("chart")];
+  if (typeof source !== "string") return { ...files };
+  const blocks = [
+    "/* chart runtime token patches */",
+    renderChartTokenRule(CHART_RUNTIME_SHARED_SELECTORS, sharedChartTokenDeclarations(tokenValues)),
+    ...CHART_RUNTIME_OVERRIDE_SCOPES
+      .map(scope => renderChartTokenRule(scope.selectors, scopedChartTokenDeclarations(tokenValues, scope.tokenPrefix)))
+      .filter(Boolean)
+  ].filter(Boolean);
+  return {
+    ...files,
+    [styleAssetName("chart")]: `${source}\n\n${blocks.join("\n\n")}\n`
+  };
+}
+
 export function applyEngentusStyleFieldBindingsToCssBundle(files, document) {
   const fieldValues = buildStyleFieldValueIndex(document);
   const tokenValues = tokenValueByName(document);
@@ -3138,6 +3257,16 @@ export function applyEngentusStyleFieldBindingsToCssBundle(files, document) {
     }
   }
   return nextFiles;
+}
+
+export function finalizeEngentusCssBundleFiles(files, document) {
+  return applyEngentusStyleFieldBindingsToCssBundle(
+    applyEngentusChartTokenBindingsToCssBundle(
+      applyEngentusTokenBindingsToCssBundle(files, document),
+      document
+    ),
+    document
+  );
 }
 
 export async function buildEngentusStyleArtifacts() {

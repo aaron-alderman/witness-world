@@ -11,7 +11,7 @@
 import path from "node:path";
 import { createComputeHostOpHandler } from "../../src/desire/host-op-migration.js";
 import { compileRvmFileToDesirePlus, normalizeDesirePlusToDesire } from "../../src/desire/index.js";
-import { evaluateModel } from "../chart-runtime/dataflow-eval.js";
+import { evaluateModel } from "../chart-runtime/plan/evaluate-model.js";
 
 const T = {
   MIN_ROBUST_SPAN: 1e-6,

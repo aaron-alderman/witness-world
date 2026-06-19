@@ -44,6 +44,7 @@ export function collectActiveRuntimeContributions({
   const staticAssetProviders = [];
   const staticAssetFiles = new Map();
   const surfaceCapabilityRenderers = [];
+  const capabilityPreloadProviders = [];
   const surfaceRuntimeSupportAssets = [];
   const moduleProjectors = {};
   const guidanceDefinitions = [];
@@ -153,6 +154,19 @@ export function collectActiveRuntimeContributions({
       }));
       continue;
     }
+    if (provider.kind === "capabilityPreloadProvider") {
+      const preloadId = String(provider.id || "");
+      const capability = String(provider.capability || "");
+      if (!preloadId || !capability || typeof provider.factory !== "function") {
+        throw new Error(`capability preload provider ${providerId} must expose id, capability, and factory`);
+      }
+      capabilityPreloadProviders.push(Object.freeze({
+        id: preloadId,
+        capability,
+        factory: provider.factory
+      }));
+      continue;
+    }
     if (provider.kind === "surfaceRuntimeSupportAssets") {
       const supportId = String(provider.id || "");
       if (!supportId || typeof provider.factory !== "function") {
@@ -202,6 +216,7 @@ export function collectActiveRuntimeContributions({
     staticAssetProviders: Object.freeze(staticAssetProviders),
     staticAssetFiles,
     surfaceCapabilityRenderers: Object.freeze(surfaceCapabilityRenderers),
+    capabilityPreloadProviders: Object.freeze(capabilityPreloadProviders),
     surfaceRuntimeSupportAssets: Object.freeze(surfaceRuntimeSupportAssets),
     guidanceDefinitions: Object.freeze(guidanceDefinitions),
     guidanceDefinitionIndex,

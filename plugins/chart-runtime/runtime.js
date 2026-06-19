@@ -3,7 +3,7 @@
  *
  * It resolves a witnessed `chart` (surface) node and its referenced `model`
  * (dataflow) node from the world, then serves a self-contained page that
- * evaluates the model and paints the grammar-of-graphics spec with D3. Modules
+ * evaluates the model and paints the grammar-of-graphics spec with the local SVG runtime. Modules
  * are reusable verbatim — any authored domain helper libraries are injected by
  * the page rather than baked into the runtime.
  *
@@ -115,9 +115,9 @@ export function resolveChartSpec(witnesses, chartName) {
   if (!model) return null;
   return {
     model: { axes: model.axes ?? [], params: model.params ?? [], derives: model.derives ?? [], reduces: model.reduces ?? [] },
-    view: { frame: view.frame, encoding: view.encoding ?? {}, editable: view.editable ?? [], layers: view.layers ?? [], modelRef: view.modelRef, props: view.props ?? {} },
+    view: { id: view.id, frame: view.frame, encoding: view.encoding ?? {}, editable: view.editable ?? [], layers: view.layers ?? [], modelRef: view.modelRef, props: view.props ?? {} },
     params: {},
-    pageProps: view.props ?? {}
+    pageProps: { ...(view.props ?? {}), chartSurfaceId: view.id }
   };
 }
 
@@ -207,6 +207,17 @@ export function buildMountedChartRuntime({ world, activeSurface, rootSurface, in
         pageProps: spec.pageProps ?? {}
       };
     },
+    chartSpecsById() {
+      return Object.fromEntries(
+        resolvedCharts
+          .map(({ chartId }) => {
+            const chartSurface = surfaces.get(chartId);
+            const chart = chartSurface ? this.describeChartSurface(chartSurface) : null;
+            return chart?.spec ? [chartId, chart.spec] : null;
+          })
+          .filter(Boolean)
+      );
+    },
     renderMountedChart(chartSurface, {
       mountMode = "mounted-panel",
       viewKey = null,
@@ -256,6 +267,9 @@ export function createSurfaceCapabilityRenderer(context = {}) {
     scriptSrcs: mounted.scriptSrcs,
     inlineCss: mounted.inlineCss,
     scriptBody: mounted.scriptBody,
+    buildManifest() {
+      return { chartSpecs: mounted.chartSpecsById() };
+    },
     renderSurface(surface) {
       if (surface?.surfaceKind !== "chart") return null;
       return mounted.renderMountedChart(surface, {
@@ -263,6 +277,13 @@ export function createSurfaceCapabilityRenderer(context = {}) {
       });
     }
   };
+}
+
+export function createCapabilityPreloadAssets() {
+  return chartRuntimeAssets({
+    pagePropsList: [],
+    standalone: false
+  });
 }
 
 export const providers = Object.freeze([
@@ -287,6 +308,12 @@ export const providers = Object.freeze([
     id: "chart-runtime.surfaceCapabilityRenderer",
     capability: "chart.render",
     factory: createSurfaceCapabilityRenderer
+  },
+  {
+    kind: "capabilityPreloadProvider",
+    id: "chart-runtime.capabilityPreloadProvider",
+    capability: "chart.render",
+    factory: createCapabilityPreloadAssets
   }
 ]);
 

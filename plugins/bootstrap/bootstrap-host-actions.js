@@ -34,7 +34,9 @@ export function bindBootstrapHostActions({
   setBootstrapStatus = () => {},
   setDesktopStatus = () => {}
 } = {}) {
-  target.addEventListener("witness:bootstrap-host-action", async event => {
+  const resolvedTarget = target || globalThis?.window || globalThis || null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  const run = async event => {
     if (event?.detail?.source !== source) return;
     const action = String(event.detail.action || "");
     try {
@@ -50,8 +52,22 @@ export function bindBootstrapHostActions({
     } catch (error) {
       (action.startsWith("desktop-") ? setDesktopStatus : setBootstrapStatus)(error.message);
     }
-  });
-  return target;
+  };
+  for (const [selector, action] of [
+    ["[data-action=\"openBootstrapAppHome\"]", "open-app"],
+    ["[data-action=\"openBootstrapDesktopWorld\"]", "desktop-open-world"],
+    ["[data-action=\"createBootstrapDesktopWorld\"]", "desktop-create-world"],
+    ["[data-action=\"revealBootstrapDesktopWorld\"]", "desktop-reveal-world"]
+  ]) {
+    const node = resolvedDocument?.querySelector?.(selector);
+    if (!node || node.__bootstrapHostActionBound) continue;
+    node.__bootstrapHostActionBound = true;
+    node.addEventListener("click", event => {
+      event.preventDefault();
+      void run({ detail: { source, action } });
+    });
+  }
+  return resolvedTarget;
 }
 
 export async function runBootstrapHostAction({

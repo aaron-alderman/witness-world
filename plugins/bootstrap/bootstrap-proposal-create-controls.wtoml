@@ -136,34 +136,6 @@ rootWidget = "bootstrap_proposal_create_controls_root"
 
 [[step]]
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_proposal_process_select"
-eventName = "witness:bootstrap-proposal-create-help-sync"
-detail = { source = "bootstrap-proposal-create-controls", trigger = "target-process" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_proposal_kind_input"
-eventName = "witness:bootstrap-proposal-create-help-sync"
-detail = { source = "bootstrap-proposal-create-controls", trigger = "target-kind" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_proposal_target_input"
-eventName = "witness:bootstrap-proposal-create-help-sync"
-detail = { source = "bootstrap-proposal-create-controls", trigger = "target-id" }
-
-[[step]]
-order = 0
-op = "dispatchDomEvent"
-on = "input:bootstrap_proposal_body_input"
-eventName = "witness:bootstrap-proposal-create-help-sync"
-detail = { source = "bootstrap-proposal-create-controls", trigger = "body-json" }
-
-[[step]]
-order = 0
 op = "setText"
 on = "submit:bootstrap_proposal_create_form"
 widget = "bootstrap_proposal_create_status"
@@ -175,13 +147,6 @@ op = "readForm"
 on = "submit:bootstrap_proposal_create_form"
 widget = "bootstrap_proposal_create_form"
 into = "bootstrapProposalCreateDraft"
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_proposal_create_form"
-eventName = "witness:bootstrap-proposal-submit"
-detail = { source = "bootstrap-proposal-create-controls", family = "create", formId = "proposal-form", statusId = "proposal-status", id = "${state.bootstrapProposalCreateDraft.id}", targetProcess = "${state.bootstrapProposalCreateDraft.targetProcess}", targetKind = "${state.bootstrapProposalCreateDraft.targetKind}", targetId = "${state.bootstrapProposalCreateDraft.targetId}", bodyJson = "${state.bootstrapProposalCreateDraft.bodyJson}", reason = "${state.bootstrapProposalCreateDraft.reason}" }
 
 [[step]]
 order = 0

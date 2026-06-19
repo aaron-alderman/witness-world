@@ -16,7 +16,10 @@ import {
   summarizePlatformPathSystem,
   TELEMETRY_IMPACT_RULES
 } from "./branch-insights.js";
+import { PLATFORM_GIT_BOUNDARY_ID, readGitBoundaryState } from "./git-push.js";
+import { PLATFORM_RELEASE_CHANNEL_ROWS } from "./git-ship.js";
 import { platformProposalTemplates } from "./platform-proposals.js";
+import { PLATFORM_TELEMETRY_THRESHOLD_ROWS } from "./projections.js";
 import { renderPlatformConsoleCss } from "./platform-style.js";
 import { buildFlakeScoreByGate } from "./test-gate-catalog.js";
 
@@ -39,10 +42,21 @@ const PLATFORM_DEFAULT_BUILD_REQUIREMENTS = Object.freeze({
   testInventory: true,
   pluginManifests: true
 });
+const PLATFORM_OVERVIEW_SUMMARY_REQUIREMENTS = Object.freeze({
+  docs: false,
+  folders: false,
+  knowledgeRelations: false,
+  testInventory: false,
+  pluginManifests: true
+});
 const PLATFORM_SLICE_REQUIREMENTS = Object.freeze({
   overview: PLATFORM_DEFAULT_BUILD_REQUIREMENTS,
   change: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
   verification: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false }),
+  telemetry: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false }),
+  defects: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false }),
+  pushes: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  ships: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
   knowledgeDocs: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, folders: false, testInventory: false }),
   knowledgeFolders: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, knowledgeRelations: false, testInventory: false }),
   knowledgeRoadmap: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, folders: false, testInventory: false }),
@@ -142,6 +156,17 @@ function normalizePlatformBuildRequirements(requirements = null) {
 
 export function requirementsForPlatformSlice(sliceKey) {
   return PLATFORM_SLICE_REQUIREMENTS[String(sliceKey || "")] || PLATFORM_DEFAULT_BUILD_REQUIREMENTS;
+}
+
+export function requirementsForPlatformRequest({
+  sliceKey = "overview",
+  sectionId = null,
+  modelView = null
+} = {}) {
+  if (String(sliceKey || "") === "overview" && (sectionId === "summary" || modelView === "summary")) {
+    return PLATFORM_OVERVIEW_SUMMARY_REQUIREMENTS;
+  }
+  return requirementsForPlatformSlice(sliceKey);
 }
 
 function unique(values = []) {
@@ -2172,45 +2197,140 @@ function compareTimeline(left, right) {
   return String(left?.id || "").localeCompare(String(right?.id || ""));
 }
 
-function buildDefectClusterRows(branches = []) {
-  const byDefect = new Map();
-  for (const branch of Array.isArray(branches) ? branches : []) {
-    const defect = String(branch?.defect || "").trim();
-    if (!defect) continue;
-    const existing = byDefect.get(defect) ?? {
-      id: defectClusterNodeId(defect),
-      defect,
-      title: defect,
+function derivedDefectProposalId(defectId) {
+  return `proposal.platform.${String(defectId || "").replace(/[^a-zA-Z0-9]+/g, ".").replace(/^\.+|\.+$/g, "")}`;
+}
+
+function buildDerivedDefectProposals(defects = [], existingProposals = []) {
+  const proposals = [];
+  const existingByTarget = new Map(
+    (Array.isArray(existingProposals) ? existingProposals : [])
+      .map(row => [`${String(row.targetProcess || "")}\u0000${String(row.targetId || "")}`, row])
+  );
+  for (const defect of Array.isArray(defects) ? defects : []) {
+    const targetKey = `defect.create\u0000${String(defect.id || "")}`;
+    const existing = existingByTarget.get(targetKey) ?? null;
+    proposals.push(existing ?? {
+      id: derivedDefectProposalId(defect.id),
+      status: "open",
+      targetProcess: "defect.create",
+      targetKind: "defect",
+      targetId: defect.id,
+      reason: defect.summary || defect.title || defect.id,
+      title: `Create defect record for ${defect.title || defect.id}`,
+      body: {
+        defectId: defect.id,
+        defectKind: defect.defectKind ?? null,
+        clusterId: defect.clusterId ?? null,
+        metricId: defect.metricId ?? null,
+        gateId: defect.gateId ?? null,
+        branchId: defect.branchId ?? null,
+        changeSetId: defect.changeSetId ?? null,
+        candidateSnapshotId: defect.candidateSnapshotId ?? null
+      },
+      origin: "derived-defect"
+    });
+  }
+  return proposals.sort((left, right) => String(left.id || "").localeCompare(String(right.id || "")));
+}
+
+function buildDefectClusterRows(defects = [], observations = [], branches = []) {
+  if (!Array.isArray(defects) || defects.length === 0) {
+    const byDefect = new Map();
+    for (const branch of Array.isArray(branches) ? branches : []) {
+      const defect = String(branch?.defect || "").trim();
+      if (!defect) continue;
+      const existing = byDefect.get(defect) ?? {
+        id: defectClusterNodeId(defect),
+        defect,
+        title: defect,
+        branchMembers: []
+      };
+      existing.branchMembers.push({
+        branchId: String(branch.id),
+        title: String(branch.title || branch.id),
+        createdAt: branch.createdAt ?? null,
+        changedPaths: [...(branch.changedPaths ?? [])],
+        affectedSystems: [...((branch.affectedSystemSummaries ?? []).map(row => String(row.system || "")).filter(Boolean))],
+        docsFreshness: branch.docsFreshness ? {
+          requiredDocs: [...(branch.docsFreshness.requiredDocs ?? [])],
+          touchedDocs: [...(branch.docsFreshness.touchedDocs ?? [])],
+          missingDocs: [...(branch.docsFreshness.missingDocs ?? [])]
+        } : null,
+        telemetryImpactIds: [...((branch.telemetryImpactSummaries ?? []).map(row => row?.id).filter(Boolean))]
+      });
+      byDefect.set(defect, existing);
+    }
+    return [...byDefect.values()]
+      .map(cluster => {
+        cluster.branchMembers.sort(compareTimeline);
+        return {
+          ...cluster,
+          branchCount: cluster.branchMembers.length,
+          branchIds: cluster.branchMembers.map(member => member.branchId),
+          defectIds: [],
+          observationIds: [],
+          gateIds: [],
+          metricIds: []
+        };
+      })
+      .sort((left, right) => left.id.localeCompare(right.id));
+  }
+  const observationIdsByDefect = Object.create(null);
+  for (const row of Array.isArray(observations) ? observations : []) pushByKey(observationIdsByDefect, row.defectId, row.id);
+  const byCluster = new Map();
+  for (const defect of defects) {
+    const clusterId = String(defect.clusterId || defectClusterNodeId(defect.id));
+    const existing = byCluster.get(clusterId) ?? {
+      id: clusterId,
+      defect: defect.clusterKey || defect.title || defect.id,
+      title: defect.clusterKey || defect.title || defect.id,
+      defectIds: [],
+      observationIds: [],
+      branchIds: [],
+      changeSetIds: [],
+      gateIds: [],
+      metricIds: [],
       branchMembers: []
     };
-    existing.branchMembers.push({
-      branchId: String(branch.id),
-      title: String(branch.title || branch.id),
-      createdAt: branch.createdAt ?? null,
-      changedPaths: [...(branch.changedPaths ?? [])],
-      affectedSystems: [...((branch.affectedSystemSummaries ?? []).map(row => String(row.system || "")).filter(Boolean))],
-      docsFreshness: branch.docsFreshness ? {
-        requiredDocs: [...(branch.docsFreshness.requiredDocs ?? [])],
-        touchedDocs: [...(branch.docsFreshness.touchedDocs ?? [])],
-        missingDocs: [...(branch.docsFreshness.missingDocs ?? [])]
-      } : null,
-      telemetryImpactIds: [...((branch.telemetryImpactSummaries ?? []).map(row => row?.id).filter(Boolean))]
-    });
-    byDefect.set(defect, existing);
+    existing.defectIds.push(String(defect.id));
+    if (defect.branchId) {
+      existing.branchIds.push(String(defect.branchId));
+      existing.branchMembers.push({
+        branchId: String(defect.branchId),
+        title: String(defect.branchId),
+        createdAt: defect.observedAt ?? null,
+        changedPaths: [],
+        affectedSystems: [],
+        docsFreshness: null,
+        telemetryImpactIds: defect.metricId ? [String(defect.metricId).replace(/^telemetryMetric:/, "")] : []
+      });
+    }
+    if (defect.changeSetId) existing.changeSetIds.push(String(defect.changeSetId));
+    if (defect.gateId) existing.gateIds.push(String(defect.gateId));
+    if (defect.metricId) existing.metricIds.push(String(defect.metricId));
+    existing.observationIds.push(...(observationIdsByDefect[defect.id] ?? []));
+    byCluster.set(clusterId, existing);
   }
-  return [...byDefect.values()]
-    .map(cluster => {
-      cluster.branchMembers.sort(compareTimeline);
-      return {
-        ...cluster,
-        branchCount: cluster.branchMembers.length,
-        branchIds: cluster.branchMembers.map(member => member.branchId)
-      };
-    })
+  return [...byCluster.values()]
+    .map(cluster => ({
+      ...cluster,
+      defectIds: unique(cluster.defectIds).sort(),
+      observationIds: unique(cluster.observationIds).sort(),
+      branchIds: unique(cluster.branchIds).sort(),
+      changeSetIds: unique(cluster.changeSetIds).sort(),
+      gateIds: unique(cluster.gateIds).sort(),
+      metricIds: unique(cluster.metricIds).sort(),
+      branchMembers: [...cluster.branchMembers].sort(compareTimeline),
+      branchCount: unique(cluster.branchIds).length,
+      defectCount: unique(cluster.defectIds).length,
+      observationCount: unique(cluster.observationIds).length
+    }))
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 
-function addDefectClusterNodes(nodes, edges, defectClusters = []) {
+function addDefectClusterNodes(nodes, edges, defectClusters = [], defects = []) {
+  const defectsById = Object.fromEntries((Array.isArray(defects) ? defects : []).map(row => [String(row.id), row]));
   for (const cluster of defectClusters) {
     addNode(nodes, {
       id: cluster.id,
@@ -2218,11 +2338,34 @@ function addDefectClusterNodes(nodes, edges, defectClusters = []) {
       title: cluster.title,
       lifecycle: ["observe", "verify", "steward"],
       owner: "plugin.platform",
-      status: cluster.branchCount > 1 ? "recurring" : "known",
+      status: (cluster.defectCount ?? cluster.branchCount) > 1 ? "recurring" : "known",
       source: "witnesses"
     });
     for (const branchId of cluster.branchIds ?? []) {
       if (nodes.has(`branch:${branchId}`)) addEdge(edges, cluster.id, "targets", `branch:${branchId}`, "defects");
+    }
+    for (const gateId of cluster.gateIds ?? []) {
+      if (nodes.has(gateId)) addEdge(edges, cluster.id, "tracks", gateId, "defects");
+    }
+    for (const metricId of cluster.metricIds ?? []) {
+      if (nodes.has(metricId)) addEdge(edges, cluster.id, "tracks", metricId, "defects");
+    }
+    for (const defectId of cluster.defectIds ?? []) {
+      const defect = defectsById[defectId] ?? null;
+      addNode(nodes, {
+        id: defectId,
+        kind: "defect",
+        title: defect?.title || defectId,
+        lifecycle: ["observe", "verify", "steward"],
+        owner: "plugin.platform",
+        status: defect?.status || "open",
+        source: "witnesses"
+      });
+      addEdge(edges, cluster.id, "contains", defectId, "defects");
+      if (defect?.gateId && nodes.has(defect.gateId)) addEdge(edges, defectId, "targets", defect.gateId, "defects");
+      if (defect?.branchId && nodes.has(`branch:${defect.branchId}`)) addEdge(edges, defectId, "targets", `branch:${defect.branchId}`, "defects");
+      if (defect?.changeSetId) addEdge(edges, defectId, "targets", defect.changeSetId, "defects");
+      if (defect?.metricId && nodes.has(defect.metricId)) addEdge(edges, defectId, "tracks", defect.metricId, "defects");
     }
   }
 }
@@ -2819,8 +2962,13 @@ export async function buildPlatformModel({
   const platformRequirements = normalizePlatformBuildRequirements(requirements);
   const nodes = new Map();
   const edges = new Map();
-  const catalog = await readJson("store/seeds/first-party-plugin-catalog.json", { packages: [], bundles: [] });
-  const profilesSeed = await readJson("store/seeds/runtime-profiles.json", { profiles: {} });
+  const [catalog, profilesSeed, gitBoundaryState] = await Promise.all([
+    readJson("store/seeds/first-party-plugin-catalog.json", { packages: [], bundles: [] }),
+    readJson("store/seeds/runtime-profiles.json", { profiles: {} }),
+    readGitBoundaryState({
+      repoRoot: appContext?.platformGit?.repoRoot ?? repoRoot
+    })
+  ]);
   const pluginPackages = catalog.packages ?? [];
   const bundleRows = catalog.bundles ?? [];
   const bundleIdsByPlugin = Object.create(null);
@@ -2840,9 +2988,12 @@ export async function buildPlatformModel({
     capabilities: capabilityDefinitions,
     capabilityInstalls
   });
-  const proposals = projectRows(project, moduleProjectors.proposals);
+  const baseProposals = projectRows(project, moduleProjectors.proposals);
   const rawChangeSets = projectRows(project, moduleProjectors.changeSets);
   const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
+  const pushRecords = projectRows(project, moduleProjectors.pushRecords);
+  const releaseChannels = projectRows(project, moduleProjectors.releaseChannels);
+  const shipRecords = projectRows(project, moduleProjectors.shipRecords);
   const conflicts = projectRows(project, moduleProjectors.conflicts);
   const mergeIntents = projectRows(project, moduleProjectors.mergeIntents);
   const changeSetsByBranch = Object.create(null);
@@ -2860,10 +3011,26 @@ export async function buildPlatformModel({
     ...platformBranchInsights(branch, {
       changeSets: changeSetsByBranch[branch.id] ?? [],
       edits: (changeSetsByBranch[branch.id] ?? []).flatMap(changeSet => editsByChangeSet[changeSet.id] ?? []),
-      proposals
+      proposals: baseProposals
     })
   }));
   const candidateSnapshots = projectRows(project, moduleProjectors.candidateSnapshots);
+  const telemetryThresholds = projectRows(project, moduleProjectors.telemetryThresholds).length
+    ? projectRows(project, moduleProjectors.telemetryThresholds)
+    : PLATFORM_TELEMETRY_THRESHOLD_ROWS.map(row => ({ ...row }));
+  const materializedViews = projectRows(project, moduleProjectors.materializedViews);
+  const materializedViewStates = projectRows(project, moduleProjectors.materializedViewStates);
+  const resourceProbeOperations = projectRows(project, moduleProjectors.resourceProbeOperations);
+  const telemetrySamples = projectRows(project, moduleProjectors.telemetrySamples);
+  const telemetryWindows = projectRows(project, moduleProjectors.telemetryWindows);
+  const performanceRegressions = projectRows(project, moduleProjectors.performanceRegressions);
+  const defects = projectRows(project, moduleProjectors.defects);
+  const defectObservations = projectRows(project, moduleProjectors.defectObservations);
+  const proposals = [
+    ...baseProposals.map(row => ({ ...row })),
+    ...buildDerivedDefectProposals(defects, baseProposals)
+      .filter(row => !baseProposals.some(existing => String(existing.id || "") === String(row.id || "")))
+  ];
   const durableVerificationRows = appContext?.verificationPersistence?.readModelRows?.() ?? {};
   const testRuns = mergeRowsById(durableVerificationRows.testRuns ?? [], projectRows(project, moduleProjectors.testRuns));
   const testResults = mergeRowsById(durableVerificationRows.testResults ?? [], projectRows(project, moduleProjectors.testResults));
@@ -2879,19 +3046,29 @@ export async function buildPlatformModel({
   const projectedTestGates = projectRows(project, moduleProjectors.testGates);
   const projectedCoverageEdges = projectRows(project, moduleProjectors.coverageEdges);
   const flakeScoresByGate = buildFlakeScoreByGate(testResults);
+  const projectedLatestTestResults = projectValue(project, moduleProjectors.latestTestResultsByGate, null);
+  const latestTestResultRows = mergeRowsById(
+    Array.isArray(projectedLatestTestResults?.rows)
+      ? projectedLatestTestResults.rows
+      : Object.values(projectedLatestTestResults?.byGate ?? {}),
+    testResults
+  );
+  const latestTestResultsByGate = Object.create(null);
+  for (const [gateId, row] of Object.entries(projectedLatestTestResults?.byGate ?? {})) {
+    if (!gateId || !row) continue;
+    latestTestResultsByGate[gateId] = row;
+  }
+  for (const row of latestTestResultRows) {
+    const gateId = String(row?.gateId || "");
+    if (!gateId) continue;
+    const existing = latestTestResultsByGate[gateId];
+    if (!existing || String(existing.producedAt || "") <= String(row?.producedAt || "")) {
+      latestTestResultsByGate[gateId] = row;
+    }
+  }
   const latestTestResultsProjection = {
-    rows: testResults,
-    byGate: Object.fromEntries(
-      Object.entries(
-        testResults.reduce((acc, row) => {
-          const gateId = String(row?.gateId || "");
-          if (!gateId) return acc;
-          const existing = acc[gateId];
-          if (!existing || String(existing.producedAt || "") <= String(row?.producedAt || "")) acc[gateId] = row;
-          return acc;
-        }, Object.create(null))
-      )
-    )
+    rows: latestTestResultRows,
+    byGate: Object.fromEntries(Object.entries(latestTestResultsByGate))
   };
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
@@ -3040,6 +3217,42 @@ export async function buildPlatformModel({
     });
     for (const plugin of profile.plugins) addEdge(edges, `profile:${profile.id}`, "activates", plugin, "profile");
     for (const bundle of profile.coreBundles) addEdge(edges, `profile:${profile.id}`, "activates", bundle, "profile");
+  }
+
+  addNode(nodes, {
+    id: PLATFORM_GIT_BOUNDARY_ID,
+    kind: "boundary",
+    title: "Git Boundary",
+    lifecycle: ["transform", "ship", "steward"],
+    owner: "plugin.platform",
+    status: "known",
+    source: "platform-git"
+  });
+  if (nodes.has("plugin.platform")) addEdge(edges, "plugin.platform", "uses", PLATFORM_GIT_BOUNDARY_ID, "platform-git");
+  for (const remote of gitBoundaryState.remotes ?? []) {
+    addNode(nodes, {
+      id: remote.id,
+      kind: "gitRemote",
+      title: remote.name,
+      lifecycle: ["observe", "ship", "steward"],
+      owner: "plugin.platform",
+      status: remote.provider || "generic",
+      source: remote.remoteUrl || "platform-git"
+    });
+    addEdge(edges, PLATFORM_GIT_BOUNDARY_ID, "observes", remote.id, "platform-git");
+  }
+  for (const ref of gitBoundaryState.refs ?? []) {
+    addNode(nodes, {
+      id: ref.id,
+      kind: "gitRef",
+      title: ref.shortName || ref.refName,
+      lifecycle: ["observe", "ship", "steward"],
+      owner: ref.remoteName || "plugin.platform",
+      status: ref.scope || "ref",
+      source: ref.refName || "platform-git"
+    });
+    addEdge(edges, PLATFORM_GIT_BOUNDARY_ID, "observes", ref.id, "platform-git");
+    if (ref.remoteName) addEdge(edges, `gitRemote:${ref.remoteName}`, "tracks", ref.id, "platform-git");
   }
 
   addTelemetryMetricNodes(nodes);
@@ -3532,6 +3745,50 @@ export async function buildPlatformModel({
     if (proposal.targetProcess) addEdge(edges, `proposal:${proposal.id}`, "proposes", `handler:${proposal.targetProcess}`, "witnesses");
     if (proposal.targetId) addEdge(edges, `proposal:${proposal.id}`, "targets", platformTargetNodeId(proposal.targetKind, proposal.targetId), "witnesses");
   }
+  for (const pushRecord of pushRecords) {
+    addNode(nodes, {
+      id: pushRecord.id,
+      kind: "pushRecord",
+      title: pushRecord.gitBranchName || pushRecord.id,
+      lifecycle: ["transform", "ship", "steward"],
+      owner: pushRecord.owner ?? "plugin.platform",
+      status: pushRecord.status ?? "failed",
+      source: pushRecord.remoteUrl || "witnesses"
+    });
+    if (pushRecord.branchId) addEdge(edges, `branch:${pushRecord.branchId}`, "records", pushRecord.id, "witnesses");
+    if (pushRecord.changeSetId) addEdge(edges, `changeSet:${pushRecord.changeSetId}`, "supports", pushRecord.id, "witnesses");
+    if (pushRecord.remoteName) addEdge(edges, pushRecord.id, "targets", `gitRemote:${pushRecord.remoteName}`, "witnesses");
+    if (pushRecord.localBranchRef) addEdge(edges, pushRecord.id, "tracks", `gitRef:${pushRecord.localBranchRef}`, "witnesses");
+    if (pushRecord.remoteName && pushRecord.gitBranchName) {
+      addEdge(edges, pushRecord.id, "tracks", `gitRef:refs/remotes/${pushRecord.remoteName}/${pushRecord.gitBranchName}`, "witnesses");
+    }
+  }
+  for (const releaseChannel of releaseChannels) {
+    addNode(nodes, {
+      id: releaseChannel.id,
+      kind: "releaseChannel",
+      title: releaseChannel.title || releaseChannel.name || releaseChannel.id,
+      lifecycle: ["ship", "steward"],
+      owner: "plugin.platform",
+      status: releaseChannel.executable ? "active" : "modeled",
+      source: "platform"
+    });
+  }
+  for (const shipRecord of shipRecords) {
+    addNode(nodes, {
+      id: shipRecord.id,
+      kind: "shipRecord",
+      title: shipRecord.gitBranchName || shipRecord.id,
+      lifecycle: ["ship", "steward"],
+      owner: shipRecord.owner ?? "plugin.platform",
+      status: shipRecord.status ?? "recorded",
+      source: shipRecord.remoteUrl || "witnesses"
+    });
+    if (shipRecord.branchId) addEdge(edges, `branch:${shipRecord.branchId}`, "records", shipRecord.id, "witnesses");
+    if (shipRecord.changeSetId) addEdge(edges, `changeSet:${shipRecord.changeSetId}`, "supports", shipRecord.id, "witnesses");
+    if (shipRecord.pushRecordId) addEdge(edges, shipRecord.pushRecordId, "supports", shipRecord.id, "witnesses");
+    if (shipRecord.releaseChannelId) addEdge(edges, shipRecord.id, "targets", shipRecord.releaseChannelId, "witnesses");
+  }
   for (const branch of branches) {
     addNode(nodes, {
       id: `branch:${branch.id}`,
@@ -3550,6 +3807,12 @@ export async function buildPlatformModel({
     }
     if (branch.latestCandidateSnapshotId) {
       addEdge(edges, `branch:${branch.id}`, "tracks", branch.latestCandidateSnapshotId, "witnesses");
+    }
+    for (const pushRecordId of branch.pushRecordIds ?? []) {
+      addEdge(edges, `branch:${branch.id}`, "records", pushRecordId, "witnesses");
+    }
+    for (const shipRecordId of branch.shipRecordIds ?? []) {
+      addEdge(edges, `branch:${branch.id}`, "records", shipRecordId, "witnesses");
     }
   }
   for (const changeSet of changeSets) {
@@ -3810,8 +4073,8 @@ export async function buildPlatformModel({
     }
   }
 
-  const defectClusters = buildDefectClusterRows(branches);
-  addDefectClusterNodes(nodes, edges, defectClusters);
+  const defectClusters = buildDefectClusterRows(defects, defectObservations, branches);
+  addDefectClusterNodes(nodes, edges, defectClusters, defects);
   const testGateProjection = buildTestGateRows(
     nodes,
     edges,
@@ -4063,6 +4326,21 @@ export async function buildPlatformModel({
     affectedTestGatesByChangeSet: testGateProjection.byChangeSet,
     selectedTestGatesByBranch: testGateProjection.selectedByBranch,
     selectedTestGatesByChangeSet: testGateProjection.selectedByChangeSet,
+    materializedViews: materializedViews.map(row => ({ ...row })),
+    materializedViewStates: materializedViewStates.map(row => ({ ...row })),
+    resourceProbeOperations: resourceProbeOperations.map(row => ({ ...row })),
+    telemetryThresholds: telemetryThresholds.map(row => ({ ...row })),
+    telemetrySamples: telemetrySamples.map(row => ({ ...row })),
+    telemetryWindows: telemetryWindows.map(row => ({ ...row })),
+    performanceRegressions: performanceRegressions.map(row => ({ ...row })),
+    gitRemotes: (gitBoundaryState.remotes ?? []).map(row => ({ ...row })),
+    gitRefs: (gitBoundaryState.refs ?? []).map(row => ({ ...row })),
+    pushRecords: pushRecords.map(row => ({ ...row })),
+    releaseChannels: releaseChannels.map(row => ({ ...row })),
+    shipRecords: shipRecords.map(row => ({ ...row })),
+    defects: defects.map(row => ({ ...row })),
+    defectObservations: defectObservations.map(row => ({ ...row })),
+    defectClusters: defectClusters.map(row => ({ ...row })),
     testRuns: testRuns.map(row => ({ ...row })),
     testResults: testResults.map(row => ({ ...row })),
     testArtifacts: testArtifacts.map(row => ({ ...row })),
@@ -4131,6 +4409,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       changeSets: model.changeSets,
       changeSetEdits: model.changeSetEdits,
       candidateSnapshots: model.candidateSnapshots,
+      pushRecords: model.pushRecords,
+      shipRecords: model.shipRecords,
       proposals: model.proposals,
       proposalActions: model.proposalActions,
       summaries: model.summaries
@@ -4142,6 +4422,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       branches: model.branches,
       changeSets: model.changeSets,
       proposals: model.proposals,
+      pushRecords: model.pushRecords,
+      shipRecords: model.shipRecords,
       candidateSnapshots: model.candidateSnapshots,
       summaries: model.summaries
     };
@@ -4151,6 +4433,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       branches: model.branches,
       branchBoard: model.branchBoard,
       branchLifecycleVocabulary: model.branchLifecycleVocabulary,
+      pushRecords: model.pushRecords,
+      shipRecords: model.shipRecords,
       candidateSnapshots: model.candidateSnapshots,
       summaries: model.summaries
     };
@@ -4432,7 +4716,13 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
   if (view === "proposals") return { proposals: model.proposals, proposalActions: model.proposalActions, summaries: model.summaries };
   if (view === "branches") {
     const branches = id ? model.branches.filter(row => row.id === id) : model.branches;
-    return { branches, branchBoard: model.branchBoard, branchLifecycleVocabulary: model.branchLifecycleVocabulary, summaries: model.summaries };
+    const pushRecords = id
+      ? (model.pushRecords ?? []).filter(row => row.branchId === id || row.id === id)
+      : (model.pushRecords ?? []);
+    const shipRecords = id
+      ? (model.shipRecords ?? []).filter(row => row.branchId === id || row.id === id)
+      : (model.shipRecords ?? []);
+    return { branches, pushRecords, shipRecords, branchBoard: model.branchBoard, branchLifecycleVocabulary: model.branchLifecycleVocabulary, summaries: model.summaries };
   }
   if (view === "changeSets") {
     const changeSets = id ? model.changeSets.filter(row => row.id === id) : model.changeSets;
@@ -4626,20 +4916,79 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
     const allTelemetryMetrics = (model.nodes ?? []).filter(node => node.kind === "telemetryMetric");
     const allBranches = model.branches ?? [];
     const allChangeSets = model.changeSets ?? [];
+    const allTelemetrySamples = model.telemetrySamples ?? [];
+    const allTelemetryWindows = model.telemetryWindows ?? [];
+    const allPerformanceRegressions = model.performanceRegressions ?? [];
+    const allTelemetryThresholds = model.telemetryThresholds ?? [];
     const matchesTelemetrySummary = row => (row.telemetryImpactSummaries ?? []).some(summary => {
       const metricId = summary?.id ? telemetryMetricNodeId(summary.id) : null;
       return metricId === id || summary?.id === id;
     });
+    const matchingSamples = id
+      ? allTelemetrySamples.filter(row =>
+        row.id === id
+        || row.metricId === id
+        || row.ownerId === id
+        || row.gateId === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.candidateSnapshotId === id
+        || row.runId === id
+      )
+      : allTelemetrySamples;
+    const matchingWindows = id
+      ? allTelemetryWindows.filter(row =>
+        row.id === id
+        || row.metricId === id
+        || row.ownerId === id
+        || row.gateIds?.includes(id)
+        || row.branchIds?.includes(id)
+        || row.changeSetIds?.includes(id)
+        || row.candidateSnapshotIds?.includes(id)
+        || row.currentSampleIds?.includes(id)
+        || row.previousSampleIds?.includes(id)
+      )
+      : allTelemetryWindows;
+    const matchingRegressions = id
+      ? allPerformanceRegressions.filter(row =>
+        row.id === id
+        || row.metricId === id
+        || row.ownerId === id
+        || row.windowId === id
+        || row.latestSampleId === id
+        || row.gateIds?.includes(id)
+        || row.branchIds?.includes(id)
+        || row.changeSetIds?.includes(id)
+        || row.candidateSnapshotIds?.includes(id)
+      )
+      : allPerformanceRegressions;
     const branches = id
-      ? allBranches.filter(row => row.id === id || (row.changeSetIds ?? []).includes(id) || matchesTelemetrySummary(row))
+      ? allBranches.filter(row =>
+        row.id === id
+        || (row.changeSetIds ?? []).includes(id)
+        || matchesTelemetrySummary(row)
+        || matchingSamples.some(sample => sample.branchId === row.id)
+        || matchingWindows.some(window => (window.branchIds ?? []).includes(row.id))
+        || matchingRegressions.some(regression => (regression.branchIds ?? []).includes(row.id))
+      )
       : allBranches.filter(row => (row.telemetryImpactSummaries ?? []).length > 0);
     const changeSets = id
-      ? allChangeSets.filter(row => row.id === id || row.branchId === id || matchesTelemetrySummary(row))
+      ? allChangeSets.filter(row =>
+        row.id === id
+        || row.branchId === id
+        || matchesTelemetrySummary(row)
+        || matchingSamples.some(sample => sample.changeSetId === row.id)
+        || matchingWindows.some(window => (window.changeSetIds ?? []).includes(row.id))
+        || matchingRegressions.some(regression => (regression.changeSetIds ?? []).includes(row.id))
+      )
       : allChangeSets.filter(row => (row.telemetryImpactSummaries ?? []).length > 0);
     const telemetryMetricIds = new Set([
       ...allTelemetryMetrics
         .filter(node => !id || node.id === id || node.title === id || node.source === id)
         .map(node => node.id),
+      ...matchingSamples.map(row => row.metricId),
+      ...matchingWindows.map(row => row.metricId),
+      ...matchingRegressions.map(row => row.metricId),
       ...branches.flatMap(row => (row.telemetryImpactSummaries ?? []).map(summary => summary?.id ? telemetryMetricNodeId(summary.id) : null)),
       ...changeSets.flatMap(row => (row.telemetryImpactSummaries ?? []).map(summary => summary?.id ? telemetryMetricNodeId(summary.id) : null))
     ].filter(Boolean));
@@ -4654,21 +5003,254 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       ? (model.testGates ?? []).filter(row =>
         row.id === id
         || (row.protectedObjects ?? []).some(target => telemetryMetricIds.has(target) || target === id)
+        || matchingSamples.some(sample => sample.gateId === row.id)
+        || matchingWindows.some(window => (window.gateIds ?? []).includes(row.id))
+        || matchingRegressions.some(regression => (regression.gateIds ?? []).includes(row.id))
       )
       : (model.testGates ?? []).filter(row => (row.protectedObjects ?? []).some(target => String(target).startsWith("telemetryMetric:")));
     const gateIds = new Set(testGates.map(row => row.id));
     const latestTestResultsByGate = Object.fromEntries(
       Object.entries(model.latestTestResultsByGate ?? {})
-        .filter(([gateId]) => gateIds.has(gateId))
+        .filter(([gateId]) => gateIds.has(gateId) || matchingSamples.some(sample => sample.gateId === gateId))
         .map(([gateId, row]) => [gateId, { ...row }])
     );
+    const telemetryThresholdIds = new Set([
+      ...matchingSamples.map(row => row.thresholdId),
+      ...matchingWindows.map(row => row.thresholdId),
+      ...matchingRegressions.map(row => row.thresholdId)
+    ].filter(Boolean));
+    const telemetryThresholds = id
+      ? allTelemetryThresholds.filter(row => telemetryThresholdIds.has(row.id) || row.metricId === id || row.id === id)
+      : allTelemetryThresholds;
+    const materializedViewStates = id
+      ? (model.materializedViewStates ?? []).filter(row =>
+        row.id === id
+        || row.sliceKey === id
+        || row.modelView === id
+      )
+      : (model.materializedViewStates ?? []);
+    const resourceProbeOperations = id
+      ? (model.resourceProbeOperations ?? []).filter(row =>
+        row.id === id
+        || row.detail?.materializedViewId === id
+        || row.detail?.requestView === id
+      )
+      : (model.resourceProbeOperations ?? []);
     return {
       telemetryMetrics,
+      telemetrySamples: matchingSamples,
+      telemetryWindows: matchingWindows,
+      telemetryThresholds,
+      performanceRegressions: matchingRegressions,
+      materializedViewStates,
+      resourceProbeOperations,
       telemetryEdges,
       branches,
       changeSets,
       testGates,
       latestTestResultsByGate,
+      summaries: model.summaries
+    };
+  }
+  if (view === "defects") {
+    const allDefects = model.defects ?? [];
+    const allObservations = model.defectObservations ?? [];
+    const allClusters = model.defectClusters ?? [];
+    const allProposals = model.proposals ?? [];
+    const defects = id
+      ? allDefects.filter(row =>
+        row.id === id
+        || row.clusterId === id
+        || row.metricId === id
+        || row.gateId === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.candidateSnapshotId === id
+        || row.performanceRegressionId === id
+      )
+      : allDefects;
+    const defectIds = new Set(defects.map(row => row.id));
+    const defectObservations = id
+      ? allObservations.filter(row =>
+        row.id === id
+        || row.defectId === id
+        || row.clusterId === id
+        || row.sourceId === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.gateId === id
+        || row.metricId === id
+      )
+      : allObservations.filter(row => defectIds.has(row.defectId));
+    for (const row of defectObservations) defectIds.add(String(row.defectId));
+    const defectClusters = id
+      ? allClusters.filter(row =>
+        row.id === id
+        || row.defectIds?.includes(id)
+        || row.observationIds?.includes(id)
+        || row.branchIds?.includes(id)
+        || row.changeSetIds?.includes(id)
+        || row.gateIds?.includes(id)
+        || row.metricIds?.includes(id)
+        || row.proposalIds?.includes(id)
+      )
+      : allClusters.filter(row => (row.defectIds ?? []).some(defectId => defectIds.has(defectId)));
+    const clusterIds = new Set(defectClusters.map(row => row.id));
+    const proposals = id
+      ? allProposals.filter(row =>
+        row.id === id
+        || row.targetId === id
+        || defectIds.has(String(row.targetId || ""))
+        || (row.body?.clusterId && clusterIds.has(String(row.body.clusterId)))
+      )
+      : allProposals.filter(row =>
+        row.targetProcess === "defect.create"
+        || defectIds.has(String(row.targetId || ""))
+      );
+    const branches = (model.branches ?? []).filter(row =>
+      !id
+      ? defectIds.size === 0 || defects.some(defect => defect.branchId === row.id) || defectClusters.some(cluster => (cluster.branchIds ?? []).includes(row.id))
+      : row.id === id || defects.some(defect => defect.branchId === row.id) || defectClusters.some(cluster => (cluster.branchIds ?? []).includes(row.id))
+    );
+    const changeSets = (model.changeSets ?? []).filter(row =>
+      !id
+      ? defectIds.size === 0 || defects.some(defect => defect.changeSetId === row.id) || defectClusters.some(cluster => (cluster.changeSetIds ?? []).includes(row.id))
+      : row.id === id || defects.some(defect => defect.changeSetId === row.id) || defectClusters.some(cluster => (cluster.changeSetIds ?? []).includes(row.id))
+    );
+    const testGates = (model.testGates ?? []).filter(row =>
+      !id
+      ? defectIds.size === 0 || defects.some(defect => defect.gateId === row.id) || defectClusters.some(cluster => (cluster.gateIds ?? []).includes(row.id))
+      : row.id === id || defects.some(defect => defect.gateId === row.id) || defectClusters.some(cluster => (cluster.gateIds ?? []).includes(row.id))
+    );
+    return {
+      defects,
+      defectObservations,
+      defectClusters,
+      proposals,
+      branches,
+      changeSets,
+      testGates,
+      summaries: model.summaries
+    };
+  }
+  if (view === "pushes") {
+    const pushRecords = id
+      ? (model.pushRecords ?? []).filter(row =>
+        row.id === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.remoteName === id
+        || row.gitBranchName === id
+        || row.localBranchRef === id
+        || row.remoteBranchRef === id
+        || row.commitSha === id
+      )
+      : (model.pushRecords ?? []);
+    const branchIds = new Set(pushRecords.map(row => String(row.branchId || "")).filter(Boolean));
+    const changeSetIds = new Set(pushRecords.map(row => String(row.changeSetId || "")).filter(Boolean));
+    const remoteNames = new Set(pushRecords.map(row => String(row.remoteName || "")).filter(Boolean));
+    const refNames = new Set(pushRecords.flatMap(row => [row.localBranchRef, `refs/remotes/${row.remoteName || ""}/${row.gitBranchName || ""}`, row.remoteBranchRef]).map(value => String(value || "")).filter(Boolean));
+    const pushDefectIds = new Set(
+      (model.defects ?? [])
+        .filter(row => row.pushRecordId && pushRecords.some(pushRecord => pushRecord.id === row.pushRecordId))
+        .map(row => String(row.id || ""))
+    );
+    return {
+      pushRecords,
+      gitRemotes: id
+        ? (model.gitRemotes ?? []).filter(row => row.id === id || row.name === id || remoteNames.has(String(row.name || "")))
+        : (model.gitRemotes ?? []),
+      gitRefs: id
+        ? (model.gitRefs ?? []).filter(row => row.id === id || row.refName === id || refNames.has(String(row.refName || "")))
+        : (model.gitRefs ?? []),
+      branches: id
+        ? (model.branches ?? []).filter(row => row.id === id || branchIds.has(String(row.id || "")) || (row.pushRecordIds ?? []).includes(id))
+        : (model.branches ?? []).filter(row => (row.pushRecordIds ?? []).length > 0),
+      changeSets: id
+        ? (model.changeSets ?? []).filter(row => row.id === id || changeSetIds.has(String(row.id || "")) || branchIds.has(String(row.branchId || "")))
+        : (model.changeSets ?? []).filter(row => changeSetIds.has(String(row.id || ""))),
+      proposals: id
+        ? (model.proposals ?? []).filter(row => row.id === id || pushDefectIds.has(String(row.targetId || "")))
+        : (model.proposals ?? []).filter(row => pushDefectIds.has(String(row.targetId || ""))),
+      defects: id
+        ? (model.defects ?? []).filter(row => row.id === id || row.pushRecordId === id || pushRecords.some(pushRecord => pushRecord.id === row.pushRecordId))
+        : (model.defects ?? []).filter(row => row.pushRecordId && pushRecords.some(pushRecord => pushRecord.id === row.pushRecordId)),
+      summaries: model.summaries
+    };
+  }
+  if (view === "ships") {
+    const shipRecords = id
+      ? (model.shipRecords ?? []).filter(row =>
+        row.id === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.pushRecordId === id
+        || row.releaseChannelId === id
+        || row.commitSha === id
+      )
+      : (model.shipRecords ?? []);
+    const branchIds = new Set(shipRecords.map(row => String(row.branchId || "")).filter(Boolean));
+    const changeSetIds = new Set(shipRecords.map(row => String(row.changeSetId || "")).filter(Boolean));
+    const pushRecordIds = new Set(shipRecords.map(row => String(row.pushRecordId || "")).filter(Boolean));
+    const releaseChannelIds = new Set(shipRecords.map(row => String(row.releaseChannelId || "")).filter(Boolean));
+    const defectIds = new Set(
+      (model.defects ?? [])
+        .filter(row => row.branchId && branchIds.has(String(row.branchId || "")))
+        .map(row => String(row.id || ""))
+    );
+    const regressionIds = new Set(
+      (model.performanceRegressions ?? [])
+        .filter(row => (row.branchIds ?? []).some(branchId => branchIds.has(String(branchId || ""))))
+        .map(row => String(row.id || ""))
+    );
+    return {
+      shipRecords,
+      releaseChannels: id
+        ? (model.releaseChannels ?? []).filter(row => row.id === id || releaseChannelIds.has(String(row.id || "")))
+        : (model.releaseChannels ?? []),
+      branches: id
+        ? (model.branches ?? []).filter(row => row.id === id || branchIds.has(String(row.id || "")) || (row.shipRecordIds ?? []).includes(id))
+        : (model.branches ?? []).filter(row => (row.shipRecordIds ?? []).length > 0),
+      changeSets: id
+        ? (model.changeSets ?? []).filter(row => row.id === id || changeSetIds.has(String(row.id || "")))
+        : (model.changeSets ?? []).filter(row => changeSetIds.has(String(row.id || ""))),
+      pushRecords: id
+        ? (model.pushRecords ?? []).filter(row => row.id === id || pushRecordIds.has(String(row.id || "")))
+        : (model.pushRecords ?? []).filter(row => pushRecordIds.has(String(row.id || ""))),
+      defects: id
+        ? (model.defects ?? []).filter(row => row.id === id || defectIds.has(String(row.id || "")) || branchIds.has(String(row.branchId || "")))
+        : (model.defects ?? []).filter(row => defectIds.has(String(row.id || ""))),
+      performanceRegressions: id
+        ? (model.performanceRegressions ?? []).filter(row =>
+          row.id === id
+          || regressionIds.has(String(row.id || ""))
+          || (row.branchIds ?? []).some(branchId => branchIds.has(String(branchId || "")))
+        )
+        : (model.performanceRegressions ?? []).filter(row => regressionIds.has(String(row.id || ""))),
+      proposals: id
+        ? (model.proposals ?? []).filter(row =>
+          row.id === id
+          || row.targetId === id
+          || branchIds.has(String(row.targetId || ""))
+          || pushRecordIds.has(String(row.body?.pushRecordId || ""))
+          || shipRecords.some(shipRecord => String(row.body?.shipRecordId || "") === String(shipRecord.id || ""))
+        )
+        : (model.proposals ?? []).filter(row =>
+          row.targetProcess === "branch.ship"
+          || row.targetProcess === "branch.rollback"
+          || branchIds.has(String(row.targetId || ""))
+          || shipRecords.some(shipRecord => String(row.body?.shipRecordId || "") === String(shipRecord.id || ""))
+        ),
+      testGates: id
+        ? (model.testGates ?? []).filter(row => row.id === id || (row.selectedByBranches ?? []).some(branchId => branchIds.has(String(branchId || ""))))
+        : (model.testGates ?? []).filter(row => (row.selectedByBranches ?? []).some(branchId => branchIds.has(String(branchId || "")))),
+      latestTestResultsByGate: Object.fromEntries(
+        Object.entries(model.latestTestResultsByGate ?? {})
+          .filter(([gateId]) =>
+            (model.testGates ?? []).some(row => String(row.id || "") === gateId && (row.selectedByBranches ?? []).some(branchId => branchIds.has(String(branchId || ""))))
+          )
+          .map(([gateId, row]) => [gateId, { ...row }])
+      ),
       summaries: model.summaries
     };
   }

@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { loadWitnessAppFile } from "./dsl.js";
+import { loadRuntimePluginRegistriesForDocs, loadWitnessAppFile } from "./dsl.js";
 
 export const APP_MANIFEST_BASENAME = "app.wtoml";
 
@@ -185,7 +185,23 @@ export async function loadAppProject(entryPath, options = {}) {
       }
     );
   };
-  const loaded = await loadWitnessAppFile(manifestPath, { beforeLoad: ensureSourceWithinBoundary });
+  const initialLoaded = await loadWitnessAppFile(manifestPath, {
+    beforeLoad: ensureSourceWithinBoundary,
+    readFile: options?.readFile ?? null
+  });
+  const pluginRuntime = await loadRuntimePluginRegistriesForDocs(initialLoaded.witnessDocs, {
+    runtimeProfile: options?.runtimeProfile,
+    runtimePluginIds: options?.runtimePluginIds ?? null,
+    pluginRoot: options?.pluginRoot ?? null,
+    env: options?.env ?? process.env
+  });
+  const loaded = pluginRuntime.registries?.rvmFormRegistry
+    ? await loadWitnessAppFile(manifestPath, {
+      beforeLoad: ensureSourceWithinBoundary,
+      readFile: options?.readFile ?? null,
+      rvmFormRegistry: pluginRuntime.registries.rvmFormRegistry
+    })
+    : initialLoaded;
   const sourceFiles = uniqueByFile(loaded.sourceFiles);
   const groupedImports = {
     "app-owned": [],
@@ -249,6 +265,7 @@ export async function loadAppProject(entryPath, options = {}) {
     appId: normalizeId(appDocs[0]?.values?.id),
     witnessDocs: loaded.witnessDocs,
     authoredDesireDocs: loaded.authoredDesireDocs,
+    runtimePluginRegistries: pluginRuntime.registries ?? null,
     allDocs: loaded.allDocs,
     sourceFiles,
     importEntries: loaded.importEntries,

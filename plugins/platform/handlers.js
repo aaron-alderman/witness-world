@@ -20,12 +20,15 @@ import {
   stagePlatformChangeSetEdits,
   validatePlatformChangeSet
 } from "./change-sets.js";
-import { buildPlatformSlice, filterPlatformModel } from "./platform-model.js";
+import { pushPlatformBranch } from "./git-push.js";
+import { ensureAutomaticShipRollbackProposals, shipPlatformBranch } from "./git-ship.js";
+import { buildPlatformSlice, filterPlatformModel, requirementsForPlatformRequest } from "./platform-model.js";
 import { renderPlatformPageFragment, renderPlatformShellPage, resolvePlatformLocation } from "./platform-page.js";
 import { buildPlatformProposalCreateBody } from "./platform-proposals.js";
 import { readPlatformTestRun, runPlatformTestCommand, runPlatformTestGate } from "./test-runs.js";
 
 const PLATFORM_TEST_RUN_EVENT_PROCESSES = new Set(["platform.test.run.start", "platform.test.run.finish"]);
+const pendingAutoRollbackProposalEnsures = new WeakMap();
 
 function platformTestRunEventFrame(event, payload) {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
@@ -74,6 +77,32 @@ function summarizePlatformTestBatch(results = []) {
     if (String(result.cacheStatus || "") === "hit") counts.cached += 1;
   }
   return counts;
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function requestPathValue(requestUrl, fallbackPath) {
+  if (typeof requestUrl === "string" && requestUrl.trim()) return requestUrl;
+  const pathname = requestUrl?.pathname ?? fallbackPath ?? "";
+  const search = requestUrl?.search ?? "";
+  return `${pathname}${search}`;
+}
+
+function memoizeProject(project) {
+  if (typeof project !== "function") return () => [];
+  const cache = new Map();
+  return projector => {
+    if (cache.has(projector)) return cache.get(projector);
+    const value = project(projector);
+    cache.set(projector, value);
+    return value;
+  };
+}
+
+function truthyFlag(value) {
+  return value === true || String(value || "").trim().toLowerCase() === "true";
 }
 
 function isWithinRoot(filePath, rootPath) {
@@ -129,13 +158,89 @@ async function refreshSnapshotAfterPlatformApply(snapshotManager, appliedFiles =
   }
 }
 
-async function platformModelFor(appContext, sliceKey = "overview") {
-  return buildPlatformSlice({
+function scheduleAutomaticShipRollbackProposals(world, appContext, ensureAutomaticShipRollbackProposalsImpl) {
+  const key = appContext && typeof appContext === "object"
+    ? appContext
+    : (world && typeof world === "object" ? world : null);
+  if (!key || typeof ensureAutomaticShipRollbackProposalsImpl !== "function") return;
+  if (pendingAutoRollbackProposalEnsures.has(key)) return;
+  const task = Promise.resolve()
+    .then(() => ensureAutomaticShipRollbackProposalsImpl(world, {
+      actor: "platform.auto",
+      appContext
+    }))
+    .catch(() => {})
+    .finally(() => {
+      pendingAutoRollbackProposalEnsures.delete(key);
+    });
+  pendingAutoRollbackProposalEnsures.set(key, task);
+}
+
+async function platformModelFor(
+  world,
+  appContext,
+  sliceKey = "overview",
+  {
+    location = null,
+    buildPlatformSliceImpl = buildPlatformSlice,
+    ensureAutomaticShipRollbackProposalsImpl = ensureAutomaticShipRollbackProposals
+  } = {}
+) {
+  scheduleAutomaticShipRollbackProposals(world, appContext, ensureAutomaticShipRollbackProposalsImpl);
+  if (appContext?.materializedViews?.registerBuilder) {
+    appContext.__platformSliceMaterializedBuilder ??= async ({ buildArgs }) => {
+      const value = await buildPlatformSliceImpl(buildArgs);
+      return {
+        value,
+        inputSize: Number(world?.witnessCount?.() ?? 0) + Number(world?.observationCount?.() ?? 0)
+      };
+    };
+    appContext.materializedViews.registerBuilder("platformSlice", appContext.__platformSliceMaterializedBuilder);
+  }
+  const project = memoizeProject(appContext?.project ?? (projector => world.project(projector)));
+  const materializedView = appContext?.materializedViews?.findOne?.(row =>
+    row.kind === "platformSlice"
+    && row.sliceKey === sliceKey
+    && (
+      !row.modelView
+      || row.modelView === location?.section?.modelView
+      || row.modelView === location?.section?.id
+    )
+  ) ?? null;
+  const buildArgs = {
     sliceKey,
     appContext,
     diagnostics: diagnosticsFromPlatformAppContext(appContext),
-    project: appContext?.project ?? null
-  });
+    project,
+    requirements: requirementsForPlatformRequest({
+      sliceKey,
+      sectionId: location?.section?.id ?? null,
+      modelView: location?.section?.modelView ?? null
+    })
+  };
+  if (materializedView) {
+    return await appContext.materializedViews.read(materializedView.id, {
+      appContext,
+      request: {
+        id: `${location?.ctx?.area || "platform"}:${location?.ctx?.section || sliceKey}`,
+        actor: "platform.cache",
+        path: location?.requestPath ?? "/api/platform-page",
+        view: location?.section?.modelView ?? null,
+        area: location?.ctx?.area ?? null,
+        section: location?.ctx?.section ?? null
+      },
+      buildArgs,
+      cacheKey: JSON.stringify({
+        sliceKey,
+        sectionId: location?.section?.id ?? null,
+        modelView: location?.section?.modelView ?? null,
+        requirements: buildArgs.requirements,
+        witnessCount: world?.witnessCount?.() ?? 0,
+        runtimeRevision: Number(appContext?.appSnapshotManager?.getActiveSnapshot?.()?.appRevision || 0)
+      })
+    });
+  }
+  return buildPlatformSliceImpl(buildArgs);
 }
 
 export function createPlatformHandlers({
@@ -147,7 +252,9 @@ export function createPlatformHandlers({
   platformTestRunner = runPlatformTestCommand,
   sendGateFailure,
   send,
-  sendJson
+  sendJson,
+  buildPlatformSliceImpl = buildPlatformSlice,
+  ensureAutomaticShipRollbackProposalsImpl = ensureAutomaticShipRollbackProposals
 }) {
   const requireBootstrapActor = authoringServices?.requireBootstrapActor ?? (() => ({ ok: false, status: 503, reason: "bootstrap authoring services are not available" }));
   const executeBootstrapProposal = authoringServices?.executeBootstrapProposal ?? null;
@@ -162,13 +269,31 @@ export function createPlatformHandlers({
   };
   return {
     "platform.model.read": async ({ res, requestUrl, requestActor, appContext }) => {
+      const startedAt = nowIso();
+      const startedAtMs = Date.now();
       const location = resolvePlatformLocation(requestUrl);
-      const model = await platformModelFor(appContext, location.section.sliceKey);
+      const model = await platformModelFor(world, appContext, location.section.sliceKey, {
+        location: { ...location, requestPath: requestPathValue(requestUrl, "/api/platform-model") },
+        buildPlatformSliceImpl,
+        ensureAutomaticShipRollbackProposalsImpl
+      });
+      const finishedAt = nowIso();
       world.observe({
         process: "backend.readPlatformModel",
         actor: requestActor || backendHost,
         claims: [relation(backendHost, "projected", "platformModel")],
-        body: { area: location.ctx.area, section: location.ctx.section, nodes: model.nodes.length, gaps: model.gaps.length }
+        body: {
+          area: location.ctx.area,
+          section: location.ctx.section,
+          routeId: "route:GET /api/platform-model",
+          handlerId: "platform.model.read",
+          view: location.ctx.requestedView || location.section.modelView,
+          nodes: model.nodes.length,
+          gaps: model.gaps.length,
+          startedAt,
+          finishedAt,
+          durationMs: Date.now() - startedAtMs
+        }
       });
       sendJson(res, 200, filterPlatformModel(model, location.section.modelView, location.ctx.id, {
         context: location.ctx.context,
@@ -178,24 +303,56 @@ export function createPlatformHandlers({
     },
 
     "platform.gaps.read": async ({ res, requestActor, appContext }) => {
-      const model = await platformModelFor(appContext);
+      const startedAt = nowIso();
+      const startedAtMs = Date.now();
+      const model = await platformModelFor(world, appContext, "overview", {
+        location: { section: { id: "summary", modelView: "summary" }, ctx: { area: "overview", section: "summary" }, requestPath: "/api/platform-gaps" },
+        buildPlatformSliceImpl,
+        ensureAutomaticShipRollbackProposalsImpl
+      });
+      const finishedAt = nowIso();
       world.observe({
         process: "backend.readPlatformGaps",
         actor: requestActor || backendHost,
         claims: [relation(backendHost, "projected", "platformGaps")],
-        body: { gaps: model.gaps.length }
+        body: {
+          routeId: "route:GET /api/platform-gaps",
+          handlerId: "platform.gaps.read",
+          gaps: model.gaps.length,
+          startedAt,
+          finishedAt,
+          durationMs: Date.now() - startedAtMs
+        }
       });
       sendJson(res, 200, { gaps: model.gaps, summaries: model.summaries });
     },
 
     "platform.page.read": async ({ res, requestActor, requestUrl, appContext }) => {
+      const startedAt = nowIso();
+      const startedAtMs = Date.now();
       const location = resolvePlatformLocation(requestUrl);
-      const model = await platformModelFor(appContext, location.section.sliceKey);
+      const model = await platformModelFor(world, appContext, location.section.sliceKey, {
+        location: { ...location, requestPath: requestPathValue(requestUrl, "/api/platform-page") },
+        buildPlatformSliceImpl,
+        ensureAutomaticShipRollbackProposalsImpl
+      });
+      const finishedAt = nowIso();
       world.observe({
         process: "frontend.renderPlatformPageFragment",
         actor: requestActor || frontendHost,
         claims: [relation(frontendHost, "rendered", "platformConsoleFragment")],
-        body: { area: location.ctx.area, section: location.ctx.section, nodes: model.nodes.length, gaps: model.gaps.length }
+        body: {
+          area: location.ctx.area,
+          section: location.ctx.section,
+          routeId: "route:GET /api/platform-page",
+          handlerId: "platform.page.read",
+          view: location.ctx.requestedView || location.section.modelView,
+          nodes: model.nodes.length,
+          gaps: model.gaps.length,
+          startedAt,
+          finishedAt,
+          durationMs: Date.now() - startedAtMs
+        }
       });
       send(res, 200, "text/html; charset=utf-8", renderPlatformPageFragment(model, { requestUrl }));
     },
@@ -216,7 +373,11 @@ export function createPlatformHandlers({
         edits: result.edits,
         candidateSnapshots: result.candidateSnapshots,
         latestCandidateSnapshot: result.latestCandidateSnapshot,
-        validationHistory: result.validationHistory
+        validationHistory: result.validationHistory,
+        pushRecords: result.pushRecords,
+        latestPushRecord: result.latestPushRecord,
+        shipRecords: result.shipRecords,
+        latestShipRecord: result.latestShipRecord
       });
     },
 
@@ -241,6 +402,80 @@ export function createPlatformHandlers({
       }
       sendJson(res, result.status, {
         branch: result.branch,
+        witness: result.witness
+      });
+    },
+
+    "platform.branch.push": async ({ req, res, params, requestActor, requestSession, appContext }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const body = await readJson(req);
+      const result = await pushPlatformBranch(world, {
+        actor,
+        branchId: params.id || "",
+        remoteName: body?.remoteName ?? "origin",
+        dryRun: truthyFlag(body?.dryRun),
+        gitBranchName: body?.gitBranchName ?? null,
+        session: requestSession ?? null,
+        repoRoot: appContext?.platformGit?.repoRoot ?? null,
+        mirrorRoot: appContext?.platformGit?.mirrorRoot ?? null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, {
+          error: result.error,
+          branch: result.branch ?? null,
+          pushRecord: result.pushRecord ?? null,
+          remote: result.remote ?? null,
+          ref: result.ref ?? null,
+          defect: result.defect ?? null,
+          proposal: result.proposal ?? null,
+          witness: result.witness ?? null
+        });
+        return;
+      }
+      sendJson(res, result.status, {
+        branch: result.branch,
+        pushRecord: result.pushRecord,
+        remote: result.remote,
+        ref: result.ref,
+        witness: result.witness
+      });
+    },
+
+    "platform.branch.ship": async ({ req, res, params, requestActor, requestSession, appContext }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const body = await readJson(req);
+      const result = await shipPlatformBranch(world, {
+        actor,
+        branchId: params.id || "",
+        releaseChannelId: body?.releaseChannelId ?? "releaseChannel:local",
+        proposalId: body?.proposalId ?? null,
+        session: requestSession ?? null,
+        appContext
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, {
+          error: result.error,
+          branch: result.branch ?? null,
+          shipRecord: result.shipRecord ?? null,
+          releaseChannel: result.releaseChannel ?? null,
+          gateResults: result.gateResults ?? null,
+          pushRecord: result.pushRecord ?? null,
+          proposal: result.proposal ?? null,
+          rollbackProposal: result.rollbackProposal ?? null,
+          witness: result.witness ?? null
+        });
+        return;
+      }
+      sendJson(res, result.status, {
+        branch: result.branch,
+        shipRecord: result.shipRecord,
+        releaseChannel: result.releaseChannel,
+        gateResults: result.gateResults,
+        pushRecord: result.pushRecord,
+        proposal: result.proposal,
+        rollbackProposal: result.rollbackProposal ?? null,
         witness: result.witness
       });
     },
@@ -442,7 +677,7 @@ export function createPlatformHandlers({
       const actor = requirePlatformMutationActor(res, requestActor);
       if (!actor) return;
       const body = await readJson(req);
-      const model = await platformModelFor(appContext);
+      const model = await platformModelFor(world, appContext);
       const gateId = body?.gateId ? String(body.gateId) : "";
       if (!gateId && body?.id) {
         sendJson(res, 400, { error: "explicit run id requires a specific gate id" });
@@ -664,7 +899,7 @@ export function createPlatformHandlers({
       sendJson(res, result.status, { proposal: result.proposal, witness: result.witness, platformProposal: proposalBody.value });
     },
 
-    "platform.proposal.approve": async ({ res, params, requestActor }) => {
+    "platform.proposal.approve": async ({ res, params, requestActor, appContext }) => {
       const actor = requirePlatformMutationActor(res, requestActor);
       if (!actor) return;
       if (!executeBootstrapProposal) {
@@ -675,7 +910,7 @@ export function createPlatformHandlers({
         actor,
         backendHost,
         proposalId: params.id || "",
-        executeTarget: executeBootstrapProposal(actor)
+        executeTarget: proposal => executeBootstrapProposal(actor)(proposal, { appContext })
       });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });

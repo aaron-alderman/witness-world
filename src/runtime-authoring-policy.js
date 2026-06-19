@@ -25,10 +25,15 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "stewardship.create",
   "stewardship.remove",
   "surface.create",
+  "collection.create",
   "process.create",
   "type.create",
   "projection.create",
   "message.create",
+  "boundary.create",
+  "policy.create",
+  "frontend.migrateLegacy",
+  "frontend.upliftLegacy",
   "package.create",
   "packageRevision.create",
   "packageRevision.publish",
@@ -66,10 +71,15 @@ export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
   "stewardship.create",
   "stewardship.remove",
   "surface.create",
+  "collection.create",
   "process.create",
   "type.create",
   "projection.create",
   "message.create",
+  "boundary.create",
+  "policy.create",
+  "frontend.migrateLegacy",
+  "frontend.upliftLegacy",
   "package.create",
   "packageRevision.create",
   "packageRevision.publish",
@@ -185,7 +195,7 @@ export function createRuntimeAuthoringPolicy({
       ? [...MCP_ONLY_FORBIDDEN_MUTATIONS]
       : [],
     stopOnLimitation: normalizedMode === AUTHORING_MODE_MCP_ONLY,
-    canonicalFrontendModel: ["surface", "process", "projection", "capability"],
+    canonicalFrontendModel: ["surface", "collection", "process", "projection", "message", "boundary", "policy", "capability"],
     loweringLayer: "DESIRE+",
     interactiveStateOwner: "process",
     blockedHandoffFields: [...BLOCKED_HANDOFF_FIELDS],
@@ -276,6 +286,11 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         runtimeConsumers: ["page.surface"],
         status: "supported"
       }),
+      collection: capabilityState({
+        publicAction: "collection.create",
+        runtimeConsumers: ["page.surface"],
+        status: "supported"
+      }),
       process: capabilityState({
         publicAction: "process.create",
         runtimeConsumers: [],
@@ -293,6 +308,16 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       }),
       message: capabilityState({
         publicAction: "message.create",
+        runtimeConsumers: ["page.surface"],
+        status: "supported"
+      }),
+      boundary: capabilityState({
+        publicAction: "boundary.create",
+        runtimeConsumers: ["page.surface"],
+        status: "supported"
+      }),
+      policy: capabilityState({
+        publicAction: "policy.create",
         runtimeConsumers: ["page.surface"],
         status: "supported"
       }),
@@ -318,34 +343,40 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         publicActions: ["widget.create", "widget.update"],
         runtimeConsumers: ["page.home"],
         status: "legacy_only",
-        reason: "widgets remain available only on the explicit legacy widget-program path"
+        reason: "widgets remain available only on the explicit legacy widget-program path until frontendLegacyMigration rewrites those routes onto page.surface compatibility surfaces"
       }),
       frontendProgram: capabilityState({
         publicAction: "frontendProgram.create",
-        runtimeConsumers: ["page.home"],
+        runtimeConsumers: ["page.home", "compat.legacy-widget-program"],
         status: "legacy_only",
-        reason: "frontend programs remain runnable only through the legacy widget-page host"
+        reason: "frontend programs remain legacy-only compatibility input until routes are uplifted onto native page.surface surface/process/projection/message/boundary/policy authoring."
       }),
       frontendStep: capabilityState({
         publicAction: "frontendStep.create",
-        runtimeConsumers: ["page.home"],
+        runtimeConsumers: ["page.home", "compat.legacy-widget-program"],
         status: "legacy_only",
-        reason: "frontend steps remain runnable only through the legacy widget-page host"
+        reason: "frontend steps remain legacy-only compatibility input until routes are uplifted onto native page.surface surface/process/projection/message/boundary/policy authoring."
+      }),
+      frontendLegacyUplift: capabilityState({
+        publicAction: "frontend.upliftLegacy",
+        runtimeConsumers: ["page.surface"],
+        status: "supported"
       })
     },
     runtimeConsumers: {
       "page.surface": {
-        consumes: ["surface", "process", "projection"],
+        consumes: ["surface", "collection", "process", "projection", "message", "boundary", "policy"],
         status: "supported",
         staticProjection: "supported",
         interactiveProjection: "supported",
         pairings: {
           surface: "supported",
+          collection: "supported",
           process: "supported",
           projection: "supported"
         },
         limitationType: null,
-        reason: "page.surface now supports authored surface, process, and projection pairings on canonical routes",
+        reason: "page.surface now supports authored surface, collection, process, and projection pairings on canonical routes",
         pathwaySemantics: {
           blockedResetHost: pathwaySemanticState({
             status: "supported",
@@ -402,16 +433,16 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       "page.home": {
         consumes: ["widget", "frontendProgram"],
         status: "legacy_only",
-        reason: "page.home remains the legacy widget-program runtime path"
+        reason: "page.home now exists only as a compatibility shim while frontendLegacyMigration moves legacy widget-program routes onto page.surface"
       }
     },
     pairings: [
       {
-        authoring: ["surface"],
+        authoring: ["surface", "collection"],
         runtime: "page.surface",
         status: "supported",
         limitationType: null,
-        reason: "page.surface supports static authored projection and route-selected alternate authored output"
+        reason: "page.surface supports static authored projection, repeated collection rendering, and route-selected alternate authored output"
       },
       {
         authoring: ["surface", "process"],
@@ -431,7 +462,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         authoring: ["widget", "frontendProgram", "frontendStep"],
         runtime: "page.home",
         status: "legacy_only",
-        reason: "legacy widget-program execution remains available only outside the constrained public MCP baseline"
+        reason: "legacy widget-program execution remains available only as a compatibility lane outside the constrained public MCP baseline; frontendLegacyMigration is the path onto page.surface"
       }
     ],
     constrainedMcp: {

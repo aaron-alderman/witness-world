@@ -77,7 +77,8 @@ export function bindBootstrapBackendAuthoringSubmit({
   contractsByFamily = bootstrapBackendAuthoringSubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = event => {
     const detail = event?.detail || {};
     if (detail.source !== "bootstrap-backend-authoring-controls") return false;
@@ -90,6 +91,19 @@ export function bindBootstrapBackendAuthoringSubmit({
       contractsByFamily
     });
   };
-  resolvedTarget.addEventListener("witness:bootstrap-backend-authoring-submit", handler);
+  for (const detail of [
+    { source: "bootstrap-backend-authoring-controls", family: "program", formId: "backend-program-form", statusId: "backend-program-status" },
+    { source: "bootstrap-backend-authoring-controls", family: "program-version", formId: "backend-program-version-form", statusId: "backend-program-version-status" },
+    { source: "bootstrap-backend-authoring-controls", family: "step", formId: "backend-step-form", statusId: "backend-step-status" }
+  ]) {
+    const form = resolvedDocument?.getElementById?.(detail.formId);
+    if (!form || form.__bootstrapBackendAuthoringSubmitBound) continue;
+    form.__bootstrapBackendAuthoringSubmitBound = true;
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      void handler({ detail: { ...detail, ...data } });
+    });
+  }
   return handler;
 }

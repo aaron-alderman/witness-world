@@ -12,6 +12,36 @@ default = true
 allowActorHeader = false
 runtimeConfig = { "mcp.engentus_mcp.token" = { value = "engentus-dev-token" } }
 
+[[materializedView]]
+actor = "aaron"
+id = "platform.view.overview.summary"
+title = "Platform overview summary"
+kind = "platformSlice"
+sliceKey = "overview"
+modelView = "summary"
+maintenance = "on-demand"
+storageClass = "memory"
+resourceBudgetClass = "interactive"
+blocking = true
+ttlMs = 1500
+sourceProjectors = ["serverRunners", "runtimePluginInstalls", "branches", "changeSets", "telemetrySamples", "telemetryWindows", "performanceRegressions"]
+sourceWitnessProcesses = ["defineServerRunner", "installRuntimePlugin", "platform.changeSet.validate", "platform.test.run.finish"]
+
+[[materializedView]]
+actor = "aaron"
+id = "platform.view.telemetry"
+title = "Platform telemetry view"
+kind = "platformSlice"
+sliceKey = "telemetry"
+modelView = "telemetry"
+maintenance = "on-demand"
+storageClass = "memory"
+resourceBudgetClass = "interactive"
+blocking = true
+ttlMs = 2000
+sourceProjectors = ["telemetrySamples", "telemetryWindows", "performanceRegressions", "materializedViewStates", "resourceProbeOperations"]
+sourceWitnessProcesses = ["platform.changeSet.validate", "platform.test.run.finish"]
+
 [[runtimePluginInstall]]
 actor = "aaron"
 serverRunner = "engentus_server"
@@ -56,6 +86,18 @@ plugin = "plugin.mcp-authoring"
 actor = "aaron"
 serverRunner = "engentus_server"
 plugin = "plugin.engentus-dev-diagnostics"
+
+[[runtimePreload]]
+actor = "aaron"
+id = "engentus_chart_runtime_boot"
+when = { kind = "boot" }
+targets = [{ kind = "capability", capability = "chart.render", load = ["assets"] }]
+
+[[runtimePreload]]
+actor = "aaron"
+id = "engentus_goodman_idle_after_home"
+when = { kind = "idleAfterRoute", route = "home", delayMs = 1000 }
+targets = [{ kind = "route", route = "goodman", load = ["manifest", "capabilityAssets"] }]
 
 [[mcpServer]]
 actor = "aaron"
@@ -463,6 +505,19 @@ params = { rootSurface = "EngentusRoot", defaultScreen = "platform-config-script
 actor = "aaron"
 serverRunner = "engentus_server"
 route = "engentus_platform_config_scripts_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_debug_route"
+method = "GET"
+path = "/engentus/debug"
+serves = "engentusDebug"
+handler = "engentus.debug.page"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_debug_route"
 
 [[route]]
 actor = "aaron"

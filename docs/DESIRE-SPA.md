@@ -26,7 +26,7 @@ Reference behavior evidence read from the oracle JavaScript lives in
   have to manually split route payloads just to avoid over-shipping off-route
   state.
 - The constrained public frontend model is
-  `surface + process + projection + capability`.
+  `surface + process + projection + collection + boundary + policy + capability`.
 - `plugin.authoring` is the only constrained write path.
 - Blocked means stop, not improvise.
 
@@ -97,14 +97,16 @@ That renderer has been removed.
 
 Current truth:
 
-- `page.surface` still resolves as a route host
-- it can project minimal authored static surface output
-- it can serve route-selected alternate authored surface output
-- it still exposes the blocked/reset host when no minimal authored payload can be projected
-- it now claims canonical route/state equivalence support
-- it now claims canonical interactive execution through authored process rules
-- it now claims `surface + process` runtime support
-- it now claims `surface + projection` runtime support
+- `page.surface` is the canonical route host
+- it can project authored surface trees, route-selected alternate output, and
+  native repeated collection content
+- it now claims canonical route/state equivalence, query synchronization,
+  route-enter preload behavior, and interactive execution through authored
+  process rules
+- it now claims native `surface + process + projection + collection + boundary
+  + policy + capability` runtime support
+- it no longer treats `dispatchDomEvent` or `witness:*` host-event bridges as
+  an acceptable public runtime lane
 
 The next honest work does not begin from the old shell host. It begins from the
 clean floor proved by the canonical authoring pathway probe.
@@ -120,6 +122,11 @@ clean floor proved by the canonical authoring pathway probe.
 - generic runtime honesty-layer truth
 - authored Engentus source structure under `examples/engentus`
 - route-local `page.surface` transport slicing for served authored surfaces
+- native collection repeat authoring on canonical `page.surface`
+- route-authored preload policies on canonical `page.surface`
+- canonical query-state bindings on canonical `page.surface`
+- governed `boundary.create`, `policy.create`, `collection.create`, and
+  `frontend.upliftLegacy`
 
 ### Removed false authority
 
@@ -130,8 +137,11 @@ clean floor proved by the canonical authoring pathway probe.
 ### Still blocked
 
 - Goodman, mill-charge, and mill-force live behavior on canonical seams
-- legacy `page.home` widget/frontend-program execution remains outside the
-  canonical constrained lane
+- legacy routes whose remaining behavior still cannot be lowered into native
+  `surface + process + projection + collection + boundary + policy +
+  capability` semantics
+- arbitrary external network targets or host-only legacy behavior that still
+  lacks a first-class native expression
 
 ### Newly proved
 
@@ -145,6 +155,9 @@ clean floor proved by the canonical authoring pathway probe.
 - route-state -> URL synchronization on canonical `page.surface`
 - same-document surface refresh after route-state change
 - canonical interactive `page.surface` execution
+- native collection repeat rendering on canonical `page.surface`
+- route-authored preload execution on canonical `page.surface`
+- native query-state bindings on canonical `page.surface`
 - faithful live Engentus shell behavior through the constrained pathway
 - route-local runtime transport for served `page.surface` output, so an active
   route no longer serializes the entire broad owning process closure by default
@@ -170,8 +183,8 @@ For Engentus this is now the shell substrate for:
 
 Route and shell state are two representations of the same authored problem.
 The constrained pathway now proves them together on canonical seams, so the
-next honest gap is broader module behavior and legacy widget-program
-compatibility removal.
+next honest gap is broader module behavior and the remaining blocked legacy
+semantics that still need first-class native expression.
 
 ## Restart lane
 

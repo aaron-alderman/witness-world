@@ -5,7 +5,7 @@ import {
   compileRvmFileToDesirePlus,
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
-import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
+import { evaluateModel } from "../plugins/chart-runtime/plan/evaluate-model.js";
 import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodman-stdlib.js";
 import { samplingFunctions } from "../examples/engentus/app/chart-functions/sampling.js";
 

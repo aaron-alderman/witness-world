@@ -68,7 +68,8 @@ export function bindBootstrapBackendVersionSubmit({
   contractsByFamily = bootstrapBackendVersionSubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = event => {
     const detail = event?.detail || {};
     if (detail.source !== "bootstrap-backend-version-controls") return false;
@@ -80,6 +81,18 @@ export function bindBootstrapBackendVersionSubmit({
       contractsByFamily
     });
   };
-  resolvedTarget.addEventListener("witness:bootstrap-backend-version-submit", handler);
+  for (const detail of [
+    { source: "bootstrap-backend-version-controls", family: "activate", formId: "backend-program-activate-form", statusId: "backend-program-activate-status" },
+    { source: "bootstrap-backend-version-controls", family: "rollback", formId: "backend-program-rollback-form", statusId: "backend-program-rollback-status" }
+  ]) {
+    const form = resolvedDocument?.getElementById?.(detail.formId);
+    if (!form || form.__bootstrapBackendVersionSubmitBound) continue;
+    form.__bootstrapBackendVersionSubmitBound = true;
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      void handler({ detail: { ...detail, ...data } });
+    });
+  }
   return handler;
 }

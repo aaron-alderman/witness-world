@@ -4,6 +4,7 @@ import {
   frontendProgramsProjection
 } from "./widgets.js";
 import {
+  APP_PREVIEW_SESSIONS_PATH,
   APP_REVISION_EVENTS_PATH,
   BACKEND_REVISION_EVENTS_PATH,
   APP_SOURCE_WRITE_PATH
@@ -20,9 +21,13 @@ import {
   activeBackendProgramDefinition
 } from "./backend-programs.js";
 import { renderInactiveRuntimeWidgetPage } from "./runtime-page-fallbacks.js";
-import { normalizePathname } from "./runtime-surface-shell.js";
+import { normalizePathname, readSurfaceMapFromWorld } from "./runtime-surface-shell.js";
 import { renderSurfacePage } from "./runtime-surface-page.js";
 import { createGuidanceBundleHandlers, guidanceConfigForSession } from "./runtime-guidance.js";
+import {
+  legacyFrontendBridgeConfigFromRoute,
+  legacyFrontendBridgeConfigFromSurface
+} from "./legacy-frontend-bridge.js";
 import {
   AUTHORING_MODE_MCP_ONLY,
   blockedDirectMutationResponse,
@@ -41,6 +46,139 @@ import {
   describeMountedRouteOwnership
 } from "./runtime-ownership.js";
 import { describeMountedRouteGovernance } from "./runtime-governance.js";
+
+function escapeScriptBody(source) {
+  return String(source ?? "").replaceAll("</script", "<\\/script");
+}
+
+function injectRuntimeWindowValue(html, globalName, value) {
+  const script = `<script>\nwindow[${JSON.stringify(globalName)}] = ${escapeScriptBody(JSON.stringify(value))};\n</script>`;
+  return String(html).includes("</body>")
+    ? String(html).replace("</body>", `${script}</body>`)
+    : `${html}\n${script}`;
+}
+
+function injectPreviewSessionClient(html, {
+  previewSessionId,
+  previewRevision = 0,
+  debugSessionId = null
+} = {}) {
+  if (!previewSessionId) return html;
+  const script = `<script>
+(() => {
+  const previewSessionId = ${JSON.stringify(previewSessionId)};
+  const currentRevision = ${JSON.stringify(Number(previewRevision || 0))};
+  const debugSessionId = ${JSON.stringify(debugSessionId)};
+  if (!previewSessionId || typeof EventSource !== "function") return;
+  const path = ${JSON.stringify(APP_PREVIEW_SESSIONS_PATH)} + "/" + encodeURIComponent(previewSessionId) + "/events";
+  const source = new EventSource(path);
+  const clearPreviewQueryAndReload = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("previewSessionId");
+    if (debugSessionId) url.searchParams.delete("debugSessionId");
+    window.location.assign(url.toString());
+  };
+  source.onmessage = event => {
+    try {
+      const payload = JSON.parse(event.data || "{}");
+      if (payload.status === "deleted") {
+        source.close();
+        clearPreviewQueryAndReload();
+        return;
+      }
+      if (payload.status === "stale") {
+        source.close();
+        window.location.reload();
+        return;
+      }
+      if (Number(payload.previewRevision || 0) <= currentRevision) return;
+      source.close();
+      window.location.reload();
+    } catch {}
+  };
+  source.onerror = () => {
+    try { source.close(); } catch {}
+  };
+})();
+</script>`;
+  return String(html).includes("</body>")
+    ? String(html).replace("</body>", `${script}</body>`)
+    : `${html}\n${script}`;
+}
+
+function renderPreviewSessionStatePage({
+  title,
+  heading,
+  detail,
+  currentPath = "/"
+} = {}) {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${title}</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+      main { max-width: 760px; margin: 10vh auto; padding: 24px; }
+      .card { border: 1px solid rgba(148,163,184,.28); border-radius: 16px; background: rgba(15,23,42,.92); padding: 24px; }
+      h1 { margin: 0 0 12px; font-size: 24px; }
+      p { margin: 0 0 16px; color: #cbd5e1; }
+      a { color: #93c5fd; }
+      code { color: #f8fafc; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="card">
+        <h1>${heading}</h1>
+        <p>${detail}</p>
+        <p><a href="${currentPath}">Return to the live app</a></p>
+      </div>
+    </main>
+  </body>
+</html>`;
+}
+
+function normalizeSourceryMuteRules(value) {
+  return Array.isArray(value)
+    ? value
+      .filter(rule => rule && typeof rule === "object")
+      .map(rule => ({
+        scopeKind: typeof rule.scopeKind === "string" ? rule.scopeKind.trim().toLowerCase() : "context",
+        scopeId: typeof rule.scopeId === "string" && rule.scopeId.trim() ? rule.scopeId.trim() : null,
+        durationKind: typeof rule.durationKind === "string" && rule.durationKind.trim() ? rule.durationKind.trim() : null,
+        expiresAt: typeof rule.expiresAt === "string" && rule.expiresAt.trim() ? rule.expiresAt.trim() : null,
+        permanent: rule.permanent === true
+      }))
+    : [];
+}
+
+function muteRuleIsActive(rule) {
+  if (!rule) return false;
+  if (rule.permanent === true) return true;
+  if (!rule.expiresAt) return false;
+  const expiresAt = Date.parse(rule.expiresAt);
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
+}
+
+function sourceryMutedForContext(rules = [], {
+  appId = null,
+  rootSurfaceId = null,
+  routeId = null,
+  pathname = null
+} = {}) {
+  const contextIds = new Set([rootSurfaceId, routeId, pathname].filter(Boolean).map(String));
+  for (const rule of normalizeSourceryMuteRules(rules)) {
+    if (!muteRuleIsActive(rule)) continue;
+    if (rule.scopeKind === "global") return true;
+    if (rule.scopeKind === "app" && rule.scopeId && rule.scopeId === appId) return true;
+    if ((rule.scopeKind === "surface" || rule.scopeKind === "context") && rule.scopeId && contextIds.has(rule.scopeId)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function widgetPageGuidanceSurface(world, {
   route = null,
@@ -189,6 +327,66 @@ export function createCoreRuntimeBundleHandlers({
         effectiveActor: requestActor,
         authorityMode: "direct"
       });
+  const renderLegacyFrontendCompatibilityHtml = ({
+    renderWorld = world,
+    route = null,
+    requestSession = null,
+    appContext = null,
+    bridgeConfig = null,
+    rootSurfaceId = null
+  } = {}) => {
+    const rootWidget = bridgeConfig?.rootWidget ?? null;
+    if (!rootWidget) return null;
+    const authority = normalizedRequestAuthority({ requestSession });
+    const pageTheme = projectPagePresentationThemeHook(requestVisibleWitnesses(authority.effectiveActor ?? null, appContext), {
+      actor: authority.effectiveActor ?? null,
+      pageId: rootWidget
+    });
+    const frontendProgramId = bridgeConfig?.frontendProgram ?? null;
+    const guidanceSurface = widgetPageGuidanceSurface(renderWorld, {
+      route,
+      rootWidget,
+      frontendProgramId,
+      guidancePage: "app"
+    });
+    const guidance = guidanceConfigForSession({
+      requestSession,
+      tutorialProgressFor,
+      guidanceProgressFor,
+      runtimeContributions,
+      surface: guidanceSurface
+    });
+    const compatibilityTutorial = guidance ?? guidanceConfigForSessionHook({
+      requestSession,
+      tutorialProgressFor,
+      guidanceProgressFor,
+      surface: guidanceSurface
+    });
+    return renderWidgetPageHook(renderWorld, {
+      actor: frontendHost,
+      rootWidget,
+      appContext,
+      frontendProgram: frontendProgramId,
+      appConfig: {
+        actors: requestActors(appContext),
+        page: bridgeConfig?.page ?? "home",
+        excludeWidgetRoles: Array.isArray(bridgeConfig?.excludeWidgetRoles) ? bridgeConfig.excludeWidgetRoles : ["world-graph-body"],
+        pageChrome: pageTheme,
+        liveProjection: bridgeConfig?.liveProjection !== false,
+        runtimeSurfaces: appContext.runtimeSurfaceEntries ?? [],
+        browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
+          .map(definition => typeof definition?.id === "string" ? definition.id : "")
+          .filter(Boolean),
+        surfaceContext: guidanceSurface.context,
+        surfaceRouteId: guidanceSurface.routeId,
+        surfaceRootWidgetId: guidanceSurface.rootWidgetId,
+        surfaceProgramId: guidanceSurface.frontendProgramId,
+        ...(rootSurfaceId ? { surfaceCompatibilityRootSurfaceId: rootSurfaceId } : {}),
+        guidance,
+        tutorial: compatibilityTutorial
+      }
+    });
+  };
   const authorityGrantReadShape = grantRow => {
     if (!grantRow) return null;
     const identityIndex = currentIdentityIndex();
@@ -278,10 +476,62 @@ export function createCoreRuntimeBundleHandlers({
   const appRenderWorld = appContext => appContext?.appSnapshotManager?.getActiveSnapshot()?.world
     ?? (typeof currentAppRenderWorld === "function" ? currentAppRenderWorld() : null)
     ?? world;
+  const currentPreviewManager = appContext => appContext?.appPreviewSessionManager ?? null;
+  const resolvePreviewManager = async appContext => {
+    const existingManager = currentPreviewManager(appContext);
+    if (existingManager) return existingManager;
+    if (appContext?.appSnapshotManagerReady && typeof appContext.appSnapshotManagerReady.then === "function") {
+      try {
+        await appContext.appSnapshotManagerReady;
+      } catch {}
+    }
+    return currentPreviewManager(appContext);
+  };
   const maybeInjectDevClient = (html, appContext) => {
     const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
     if (!snapshotManager || appContext?.devMode !== true) return html;
     return snapshotManager.injectDevClient(html, snapshotManager.getActiveSnapshot());
+  };
+  const companionConfigForSurfaceRequest = ({
+    rootSurfaceId,
+    route,
+    requestUrl,
+    requestSession,
+    appContext,
+    previewSession = null
+  } = {}) => {
+    if (rootSurfaceId !== "EngentusRoot") return null;
+    const featureAccess = requestSession?.featureAccess ?? {};
+    const canOpenDebug = (
+      featureAccess["engentus.platform_config"]
+      ?? requestSession?.featureAccess__engentus_platform_config
+    ) === "granted";
+    const identityId = requestSession?.effectiveIdentity
+      ?? requestSession?.identity
+      ?? requestSession?.authenticatedIdentity
+      ?? null;
+    const identity = identityId ? (currentIdentityIndex()?.byId?.[identityId] ?? null) : null;
+    const appId = appContext?.requestSnapshot?.appProject?.appId
+      ?? appContext?.appSnapshotManager?.getActiveSnapshot?.()?.appProject?.appId
+      ?? "engentus";
+    const sourceryVisible = !sourceryMutedForContext(identity?.sourceryMuteRules ?? [], {
+      appId,
+      rootSurfaceId,
+      routeId: route?.id ?? null,
+      pathname: requestUrl?.pathname ?? route?.path ?? "/"
+    });
+    return {
+      appId,
+      rootSurfaceId,
+      routeId: route?.id ?? null,
+      pathname: requestUrl?.pathname ?? route?.path ?? "/",
+      previewSessionId: previewSession?.id ?? null,
+      previewRevision: previewSession?.previewRevision ?? 0,
+      wcssPreviewSessionId: requestUrl?.searchParams?.get("wcssPreview")?.trim() || null,
+      debugSessionId: requestUrl?.searchParams?.get("debugSessionId")?.trim() || null,
+      canOpenDebug,
+      sourceryVisible
+    };
   };
   const backendProcessRequestHandler = processId => {
     const id = typeof processId === "string" && processId.trim() ? processId.trim() : "";
@@ -949,78 +1199,128 @@ export function createCoreRuntimeBundleHandlers({
       await executeBackendProgramRoute(args);
     },
 
-    "page.home": async ({ res, route, appContext, requestSession }) => {
-      const params = route.params ?? {};
-      const rootWidget = params.rootWidget ?? null;
-      if (!rootWidget) {
+    "page.home": async ({ res, route, requestUrl, appContext, requestSession }) => {
+      const bridge = legacyFrontendBridgeConfigFromRoute(route);
+      if (!bridge?.rootWidget) {
         sendJson(res, 404, { error: "page not configured", route: route.id });
         return;
       }
-      const page = params.page ?? "home";
-      const excludeWidgetRoles = Array.isArray(params.excludeWidgetRoles) ? params.excludeWidgetRoles : ["world-graph-body"];
+      const previewSessionId = requestUrl?.searchParams?.get("previewSessionId")?.trim() || null;
+      const previewManager = previewSessionId ? await resolvePreviewManager(appContext) : currentPreviewManager(appContext);
+      const previewResolution = previewSessionId && previewManager
+        ? previewManager.resolveRenderSession(previewSessionId)
+        : null;
+      if (previewResolution && !previewResolution.ok && previewResolution.reason === "stale") {
+        send(
+          res,
+          409,
+          "text/html",
+          renderPreviewSessionStatePage({
+            title: "Preview Stale",
+            heading: "Preview no longer matches the active snapshot",
+            detail: previewResolution.session?.invalidReason || "The active app snapshot changed while the preview session was open.",
+            currentPath: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/")
+          }),
+          devHtmlHeaders(appContext)
+        );
+        return;
+      }
       world.observe({
         process: "frontend.render",
         actor: frontendHost,
-        claims: [relation(frontendHost, "rendered", route.serves || rootWidget)],
+        claims: [relation(frontendHost, "rendered", route.serves || bridge.rootWidget)],
         body: { route: route.path }
       });
-      const authority = normalizedRequestAuthority({ requestSession });
-      const pageTheme = projectPagePresentationThemeHook(requestVisibleWitnesses(authority.effectiveActor ?? null, appContext), {
-        actor: authority.effectiveActor ?? null,
-        pageId: rootWidget
+      let responseHtml = renderLegacyFrontendCompatibilityHtml({
+        renderWorld: previewResolution?.ok ? previewResolution.world : world,
+        route,
+        requestSession,
+        appContext,
+        bridgeConfig: bridge
       });
-        const guidanceSurface = widgetPageGuidanceSurface(world, {
-          route,
-          rootWidget,
-          frontendProgramId: params.frontendProgram ?? null,
-          guidancePage: "app"
+      if (previewResolution?.ok) {
+        responseHtml = injectPreviewSessionClient(responseHtml, {
+          previewSessionId,
+          previewRevision: previewResolution.session?.previewRevision ?? 0,
+          debugSessionId: requestUrl?.searchParams?.get("debugSessionId")?.trim() || null
         });
-        const guidance = guidanceConfigForSession({
-          requestSession,
-          tutorialProgressFor,
-          guidanceProgressFor,
-          runtimeContributions,
-          surface: guidanceSurface
-        });
-        const compatibilityTutorial = guidance ?? guidanceConfigForSessionHook({
-          requestSession,
-          tutorialProgressFor,
-          guidanceProgressFor,
-          surface: guidanceSurface
-        });
-        send(res, 200, "text/html", renderWidgetPageHook(world, {
-          actor: frontendHost,
-          rootWidget,
-          appContext,
-          frontendProgram: params.frontendProgram ?? null,
-        appConfig: {
-          actors: requestActors(appContext),
-          page,
-          excludeWidgetRoles,
-          pageChrome: pageTheme,
-          liveProjection: params.liveProjection !== false,
-            runtimeSurfaces: appContext.runtimeSurfaceEntries ?? [],
-            browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
-              .map(definition => typeof definition?.id === "string" ? definition.id : "")
-              .filter(Boolean),
-            surfaceContext: guidanceSurface.context,
-            surfaceRouteId: guidanceSurface.routeId,
-            surfaceRootWidgetId: guidanceSurface.rootWidgetId,
-            surfaceProgramId: guidanceSurface.frontendProgramId,
-            guidance,
-            tutorial: compatibilityTutorial
-          }
-        }));
+      }
+      send(res, 200, "text/html", maybeInjectDevClient(responseHtml, appContext), devHtmlHeaders(appContext));
       },
 
-    "page.surface": async ({ res, route, requestUrl, appContext }) => {
+    "page.surface": async ({ res, route, requestUrl, requestSession, appContext }) => {
       const rootSurfaceId = route?.params?.rootSurface ?? null;
       const pageStatus = Number(route?.params?.responseStatus ?? 200) || 200;
       if (!rootSurfaceId) {
         sendJson(res, 404, { error: "surface page not configured", route: route?.id ?? null });
         return;
       }
-      const renderWorld = appRenderWorld(appContext);
+      const previewSessionId = requestUrl?.searchParams?.get("previewSessionId")?.trim() || null;
+      const previewManager = previewSessionId ? await resolvePreviewManager(appContext) : currentPreviewManager(appContext);
+      const previewResolution = previewSessionId && previewManager
+        ? previewManager.resolveRenderSession(previewSessionId)
+        : null;
+      if (previewResolution && !previewResolution.ok && previewResolution.reason === "stale") {
+        send(
+          res,
+          409,
+          "text/html",
+          renderPreviewSessionStatePage({
+            title: "Preview Stale",
+            heading: "Preview no longer matches the active snapshot",
+            detail: previewResolution.session?.invalidReason || "The active app snapshot changed while the preview session was open.",
+            currentPath: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/")
+          }),
+          devHtmlHeaders(appContext)
+        );
+        return;
+      }
+      const renderWorld = previewResolution?.ok
+        ? previewResolution.world
+        : appRenderWorld(appContext);
+      const bridgeSurface = readSurfaceMapFromWorld(renderWorld).get(rootSurfaceId) ?? null;
+      const legacyBridge = legacyFrontendBridgeConfigFromSurface(bridgeSurface);
+      if (legacyBridge) {
+        let responseHtml = renderLegacyFrontendCompatibilityHtml({
+          renderWorld,
+          route,
+          requestSession,
+          appContext,
+          bridgeConfig: legacyBridge,
+          rootSurfaceId
+        });
+        if (!responseHtml) {
+          sendJson(res, 404, { error: "surface page not found", rootSurface: rootSurfaceId });
+          return;
+        }
+        if (previewResolution?.ok) {
+          responseHtml = injectPreviewSessionClient(responseHtml, {
+            previewSessionId,
+            previewRevision: previewResolution.session?.previewRevision ?? 0,
+            debugSessionId: requestUrl?.searchParams?.get("debugSessionId")?.trim() || null
+          });
+        }
+        const companionConfig = companionConfigForSurfaceRequest({
+          rootSurfaceId,
+          route,
+          requestUrl,
+          requestSession,
+          appContext,
+          previewSession: previewResolution?.session ?? null
+        });
+        if (companionConfig) {
+          responseHtml = injectRuntimeWindowValue(responseHtml, "__engentusDebugConfig", companionConfig);
+          responseHtml = injectRuntimeWindowValue(responseHtml, "__sourceryCompanionEnabled", companionConfig.sourceryVisible !== false);
+        }
+        world.observe({
+          process: "frontend.render",
+          actor: frontendHost,
+          claims: [relation(frontendHost, "rendered", route?.serves || rootSurfaceId)],
+          body: { route: requestUrl?.pathname ?? route?.path ?? "/", rootSurface: rootSurfaceId, compatibilityBridge: true }
+        });
+        send(res, pageStatus, "text/html", maybeInjectDevClient(responseHtml, appContext), devHtmlHeaders(appContext));
+        return;
+      }
       const html = renderSurfacePage(renderWorld, {
         rootSurfaceId,
         requestPathname: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/"),
@@ -1031,9 +1331,15 @@ export function createCoreRuntimeBundleHandlers({
         browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
           .map(definition => typeof definition?.id === "string" ? definition.id : "")
           .filter(Boolean),
+        runtimePreloads: [
+          ...renderWorld.project(moduleProjectors.runtimePreloads),
+          ...((Array.isArray(route?.params?.preloadPolicies) ? route.params.preloadPolicies : []).map(policy => structuredClone(policy)))
+        ],
         routeStateDescriptor: route?.params?.routeState ?? null,
+        queryBindings: route?.params?.queryBindings ?? [],
         initialStateOverrides: route?.params?.initialStateOverrides ?? null,
         surfaceCapabilityRenderers: appContext?.runtimeContributions?.surfaceCapabilityRenderers ?? [],
+        capabilityPreloadProviders: appContext?.runtimeContributions?.capabilityPreloadProviders ?? [],
         surfaceRuntimeSupportAssets: appContext?.runtimeContributions?.surfaceRuntimeSupportAssets ?? [],
         devMode: appContext?.devMode === true
       });
@@ -1041,13 +1347,33 @@ export function createCoreRuntimeBundleHandlers({
         sendJson(res, 404, { error: "surface page not found", rootSurface: rootSurfaceId });
         return;
       }
+      let responseHtml = html;
+      if (previewResolution?.ok) {
+        responseHtml = injectPreviewSessionClient(responseHtml, {
+          previewSessionId,
+          previewRevision: previewResolution.session?.previewRevision ?? 0,
+          debugSessionId: requestUrl?.searchParams?.get("debugSessionId")?.trim() || null
+        });
+      }
+      const companionConfig = companionConfigForSurfaceRequest({
+        rootSurfaceId,
+        route,
+        requestUrl,
+        requestSession,
+        appContext,
+        previewSession: previewResolution?.session ?? null
+      });
+      if (companionConfig) {
+        responseHtml = injectRuntimeWindowValue(responseHtml, "__engentusDebugConfig", companionConfig);
+        responseHtml = injectRuntimeWindowValue(responseHtml, "__sourceryCompanionEnabled", companionConfig.sourceryVisible !== false);
+      }
       world.observe({
         process: "frontend.render",
         actor: frontendHost,
         claims: [relation(frontendHost, "rendered", route?.serves || rootSurfaceId)],
         body: { route: requestUrl?.pathname ?? route?.path ?? "/", rootSurface: rootSurfaceId }
       });
-      send(res, pageStatus, "text/html", maybeInjectDevClient(html, appContext), devHtmlHeaders(appContext));
+      send(res, pageStatus, "text/html", maybeInjectDevClient(responseHtml, appContext), devHtmlHeaders(appContext));
     },
 
     "app.revision.events": async ({ req, res, appContext }) => {
@@ -1090,6 +1416,207 @@ export function createCoreRuntimeBundleHandlers({
         unsubscribe();
         try { res.end(); } catch {}
       });
+    },
+
+    "app.preview.session.create": async ({ res, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      try {
+        const previewSession = previewManager.createSession();
+        sendJson(res, 201, { previewSession });
+      } catch (error) {
+        sendJson(res, 409, {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    },
+
+    "app.preview.session.read": async ({ res, params, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      const previewSession = previewManager.readSession(params?.id ?? "");
+      if (!previewSession) {
+        sendJson(res, 404, { error: "preview session not found" });
+        return;
+      }
+      sendJson(res, 200, { previewSession });
+    },
+
+    "app.preview.session.patchSources": async ({ req, res, params, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      try {
+        const body = await readJson(req);
+        const edits = Array.isArray(body?.edits) ? body.edits : [];
+        const previewSession = await previewManager.patchSources(params?.id ?? "", edits);
+        sendJson(res, 200, { previewSession });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const status = /not found/i.test(message) ? 404 : 400;
+        sendJson(res, status, { error: message });
+      }
+    },
+
+    "app.preview.session.patchCandidates": async ({ req, res, params, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      try {
+        const body = await readJson(req);
+        const result = await previewManager.patchCandidates(
+          params?.id ?? "",
+          Array.isArray(body?.candidates) ? body.candidates : []
+        );
+        sendJson(res, 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const status = /not found/i.test(message) ? 404 : 400;
+        sendJson(res, status, { error: message });
+      }
+    },
+
+    "app.preview.session.delete": async ({ res, params, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      if (!previewManager.deleteSession(params?.id ?? "")) {
+        sendJson(res, 404, { error: "preview session not found" });
+        return;
+      }
+      sendJson(res, 200, { ok: true });
+    },
+
+    "app.preview.session.events": async ({ req, res, params, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      const previewSession = previewManager.readSession(params?.id ?? "");
+      if (!previewSession) {
+        sendJson(res, 404, { error: "preview session not found" });
+        return;
+      }
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive"
+      });
+      res.write(revisionEventFrame(previewSession.event ?? previewSession));
+      const unsubscribe = previewManager.subscribe(params?.id ?? "", event => {
+        res.write(revisionEventFrame(event?.event ?? event));
+      });
+      req.on("close", () => {
+        unsubscribe();
+        try { res.end(); } catch {}
+      });
+    },
+
+    "app.preview.session.source.read": async ({ res, params, requestUrl, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      const file = requestUrl?.searchParams?.get("file")?.trim() || "";
+      const source = await previewManager.readSource(params?.id ?? "", file);
+      if (!source) {
+        sendJson(res, 404, { error: "preview source not found", file });
+        return;
+      }
+      sendJson(res, 200, source);
+    },
+
+    "app.preview.session.targets.read": async ({ res, params, requestUrl, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      const query = requestUrl?.searchParams?.get("query")?.trim() || "";
+      const descriptorJson = requestUrl?.searchParams?.get("descriptor")?.trim() || "";
+      let descriptor = null;
+      if (descriptorJson) {
+        try {
+          descriptor = JSON.parse(descriptorJson);
+        } catch {
+          sendJson(res, 400, { error: "descriptor must be valid JSON" });
+          return;
+        }
+      }
+      const preferredTarget = requestUrl?.searchParams?.get("preferredTarget")?.trim() || "";
+      const result = previewManager.readTargetSources(params?.id ?? "", query, {
+        descriptor,
+        preferredTarget
+      });
+      if (!result) {
+        sendJson(res, 404, { error: "preview target not found", query });
+        return;
+      }
+      sendJson(res, 200, result);
+    },
+
+    "app.preview.session.inspect.read": async ({ res, params, requestUrl, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      const target = requestUrl?.searchParams?.get("target")?.trim() || "";
+      const descriptorJson = requestUrl?.searchParams?.get("descriptor")?.trim() || "";
+      let descriptor = null;
+      if (descriptorJson) {
+        try {
+          descriptor = JSON.parse(descriptorJson);
+        } catch {
+          sendJson(res, 400, { error: "descriptor must be valid JSON" });
+          return;
+        }
+      }
+      const preferredTarget = requestUrl?.searchParams?.get("preferredTarget")?.trim() || "";
+      const inspection = await previewManager.inspectTarget(params?.id ?? "", target, {
+        descriptor,
+        preferredTarget
+      });
+      if (!inspection) {
+        sendJson(res, 404, { error: "preview target not found", target });
+        return;
+      }
+      sendJson(res, 200, inspection);
+    },
+
+    "app.preview.session.properties.patch": async ({ req, res, params, appContext }) => {
+      const previewManager = await resolvePreviewManager(appContext);
+      if (!previewManager) {
+        sendJson(res, 503, { error: "app preview sessions unavailable" });
+        return;
+      }
+      try {
+        const body = await readJson(req);
+        const result = await previewManager.patchTargetProperty(params?.id ?? "", {
+          target: body?.target ?? "",
+          property: body?.property ?? "",
+          value: body?.value
+        });
+        sendJson(res, 200, result);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const status = /not found/i.test(message) ? 404 : 400;
+        sendJson(res, status, { error: message });
+      }
     },
 
     "app.source.write": async ({ req, res, appContext }) => {

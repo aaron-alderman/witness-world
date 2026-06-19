@@ -75,6 +75,12 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
     "output_transform",
     "pipeline_test"
   ]);
+  assert.deepEqual(runtimeModule.desireExtensions.runtimeDeclarations.map(entry => entry.kind), [
+    "sync",
+    "input_transform",
+    "output_transform",
+    "pipeline_test"
+  ]);
   assert.equal(typeof runtimeModule.createPipelineExecutionPlanProgramFromDesire, "function");
   assert.equal(typeof runtimeModule.evaluatePipelineProof, "function");
   assert.equal(typeof runtimeModule.createPipelineProofProgramFromDesire, "function");
@@ -604,7 +610,16 @@ test("pipeline platform-config identity access handlers round-trip canonical rol
     world,
     backendHost: "backendHost",
     sendJson: (_res, status, body) => json.push({ status, body }),
-    readJson: async () => ({ roles: ["platform_admin", "engentus_user", "platform_admin"] })
+    readJson: async () => ({
+      roles: ["platform_admin", "engentus_user", "platform_admin"],
+      sourceryMuteRules: [{
+        scopeKind: "app",
+        scopeId: "engentus",
+        durationKind: "temporary",
+        expiresAt: "2026-06-20T00:00:00.000Z",
+        permanent: false
+      }]
+    })
   });
 
   await handlers["pipeline.platform-config.access.identity.read"]({
@@ -633,7 +648,21 @@ test("pipeline platform-config identity access handlers round-trip canonical rol
 
   assert.equal(json[1].status, 200);
   assert.deepEqual(json[1].body.PlatformConfigAccessIdentityRoles, ["engentus_user", "platform_admin"]);
+  assert.deepEqual(json[1].body.PlatformConfigAccessIdentitySourceryMuteRules, [{
+    scopeKind: "app",
+    scopeId: "engentus",
+    durationKind: "temporary",
+    expiresAt: "2026-06-20T00:00:00.000Z",
+    permanent: false
+  }]);
   assert.deepEqual(world.project(moduleProjectors.identityRoleGrantIndex).byIdentity["identity.aaron"], ["engentus_user", "platform_admin"]);
+  assert.deepEqual(world.project(moduleProjectors.identities)[0].sourceryMuteRules, [{
+    scopeKind: "app",
+    scopeId: "engentus",
+    durationKind: "temporary",
+    expiresAt: "2026-06-20T00:00:00.000Z",
+    permanent: false
+  }]);
 });
 
 test("pipeline platform-config feature access handlers accept canonical arrays, reject unknown roles, and preserve CSV compatibility", async () => {

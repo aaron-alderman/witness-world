@@ -78,10 +78,8 @@ text = "Todo starter created. Open the app at / and inspect it at /world."
 [[step]]
 id = "bootstrap_starter_refresh"
 order = 3
-op = "dispatchDomEvent"
+op = "refreshProjection"
 on = "click:createBootstrapTodoStarter"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-starter-controls", reason = "create-todo-starter" }
 
 [[step]]
 id = "bootstrap_starter_error"

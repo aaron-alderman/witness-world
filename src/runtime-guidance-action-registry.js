@@ -166,7 +166,7 @@ export const GUIDANCE_ACTION_REGISTRY = Object.freeze([
     id: "suggestion.copyRuntimeInspection",
     kind: "copyRuntimeInspection",
     surfaces: ["app", "world", "bootstrap", "page.surface"],
-    resolver: "click:#sourcery-companion-panel copy json action",
+    resolver: "click:#sourcery-companion-panel download json action",
     hiddenBehavior: false
   },
   {

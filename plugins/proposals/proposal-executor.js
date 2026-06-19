@@ -6,6 +6,7 @@ import { executeServerRunnerAuthoringProposalTarget } from "../server-runner-aut
 import { executeMcpAuthoringProposalTarget } from "../mcp-authoring/mcp-proposal-targets.js";
 import { executeDemoProposalTarget } from "../demo/demo-proposal-targets.js";
 import { executePlatformProposalTarget } from "../platform/platform-proposal-targets.js";
+import { executeBootstrapProposalTarget } from "../bootstrap/bootstrap-proposal-targets.js";
 import { requestWidgetVersionActivation, rollbackWidgetVersion } from "../inspect/widget-versions.js";
 import {
   requestEdenVersionActivate,
@@ -117,12 +118,15 @@ export function createAuthoringProposalExecutor({
     if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
     return canvasProposalResult(canvasProcessHandlers[process](world, { actor, ...body }));
   };
-  return actor => async proposal => {
+  return actor => async (proposal, executionContext = {}) => {
     const body = proposal.body ?? {};
     switch (proposal.targetProcess) {
       case "branch.create":
       case "branch.merge":
       case "branch.rebase":
+      case "branch.push":
+      case "branch.ship":
+      case "branch.rollback":
       case "changeSet.create":
       case "changeSet.edit":
       case "changeSet.validate":
@@ -131,7 +135,8 @@ export function createAuthoringProposalExecutor({
           world,
           actor,
           proposal,
-          body
+          body,
+          appContext: executionContext?.appContext ?? null
         });
       case "identity.update": {
         return executeAuthoringCoreProposalTarget({
@@ -140,11 +145,13 @@ export function createAuthoringProposalExecutor({
           backendHost,
           proposal,
           body,
+          runtimeProfile: body.runtimeProfile ?? null,
           supportedHandlers,
           supportedHandlerMetadata,
           ensureIdentityAuthority,
           ensureContextAuthority,
-          ensureTargetAuthority
+          ensureTargetAuthority,
+          getRuntimePluginCatalog
         });
       }
       case "todo.create": {
@@ -227,6 +234,7 @@ export function createAuthoringProposalExecutor({
         return canvasProposalResult(canvasProcessHandlers["asset.detach"](world, { actor, ...body, asset: assetId, target: targetId }));
       }
       case "context.define":
+      case "bootstrap.appBoundary.establish":
       case "context.bind":
       case "context.unbind":
       case "context.export":
@@ -237,10 +245,13 @@ export function createAuthoringProposalExecutor({
       case "stewardship.grant":
       case "stewardship.revoke":
       case "surface.define":
+      case "collection.define":
       case "process.define":
       case "type.define":
       case "projection.define":
       case "message.define":
+      case "boundary.define":
+      case "policy.define":
       case "package.define":
       case "packageRevision.define":
       case "packageRevision.publish":
@@ -250,6 +261,26 @@ export function createAuthoringProposalExecutor({
       case "packageTransformer.define":
       case "widget.define":
       case "widget.update":
+      case "widget.replace":
+      case "widget.replace.rollback":
+      case "frontend.migrateLegacy":
+      case "frontend.upliftLegacy":
+        if (proposal.targetProcess === "bootstrap.appBoundary.establish") {
+          return executeBootstrapProposalTarget({
+            world,
+            actor,
+            backendHost,
+            proposal,
+            body,
+            supportedHandlerSets,
+            supportedHandlers,
+            supportedHandlerMetadata,
+            runtimeProfile: body.runtimeProfile ?? null,
+            ensureContextAuthority,
+            ensureTargetAuthority,
+            getRuntimePluginCatalog
+          });
+        }
         return executeAuthoringCoreProposalTarget({
           world,
           actor,
@@ -341,6 +372,7 @@ export function createAuthoringProposalExecutor({
           backendHost,
           proposal,
           body,
+          runtimeProfile: body.runtimeProfile ?? null,
           supportedHandlerSets,
           ensureContextAuthority,
           ensureTargetAuthority,

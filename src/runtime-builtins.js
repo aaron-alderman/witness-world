@@ -44,7 +44,7 @@ const VALUE_TYPES = [
   { id: "identity.perspective", label: "Identity Perspective", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "program.id", label: "Program Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "program.event", label: "Program Event", compatibleWith: ["textual"], editor: { control: "text" } },
-  { id: "program.op", label: "Program Operation", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["initSession", "setSession", "logout", "setText", "setValue", "fetchJson", "renderCollection", "renderWorldGraph", "readForm", "refreshProjection", "navigate", "setQueryParam", "dispatchDomEvent", "reloadPage", "postJson", "patchJson", "deleteJson", "clearForm", "run"] } },
+  { id: "program.op", label: "Program Operation", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["initSession", "setSession", "logout", "setText", "setValue", "fetchJson", "renderCollection", "renderWorldGraph", "readForm", "refreshProjection", "navigate", "setQueryParam", "reloadPage", "postJson", "patchJson", "deleteJson", "clearForm", "run"] } },
   { id: "backendProgram.soul", label: "Backend Program Soul", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "backendProgram.version", label: "Backend Program Version", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "backendProgram.label", label: "Backend Program Label", compatibleWith: ["textual"], editor: { control: "text" } },

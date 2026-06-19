@@ -1,3 +1,5 @@
+import { createResourceProbeCollector } from "./resource-probes.js";
+
 function roundMs(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 0;
@@ -41,12 +43,14 @@ function cloneMarks(marks = {}) {
 
 export function createStartupTelemetry({
   mode = "serve",
-  now = () => performance.now()
+  now = () => performance.now(),
+  probeCollector = null
 } = {}) {
   const startedAt = now();
   const phases = [];
   const marks = Object.create(null);
   const listeners = new Set();
+  const resourceProbes = probeCollector ?? createResourceProbeCollector();
 
   const elapsedMs = () => roundMs(now() - startedAt);
   const notify = event => {
@@ -63,6 +67,16 @@ export function createStartupTelemetry({
     blocking = true,
     detail = null
   } = {}) => {
+    const probe = resourceProbes.beginOperation({
+      id,
+      kind: "startupPhase",
+      title: label,
+      detail: {
+        startupMode: String(mode || "serve"),
+        blocking: blocking !== false,
+        ...(detail && typeof detail === "object" ? structuredClone(detail) : {})
+      }
+    });
     const phase = {
       id,
       label,
@@ -88,6 +102,13 @@ export function createStartupTelemetry({
             ...extraDetail
           };
         }
+        const probeRecord = probe?.complete?.(extraDetail);
+        if (probeRecord) {
+          phase.detail = {
+            ...(phase.detail && typeof phase.detail === "object" ? phase.detail : {}),
+            probe: probeRecord
+          };
+        }
         notify({ type: "phase-completed", phaseId: phase.id });
         return phase;
       },
@@ -104,6 +125,13 @@ export function createStartupTelemetry({
           phase.detail = {
             ...(phase.detail && typeof phase.detail === "object" ? phase.detail : {}),
             ...extraDetail
+          };
+        }
+        const probeRecord = probe?.fail?.(error, extraDetail);
+        if (probeRecord) {
+          phase.detail = {
+            ...(phase.detail && typeof phase.detail === "object" ? phase.detail : {}),
+            probe: probeRecord
           };
         }
         notify({ type: "phase-failed", phaseId: phase.id });
@@ -148,6 +176,7 @@ export function createStartupTelemetry({
       meaningfulReadyAtMs,
       phases: clonedPhases,
       marks: cloneMarks(marks),
+      resourceProbes: resourceProbes.snapshot(),
       blockingPhaseCount: blocking.length,
       backgroundPhaseCount: background.length,
       backgroundPendingCount: background.filter(phase => phase.status === "pending").length,
@@ -172,6 +201,7 @@ export function createStartupTelemetry({
     runPhase,
     mark,
     snapshot,
-    subscribe
+    subscribe,
+    probeCollector: resourceProbes
   });
 }

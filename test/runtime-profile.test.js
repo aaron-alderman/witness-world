@@ -351,6 +351,16 @@ test("minimal runtime profile does not expose platform self-model routes", async
     assert.equal((await fetch(`${server.url}/api/platform-gaps`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-branches`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-branches/demo`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-branches/demo/push`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    })).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-branches/demo/ship`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ releaseChannelId: "releaseChannel:local" })
+    })).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-branches`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -435,6 +445,16 @@ test("full runtime exposes platform console and platform self-model API", async 
       body: JSON.stringify({ id: "branch.runtime.profile" })
     });
     const branchReadRoute = await fetch(`${server.url}/api/platform-branches/branch.runtime.profile`);
+    const branchPushRoute = await fetch(`${server.url}/api/platform-branches/branch.runtime.profile/push`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    });
+    const branchShipRoute = await fetch(`${server.url}/api/platform-branches/branch.runtime.profile/ship`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ releaseChannelId: "releaseChannel:local" })
+    });
     const changeSetListRoute = await fetch(`${server.url}/api/platform-change-sets`);
     const changeSetRoute = await fetch(`${server.url}/api/platform-change-sets`, {
       method: "POST",
@@ -489,25 +509,24 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.equal(page.status, 200);
     const pageHtml = await page.text();
     assert.match(pageHtml, /Platform Console/);
-    assert.match(pageHtml, /Pages/);
-    assert.match(pageHtml, /Verification Runtime/);
+    assert.match(pageHtml, /Areas/);
+    assert.match(pageHtml, /Verification/);
     assert.match(pageHtml, /Knowledge/);
-    assert.match(pageHtml, /Platform Map/);
-    assert.match(pageHtml, /\/platform\?view=verificationRuntime/);
-    assert.match(pageHtml, /\/platform\?view=knowledge/);
-    assert.match(pageHtml, /authored-server-runner/);
-    assert.match(pageHtml, /server_runner/);
+    assert.match(pageHtml, /Overview Detail/);
+    assert.match(pageHtml, /\/platform\?area=verification&amp;section=status/);
+    assert.match(pageHtml, /\/platform\?area=knowledge&amp;section=docs/);
     assert.equal(model.nodes.some(node => node.id === "plugin.platform"), true);
     assert.equal(model.nodes.some(node => node.id === "surface:platform"), true);
     assert.equal(model.nodes.some(node => node.kind === "task" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
     assert.equal(model.profiles.find(row => row.id === "full")?.activeRunnerSource, "authored-server-runner");
     assert.equal(model.profiles.find(row => row.id === "full")?.activePluginSource, "profile-or-operator-defaults");
     assert.match(model.profiles.find(row => row.id === "full")?.compositionSummary ?? "", /authored runner server_runner/);
-    assert.equal(Array.isArray(model.coverageEdges), true);
     assert.equal(Array.isArray(gaps.gaps), true);
     assert.notEqual(branchListRoute.status, 404);
     assert.notEqual(branchCreateRoute.status, 404);
     assert.notEqual(branchReadRoute.status, 404);
+    assert.notEqual(branchPushRoute.status, 404);
+    assert.notEqual(branchShipRoute.status, 404);
     assert.notEqual(changeSetListRoute.status, 404);
     assert.notEqual(changeSetRoute.status, 404);
     assert.notEqual(changeSetReadRoute.status, 404);
@@ -527,6 +546,8 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-branches" && route.handler === "platform.branch.list"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-branches" && route.handler === "platform.branch.create"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-branches") && route.handler === "platform.branch.read"), true);
+    assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-branches") && route.handler === "platform.branch.push"), true);
+    assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-branches") && route.handler === "platform.branch.ship"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-change-sets" && route.handler === "platform.changeSet.list"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-change-sets" && route.handler === "platform.changeSet.create"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.read"), true);

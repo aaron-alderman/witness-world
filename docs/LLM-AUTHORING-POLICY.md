@@ -16,7 +16,14 @@ The canonical public frontend model in constrained mode is:
 - `surface`
 - `process`
 - `projection`
+- `collection`
+- `boundary`
+- `policy`
 - `capability`
+
+Canonical page hosting is `page.surface`.
+Legacy `page.home`, `widget`, `frontendProgram`, and `frontendStep` remain
+compatibility inputs only and are not the forward authoring lane.
 
 `DESIRE+` remains an internal lowering/debug layer, not a public MCP write
 surface.
@@ -84,18 +91,24 @@ capability authority into a generic host.
 
 Current constrained truth is:
 
-- `page.surface` exists as a route host
-- it supports minimal static authored projection
-- it supports route-selected alternate authored output
-- it now slices served runtime transport to the reachable fragment used by the
+- `page.surface` is the canonical route host
+- the native constrained frontend floor is
+  `surface + process + projection + collection + boundary + policy + capability`
+- canonical `page.surface` supports route-selected authored surface output,
+  process-driven interaction flow, native collection repeat rendering,
+  route-enter preload authoring, and route/query synchronization
+- served runtime transport is sliced to the reachable fragment used by the
   active authored route subtree instead of serializing the whole broad process
   closure by default
-- it now supports authored projection-bound surface output on canonical routes
-- route/state equivalence is pathway-proven on canonical `page.surface`
-- canonical interactive execution through authored process rules is
-  pathway-proven on canonical `page.surface`
-- broader authored module behavior and the remaining legacy widget-program path
-  remain the next major gaps
+- `frontendLegacyMigration` and `frontendLegacyUplift` are the discoverable
+  migration surfaces for remaining legacy `page.home` or
+  `compat.legacy-widget-program` routes
+- legacy widget/program CRUD remains compatibility-only and is intentionally
+  hidden from constrained MCP write surfaces
+- `dispatchDomEvent` and the old `witness:*` page bridge lane are retired from
+  the supported public frontend model
+- the remaining honest gaps are blocked legacy semantics that still lack a
+  first-class native expression, not permission to reintroduce hidden host JS
 
 Any future claim beyond that must be pathway-proven first.
 

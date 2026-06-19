@@ -134,6 +134,9 @@ export function createBootstrapLiveStateReaders({
     legacyCapabilityMigrationRows() {
       return state.bootstrapState?.legacyCapabilityMigration?.pending || [];
     },
+    legacyFrontendMigrationRows() {
+      return state.bootstrapState?.legacyFrontendMigration?.pending || [];
+    },
     capabilityRevisionHistoryRows(capabilityId = null) {
       const rows = state.bootstrapState?.capabilityRevisionHistory || [];
       const id = typeof capabilityId === "string" ? capabilityId.trim() : "";

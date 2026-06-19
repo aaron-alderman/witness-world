@@ -411,6 +411,299 @@ test("live page inspector can hide and show a rendered widget through real widge
   }
 });
 
+test("live page inspector can preview, discard, apply, and rollback a widget replacement through shared runtime rules", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_title"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Replace / Upgrade")
+        && inspector.textContent.includes("Apply Replace")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-evolution-form][data-surface-inspector-evolution-mode="replace"] select[name="kind"]').selectOption("Paragraph");
+    await page.locator('[data-surface-inspector-evolution-form][data-surface-inspector-evolution-mode="replace"] textarea[name="text"]').fill("Preview Paragraph");
+
+    const previewResponse = page.waitForResponse(response =>
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname.includes("/api/runtime/app-preview-sessions/")
+      && new URL(response.url()).pathname.endsWith("/candidates")
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-inspector-evolution-preview]').click();
+    await previewResponse;
+
+    await page.waitForFunction(() => {
+      const url = new URL(window.location.href);
+      const title = document.querySelector('[data-widget="todo_title"]');
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        url.searchParams.get("previewSessionId")
+        && title
+        && title.tagName === "P"
+        && title.textContent
+        && title.textContent.includes("Preview Paragraph")
+        && inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Rendering from preview session")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-evolution-discard]').click();
+    await page.waitForFunction(() => {
+      const url = new URL(window.location.href);
+      const title = document.querySelector('[data-widget="todo_title"]');
+      const kind = document.querySelector('[data-surface-inspector-evolution-form][data-surface-inspector-evolution-mode="replace"] select[name="kind"]');
+      const text = document.querySelector('[data-surface-inspector-evolution-form][data-surface-inspector-evolution-mode="replace"] textarea[name="text"]');
+      return Boolean(
+        !url.searchParams.get("previewSessionId")
+        && title
+        && title.tagName === "H1"
+        && title.textContent
+        && title.textContent.includes("Witness Todo")
+        && kind
+        && kind.value === "Heading"
+        && text
+        && text.value === "Witness Todo"
+      );
+    });
+
+    await page.locator('[data-surface-inspector-evolution-form][data-surface-inspector-evolution-mode="replace"] select[name="kind"]').selectOption("Paragraph");
+    await page.locator('[data-surface-inspector-evolution-form][data-surface-inspector-evolution-mode="replace"] textarea[name="text"]').fill("Witness Todo Paragraph");
+
+    const previewAgain = page.waitForResponse(response =>
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname.includes("/api/runtime/app-preview-sessions/")
+      && new URL(response.url()).pathname.endsWith("/candidates")
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-inspector-evolution-preview]').click();
+    await previewAgain;
+    await page.waitForFunction(() => {
+      const url = new URL(window.location.href);
+      const title = document.querySelector('[data-widget="todo_title"]');
+      return Boolean(
+        url.searchParams.get("previewSessionId")
+        && title
+        && title.tagName === "P"
+        && title.textContent
+        && title.textContent.includes("Witness Todo Paragraph")
+      );
+    });
+
+    const applyResponse = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/widgets/todo_title/replace"
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-inspector-evolution-apply]').click();
+    await applyResponse;
+
+    await page.waitForFunction(() => {
+      const url = new URL(window.location.href);
+      const title = document.querySelector('[data-widget="todo_title"]');
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        !url.searchParams.get("previewSessionId")
+        && title
+        && title.tagName === "P"
+        && title.textContent
+        && title.textContent.includes("Witness Todo Paragraph")
+        && inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Applied replacement for todo_title.")
+      );
+    });
+
+    const rollbackResponse = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/widgets/todo_title/replace/rollback"
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-inspector-evolution-replace-rollback="todo_title"]').click();
+    await rollbackResponse;
+
+    await page.waitForFunction(() => {
+      const title = document.querySelector('[data-widget="todo_title"]');
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        title
+        && title.tagName === "H1"
+        && title.textContent
+        && title.textContent.includes("Witness Todo")
+        && inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Rolled back replacement for todo_title.")
+      );
+    });
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can preview a read-only widget replacement and propose it through the shared replace seam", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "callan", password: "callan", label: "Callan" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_title"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Replace / Upgrade")
+        && inspector.textContent.includes("Propose Replace")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-evolution-form][data-surface-inspector-evolution-mode="replace"] select[name="kind"]').selectOption("Paragraph");
+    await page.locator('[data-surface-inspector-evolution-form][data-surface-inspector-evolution-mode="replace"] textarea[name="text"]').fill("Shared Preview Paragraph");
+    await page.locator('[data-surface-inspector-evolution-form][data-surface-inspector-evolution-mode="replace"] input[name="reason"]').fill("Shared heading should become body copy");
+
+    const previewResponse = page.waitForResponse(response =>
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname.includes("/api/runtime/app-preview-sessions/")
+      && new URL(response.url()).pathname.endsWith("/candidates")
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-inspector-evolution-preview]').click();
+    await previewResponse;
+
+    await page.waitForFunction(() => {
+      const url = new URL(window.location.href);
+      const title = document.querySelector('[data-widget="todo_title"]');
+      return Boolean(
+        url.searchParams.get("previewSessionId")
+        && title
+        && title.tagName === "P"
+        && title.textContent
+        && title.textContent.includes("Shared Preview Paragraph")
+      );
+    });
+
+    const proposeResponse = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/widgets/todo_title/replace"
+      && response.status() === 202
+    );
+    await page.locator('[data-surface-inspector-evolution-apply]').click();
+    const proposalBody = await (await proposeResponse).json();
+    assert.match(proposalBody?.proposal?.id || "", /^proposal\.authoringCore\.callan\.widget\.replace\.widget\.todo_title$/);
+
+    await page.waitForFunction(expected => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Created proposal " + expected + ".")
+      );
+    }, proposalBody.proposal.id);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can preview and discard a widget version upgrade through preview sessions", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_versioned_banner"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Replace / Upgrade")
+        && inspector.textContent.includes("Preview Upgrade")
+      );
+    });
+
+    const previewResponse = page.waitForResponse(response =>
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname.includes("/api/runtime/app-preview-sessions/")
+      && new URL(response.url()).pathname.endsWith("/candidates")
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-inspector-evolution-preview]').click();
+    await previewResponse;
+
+    await page.waitForFunction(() => {
+      const url = new URL(window.location.href);
+      const banner = document.querySelector('[data-widget="todo_versioned_banner"]');
+      return Boolean(
+        url.searchParams.get("previewSessionId")
+        && banner
+        && banner.textContent
+        && banner.textContent.includes("Versioned widget: v2")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-evolution-discard]').click();
+    await page.waitForFunction(() => {
+      const url = new URL(window.location.href);
+      const banner = document.querySelector('[data-widget="todo_versioned_banner"]');
+      return Boolean(
+        !url.searchParams.get("previewSessionId")
+        && banner
+        && banner.textContent
+        && banner.textContent.includes("Versioned widget: v1")
+      );
+    });
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
 test("live page inspector can create a real child widget under an authored container through shared widget.define semantics", async () => {
   const { server, close: closeServer } = await startUiDemoServer({});
   const {

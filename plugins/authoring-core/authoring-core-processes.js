@@ -1,6 +1,12 @@
 import { projectors, relation } from "../../src/kernel.js";
 import { thingId } from "../../src/ids.js";
 import {
+  applyWidgetReplace,
+  classifyWidgetReplacement,
+  rollbackWidgetReplace,
+  widgetReplacementPropsFromInput
+} from "../../src/widget-evolution.js";
+import {
   createIdentity,
   updateIdentity,
   defineContext,
@@ -30,6 +36,8 @@ import {
   moduleProjectors
 } from "../../src/modules.js";
 import { createCanonicalPackagePatch } from "../../src/package-authorship.js";
+import { applyLegacyFrontendMigration } from "../../src/frontend-legacy-migration.js";
+import { applyLegacyFrontendUplift } from "../../src/frontend-legacy-uplift.js";
 import { defineFrontendProgram, defineFrontendStep, defineWidget, updateWidget, attachWidget, widgetDefinitions, widgetVersions } from "../../src/widgets.js";
 import {
   defineBackendProgram,
@@ -242,6 +250,15 @@ function patchFromWidgetUpdateInput(input, body) {
   return patch;
 }
 
+function widgetUpdateOutputFromProps(id, props = {}) {
+  const output = { id };
+  if (typeof props.text === "string") output.text = props.text;
+  if (typeof props.title === "string") output.title = props.title;
+  if (typeof props.class === "string") output.class = props.class;
+  if (props.hidden === true) output.hidden = true;
+  return output;
+}
+
 function knownSurfaceIds(world) {
   return new Set(
     world.allWitnesses()
@@ -276,6 +293,7 @@ function surfaceCreateDocAt(body, index) {
     capabilityRefs: Array.isArray(body.capabilityRefs) ? structuredClone(body.capabilityRefs) : [],
     bindings: Array.isArray(body.bindings) ? structuredClone(body.bindings) : [],
     interactions: Array.isArray(body.interactions) ? structuredClone(body.interactions) : [],
+    repeat: body.repeat && typeof body.repeat === "object" && !Array.isArray(body.repeat) ? structuredClone(body.repeat) : null,
     modelRef: body.modelRef ?? null,
     frame: body.frame ?? null,
     encoding: body.encoding && typeof body.encoding === "object" && !Array.isArray(body.encoding) ? structuredClone(body.encoding) : {},
@@ -322,6 +340,7 @@ function surfaceCreateNode(doc, { actor, backendHost, index }) {
       capabilityRefs: structuredClone(doc.capabilityRefs),
       bindings: structuredClone(doc.bindings),
       interactions: structuredClone(doc.interactions),
+      repeat: structuredClone(doc.repeat),
       modelRef: doc.modelRef,
       frame: doc.frame,
       encoding: structuredClone(doc.encoding),
@@ -339,6 +358,52 @@ function surfaceCreateNode(doc, { actor, backendHost, index }) {
         endColumn: null,
         originNodeId: null,
         via: [`authoring:surface.create:${doc.id}`],
+        actor: doc.actor ?? actor ?? backendHost,
+        owner: doc.owner ?? actor ?? backendHost,
+        context: doc.context ?? null
+      }
+    }
+  });
+}
+
+function collectionCreateDoc(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("collection doc must be an object");
+  }
+  const id = trimOptionalString(body.id);
+  if (!id) throw new Error("collection doc requires id");
+  return {
+    id,
+    actor: trimOptionalString(body.actor),
+    owner: trimOptionalString(body.owner),
+    context: trimOptionalString(body.context)
+  };
+}
+
+function validateCollectionCreateDoc(world, body) {
+  const doc = collectionCreateDoc(body);
+  if (exists(world, doc.id)) throw new Error(`collection id already exists: ${doc.id}`);
+  return doc;
+}
+
+function collectionCreateNode(doc, { actor, backendHost }) {
+  return createDesireNode({
+    kind: "collection",
+    name: doc.id,
+    body: {
+      id: doc.id
+    },
+    meta: {
+      provenance: {
+        file: "authoring://plugin.authoring/collection.create",
+        sourceLanguage: "authoring",
+        sourceKind: "collection",
+        startLine: 1,
+        endLine: 1,
+        startColumn: 1,
+        endColumn: null,
+        originNodeId: null,
+        via: [`authoring:collection.create:${doc.id}`],
         actor: doc.actor ?? actor ?? backendHost,
         owner: doc.owner ?? actor ?? backendHost,
         context: doc.context ?? null
@@ -553,6 +618,118 @@ function messageCreateNode(doc, { actor, backendHost }) {
         endColumn: null,
         originNodeId: null,
         via: [`authoring:message.create:${doc.id}`],
+        actor: doc.actor ?? actor ?? backendHost,
+        owner: doc.owner ?? actor ?? backendHost,
+        context: doc.context ?? null
+      }
+    }
+  });
+}
+
+function boundaryCreateDoc(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("boundary doc must be an object");
+  }
+  const id = trimOptionalString(body.id);
+  if (!id) throw new Error("boundary doc requires id");
+  return {
+    id,
+    capabilities: Array.isArray(body.capabilities) ? structuredClone(body.capabilities) : [],
+    operations: Array.isArray(body.operations) ? structuredClone(body.operations) : [],
+    actor: trimOptionalString(body.actor),
+    owner: trimOptionalString(body.owner),
+    context: trimOptionalString(body.context)
+  };
+}
+
+function validateBoundaryCreateDoc(world, body) {
+  const doc = boundaryCreateDoc(body);
+  if (exists(world, doc.id)) throw new Error(`boundary id already exists: ${doc.id}`);
+  return doc;
+}
+
+function boundaryCreateNode(doc, { actor, backendHost }) {
+  return createDesireNode({
+    kind: "boundary",
+    name: doc.id,
+    body: {
+      capabilities: structuredClone(doc.capabilities),
+      operations: structuredClone(doc.operations)
+    },
+    meta: {
+      provenance: {
+        file: "authoring://plugin.authoring/boundary.create",
+        sourceLanguage: "authoring",
+        sourceKind: "boundary",
+        startLine: 1,
+        endLine: 1,
+        startColumn: 1,
+        endColumn: null,
+        originNodeId: null,
+        via: [`authoring:boundary.create:${doc.id}`],
+        actor: doc.actor ?? actor ?? backendHost,
+        owner: doc.owner ?? actor ?? backendHost,
+        context: doc.context ?? null
+      }
+    }
+  });
+}
+
+function policyCreateDoc(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("policy doc must be an object");
+  }
+  const id = trimOptionalString(body.id);
+  if (!id) throw new Error("policy doc requires id");
+  return {
+    id,
+    subject: trimOptionalString(body.subject),
+    initialState: trimOptionalString(body.initialState),
+    stateField: trimOptionalString(body.stateField),
+    readyState: trimOptionalString(body.readyState),
+    disagreementState: trimOptionalString(body.disagreementState),
+    policyOutcomes: body.policyOutcomes && typeof body.policyOutcomes === "object" && !Array.isArray(body.policyOutcomes)
+      ? structuredClone(body.policyOutcomes)
+      : {},
+    disagreementOutcomes: body.disagreementOutcomes && typeof body.disagreementOutcomes === "object" && !Array.isArray(body.disagreementOutcomes)
+      ? structuredClone(body.disagreementOutcomes)
+      : {},
+    actor: trimOptionalString(body.actor),
+    owner: trimOptionalString(body.owner),
+    context: trimOptionalString(body.context)
+  };
+}
+
+function validatePolicyCreateDoc(world, body) {
+  const doc = policyCreateDoc(body);
+  if (exists(world, doc.id)) throw new Error(`policy id already exists: ${doc.id}`);
+  return doc;
+}
+
+function policyCreateNode(doc, { actor, backendHost }) {
+  return createDesireNode({
+    kind: "policy",
+    name: doc.id,
+    body: {
+      subject: doc.subject,
+      initialState: doc.initialState,
+      stateField: doc.stateField,
+      readyState: doc.readyState,
+      disagreementState: doc.disagreementState,
+      policyOutcomes: structuredClone(doc.policyOutcomes),
+      disagreementOutcomes: structuredClone(doc.disagreementOutcomes)
+    },
+    meta: {
+      provenance: {
+        file: "authoring://plugin.authoring/policy.create",
+        sourceLanguage: "authoring",
+        sourceKind: "policy",
+        startLine: 1,
+        endLine: 1,
+        startColumn: 1,
+        endColumn: null,
+        originNodeId: null,
+        via: [`authoring:policy.create:${doc.id}`],
         actor: doc.actor ?? actor ?? backendHost,
         owner: doc.owner ?? actor ?? backendHost,
         context: doc.context ?? null
@@ -1394,6 +1571,118 @@ export function requestMessageDefine(world, {
   };
 }
 
+export function requestBoundaryDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  let doc;
+  try {
+    doc = validateBoundaryCreateDoc(world, body);
+  } catch (error) {
+    return {
+      ok: false,
+      status: /already exists/i.test(error instanceof Error ? error.message : "") ? 409 : 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let desire;
+  try {
+    desire = createDesireDocument([
+      boundaryCreateNode(doc, { actor, backendHost })
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let witnesses;
+  try {
+    witnesses = applyDesire(world, desire);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  const witness = witnesses.find(entry =>
+    entry.process === "desire.defineBoundary"
+    && typeof entry.body?.id === "string"
+    && entry.body.id === doc.id
+  ) ?? null;
+  return {
+    ok: true,
+    status: 201,
+    boundary: witness?.body ?? { id: doc.id },
+    witness
+  };
+}
+
+export function requestPolicyDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  let doc;
+  try {
+    doc = validatePolicyCreateDoc(world, body);
+  } catch (error) {
+    return {
+      ok: false,
+      status: /already exists/i.test(error instanceof Error ? error.message : "") ? 409 : 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let desire;
+  try {
+    desire = createDesireDocument([
+      policyCreateNode(doc, { actor, backendHost })
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let witnesses;
+  try {
+    witnesses = applyDesire(world, desire);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  const witness = witnesses.find(entry =>
+    entry.process === "desire.definePolicy"
+    && typeof entry.body?.id === "string"
+    && entry.body.id === doc.id
+  ) ?? null;
+  return {
+    ok: true,
+    status: 201,
+    policy: witness?.body ?? { id: doc.id },
+    witness
+  };
+}
+
 function authoringObject(body, label) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error(`${label} must be an object`);
@@ -2059,6 +2348,192 @@ export function requestPackageTransformerDefine(world, {
   };
 }
 
+export function requestCollectionDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  let doc;
+  try {
+    doc = validateCollectionCreateDoc(world, body);
+  } catch (error) {
+    return {
+      ok: false,
+      status: /already exists/i.test(error instanceof Error ? error.message : "")
+        ? 409
+        : 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let desire;
+  try {
+    desire = createDesireDocument([
+      collectionCreateNode(doc, { actor, backendHost })
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let witnesses;
+  try {
+    witnesses = applyDesire(world, desire);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  const witness = witnesses.find(entry =>
+    entry.process === "desire.defineCollection"
+    && typeof entry.body?.id === "string"
+    && entry.body.id === doc.id
+  ) ?? null;
+  return {
+    ok: true,
+    status: 201,
+    collection: witness?.body ?? { id: doc.id },
+    witness
+  };
+}
+
+function normalizeRoutePreloadWhenInput(value, label = "preloadPolicies.when") {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const kind = trimOptionalString(value.kind);
+  if (!kind) throw new Error(`${label}.kind is required`);
+  if (kind === "boot") return { kind };
+  if (kind === "routeEnter") {
+    const route = trimOptionalString(value.route);
+    if (!route) throw new Error(`${label}.route is required for routeEnter`);
+    return { kind, route };
+  }
+  if (kind === "idleAfterRoute") {
+    const route = trimOptionalString(value.route);
+    if (!route) throw new Error(`${label}.route is required for idleAfterRoute`);
+    const delayMs = Number(value.delayMs);
+    if (!Number.isFinite(delayMs) || delayMs < 0) {
+      throw new Error(`${label}.delayMs must be a non-negative number for idleAfterRoute`);
+    }
+    return { kind, route, delayMs };
+  }
+  throw new Error(`unsupported ${label}.kind: ${kind}`);
+}
+
+function normalizeRoutePreloadLoadListInput(value, allowed, label) {
+  const loads = [...new Set((Array.isArray(value) ? value : [])
+    .map(entry => trimOptionalString(entry))
+    .filter(Boolean))];
+  if (!loads.length) throw new Error(`${label} must be a non-empty array`);
+  for (const load of loads) {
+    if (!allowed.includes(load)) throw new Error(`${label} includes unsupported load: ${load}`);
+  }
+  return loads;
+}
+
+function normalizeRoutePreloadTargetsInput(value, label = "preloadPolicies.targets") {
+  const targets = Array.isArray(value) ? value : [];
+  if (!targets.length) throw new Error(`${label} must be a non-empty array`);
+  return targets.map((target, index) => {
+    if (!target || typeof target !== "object" || Array.isArray(target)) {
+      throw new Error(`${label}[${index}] must be an object`);
+    }
+    const kind = trimOptionalString(target.kind);
+    if (!kind) throw new Error(`${label}[${index}].kind is required`);
+    if (kind === "route") {
+      const route = trimOptionalString(target.route);
+      if (!route) throw new Error(`${label}[${index}].route is required`);
+      const command = trimOptionalString(target.command);
+      return {
+        kind,
+        route,
+        ...(command ? { command } : {}),
+        load: normalizeRoutePreloadLoadListInput(target.load, ["manifest", "capabilityAssets", "command"], `${label}[${index}].load`)
+      };
+    }
+    if (kind === "capability") {
+      const capability = trimOptionalString(target.capability);
+      if (!capability) throw new Error(`${label}[${index}].capability is required`);
+      return {
+        kind,
+        capability,
+        load: normalizeRoutePreloadLoadListInput(target.load, ["assets"], `${label}[${index}].load`)
+      };
+    }
+    throw new Error(`unsupported ${label}[${index}].kind: ${kind}`);
+  });
+}
+
+function normalizeRoutePreloadPoliciesInput(value, label = "preloadPolicies") {
+  if (value == null) return [];
+  const policies = Array.isArray(value) ? value : [];
+  return policies.map((policy, index) => {
+    if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+      throw new Error(`${label}[${index}] must be an object`);
+    }
+    const id = trimOptionalString(policy.id);
+    if (!id) throw new Error(`${label}[${index}].id is required`);
+    return {
+      id,
+      when: normalizeRoutePreloadWhenInput(policy.when, `${label}[${index}].when`),
+      targets: normalizeRoutePreloadTargetsInput(policy.targets, `${label}[${index}].targets`)
+    };
+  });
+}
+
+function normalizeRouteQueryBindingDefaults(value) {
+  if (value == null) return null;
+  if (Array.isArray(value)) return structuredClone(value);
+  if (["string", "number", "boolean"].includes(typeof value)) return value;
+  throw new Error("queryBindings.defaultValue must be a scalar or array");
+}
+
+function normalizeRouteQueryBindingsInput(world, body, label = "queryBindings") {
+  if (body?.[label] == null) return [];
+  const rows = Array.isArray(body[label]) ? body[label] : [];
+  return rows.map((binding, index) => {
+    if (!binding || typeof binding !== "object" || Array.isArray(binding)) {
+      throw new Error(`${label}[${index}] must be an object`);
+    }
+    const param = trimOptionalString(binding.param);
+    if (!param) throw new Error(`${label}[${index}].param is required`);
+    const processResolved = resolveCoveredNestedRef(world, binding, {
+      context: body?.context ?? null,
+      idField: "process",
+      refField: "processRef",
+      label: `${label}[${index}] process`
+    });
+    if (!processResolved.ok) throw new Error(processResolved.error);
+    if (!processResolved.target) throw new Error(`${label}[${index}].process is required`);
+    const stateResolved = resolveCoveredNestedRef(world, binding, {
+      context: body?.context ?? null,
+      idField: "state",
+      refField: "stateRef",
+      label: `${label}[${index}] state`
+    });
+    if (!stateResolved.ok) throw new Error(stateResolved.error);
+    if (!stateResolved.target) throw new Error(`${label}[${index}].state is required`);
+    return {
+      param,
+      process: processResolved.target,
+      state: stateResolved.target,
+      ...(Object.prototype.hasOwnProperty.call(binding, "defaultValue")
+        ? { defaultValue: normalizeRouteQueryBindingDefaults(binding.defaultValue) }
+        : {})
+    };
+  });
+}
+
 export function requestBootstrapRouteDefine(world, {
   actor,
   backendHost,
@@ -2191,6 +2666,22 @@ export function requestBootstrapRouteDefine(world, {
       };
     }
   }
+  try {
+    const preloadPolicies = normalizeRoutePreloadPoliciesInput(body.preloadPolicies);
+    if (preloadPolicies.length) params.preloadPolicies = preloadPolicies;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: message } });
+    return { ok: false, status: 400, error: message, witness };
+  }
+  try {
+    const queryBindings = normalizeRouteQueryBindingsInput(world, body);
+    if (queryBindings.length) params.queryBindings = queryBindings;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: message } });
+    return { ok: false, status: 400, error: message, witness };
+  }
   if (body.liveProjection === true) params.liveProjection = true;
   if (Array.isArray(body.excludeWidgetRoles) && body.excludeWidgetRoles.length) params.excludeWidgetRoles = [...body.excludeWidgetRoles];
   const defaultRootWidgetResolved = resolveCoveredBodyRef(world, body, {
@@ -2211,6 +2702,8 @@ export function requestBootstrapRouteDefine(world, {
     || body.page
     || params.defaultScreen
     || params.routeState
+    || (Array.isArray(params.preloadPolicies) && params.preloadPolicies.length)
+    || (Array.isArray(params.queryBindings) && params.queryBindings.length)
     || body.liveProjection === true
     || (Array.isArray(body.excludeWidgetRoles) && body.excludeWidgetRoles.length)
   );
@@ -2388,6 +2881,43 @@ export function requestBootstrapServeDefine(world, {
   return { ok: true, status: 201, serve: { serverRunner: resolvedServerRunner, route: resolvedRoute, context: input.context ?? null }, witness };
 }
 
+export function requestBootstrapFrontendMigrateLegacy(world, {
+  actor,
+  backendHost
+}) {
+  const migrated = applyLegacyFrontendMigration(world, {
+    actor: actor || backendHost
+  });
+  if (!migrated.ok) return migrated;
+  return {
+    ok: true,
+    status: 200,
+    actions: migrated.actions,
+    previewBefore: migrated.previewBefore,
+    previewAfter: migrated.previewAfter,
+    witness: migrated.witness
+  };
+}
+
+export function requestBootstrapFrontendUpliftLegacy(world, {
+  actor,
+  backendHost
+}) {
+  const uplifted = applyLegacyFrontendUplift(world, {
+    actor: actor || backendHost,
+    backendHost
+  });
+  if (!uplifted.ok) return uplifted;
+  return {
+    ok: true,
+    status: 200,
+    actions: uplifted.actions,
+    previewBefore: uplifted.previewBefore,
+    previewAfter: uplifted.previewAfter,
+    witness: uplifted.witness
+  };
+}
+
 export function requestWidgetDefine(world, {
   actor,
   backendHost,
@@ -2562,11 +3092,7 @@ export function requestWidgetUpdate(world, {
     if (value === "") delete nextProps[key];
     else nextProps[key] = value;
   }
-  const output = { id: current.id };
-  if (typeof nextProps.text === "string") output.text = nextProps.text;
-  if (typeof nextProps.title === "string") output.title = nextProps.title;
-  if (typeof nextProps.class === "string") output.class = nextProps.class;
-  if (nextProps.hidden === true) output.hidden = true;
+  const output = widgetUpdateOutputFromProps(current.id, nextProps);
   const validatedOutput = validateOutput(world, "widget.update", output);
   if (!validatedOutput.ok) {
     const witness = fail(world, {
@@ -2596,4 +3122,116 @@ export function requestWidgetUpdate(world, {
     body: { input, patch, previous: { props: current.props ?? {} }, widget }
   });
   return { ok: true, status: 200, widget, witness };
+}
+
+export function requestWidgetReplace(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validatedInput = validateInput(world, "widget.replace", body);
+  if (!validatedInput.ok) {
+    const witness = fail(world, {
+      process: "widget.replace.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validatedInput.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const input = validatedInput.value;
+  const id = typeof input?.id === "string" ? input.id.trim() : "";
+  const current = widgetDefinitions(world.allWitnesses()).find(row => row.id === id) ?? null;
+  if (!current) {
+    const witness = fail(world, {
+      process: "widget.replace.failed",
+      actor: actor || backendHost,
+      body: { reason: "widget not found", id }
+    });
+    return { ok: false, status: 404, error: "widget not found", witness };
+  }
+  if (widgetVersions(world.allWitnesses()).some(row => row.soul === id)) {
+    const witness = fail(world, {
+      process: "widget.replace.failed",
+      actor: actor || backendHost,
+      body: { reason: "versioned widgets must evolve through widget versions", id }
+    });
+    return { ok: false, status: 409, error: "versioned widgets must evolve through widget versions", witness };
+  }
+  const nextKind = typeof input?.kind === "string" ? input.kind.trim() : "";
+  const nextProps = widgetReplacementPropsFromInput(current.props ?? {}, body ?? input);
+  const classification = classifyWidgetReplacement({
+    currentWidget: current,
+    nextKind,
+    nextProps
+  });
+  if (classification.migrationStatus === "blocked") {
+    const witness = fail(world, {
+      process: "widget.replace.blocked",
+      actor: actor || backendHost,
+      body: { reason: classification.reason || "widget replacement blocked", id, kind: nextKind }
+    });
+    return { ok: false, status: 400, error: classification.reason || "widget replacement blocked", witness };
+  }
+  const validatedOutput = validateOutput(world, "widget.update", widgetUpdateOutputFromProps(id, nextProps));
+  if (!validatedOutput.ok) {
+    const witness = fail(world, {
+      process: "widget.replace.failed",
+      actor: actor || backendHost,
+      body: { failures: validatedOutput.failures, id }
+    });
+    return { ok: false, status: 500, error: "widget.replace output failed typed validation", witness };
+  }
+  const result = applyWidgetReplace(world, {
+    actor: actor || backendHost,
+    id,
+    kind: nextKind,
+    props: nextProps,
+    context: current.context ?? null,
+    previous: current,
+    migrationStatus: classification.migrationStatus
+  });
+  return {
+    ok: true,
+    status: 200,
+    widget: result.widget,
+    migrationStatus: result.migrationStatus,
+    witness: result.witness,
+    witnesses: result.witnesses
+  };
+}
+
+export function requestWidgetReplaceRollback(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const id = typeof body?.id === "string" ? body.id.trim() : "";
+  if (!id) {
+    const witness = fail(world, {
+      process: "widget.replace.rollback.failed",
+      actor: actor || backendHost,
+      body: { reason: "widget id is required", id: null }
+    });
+    return { ok: false, status: 400, error: "widget id is required", witness };
+  }
+  const result = rollbackWidgetReplace(world, {
+    actor: actor || backendHost,
+    id
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: result.status === "failed" ? 409 : 400,
+      error: result.witness?.body?.reason || "widget replace rollback unavailable",
+      witness: result.witness
+    };
+  }
+  return {
+    ok: true,
+    status: 200,
+    widget: result.widget,
+    migrationStatus: result.migrationStatus,
+    witness: result.witness,
+    witnesses: result.witnesses
+  };
 }

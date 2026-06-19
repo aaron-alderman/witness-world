@@ -71,7 +71,8 @@ export function bindBootstrapProposalSubmit({
   contractsByFamily = bootstrapProposalSubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = event => {
     const detail = event?.detail || {};
     if (!["bootstrap-proposal-create-controls", "bootstrap-proposal-review-controls"].includes(detail.source)) return false;
@@ -84,6 +85,19 @@ export function bindBootstrapProposalSubmit({
       contractsByFamily
     });
   };
-  resolvedTarget.addEventListener("witness:bootstrap-proposal-submit", handler);
+  for (const detail of [
+    { source: "bootstrap-proposal-create-controls", family: "create", formId: "proposal-form", statusId: "proposal-status" },
+    { source: "bootstrap-proposal-review-controls", family: "approve", formId: "proposal-approve-form", statusId: "proposal-approve-status" },
+    { source: "bootstrap-proposal-review-controls", family: "reject", formId: "proposal-reject-form", statusId: "proposal-reject-status" }
+  ]) {
+    const form = resolvedDocument?.getElementById?.(detail.formId);
+    if (!form || form.__bootstrapProposalSubmitBound) continue;
+    form.__bootstrapProposalSubmitBound = true;
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      void handler({ detail: { ...detail, ...data } });
+    });
+  }
   return handler;
 }

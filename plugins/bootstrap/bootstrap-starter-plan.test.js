@@ -127,3 +127,23 @@ test("starter plan degrades cleanly when no starter blueprint is contributed", (
 
   assert.deepEqual(plan, { requests: [] });
 });
+
+test("starter plan drops unsupported handler sets from runner requests when the live bootstrap model does not expose them", () => {
+  const plan = buildBootstrapStarterPlan({
+    bootstrapModel: {
+      backendHosts: [{ id: "backend-host-a" }],
+      frontendHosts: [{ id: "frontend-host-a" }],
+      supportedHandlerSets: []
+    },
+    blueprint: {
+      requestPlan: [
+        { from: "runner", url: "/api/server-runners" }
+      ],
+      runner: { id: "demo_server", handlerSet: "demo", backendHost: "backendHost", frontendHost: "frontendHost" }
+    }
+  });
+
+  assert.deepEqual(plan.requests, [
+    { url: "/api/server-runners", body: { id: "demo_server", backendHost: "backend-host-a", frontendHost: "frontend-host-a" } }
+  ]);
+});

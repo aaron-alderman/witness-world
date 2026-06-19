@@ -1,5 +1,7 @@
 import { moduleProjectors } from "../../src/modules.js";
 import { platformChangeSetInsights } from "./branch-insights.js";
+import { defaultGitBranchName } from "./git-push.js";
+import { PLATFORM_RELEASE_CHANNEL_ROWS } from "./git-ship.js";
 import {
   buildFlakeScoreByGate,
   buildProjectedCoverageEdges,
@@ -29,6 +31,18 @@ function sortRows(rows, keys) {
     }
     return 0;
   });
+}
+
+function observedEvents(witnesses, observations = []) {
+  const seen = new Set();
+  const rows = [];
+  for (const row of [...(Array.isArray(witnesses) ? witnesses : []), ...(Array.isArray(observations) ? observations : [])]) {
+    const id = String(row?.id || "");
+    if (id && seen.has(id)) continue;
+    if (id) seen.add(id);
+    rows.push(row);
+  }
+  return rows;
 }
 
 function uniqueStrings(values = []) {
@@ -90,6 +104,588 @@ function inferRegressionStatus(currentDurationMs, baselineDurationMs, {
     return { status: "improved", deltaMs, deltaPercent };
   }
   return { status: "steady", deltaMs, deltaPercent };
+}
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || "unknown";
+}
+
+function timestampMs(value) {
+  const numeric = Date.parse(String(value || ""));
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function average(values = []) {
+  const numbers = values.filter(value => Number.isFinite(value));
+  if (!numbers.length) return null;
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
+
+function latestPushByBranch(pushRows = []) {
+  const byBranch = Object.create(null);
+  for (const row of pushRows) {
+    const branchId = String(row?.branchId || "");
+    if (!branchId) continue;
+    const previous = byBranch[branchId] ?? null;
+    if (!previous || compareActivityRows(previous, row) < 0) byBranch[branchId] = row;
+  }
+  return byBranch;
+}
+
+function latestShipByBranch(shipRows = []) {
+  const byBranch = Object.create(null);
+  for (const row of shipRows) {
+    const branchId = String(row?.branchId || "");
+    if (!branchId) continue;
+    const previous = byBranch[branchId] ?? null;
+    if (!previous || compareActivityRows(previous, row) < 0) byBranch[branchId] = row;
+  }
+  return byBranch;
+}
+
+export const PLATFORM_TELEMETRY_THRESHOLD_ROWS = Object.freeze([
+  Object.freeze({
+    id: "telemetryThreshold:platform.self.http",
+    metricId: "telemetryMetric:platform.self",
+    title: "Platform HTTP handler latency",
+    owners: Object.freeze(["backend.readPlatformModel", "backend.readPlatformGaps", "frontend.renderPlatformPageFragment"]),
+    sampleKinds: Object.freeze(["httpRequest"]),
+    thresholdMs: 125,
+    regressionMinDeltaMs: 40,
+    regressionMinDeltaPct: 35,
+    hotLoopWindowMs: 300000,
+    hotLoopRepeatCount: 3
+  }),
+  Object.freeze({
+    id: "telemetryThreshold:runtime.behavior.snapshot",
+    metricId: "telemetryMetric:runtime.behavior",
+    title: "Candidate snapshot rebuild latency",
+    owners: Object.freeze(["platform.changeSet.validate"]),
+    sampleKinds: Object.freeze(["candidateSnapshotRebuild"]),
+    thresholdMs: 200,
+    regressionMinDeltaMs: 60,
+    regressionMinDeltaPct: 35,
+    hotLoopWindowMs: 300000,
+    hotLoopRepeatCount: 3
+  }),
+  Object.freeze({
+    id: "telemetryThreshold:verification.gates.test",
+    metricId: "telemetryMetric:verification.gates",
+    title: "Verification gate execution latency",
+    owners: Object.freeze(["platform.test.run.finish"]),
+    sampleKinds: Object.freeze(["testRun"]),
+    thresholdMs: 50,
+    regressionMinDeltaMs: 15,
+    regressionMinDeltaPct: 25,
+    hotLoopWindowMs: 300000,
+    hotLoopRepeatCount: 3
+  })
+]);
+
+const TELEMETRY_WINDOW_SAMPLE_COUNT = 3;
+
+function telemetryThresholdByOwnerAndKind(ownerId, sampleKind) {
+  return PLATFORM_TELEMETRY_THRESHOLD_ROWS.find(row =>
+    (row.owners ?? []).includes(String(ownerId || ""))
+    && (row.sampleKinds ?? []).includes(String(sampleKind || ""))
+  ) ?? null;
+}
+
+function telemetrySampleRows(witnesses) {
+  const rows = [];
+  for (const witness of witnesses) {
+    const body = witness?.body ?? {};
+    if (
+      witness.process === "backend.readPlatformModel"
+      || witness.process === "backend.readPlatformGaps"
+      || witness.process === "frontend.renderPlatformPageFragment"
+    ) {
+      const durationMs = numberOrNull(body.durationMs);
+      const threshold = telemetryThresholdByOwnerAndKind(witness.process, "httpRequest");
+      rows.push({
+        id: `telemetrySample:${witness.id || `${witness.process}:${rows.length}`}`,
+        metricId: threshold?.metricId ?? "telemetryMetric:platform.self",
+        thresholdId: threshold?.id ?? null,
+        ownerId: String(witness.process),
+        ownerKind: "handler",
+        sampleKind: "httpRequest",
+        value: durationMs,
+        durationMs,
+        unit: "ms",
+        status: "observed",
+        routeId: body.routeId ? String(body.routeId) : null,
+        handlerId: body.handlerId ? String(body.handlerId) : null,
+        branchId: null,
+        changeSetId: null,
+        gateId: null,
+        candidateSnapshotId: null,
+        message: body.section ? `${body.area || "platform"}/${body.section}` : null,
+        fingerprint: `${witness.process}:observed:${body.section || body.path || ""}`,
+        startedAt: body.startedAt ?? null,
+        finishedAt: body.finishedAt ?? null,
+        observedAt: body.finishedAt ?? body.startedAt ?? witness.time ?? null
+      });
+      continue;
+    }
+    if (witness.process === "platform.changeSet.validate") {
+      const durationMs = numberOrNull(body.durationMs);
+      const errorMessages = Array.isArray(body.candidateSnapshot?.errors)
+        ? body.candidateSnapshot.errors.map(error => String(error?.message || error?.kind || "")).filter(Boolean)
+        : [];
+      const threshold = telemetryThresholdByOwnerAndKind(witness.process, "candidateSnapshotRebuild");
+      const status = body.status === "valid" ? "passed" : "failed";
+      rows.push({
+        id: `telemetrySample:${witness.id || `${witness.process}:${rows.length}`}`,
+        metricId: threshold?.metricId ?? "telemetryMetric:runtime.behavior",
+        thresholdId: threshold?.id ?? null,
+        ownerId: String(witness.process),
+        ownerKind: "candidateSnapshot",
+        sampleKind: "candidateSnapshotRebuild",
+        value: durationMs,
+        durationMs,
+        unit: "ms",
+        status,
+        routeId: null,
+        handlerId: "platform.changeSet.validate",
+        branchId: body.branchId ? String(body.branchId) : null,
+        changeSetId: body.id ? String(body.id) : null,
+        gateId: null,
+        candidateSnapshotId: body.candidateSnapshot?.id ? String(body.candidateSnapshot.id) : null,
+        message: errorMessages.join("; ") || null,
+        fingerprint: `${witness.process}:${status}:${errorMessages[0] || "ok"}`,
+        startedAt: body.startedAt ?? null,
+        finishedAt: body.finishedAt ?? body.validatedAt ?? null,
+        observedAt: body.validatedAt ?? body.finishedAt ?? body.startedAt ?? witness.time ?? null
+      });
+      continue;
+    }
+    if (witness.process === "platform.test.run.finish") {
+      const protectedTelemetryMetric = (Array.isArray(body.protectedObjects) ? body.protectedObjects : [])
+        .map(value => String(value || ""))
+        .find(value => value.startsWith("telemetryMetric:"));
+      const threshold = telemetryThresholdByOwnerAndKind(witness.process, "testRun");
+      const durationMs = numberOrNull(body.durationMs);
+      const status = String(body.status || "observed");
+      rows.push({
+        id: `telemetrySample:${witness.id || `${witness.process}:${rows.length}`}`,
+        metricId: protectedTelemetryMetric || threshold?.metricId || "telemetryMetric:verification.gates",
+        thresholdId: threshold?.id ?? null,
+        ownerId: body.gateId ? String(body.gateId) : String(witness.process),
+        ownerKind: "testGate",
+        sampleKind: "testRun",
+        value: durationMs,
+        durationMs,
+        unit: "ms",
+        status,
+        routeId: null,
+        handlerId: "platform.testRun.create",
+        branchId: body.branchId ? String(body.branchId) : null,
+        changeSetId: body.changeSetId ? String(body.changeSetId) : null,
+        gateId: body.gateId ? String(body.gateId) : null,
+        candidateSnapshotId: body.candidateSnapshotId ? String(body.candidateSnapshotId) : null,
+        runId: body.id ? String(body.id) : null,
+        message: body.error ? String(body.error) : null,
+        fingerprint: `${body.gateId || witness.process}:${status}:${body.error || body.exitCode || "ok"}`,
+        startedAt: body.startedAt ?? null,
+        finishedAt: body.finishedAt ?? null,
+        observedAt: body.finishedAt ?? body.startedAt ?? witness.time ?? null
+      });
+    }
+  }
+  return sortRows(rows, ["metricId", "ownerId", "observedAt", "id"]);
+}
+
+function telemetryWindowRows(samples, thresholds) {
+  const thresholdsById = Object.fromEntries((thresholds ?? []).map(row => [String(row.id), row]));
+  const groups = new Map();
+  for (const sample of samples) {
+    const key = `${String(sample.metricId || "")}\u0000${String(sample.ownerId || "")}\u0000${String(sample.sampleKind || "")}`;
+    const existing = groups.get(key) ?? [];
+    existing.push(sample);
+    groups.set(key, existing);
+  }
+  const rows = [];
+  for (const [key, group] of groups.entries()) {
+    const ordered = [...group].sort(compareActivityRows);
+    const currentSamples = ordered.slice(Math.max(0, ordered.length - TELEMETRY_WINDOW_SAMPLE_COUNT));
+    const previousSamples = ordered.slice(
+      Math.max(0, ordered.length - (TELEMETRY_WINDOW_SAMPLE_COUNT * 2)),
+      Math.max(0, ordered.length - TELEMETRY_WINDOW_SAMPLE_COUNT)
+    );
+    const currentValues = currentSamples.map(sample => numberOrNull(sample.value)).filter(Number.isFinite);
+    const previousValues = previousSamples.map(sample => numberOrNull(sample.value)).filter(Number.isFinite);
+    const [metricId, ownerId, sampleKind] = key.split("\u0000");
+    const threshold = thresholdsById[String(currentSamples.at(-1)?.thresholdId || "")] ?? null;
+    rows.push({
+      id: `telemetryWindow:${slugify(metricId)}:${slugify(ownerId)}:${slugify(sampleKind)}`,
+      metricId,
+      ownerId,
+      ownerKind: currentSamples.at(-1)?.ownerKind ?? null,
+      sampleKind,
+      thresholdId: currentSamples.at(-1)?.thresholdId ?? null,
+      currentSampleIds: currentSamples.map(sample => String(sample.id)),
+      previousSampleIds: previousSamples.map(sample => String(sample.id)),
+      currentAggregateMs: average(currentValues),
+      previousAggregateMs: average(previousValues),
+      currentSampleCount: currentSamples.length,
+      previousSampleCount: previousSamples.length,
+      sampleCount: ordered.length,
+      failureCount: currentSamples.filter(sample => ["failed", "error", "timed_out"].includes(String(sample.status || ""))).length,
+      latestSampleId: currentSamples.at(-1)?.id ?? null,
+      latestObservedAt: currentSamples.at(-1)?.observedAt ?? null,
+      branchIds: uniqueStrings(currentSamples.map(sample => sample.branchId)),
+      changeSetIds: uniqueStrings(currentSamples.map(sample => sample.changeSetId)),
+      gateIds: uniqueStrings(currentSamples.map(sample => sample.gateId)),
+      candidateSnapshotIds: uniqueStrings(currentSamples.map(sample => sample.candidateSnapshotId)),
+      thresholdMs: numberOrNull(threshold?.thresholdMs),
+      regressionMinDeltaMs: numberOrNull(threshold?.regressionMinDeltaMs),
+      regressionMinDeltaPct: numberOrNull(threshold?.regressionMinDeltaPct)
+    });
+  }
+  return sortRows(rows, ["metricId", "ownerId", "sampleKind", "id"]);
+}
+
+function performanceRegressionRows(windows) {
+  const rows = [];
+  for (const window of windows) {
+    const currentAggregateMs = numberOrNull(window.currentAggregateMs);
+    const previousAggregateMs = numberOrNull(window.previousAggregateMs);
+    const delta = inferRegressionStatus(currentAggregateMs, previousAggregateMs, {
+      minDeltaMs: Number(window.regressionMinDeltaMs || 0),
+      minDeltaPct: Number(window.regressionMinDeltaPct || 0)
+    });
+    if (delta.status !== "regressed") continue;
+    rows.push({
+      id: `performanceRegression:${slugify(window.metricId)}:${slugify(window.ownerId)}:${slugify(window.sampleKind)}`,
+      metricId: window.metricId,
+      thresholdId: window.thresholdId,
+      ownerId: window.ownerId,
+      ownerKind: window.ownerKind,
+      sampleKind: window.sampleKind,
+      windowId: window.id,
+      latestSampleId: window.latestSampleId,
+      currentAggregateMs,
+      previousAggregateMs,
+      deltaMs: delta.deltaMs,
+      deltaPercent: delta.deltaPercent,
+      branchIds: [...(window.branchIds ?? [])],
+      changeSetIds: [...(window.changeSetIds ?? [])],
+      gateIds: [...(window.gateIds ?? [])],
+      candidateSnapshotIds: [...(window.candidateSnapshotIds ?? [])],
+      observedAt: window.latestObservedAt ?? null,
+      status: "open"
+    });
+  }
+  return sortRows(rows, ["metricId", "ownerId", "sampleKind", "id"]);
+}
+
+function defectRows(branches, samples, windows, regressions, pushRecords = []) {
+  const rows = [];
+  const observations = [];
+  const sampleById = Object.fromEntries((samples ?? []).map(sample => [String(sample.id), sample]));
+  const thresholdById = Object.fromEntries(PLATFORM_TELEMETRY_THRESHOLD_ROWS.map(row => [String(row.id), row]));
+  for (const branch of Array.isArray(branches) ? branches : []) {
+    const defectLabel = String(branch?.defect || "").trim();
+    if (!defectLabel) continue;
+    const defectId = `defect:branch:${slugify(branch.id)}:${slugify(defectLabel)}`;
+    const clusterId = `defectCluster:${slugify(defectLabel)}`;
+    rows.push({
+      id: defectId,
+      title: defectLabel,
+      defectKind: "branchDeclared",
+      status: String(branch.status || "open") === "closed" ? "resolved" : "open",
+      clusterId,
+      clusterKey: defectLabel,
+      metricId: null,
+      gateId: null,
+      branchId: String(branch.id),
+      changeSetId: null,
+      candidateSnapshotId: null,
+      ownerId: `branch:${branch.id}`,
+      summary: defectLabel,
+      observedAt: branch.createdAt ?? null
+    });
+    observations.push({
+      id: `defectObservation:${slugify(defectId)}:branch`,
+      defectId,
+      clusterId,
+      sourceKind: "branch",
+      sourceId: String(branch.id),
+      status: "observed",
+      branchId: String(branch.id),
+      changeSetId: null,
+      gateId: null,
+      metricId: null,
+      candidateSnapshotId: null,
+      observedAt: branch.createdAt ?? null,
+      message: defectLabel
+    });
+  }
+  for (const regression of regressions ?? []) {
+    const defectId = `defect:regression:${slugify(regression.metricId)}:${slugify(regression.ownerId)}`;
+    const clusterId = `defectCluster:${slugify(regression.metricId)}`;
+    rows.push({
+      id: defectId,
+      title: `Performance regression for ${regression.ownerId}`,
+      defectKind: "performanceRegression",
+      status: "open",
+      clusterId,
+      clusterKey: regression.metricId,
+      metricId: regression.metricId,
+      gateId: regression.gateIds?.[0] ?? null,
+      branchId: regression.branchIds?.[0] ?? null,
+      changeSetId: regression.changeSetIds?.[0] ?? null,
+      candidateSnapshotId: regression.candidateSnapshotIds?.[0] ?? null,
+      ownerId: regression.ownerId,
+      summary: `${Math.round(regression.deltaMs || 0)} ms slower (${Math.round(regression.deltaPercent || 0)}%)`,
+      observedAt: regression.observedAt ?? null,
+      performanceRegressionId: regression.id
+    });
+    observations.push({
+      id: `defectObservation:${slugify(defectId)}:regression`,
+      defectId,
+      clusterId,
+      sourceKind: "performanceRegression",
+      sourceId: regression.id,
+      status: "regressed",
+      branchId: regression.branchIds?.[0] ?? null,
+      changeSetId: regression.changeSetIds?.[0] ?? null,
+      gateId: regression.gateIds?.[0] ?? null,
+      metricId: regression.metricId,
+      candidateSnapshotId: regression.candidateSnapshotIds?.[0] ?? null,
+      observedAt: regression.observedAt ?? null,
+      message: `${Math.round(regression.deltaMs || 0)} ms slower than prior aggregate`
+    });
+  }
+  for (const window of windows ?? []) {
+    const latestSample = sampleById[String(window.latestSampleId || "")] ?? null;
+    const threshold = thresholdById[String(window.thresholdId || "")] ?? null;
+    if (Number.isFinite(window.currentAggregateMs) && Number.isFinite(window.thresholdMs) && window.currentAggregateMs > window.thresholdMs) {
+      const defectId = `defect:slow:${slugify(window.metricId)}:${slugify(window.ownerId)}`;
+      const clusterId = `defectCluster:${slugify(window.metricId)}`;
+      rows.push({
+        id: defectId,
+        title: `Slow ${window.ownerId}`,
+        defectKind: "slowSample",
+        status: "open",
+        clusterId,
+        clusterKey: window.metricId,
+        metricId: window.metricId,
+        gateId: window.gateIds?.[0] ?? null,
+        branchId: window.branchIds?.[0] ?? null,
+        changeSetId: window.changeSetIds?.[0] ?? null,
+        candidateSnapshotId: window.candidateSnapshotIds?.[0] ?? null,
+        ownerId: window.ownerId,
+        summary: `${Math.round(window.currentAggregateMs)} ms exceeds ${Math.round(window.thresholdMs)} ms threshold`,
+        observedAt: window.latestObservedAt ?? null
+      });
+      observations.push({
+        id: `defectObservation:${slugify(defectId)}:slow`,
+        defectId,
+        clusterId,
+        sourceKind: "telemetryWindow",
+        sourceId: window.id,
+        status: "slow",
+        branchId: window.branchIds?.[0] ?? null,
+        changeSetId: window.changeSetIds?.[0] ?? null,
+        gateId: window.gateIds?.[0] ?? null,
+        metricId: window.metricId,
+        candidateSnapshotId: window.candidateSnapshotIds?.[0] ?? null,
+        observedAt: window.latestObservedAt ?? null,
+        message: `${Math.round(window.currentAggregateMs)} ms exceeds ${Math.round(window.thresholdMs)} ms threshold`
+      });
+    }
+    if (!threshold || !latestSample) continue;
+    const hotLoopCandidates = (window.currentSampleIds ?? [])
+      .map(sampleId => sampleById[String(sampleId)] ?? null)
+      .filter(Boolean)
+      .filter(sample => ["failed", "error", "timed_out"].includes(String(sample.status || "")))
+      .filter(sample => sample.fingerprint === latestSample.fingerprint);
+    const latestObservedAtMs = timestampMs(latestSample.observedAt);
+    const recentHotLoopCandidates = hotLoopCandidates.filter(sample => {
+      const observedAtMs = timestampMs(sample.observedAt);
+      if (latestObservedAtMs == null || observedAtMs == null) return false;
+      return (latestObservedAtMs - observedAtMs) <= Number(threshold.hotLoopWindowMs || 0);
+    });
+    if (recentHotLoopCandidates.length >= Number(threshold.hotLoopRepeatCount || 0)) {
+      const defectId = `defect:hotLoop:${slugify(window.ownerId)}:${slugify(latestSample.fingerprint)}`;
+      const clusterId = latestSample.gateId
+        ? `defectCluster:${slugify(latestSample.gateId)}`
+        : `defectCluster:${slugify(window.metricId)}`;
+      rows.push({
+        id: defectId,
+        title: `Hot loop on ${window.ownerId}`,
+        defectKind: "hotLoop",
+        status: "open",
+        clusterId,
+        clusterKey: latestSample.gateId || window.metricId,
+        metricId: window.metricId,
+        gateId: latestSample.gateId ?? null,
+        branchId: latestSample.branchId ?? null,
+        changeSetId: latestSample.changeSetId ?? null,
+        candidateSnapshotId: latestSample.candidateSnapshotId ?? null,
+        ownerId: window.ownerId,
+        summary: `${recentHotLoopCandidates.length} repeated failing samples in ${Math.round(Number(threshold.hotLoopWindowMs || 0) / 1000)} seconds`,
+        observedAt: latestSample.observedAt ?? null
+      });
+      for (const sample of recentHotLoopCandidates) {
+        observations.push({
+          id: `defectObservation:${slugify(defectId)}:${slugify(sample.id)}`,
+          defectId,
+          clusterId,
+          sourceKind: "telemetrySample",
+          sourceId: sample.id,
+          status: sample.status,
+          branchId: sample.branchId ?? null,
+          changeSetId: sample.changeSetId ?? null,
+          gateId: sample.gateId ?? null,
+          metricId: sample.metricId,
+          candidateSnapshotId: sample.candidateSnapshotId ?? null,
+          observedAt: sample.observedAt ?? null,
+          message: sample.message || sample.fingerprint
+        });
+      }
+    }
+  }
+  const latestGateSamples = new Map();
+  for (const sample of samples ?? []) {
+    if (!sample.gateId) continue;
+    latestGateSamples.set(String(sample.gateId), sample);
+  }
+  for (const sample of latestGateSamples.values()) {
+    if (!["failed", "error", "timed_out"].includes(String(sample.status || ""))) continue;
+    const defectId = `defect:gate:${slugify(sample.gateId)}`;
+    const clusterId = `defectCluster:${slugify(sample.gateId)}`;
+    rows.push({
+      id: defectId,
+      title: `Gate failure ${sample.gateId}`,
+      defectKind: "failingGate",
+      status: "open",
+      clusterId,
+      clusterKey: sample.gateId,
+      metricId: sample.metricId,
+      gateId: sample.gateId,
+      branchId: sample.branchId ?? null,
+      changeSetId: sample.changeSetId ?? null,
+      candidateSnapshotId: sample.candidateSnapshotId ?? null,
+      ownerId: sample.ownerId,
+      summary: sample.message || sample.status,
+      observedAt: sample.observedAt ?? null
+    });
+    observations.push({
+      id: `defectObservation:${slugify(defectId)}:gate`,
+      defectId,
+      clusterId,
+      sourceKind: "telemetrySample",
+      sourceId: sample.id,
+      status: sample.status,
+      branchId: sample.branchId ?? null,
+      changeSetId: sample.changeSetId ?? null,
+      gateId: sample.gateId,
+      metricId: sample.metricId,
+      candidateSnapshotId: sample.candidateSnapshotId ?? null,
+      observedAt: sample.observedAt ?? null,
+      message: sample.message || sample.status
+    });
+  }
+  const pushFailureRows = Object.values(latestPushByBranch(Array.isArray(pushRecords) ? pushRecords : []))
+    .filter(pushRecord => String(pushRecord?.status || "") === "failed");
+  for (const pushRecord of pushFailureRows) {
+    const defectId = `defect:branch-push:${slugify(pushRecord.branchId)}:${slugify(pushRecord.remoteName || "origin")}`;
+    const clusterId = `defectCluster:${slugify(`branch-push:${pushRecord.provider || "generic"}:${pushRecord.remoteName || "origin"}`)}`;
+    rows.push({
+      id: defectId,
+      title: `Push failure for ${pushRecord.branchId}`,
+      defectKind: "branchPushFailed",
+      status: "open",
+      clusterId,
+      clusterKey: `branch-push:${pushRecord.provider || "generic"}:${pushRecord.remoteName || "origin"}`,
+      metricId: null,
+      gateId: null,
+      branchId: pushRecord.branchId ? String(pushRecord.branchId) : null,
+      changeSetId: pushRecord.changeSetId ? String(pushRecord.changeSetId) : null,
+      candidateSnapshotId: null,
+      ownerId: pushRecord.remoteBranchRef ? String(pushRecord.remoteBranchRef) : `branch:${String(pushRecord.branchId || "")}`,
+      summary: pushRecord.error || "Git push failed",
+      observedAt: pushRecord.createdAt ?? null,
+      pushRecordId: pushRecord.id ? String(pushRecord.id) : null
+    });
+    observations.push({
+      id: `defectObservation:${slugify(defectId)}:push`,
+      defectId,
+      clusterId,
+      sourceKind: "pushRecord",
+      sourceId: pushRecord.id ? String(pushRecord.id) : defectId,
+      status: "failed",
+      branchId: pushRecord.branchId ? String(pushRecord.branchId) : null,
+      changeSetId: pushRecord.changeSetId ? String(pushRecord.changeSetId) : null,
+      gateId: null,
+      metricId: null,
+      candidateSnapshotId: null,
+      observedAt: pushRecord.createdAt ?? null,
+      message: pushRecord.error || "Git push failed"
+    });
+  }
+  const uniqueRows = new Map();
+  for (const row of rows) uniqueRows.set(String(row.id), row);
+  const uniqueObservations = new Map();
+  for (const row of observations) uniqueObservations.set(String(row.id), row);
+  return {
+    rows: sortRows([...uniqueRows.values()], ["clusterId", "id"]),
+    observations: sortRows([...uniqueObservations.values()], ["defectId", "observedAt", "id"])
+  };
+}
+
+function defectClusterRows(defects, observations) {
+  const observationIdsByDefect = Object.create(null);
+  for (const observation of observations ?? []) pushByKey(observationIdsByDefect, observation.defectId, observation.id);
+  const byCluster = new Map();
+  for (const defect of defects ?? []) {
+    const clusterId = String(defect.clusterId || `defectCluster:${slugify(defect.id)}`);
+    const existing = byCluster.get(clusterId) ?? {
+      id: clusterId,
+      title: defect.clusterKey || defect.title || clusterId,
+      defectIds: [],
+      branchIds: [],
+      changeSetIds: [],
+      gateIds: [],
+      metricIds: [],
+      candidateSnapshotIds: [],
+      proposalIds: [],
+      observationIds: [],
+      latestObservedAt: null
+    };
+    existing.defectIds.push(String(defect.id));
+    if (defect.branchId) existing.branchIds.push(String(defect.branchId));
+    if (defect.changeSetId) existing.changeSetIds.push(String(defect.changeSetId));
+    if (defect.gateId) existing.gateIds.push(String(defect.gateId));
+    if (defect.metricId) existing.metricIds.push(String(defect.metricId));
+    if (defect.candidateSnapshotId) existing.candidateSnapshotIds.push(String(defect.candidateSnapshotId));
+    if (defect.proposalId) existing.proposalIds.push(String(defect.proposalId));
+    existing.observationIds.push(...(observationIdsByDefect[defect.id] ?? []));
+    if (!existing.latestObservedAt || String(existing.latestObservedAt) < String(defect.observedAt || "")) {
+      existing.latestObservedAt = defect.observedAt ?? existing.latestObservedAt;
+    }
+    byCluster.set(clusterId, existing);
+  }
+  return sortRows([...byCluster.values()].map(row => ({
+    ...row,
+    defectCount: uniqueStrings(row.defectIds).length,
+    defectIds: uniqueStrings(row.defectIds),
+    branchIds: uniqueStrings(row.branchIds),
+    changeSetIds: uniqueStrings(row.changeSetIds),
+    gateIds: uniqueStrings(row.gateIds),
+    metricIds: uniqueStrings(row.metricIds),
+    candidateSnapshotIds: uniqueStrings(row.candidateSnapshotIds),
+    proposalIds: uniqueStrings(row.proposalIds),
+    observationIds: uniqueStrings(row.observationIds),
+    observationCount: uniqueStrings(row.observationIds).length
+  })), ["id"]);
 }
 
 function regressionSummaryByRun(runs = []) {
@@ -1081,7 +1677,221 @@ function testReportRows(witnesses) {
   return sortRows(rows, ["runId", "reportKind", "id"]);
 }
 
+function materializedViewStateRows(observations = []) {
+  const latest = new Map();
+  for (const observation of observations) {
+    if (observation?.process !== "materializedView.read" || !observation.body?.id) continue;
+    latest.set(String(observation.body.id), {
+      id: String(observation.body.id),
+      title: observation.body.title ? String(observation.body.title) : String(observation.body.id),
+      kind: observation.body.kind ? String(observation.body.kind) : "generic",
+      sliceKey: observation.body.sliceKey ? String(observation.body.sliceKey) : null,
+      modelView: observation.body.modelView ? String(observation.body.modelView) : null,
+      maintenance: observation.body.maintenance ? String(observation.body.maintenance) : "on-demand",
+      storageClass: observation.body.storageClass ? String(observation.body.storageClass) : "memory",
+      resourceBudgetClass: observation.body.resourceBudgetClass ? String(observation.body.resourceBudgetClass) : null,
+      blocking: observation.body.blocking !== false,
+      ttlMs: Number(observation.body.ttlMs || 0),
+      cacheStatus: observation.body.cacheStatus ? String(observation.body.cacheStatus) : "cold",
+      buildCount: Number(observation.body.buildCount || 0),
+      hitCount: Number(observation.body.hitCount || 0),
+      missCount: Number(observation.body.missCount || 0),
+      lastBuiltAt: observation.body.lastBuiltAt ?? null,
+      durationMs: Number(observation.body.durationMs || 0),
+      requestId: observation.body.requestId ? String(observation.body.requestId) : null,
+      requestPath: observation.body.requestPath ? String(observation.body.requestPath) : null,
+      requestView: observation.body.requestView ? String(observation.body.requestView) : null,
+      requestArea: observation.body.requestArea ? String(observation.body.requestArea) : null,
+      requestSection: observation.body.requestSection ? String(observation.body.requestSection) : null,
+      invalidationCause: observation.body.invalidationCause ? String(observation.body.invalidationCause) : null,
+      outputSizeEstimate: Number(observation.body.outputSizeEstimate || 0),
+      inputSize: Number(observation.body.inputSize || 0),
+      observedAt: observation.body.observedAt ?? observation.time ?? null
+    });
+  }
+  return sortRows(latest.values(), ["kind", "sliceKey", "id"]);
+}
+
+function resourceProbeOperationRows(observations = []) {
+  const rows = [];
+  for (const observation of observations) {
+    if (observation?.process !== "runtime.resourceProbe.operation" || !observation.body?.id) continue;
+    rows.push({
+      id: String(observation.body.id),
+      kind: observation.body.kind ? String(observation.body.kind) : "operation",
+      title: observation.body.title ? String(observation.body.title) : null,
+      status: observation.body.status ? String(observation.body.status) : "completed",
+      durationMs: Number(observation.body.durationMs || 0),
+      startedAt: observation.body.startedAt ?? null,
+      finishedAt: observation.body.finishedAt ?? null,
+      materializedViewId: observation.body.materializedViewId ? String(observation.body.materializedViewId) : null,
+      requestPath: observation.body.detail?.requestPath ? String(observation.body.detail.requestPath) : null,
+      requestView: observation.body.detail?.requestView ? String(observation.body.detail.requestView) : null,
+      requestId: observation.body.detail?.requestId ? String(observation.body.detail.requestId) : null,
+      memoryRssDelta: Number(observation.body.memory?.delta?.rss || 0),
+      heapUsedDelta: Number(observation.body.memory?.delta?.heapUsed || 0),
+      cpuUserUs: Number(observation.body.cpu?.userUs || 0),
+      cpuSystemUs: Number(observation.body.cpu?.systemUs || 0),
+      eventLoopP95Ms: Number(observation.body.eventLoop?.p95Ms || 0),
+      eventLoopMaxMs: Number(observation.body.eventLoop?.maxMs || 0),
+      detail: observation.body.detail && typeof observation.body.detail === "object"
+        ? structuredClone(observation.body.detail)
+        : null,
+      observedAt: observation.body.finishedAt ?? observation.time ?? null
+    });
+  }
+  return sortRows(rows, ["kind", "finishedAt", "id"]);
+}
+
 export const platformModuleProjectors = {
+  pushRecords(witnesses) {
+    const rows = [];
+    for (const witness of witnesses) {
+      if (witness.process !== "platform.branch.push" || !witness.body?.id) continue;
+      const body = witness.body;
+      rows.push({
+        id: String(body.id),
+        branchId: body.branchId ? String(body.branchId) : null,
+        changeSetId: body.changeSetId ? String(body.changeSetId) : null,
+        status: String(body.status || "failed"),
+        remoteName: body.remoteName ? String(body.remoteName) : null,
+        remoteUrl: body.remoteUrl ? String(body.remoteUrl) : null,
+        provider: body.provider ? String(body.provider) : "generic",
+        gitBranchName: body.gitBranchName ? String(body.gitBranchName) : null,
+        localBranchRef: body.localBranchRef ? String(body.localBranchRef) : null,
+        remoteBranchRef: body.remoteBranchRef ? String(body.remoteBranchRef) : null,
+        commitSha: body.commitSha ? String(body.commitSha) : null,
+        commitMessage: body.commitMessage ? String(body.commitMessage) : null,
+        compareUrl: body.compareUrl ? String(body.compareUrl) : null,
+        pullRequestUrl: body.pullRequestUrl ? String(body.pullRequestUrl) : null,
+        dryRun: body.dryRun === true,
+        error: body.error ? String(body.error) : null,
+        owner: body.owner ? String(body.owner) : null,
+        runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
+        session: body.session ? String(body.session) : null,
+        createdAt: body.createdAt ?? witness.time ?? null
+      });
+    }
+    return sortRows(rows, ["branchId", "createdAt", "id"]);
+  },
+
+  pushRecordIndex(witnesses) {
+    const rows = platformModuleProjectors.pushRecords(witnesses);
+    const byId = Object.create(null);
+    const byBranch = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(byBranch, row.branchId, row);
+    }
+    return { rows, byId, byBranch };
+  },
+
+  releaseChannels() {
+    return PLATFORM_RELEASE_CHANNEL_ROWS.map(row => ({ ...row }));
+  },
+
+  shipRecords(witnesses) {
+    const rows = [];
+    for (const witness of witnesses) {
+      if (witness.process !== "platform.branch.ship" || !witness.body?.id) continue;
+      const body = witness.body;
+      rows.push({
+        id: String(body.id),
+        branchId: body.branchId ? String(body.branchId) : null,
+        changeSetId: body.changeSetId ? String(body.changeSetId) : null,
+        pushRecordId: body.pushRecordId ? String(body.pushRecordId) : null,
+        releaseChannelId: body.releaseChannelId ? String(body.releaseChannelId) : null,
+        releaseChannelName: body.releaseChannelName ? String(body.releaseChannelName) : null,
+        status: String(body.status || "recorded"),
+        remoteName: body.remoteName ? String(body.remoteName) : null,
+        remoteUrl: body.remoteUrl ? String(body.remoteUrl) : null,
+        provider: body.provider ? String(body.provider) : "generic",
+        gitBranchName: body.gitBranchName ? String(body.gitBranchName) : null,
+        localBranchRef: body.localBranchRef ? String(body.localBranchRef) : null,
+        remoteBranchRef: body.remoteBranchRef ? String(body.remoteBranchRef) : null,
+        commitSha: body.commitSha ? String(body.commitSha) : null,
+        commitMessage: body.commitMessage ? String(body.commitMessage) : null,
+        compareUrl: body.compareUrl ? String(body.compareUrl) : null,
+        pullRequestUrl: body.pullRequestUrl ? String(body.pullRequestUrl) : null,
+        proposalId: body.proposalId ? String(body.proposalId) : null,
+        owner: body.owner ? String(body.owner) : null,
+        runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
+        session: body.session ? String(body.session) : null,
+        createdAt: body.createdAt ?? witness.time ?? null,
+        observationWindowEndsAt: body.observationWindowEndsAt ?? null,
+        observationStatus: body.observationStatus ? String(body.observationStatus) : null
+      });
+    }
+    return sortRows(rows, ["branchId", "createdAt", "id"]);
+  },
+
+  shipRecordIndex(witnesses) {
+    const rows = platformModuleProjectors.shipRecords(witnesses);
+    const byId = Object.create(null);
+    const byBranch = Object.create(null);
+    const byReleaseChannel = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(byBranch, row.branchId, row);
+      pushByKey(byReleaseChannel, row.releaseChannelId, row);
+    }
+    return { rows, byId, byBranch, byReleaseChannel };
+  },
+
+  telemetryThresholds() {
+    return PLATFORM_TELEMETRY_THRESHOLD_ROWS.map(row => ({ ...row }));
+  },
+
+  materializedViewStates(witnesses, options = {}) {
+    return materializedViewStateRows(options.observations ?? []);
+  },
+
+  resourceProbeOperations(witnesses, options = {}) {
+    return resourceProbeOperationRows(options.observations ?? []);
+  },
+
+  telemetrySamples(witnesses, options = {}) {
+    return telemetrySampleRows(observedEvents(witnesses, options.observations ?? []));
+  },
+
+  telemetryWindows(witnesses, options = {}) {
+    return telemetryWindowRows(
+      platformModuleProjectors.telemetrySamples(witnesses, options),
+      platformModuleProjectors.telemetryThresholds(witnesses)
+    );
+  },
+
+  performanceRegressions(witnesses, options = {}) {
+    return performanceRegressionRows(platformModuleProjectors.telemetryWindows(witnesses, options));
+  },
+
+  defects(witnesses) {
+    return defectRows(
+      platformModuleProjectors.branches(witnesses),
+      platformModuleProjectors.telemetrySamples(witnesses),
+      platformModuleProjectors.telemetryWindows(witnesses),
+      platformModuleProjectors.performanceRegressions(witnesses),
+      platformModuleProjectors.pushRecords(witnesses)
+    ).rows;
+  },
+
+  defectObservations(witnesses) {
+    return defectRows(
+      platformModuleProjectors.branches(witnesses),
+      platformModuleProjectors.telemetrySamples(witnesses),
+      platformModuleProjectors.telemetryWindows(witnesses),
+      platformModuleProjectors.performanceRegressions(witnesses),
+      platformModuleProjectors.pushRecords(witnesses)
+    ).observations;
+  },
+
+  defectClusters(witnesses) {
+    return defectClusterRows(
+      platformModuleProjectors.defects(witnesses),
+      platformModuleProjectors.defectObservations(witnesses)
+    );
+  },
+
   changeSetEdits(witnesses) {
     return changeSetEditRows(witnesses);
   },
@@ -1215,6 +2025,10 @@ export const platformModuleProjectors = {
 
   branches(witnesses) {
     const latest = latestBodiesByProcess(witnesses, "platform.branch.create");
+    const pushIndex = platformModuleProjectors.pushRecordIndex(witnesses);
+    const shipIndex = platformModuleProjectors.shipRecordIndex(witnesses);
+    const latestPushByBranchId = latestPushByBranch(pushIndex.rows);
+    const latestShipByBranchId = latestShipByBranch(shipIndex.rows);
     const rows = new Map();
     for (const body of latest.values()) {
       rows.set(String(body.id), {
@@ -1227,10 +2041,18 @@ export const platformModuleProjectors = {
         owner: body.owner ? String(body.owner) : null,
         runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
         session: body.session ? String(body.session) : null,
+        gitBranchName: body.gitBranchName ? String(body.gitBranchName) : defaultGitBranchName(body.id),
         status: String(body.status || "open"),
         createdAt: body.createdAt ?? null,
         changeSetIds: [],
-        latestCandidateSnapshotId: null
+        latestCandidateSnapshotId: null,
+        latestPushRecordId: null,
+        latestPushStatus: null,
+        pushRecordIds: [],
+        latestShipRecordId: null,
+        latestShipStatus: null,
+        latestReleaseChannelId: null,
+        shipRecordIds: []
       });
     }
     for (const witness of witnesses) {
@@ -1249,15 +2071,41 @@ export const platformModuleProjectors = {
         if (!row) continue;
         row.latestCandidateSnapshotId = witness.body.candidateSnapshotId ?? row.latestCandidateSnapshotId;
       }
+      if (witness.process === "platform.branch.push" && witness.body?.branchId && witness.body?.id) {
+        const row = rows.get(String(witness.body.branchId));
+        if (!row) continue;
+        const pushRecordId = String(witness.body.id);
+        if (!row.pushRecordIds.includes(pushRecordId)) row.pushRecordIds.push(pushRecordId);
+        row.latestPushRecordId = pushRecordId;
+        row.latestPushStatus = String(witness.body.status || row.latestPushStatus || "");
+        row.gitBranchName = witness.body.gitBranchName ? String(witness.body.gitBranchName) : row.gitBranchName;
+      }
+      if (witness.process === "platform.branch.ship" && witness.body?.branchId && witness.body?.id) {
+        const row = rows.get(String(witness.body.branchId));
+        if (!row) continue;
+        const shipRecordId = String(witness.body.id);
+        if (!row.shipRecordIds.includes(shipRecordId)) row.shipRecordIds.push(shipRecordId);
+        row.latestShipRecordId = shipRecordId;
+        row.latestShipStatus = String(witness.body.status || row.latestShipStatus || "");
+        row.latestReleaseChannelId = witness.body.releaseChannelId ? String(witness.body.releaseChannelId) : row.latestReleaseChannelId;
+      }
     }
     const changeSetIndex = platformModuleProjectors.changeSetIndex(witnesses);
     return sortRows([...rows.values()].map(row => ({
       ...row,
       changeSetIds: [...row.changeSetIds].sort(),
+      pushRecordIds: [...row.pushRecordIds].sort(),
+      shipRecordIds: [...row.shipRecordIds].sort(),
+      latestPushRecord: row.latestPushRecordId ? (pushIndex.byId?.[row.latestPushRecordId] ?? null) : (latestPushByBranchId[row.id] ?? null),
+      latestShipRecord: row.latestShipRecordId ? (shipIndex.byId?.[row.latestShipRecordId] ?? null) : (latestShipByBranchId[row.id] ?? null),
       status: (() => {
         const branchChangeSets = row.changeSetIds
           .map(id => changeSetIndex.byId?.[id] ?? null)
           .filter(Boolean);
+        const latestShip = row.latestShipRecordId ? (shipIndex.byId?.[row.latestShipRecordId] ?? null) : (latestShipByBranchId[row.id] ?? null);
+        const latestPush = row.latestPushRecordId ? (pushIndex.byId?.[row.latestPushRecordId] ?? null) : (latestPushByBranchId[row.id] ?? null);
+        if (String(latestShip?.status || "") === "shipped" && String(latestShip?.releaseChannelId || "") === "releaseChannel:local") return "shipped";
+        if (String(latestPush?.status || "") === "pushed") return "pushed";
         if (branchChangeSets.length && branchChangeSets.every(changeSet => ["rejected", "abandoned"].includes(String(changeSet.status || "")))) {
           return "closed";
         }

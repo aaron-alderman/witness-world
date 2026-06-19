@@ -92,14 +92,6 @@ rootWidget = "bootstrap_context_binding_create_controls_root"
 [[step]]
 program = "bootstrap_context_binding_create_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_context_binding_create_context_select"
-eventName = "witness:bootstrap-dependent-select-sync"
-detail = { source = "bootstrap-scoped-controls", family = "context-binding-target", contextSelectId = "context-binding-context", targetSelectId = "context-binding-target" }
-
-[[step]]
-program = "bootstrap_context_binding_create_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_context_binding_create_form"
 widget = "bootstrap_context_binding_create_status"
@@ -112,14 +104,6 @@ op = "readForm"
 on = "submit:bootstrap_context_binding_create_form"
 widget = "bootstrap_context_binding_create_form"
 into = "bootstrapContextBindingCreateDraft"
-
-[[step]]
-program = "bootstrap_context_binding_create_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_context_binding_create_form"
-eventName = "witness:bootstrap-scoped-submit"
-detail = { source = "bootstrap-scoped-controls", family = "context-binding-create", formId = "context-binding-form", statusId = "context-binding-status", context = "${state.bootstrapContextBindingCreateDraft.context}", name = "${state.bootstrapContextBindingCreateDraft.name}", target = "${state.bootstrapContextBindingCreateDraft.target}" }
 
 [[step]]
 program = "bootstrap_context_binding_create_controls_program"
@@ -220,14 +204,6 @@ rootWidget = "bootstrap_context_export_create_controls_root"
 [[step]]
 program = "bootstrap_context_export_create_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_context_export_create_context_select"
-eventName = "witness:bootstrap-dependent-select-sync"
-detail = { source = "bootstrap-scoped-controls", family = "context-export-target", contextSelectId = "context-export-context", targetSelectId = "context-export-target" }
-
-[[step]]
-program = "bootstrap_context_export_create_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_context_export_create_form"
 widget = "bootstrap_context_export_create_status"
@@ -240,14 +216,6 @@ op = "readForm"
 on = "submit:bootstrap_context_export_create_form"
 widget = "bootstrap_context_export_create_form"
 into = "bootstrapContextExportCreateDraft"
-
-[[step]]
-program = "bootstrap_context_export_create_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_context_export_create_form"
-eventName = "witness:bootstrap-scoped-submit"
-detail = { source = "bootstrap-scoped-controls", family = "context-export-create", formId = "context-export-form", statusId = "context-export-status", context = "${state.bootstrapContextExportCreateDraft.context}", name = "${state.bootstrapContextExportCreateDraft.name}", target = "${state.bootstrapContextExportCreateDraft.target}" }
 
 [[step]]
 program = "bootstrap_context_export_create_controls_program"
@@ -358,14 +326,6 @@ rootWidget = "bootstrap_context_import_create_controls_root"
 [[step]]
 program = "bootstrap_context_import_create_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_context_import_create_source_context_select"
-eventName = "witness:bootstrap-dependent-select-sync"
-detail = { source = "bootstrap-scoped-controls", family = "context-import-export", sourceContextSelectId = "context-import-source-context", exportNameSelectId = "context-import-export-name" }
-
-[[step]]
-program = "bootstrap_context_import_create_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_context_import_create_form"
 widget = "bootstrap_context_import_create_status"
@@ -378,14 +338,6 @@ op = "readForm"
 on = "submit:bootstrap_context_import_create_form"
 widget = "bootstrap_context_import_create_form"
 into = "bootstrapContextImportCreateDraft"
-
-[[step]]
-program = "bootstrap_context_import_create_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_context_import_create_form"
-eventName = "witness:bootstrap-scoped-submit"
-detail = { source = "bootstrap-scoped-controls", family = "context-import-create", formId = "context-import-form", statusId = "context-import-status", context = "${state.bootstrapContextImportCreateDraft.context}", sourceContext = "${state.bootstrapContextImportCreateDraft.sourceContext}", exportName = "${state.bootstrapContextImportCreateDraft.exportName}", name = "${state.bootstrapContextImportCreateDraft.name}" }
 
 [[step]]
 program = "bootstrap_context_import_create_controls_program"
@@ -486,14 +438,6 @@ rootWidget = "bootstrap_stewardship_create_controls_root"
 [[step]]
 program = "bootstrap_stewardship_create_controls_program"
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_stewardship_create_kind_select"
-eventName = "witness:bootstrap-dependent-select-sync"
-detail = { source = "bootstrap-scoped-controls", family = "stewardship-target", targetKindSelectId = "stewardship-target-kind", targetSelectId = "stewardship-target" }
-
-[[step]]
-program = "bootstrap_stewardship_create_controls_program"
-order = 0
 op = "setText"
 on = "submit:bootstrap_stewardship_create_form"
 widget = "bootstrap_stewardship_create_status"
@@ -506,14 +450,6 @@ op = "readForm"
 on = "submit:bootstrap_stewardship_create_form"
 widget = "bootstrap_stewardship_create_form"
 into = "bootstrapStewardshipCreateDraft"
-
-[[step]]
-program = "bootstrap_stewardship_create_controls_program"
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_stewardship_create_form"
-eventName = "witness:bootstrap-scoped-submit"
-detail = { source = "bootstrap-scoped-controls", family = "stewardship-create", formId = "stewardship-form", statusId = "stewardship-status", steward = "${state.bootstrapStewardshipCreateDraft.steward}", target = "${state.bootstrapStewardshipCreateDraft.target}", targetKind = "${state.bootstrapStewardshipCreateDraft.targetKind}" }
 
 [[step]]
 program = "bootstrap_stewardship_create_controls_program"

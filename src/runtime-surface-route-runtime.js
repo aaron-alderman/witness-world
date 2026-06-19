@@ -1,4 +1,5 @@
 import {
+  normalizeQueryBindings,
   normalizeRouteStateDescriptor,
   resolveRouteStateDescriptor,
   trimString
@@ -37,6 +38,76 @@ export function routeTargetForManifestState(manifest, processRuntime) {
   return routeTargetForProcessState(manifest, processRuntime, processRef);
 }
 
+export function queryBindingsForProcess(manifest, processRef) {
+  const normalizedProcessRef = trimString(processRef);
+  return normalizeQueryBindings(manifest?.queryBindings)
+    .filter(binding => !normalizedProcessRef || binding.processRef === normalizedProcessRef);
+}
+
+function sameQueryValue(left, right) {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false;
+    if (left.length !== right.length) return false;
+    return left.every((value, index) => String(value) === String(right[index]));
+  }
+  return left === right;
+}
+
+function normalizeSearchValue(values = []) {
+  if (!values.length) return undefined;
+  return values.length === 1 ? values[0] : values;
+}
+
+function coerceQueryValue(rawValue, exemplar) {
+  if (Array.isArray(exemplar)) {
+    const values = Array.isArray(rawValue) ? rawValue : (rawValue == null ? [] : [rawValue]);
+    return values.map(value => String(value));
+  }
+  if (typeof exemplar === "boolean") {
+    const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+    if (typeof value === "boolean") return value;
+    const normalized = String(value ?? "").trim().toLowerCase();
+    return ["1", "true", "yes", "on"].includes(normalized);
+  }
+  if (typeof exemplar === "number") {
+    const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+  if (Array.isArray(rawValue)) return rawValue.map(value => String(value));
+  return rawValue == null ? "" : String(rawValue);
+}
+
+function queryUrlForWindow(window) {
+  if (typeof window?.location?.href === "string" && window.location.href.trim()) {
+    try {
+      return new URL(window.location.href, window.location.origin || "http://127.0.0.1");
+    } catch {}
+  }
+  const pathname = String(window?.location?.pathname || "/");
+  const search = String(window?.location?.search || "");
+  return new URL(`${pathname}${search}`, "http://127.0.0.1");
+}
+
+export function syncUrlToQueryState({ manifest, processRuntime, processRef, window }) {
+  const bindings = queryBindingsForProcess(manifest, processRef);
+  if (!bindings.length) return false;
+  const url = queryUrlForWindow(window);
+  let changed = false;
+  for (const binding of bindings) {
+    const values = url.searchParams.getAll(binding.param);
+    const current = processRuntime.value(binding.state);
+    if (!values.length && !Object.prototype.hasOwnProperty.call(binding, "defaultValue")) continue;
+    const next = values.length
+      ? coerceQueryValue(normalizeSearchValue(values), Object.prototype.hasOwnProperty.call(binding, "defaultValue") ? binding.defaultValue : current)
+      : binding.defaultValue;
+    if (sameQueryValue(current, next)) continue;
+    processRuntime.set(binding.state, next);
+    changed = true;
+  }
+  return changed;
+}
+
 export function syncUrlToRouteState({ manifest, processRuntime, processRef, window }) {
   const active = activeRouteTargetForPath(manifest, window?.location?.pathname);
   if (!active || !processRef) return false;
@@ -54,6 +125,30 @@ export function syncRouteStateToUrl({ manifest, processRuntime, processRef, wind
   const nextPath = String(target.path || "/").replace(/\/+$/, "") || "/";
   if (currentPath !== nextPath) window.history.pushState({ surfaceRouteKey: target.key }, "", target.path);
   return target;
+}
+
+export function syncQueryStateToUrl({ manifest, processRuntime, processRef, window }) {
+  const bindings = queryBindingsForProcess(manifest, processRef);
+  if (!bindings.length || !window?.history || !window?.location) return false;
+  const url = queryUrlForWindow(window);
+  const before = url.search;
+  for (const binding of bindings) {
+    const value = processRuntime.value(binding.state);
+    const useDefault = Object.prototype.hasOwnProperty.call(binding, "defaultValue")
+      && sameQueryValue(value, binding.defaultValue);
+    const isEmpty = value == null || value === "" || (Array.isArray(value) && value.length === 0);
+    url.searchParams.delete(binding.param);
+    if (useDefault || isEmpty) continue;
+    if (Array.isArray(value)) {
+      for (const entry of value) url.searchParams.append(binding.param, String(entry));
+      continue;
+    }
+    url.searchParams.set(binding.param, String(value));
+  }
+  if (url.search === before) return false;
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({ surfaceQuerySync: true }, "", next);
+  return true;
 }
 
 export function forceDocumentNavigation(window, targetPath) {

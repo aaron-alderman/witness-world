@@ -5,15 +5,15 @@ import {
   compileRvmFileToDesirePlus,
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
-import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
+import { evaluateModel } from "../plugins/chart-runtime/plan/evaluate-model.js";
 import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodman-stdlib.js";
 import { millForceKernels } from "../examples/engentus/app/chart-functions/mill-force-kernels.js";
 import { samplingFunctions } from "../examples/engentus/app/chart-functions/sampling.js";
-import { planChart } from "../plugins/chart-runtime/gog-runtime.js";
+import { planChart } from "../plugins/chart-runtime/plan/chart-plan.js";
 
 // ── M3: the GoG runtime turns the IR chart + evaluated model into a render plan ──
 // Pure geometry, node-testable — no browser. Proves forms → IR → eval → chart
-// plan end to end. The browser step (drawChart) is a thin D3 paint of this plan.
+// plan end to end. The browser step (drawChart) is a thin SVG paint of this plan.
 
 async function loadBody(file, kind, name) {
   const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(

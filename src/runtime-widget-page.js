@@ -376,17 +376,6 @@ function renderClientEngine(program) {
     if (replace === false) window.history.pushState({}, '', url.toString());
     else window.history.replaceState({}, '', url.toString());
   };
-  const dispatchDomEvent = ({ event, eventName, detail = null, target = 'window', bubbles = false, cancelable = false, composed = false }) => {
-    const name = String(eventName || event || '').trim();
-    if (!name) throw new Error('dispatchDomEvent requires an event name');
-    const resolvedTarget = target === 'document' ? document : target === 'body' ? document.body : window;
-    resolvedTarget?.dispatchEvent?.(new CustomEvent(name, {
-      detail,
-      bubbles: Boolean(bubbles),
-      cancelable: Boolean(cancelable),
-      composed: Boolean(composed)
-    }));
-  };
   const resolveBody = ({ from, pick, body }, executionScope = {}) => {
     if (body) return interpolateValue(body, scopeFor({ ...executionScope }));
     const source = from ? (readPath(state, from) ?? readPath(scopeFor({ ...executionScope }), from) ?? {}) : {};
@@ -488,7 +477,7 @@ function renderClientEngine(program) {
     if (step.op === 'refreshProjection') await refreshProjection();
     if (step.op === 'navigate') window.location.assign(p.url || p.href || window.location.href);
     if (step.op === 'setQueryParam') setQueryParam(p);
-    if (step.op === 'dispatchDomEvent') dispatchDomEvent(p);
+    if (step.op === 'dispatchDomEvent') throw new Error('dispatchDomEvent has been retired; use native page.surface refresh, navigation, boundary, policy, or capability semantics instead');
     if (step.op === 'reloadPage') window.location.reload();
     if (step.op === 'postJson' || step.op === 'patchJson' || step.op === 'deleteJson') {
       const method = step.op === 'postJson' ? (p.method || 'POST') : step.op === 'patchJson' ? (p.method || 'PATCH') : (p.method || 'DELETE');

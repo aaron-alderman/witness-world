@@ -113,17 +113,29 @@ function tokenOpsToDocumentPatchOps(ops) {
 
 function buildPreviewSessionRuntime() {
   const sessions = new Map();
-  const readSession = ({
+  const lookupSession = ({
     previewSessionId,
     appRoot,
-    adapterKey,
-    requestSnapshot
+    adapterKey
   }) => {
     const session = sessions.get(previewSessionId);
     if (!session) throw new Error(`unknown preview session ${previewSessionId}`);
     if (session.appRoot !== appRoot || session.adapterKey !== adapterKey) {
       throw new Error(`preview session ${previewSessionId} does not match the requested adapter`);
     }
+    return session;
+  };
+  const readSession = ({
+    previewSessionId,
+    appRoot,
+    adapterKey,
+    requestSnapshot
+  }) => {
+    const session = lookupSession({
+      previewSessionId,
+      appRoot,
+      adapterKey
+    });
     if (session.snapshotRevision !== snapshotRevision(requestSnapshot)) {
       throw new Error(`preview session ${previewSessionId} no longer matches the active app snapshot`);
     }
@@ -183,11 +195,10 @@ function buildPreviewSessionRuntime() {
       adapterKey,
       requestSnapshot
     }) {
-      readSession({
+      lookupSession({
         previewSessionId,
         appRoot,
-        adapterKey,
-        requestSnapshot
+        adapterKey
       });
       sessions.delete(previewSessionId);
       return { ok: true, previewSessionId };
@@ -267,6 +278,117 @@ function previewServiceFor(appContext) {
   return service;
 }
 
+function requestedPreviewSessionId(requestUrl = null) {
+  return requestUrl?.searchParams?.get("previewSessionId")?.trim()
+    || requestUrl?.searchParams?.get("wcssPreview")?.trim()
+    || "";
+}
+
+function sessionPreviewForRequest({
+  requestUrl,
+  appContext,
+  identity,
+  requestSnapshot
+} = {}) {
+  const previewSessionId = requestedPreviewSessionId(requestUrl);
+  if (!previewSessionId) return null;
+  return previewServiceFor(appContext).resolveSession({
+    previewSessionId,
+    appRoot: identity.appRoot,
+    adapterKey: identity.key,
+    requestSnapshot
+  });
+}
+
+function applyPreviewDocumentIfNeeded(adapter, previewSession = null) {
+  if (!previewSession) return adapter.document;
+  if (typeof adapter?.applyPatch !== "function") {
+    throw new Error("wcss preview requires an authoring-capable adapter");
+  }
+  return adapter.applyPatch({ ops: previewSession.ops });
+}
+
+function updatedSchemaForPreview(schema, patchedDocument) {
+  if (!schema || typeof schema !== "object" || !patchedDocument || typeof patchedDocument !== "object") {
+    return schema;
+  }
+  const patchedTokens = new Map((patchedDocument.tokens ?? []).map(token => [token.name, token.value]));
+  const patchedSchema = structuredClone(schema);
+  for (const token of patchedSchema.tokens ?? []) {
+    if (!token?.name || !patchedTokens.has(token.name)) continue;
+    token.currentValue = patchedTokens.get(token.name);
+  }
+  const stylesByName = new Map((patchedDocument.styles ?? []).map(style => [style.name, style]));
+  for (const style of patchedSchema.styles ?? []) {
+    const patchedStyle = stylesByName.get(style?.name) ?? null;
+    if (!patchedStyle) continue;
+    const patchFieldGroup = (schemaFields = [], patchedFields = []) => {
+      const patchedByField = new Map((patchedFields ?? []).map(field => [field.field, field.value]));
+      for (const field of schemaFields ?? []) {
+        if (!field?.field || !patchedByField.has(field.field)) continue;
+        field.value = patchedByField.get(field.field);
+      }
+    };
+    patchFieldGroup(style.fields, patchedStyle.fields);
+    const patchedStatesByName = new Map((patchedStyle.states ?? []).map(state => [state.name, state]));
+    for (const state of style.states ?? []) {
+      const patchedState = patchedStatesByName.get(state?.name) ?? null;
+      if (!patchedState) continue;
+      patchFieldGroup(state.fields, patchedState.fields);
+    }
+    const patchedPartsByName = new Map((patchedStyle.parts ?? []).map(part => [part.name, part]));
+    for (const part of style.parts ?? []) {
+      const patchedPart = patchedPartsByName.get(part?.name) ?? null;
+      if (!patchedPart) continue;
+      patchFieldGroup(part.fields, patchedPart.fields);
+      const patchedPartStatesByName = new Map((patchedPart.states ?? []).map(state => [state.name, state]));
+      for (const state of part.states ?? []) {
+        const patchedState = patchedPartStatesByName.get(state?.name) ?? null;
+        if (!patchedState) continue;
+        patchFieldGroup(state.fields, patchedState.fields);
+      }
+    }
+  }
+  return patchedSchema;
+}
+
+function replayPreviewOpsIntoSchema(schema, ops = []) {
+  if (!schema || typeof schema !== "object" || !Array.isArray(ops) || ops.length === 0) return schema;
+  const patchedSchema = structuredClone(schema);
+  const tokenByName = new Map((patchedSchema.tokens ?? []).map(token => [token.name, token]));
+  const styleByName = new Map((patchedSchema.styles ?? []).map(style => [style.name, style]));
+  const findContainer = (styleName, partName = null) => {
+    const style = styleByName.get(styleName) ?? null;
+    if (!style) return null;
+    if (!partName) return style;
+    return (style.parts ?? []).find(part => part.name === partName) ?? null;
+  };
+  const findState = (container, stateName) => (container?.states ?? []).find(state => state.name === stateName) ?? null;
+  const setField = (fields, fieldName, value) => {
+    const field = (fields ?? []).find(entry => entry.field === fieldName) ?? null;
+    if (field) field.value = value;
+  };
+  for (const op of ops) {
+    const kind = typeof op?.kind === "string" ? op.kind.trim() : "";
+    if (kind === "token.set") {
+      const token = tokenByName.get(op.token) ?? null;
+      if (token) token.currentValue = op.value;
+      continue;
+    }
+    if (kind === "style.field.set") {
+      const container = findContainer(op.style, op.part);
+      if (container) setField(container.fields, op.field, op.value);
+      continue;
+    }
+    if (kind === "style.state_field.set") {
+      const container = findContainer(op.style, op.part);
+      const state = findState(container, op.state);
+      if (state) setField(state.fields, op.field, op.value);
+    }
+  }
+  return patchedSchema;
+}
+
 export function createHandlers(deps = {}) {
   const {
     sendJson,
@@ -290,12 +412,25 @@ export function createHandlers(deps = {}) {
   }
 
   return {
-    "wcss.document.read": async ({ res, route, appContext }) => {
+    "wcss.document.read": async ({ res, route, appContext, requestUrl }) => {
       try {
-        const { adapter } = await withAdapter(route, appContext);
+        const { adapter, identity, requestSnapshot } = await withAdapter(route, appContext);
+        const previewSession = sessionPreviewForRequest({
+          requestUrl,
+          appContext,
+          identity,
+          requestSnapshot
+        });
+        const document = applyPreviewDocumentIfNeeded(adapter, previewSession);
         sendJson(res, 200, {
-          document: adapter.document,
-          tokenCatalog: adapter.tokenCatalog
+          document,
+          tokenCatalog: adapter.tokenCatalog,
+          previewSession: previewSession
+            ? {
+                previewSessionId: previewSession.previewSessionId,
+                version: previewSession.version
+              }
+            : null
         });
       } catch (error) {
         sendJson(res, 500, {
@@ -305,12 +440,29 @@ export function createHandlers(deps = {}) {
       }
     },
 
-    "wcss.schema.read": async ({ res, route, appContext }) => {
+    "wcss.schema.read": async ({ res, route, appContext, requestUrl }) => {
       try {
-        const { adapter } = await withAdapter(route, appContext);
+        const { adapter, identity, requestSnapshot } = await withAdapter(route, appContext);
+        const previewSession = sessionPreviewForRequest({
+          requestUrl,
+          appContext,
+          identity,
+          requestSnapshot
+        });
+        const document = applyPreviewDocumentIfNeeded(adapter, previewSession);
+        const schema = replayPreviewOpsIntoSchema(
+          updatedSchemaForPreview(adapter.schema, document),
+          previewSession?.ops ?? []
+        );
         sendJson(res, 200, {
           documentModel: "wcss",
-          schema: adapter.schema
+          schema,
+          previewSession: previewSession
+            ? {
+                previewSessionId: previewSession.previewSessionId,
+                version: previewSession.version
+              }
+            : null
         });
       } catch (error) {
         sendJson(res, 500, {

@@ -119,13 +119,6 @@ rootWidget = "bootstrap_proposal_review_controls_root"
 
 [[step]]
 order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_proposal_approve_id_select"
-eventName = "witness:bootstrap-proposal-approve-help-sync"
-detail = { source = "bootstrap-proposal-review-controls", trigger = "approve-id" }
-
-[[step]]
-order = 0
 op = "setText"
 on = "submit:bootstrap_proposal_approve_form"
 widget = "bootstrap_proposal_approve_status"
@@ -137,13 +130,6 @@ op = "readForm"
 on = "submit:bootstrap_proposal_approve_form"
 widget = "bootstrap_proposal_approve_form"
 into = "bootstrapProposalApproveDraft"
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_proposal_approve_form"
-eventName = "witness:bootstrap-proposal-submit"
-detail = { source = "bootstrap-proposal-review-controls", family = "approve", formId = "proposal-approve-form", statusId = "proposal-approve-status", id = "${state.bootstrapProposalApproveDraft.id}" }
 
 [[step]]
 order = 0
@@ -158,13 +144,6 @@ op = "readForm"
 on = "submit:bootstrap_proposal_reject_form"
 widget = "bootstrap_proposal_reject_form"
 into = "bootstrapProposalRejectDraft"
-
-[[step]]
-order = 2
-op = "dispatchDomEvent"
-on = "submit:bootstrap_proposal_reject_form"
-eventName = "witness:bootstrap-proposal-submit"
-detail = { source = "bootstrap-proposal-review-controls", family = "reject", formId = "proposal-reject-form", statusId = "proposal-reject-status", id = "${state.bootstrapProposalRejectDraft.id}", reason = "${state.bootstrapProposalRejectDraft.reason || ''}" }
 
 [[step]]
 order = 0

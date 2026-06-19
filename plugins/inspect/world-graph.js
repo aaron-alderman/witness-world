@@ -1,5 +1,10 @@
 import { projectors } from "../../src/kernel.js";
 import { activeWidgetVersions, frontendProgram, widgetVersions, widgetVersionTransitions, widgetVersionActivationHistory } from "../../src/widgets.js";
+import {
+  latestWidgetReplaceWitness,
+  WIDGET_REPLACE_KIND_OPTIONS,
+  widgetVersionMigrationStatusFromStrategy
+} from "../../src/widget-evolution.js";
 
 const ASYNC_FRONTEND_OPS = new Set(["fetchJson", "postJson", "patchJson", "deleteJson", "initSession", "setSession", "logout", "refreshProjection"]);
 
@@ -240,6 +245,50 @@ function nodeDetails(witnesses, relations, knownIds = new Set()) {
         actor: entry.actor,
         version: entry.version
       }))
+    };
+    detail.widgetEvolution = {
+      mode: "versioned",
+      replaceSupported: false,
+      rollbackAvailable: Boolean(detail.widgetVersionState.rollbackAvailable),
+      latestReplaceWitness: null,
+      kindOptions: [...WIDGET_REPLACE_KIND_OPTIONS],
+      versionCandidates: detail.widgetVersions.map(row => ({
+        soul: row.soul,
+        version: row.version,
+        isActive: row.isActive,
+        transitionStrategy: row.transitionFromActive ?? null,
+        migrationStatus: row.isActive
+          ? "compatible"
+          : widgetVersionMigrationStatusFromStrategy(row.transitionFromActive ?? "block")
+      }))
+    };
+  }
+
+  const widgetIds = new Set([
+    ...activeWidgetVersions(witnesses).keys(),
+    ...widgetVersions(witnesses).map(row => row.soul),
+    ...witnesses.filter(w => w.process === "defineWidget" || w.process === "updateWidget").map(w => w.body?.id).filter(Boolean)
+  ]);
+  for (const widget of widgetIds) ensure(widget);
+  for (const [id, detail] of map.entries()) {
+    if (!widgetIds.has(id)) continue;
+    if (detail.widgetEvolution?.mode === "versioned") continue;
+    const replaceWitness = latestWidgetReplaceWitness(witnesses, id);
+    detail.widgetEvolution = {
+      mode: "replace",
+      replaceSupported: true,
+      rollbackAvailable: Boolean(replaceWitness),
+      latestReplaceWitness: replaceWitness
+        ? {
+            id: replaceWitness.id,
+            actor: replaceWitness.actor,
+            migrationStatus: replaceWitness.body?.migrationStatus ?? null,
+            previous: replaceWitness.body?.previous ?? null,
+            next: replaceWitness.body?.next ?? null
+          }
+        : null,
+      kindOptions: [...WIDGET_REPLACE_KIND_OPTIONS],
+      versionCandidates: []
     };
   }
 

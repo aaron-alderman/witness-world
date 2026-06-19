@@ -46,6 +46,8 @@ export const routes = Object.freeze([
   exactRoute("GET", "/api/platform-branches", "platform.branch.list"),
   patternRoute("GET", /^\/api\/platform-branches\/([^/]+)$/, "platform.branch.read", Object.freeze(["id"])),
   exactRoute("POST", "/api/platform-branches", "platform.branch.create"),
+  patternRoute("POST", /^\/api\/platform-branches\/([^/]+)\/push$/, "platform.branch.push", Object.freeze(["id"])),
+  patternRoute("POST", /^\/api\/platform-branches\/([^/]+)\/ship$/, "platform.branch.ship", Object.freeze(["id"])),
   exactRoute("GET", "/api/platform-change-sets", "platform.changeSet.list"),
   patternRoute("GET", /^\/api\/platform-change-sets\/([^/]+)$/, "platform.changeSet.read", Object.freeze(["id"])),
   exactRoute("POST", "/api/platform-change-sets", "platform.changeSet.create"),

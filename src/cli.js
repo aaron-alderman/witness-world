@@ -53,7 +53,11 @@ async function runServe(args) {
   let selection = null;
   const startupTelemetry = createStartupTelemetry({ mode: "serve" });
   try {
-    appProject = await startupTelemetry.runPhase("app.project.load", () => loadAppProject(parsed.appPath), {
+    appProject = await startupTelemetry.runPhase("app.project.load", () => loadAppProject(parsed.appPath, {
+      runtimeProfile: parsed.runtimeProfile,
+      runtimePluginIds: parsed.runtimePluginIds,
+      env: process.env
+    }), {
       label: "Load app project"
     });
     selection = resolveServeTarget(appProject, { serverRunnerId: parsed.serverRunnerId });
@@ -185,7 +189,11 @@ async function runMcp(args) {
   let selection = null;
   const startupTelemetry = createStartupTelemetry({ mode: "mcp" });
   try {
-    appProject = await startupTelemetry.runPhase("app.project.load", () => loadAppProject(parsed.appPath), {
+    appProject = await startupTelemetry.runPhase("app.project.load", () => loadAppProject(parsed.appPath, {
+      runtimeProfile: parsed.runtimeProfile,
+      runtimePluginIds: parsed.runtimePluginIds,
+      env: process.env
+    }), {
       label: "Load app project"
     });
     selection = resolveMcpTarget(appProject, { mcpServerId: parsed.mcpServerId });

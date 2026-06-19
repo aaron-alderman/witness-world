@@ -556,7 +556,7 @@ text = "B: \${state.draftB.name}"
   }
 });
 
-test("generated runtime can dispatch generic DOM events from authored program steps", async () => {
+test("generated runtime rejects retired dispatchDomEvent authored steps", async () => {
   const world = createWorld();
   applyWitnessToml(world, `
 [[defaults]]
@@ -606,14 +606,11 @@ text = "Failed: \${event.message}"
 
   try {
     await page.setContent(html, { waitUntil: "domcontentloaded" });
-    await page.evaluate(() => {
-      window.addEventListener("witness:test-event", event => {
-        const status = document.querySelector('[data-widget="status"]');
-        if (status) status.textContent = String(event.detail?.value || "");
-      }, { once: true });
-    });
     await page.locator('[data-widget="notify_button"]').click();
-    await page.waitForFunction(() => document.querySelector('[data-widget="status"]')?.textContent === "Alpha");
+    await page.waitForFunction(() => {
+      const text = document.querySelector('[data-widget="status"]')?.textContent || "";
+      return text.includes("dispatchDomEvent has been retired");
+    });
     await expectNoRuntimeErrors(runtime);
   } finally {
     await closeBrowser();

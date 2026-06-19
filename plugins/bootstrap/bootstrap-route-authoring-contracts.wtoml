@@ -8,8 +8,8 @@ missingBackendProgramSoulIssue = "choose a backend program soul"
 [[bootstrapRouteAuthoringPolicy]]
 routeKind = "page"
 responseKind = "page"
-enabledFields = ["page", "rootWidget", "rootWidgetRef", "frontendProgram", "frontendProgramRef", "routeStateProcess", "routeStateProcessRef", "routeStateState", "routeStateStateRef", "liveProjection"]
-fieldSummary = "Enabled fields: page, root widget, frontend program, route state, live projection."
+enabledFields = ["page", "rootWidget", "rootWidgetRef", "rootSurface", "rootSurfaceRef", "frontendProgram", "frontendProgramRef", "routeStateProcess", "routeStateProcessRef", "routeStateState", "routeStateStateRef", "liveProjection"]
+fieldSummary = "Enabled fields depend on the page handler. Canonical page.surface routes use root surface and route state. Legacy page.home routes use page, root widget, frontend program, and live projection."
 
 [[bootstrapRouteAuthoringPolicy]]
 routeKind = "stream"
@@ -32,9 +32,17 @@ fieldSummary = "Backend resource route. Page and backend-program fields are disa
 [[bootstrapRouteAuthoringHandlerRule]]
 handler = "page.home"
 requiresRootWidget = true
+disabledFields = ["rootSurface", "rootSurfaceRef"]
 missingRootWidgetIssue = "choose a root widget for this page handler"
+
+[[bootstrapRouteAuthoringHandlerRule]]
+handler = "page.surface"
+requiresRootSurface = true
+disabledFields = ["page", "rootWidget", "rootWidgetRef", "frontendProgram", "frontendProgramRef", "liveProjection"]
+missingRootSurfaceIssue = "choose a root surface for this page handler"
 
 [[bootstrapRouteAuthoringHandlerRule]]
 handler = "page.world"
 requiresRootWidget = true
+disabledFields = ["rootSurface", "rootSurfaceRef"]
 missingRootWidgetIssue = "choose a root widget for this page handler"

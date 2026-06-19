@@ -764,10 +764,11 @@ test("createSurfaceInteractionRuntime boots capability hooks after route surface
     },
     removeEventListener() {},
     matches(selector) {
-      return selector === "[data-chart-spec]" && this.hasChartSpec === true;
+      return selector === ".chart-page__mount" && this.isChartMount === true;
     },
     querySelectorAll(selector) {
-      return selector === "[data-chart-spec]" ? (this.chartNodes ?? []) : [];
+      if (selector === "*" || selector === ".chart-page__mount") return this.chartNodes ?? [];
+      return [];
     },
     replaceWith(next) {
       nodes.delete(this.id);
@@ -781,6 +782,25 @@ test("createSurfaceInteractionRuntime boots capability hooks after route surface
   homeRoot.parentNode = { nodeType: 1 };
   nodes.set(homeRoot.id, homeRoot);
   nodes.set(homeButton.id, homeButton);
+  class FakeDomParser {
+    parseFromString(html) {
+      const manifestMatch = String(html).match(
+        /<script type="application\/json" id="surface-runtime-manifest">([\s\S]*?)<\/script>/i
+      );
+      const rootId = String(html).match(/<main id="([^"]+)"/i)?.[1] ?? null;
+      const manifest = manifestMatch ? JSON.parse(manifestMatch[1]) : null;
+      return {
+        getElementById(id) {
+          if (id === "surface-runtime-manifest" && manifest) return { textContent: JSON.stringify(manifest) };
+          if (id === rootId && rootId) return { outerHTML: `<main id="${rootId}"><svg class="chart-page__mount" data-chart-id="ChartSurface"></svg></main>` };
+          return null;
+        },
+        body: {
+          firstElementChild: rootId ? { outerHTML: `<main id="${rootId}"><svg class="chart-page__mount" data-chart-id="ChartSurface"></svg></main>` } : null
+        }
+      };
+    }
+  }
   const runtimeWindow = {
     location: { pathname: "/home" },
     history: {
@@ -788,19 +808,52 @@ test("createSurfaceInteractionRuntime boots capability hooks after route surface
         runtimeWindow.location.pathname = path;
       }
     },
+    DOMParser: FakeDomParser,
     async fetch(path) {
       assert.equal(path, "/chart");
       return {
         ok: true,
         async text() {
-          return '<main id="surface-chart"><svg data-chart-spec="{}"></svg></main>';
+          return `<html><body><main id="surface-chart"><svg class="chart-page__mount" data-chart-id="ChartSurface"></svg></main><script type="application/json" id="surface-runtime-manifest">${JSON.stringify({
+            activeSurfaceId: "Surface.Chart",
+            requestPathname: "/chart",
+            routeTargets: [
+              { key: "home", path: "/home", surfaceId: "Surface.Home" },
+              { key: "chart", path: "/chart", surfaceId: "Surface.Chart" }
+            ],
+            browserRuntimeCapabilities: ["chart.render"],
+            chartSpecs: {
+              ChartSurface: {
+                model: {},
+                view: { id: "ChartSurface", frame: "cartesian", encoding: {}, layers: [], props: {} },
+                params: {}
+              }
+            },
+            surfaces: [
+              {
+                id: "Surface.Chart",
+                runtime: {
+                  processRef: "ShellNavigation",
+                  projectionRefs: [],
+                  capabilityRefs: ["chart.render"],
+                  bindings: [],
+                  interactions: []
+                },
+                view: {
+                  rootId: "surface-chart",
+                  propTargets: {},
+                  interactionTargets: {}
+                }
+              }
+            ]
+          })}</script></body></html>`;
         }
       };
     },
     __surfaceCapabilityBootHooks: [
       root => booted.push({
         rootId: root?.id ?? null,
-        chartCount: root?.querySelectorAll?.("[data-chart-spec]")?.length ?? 0
+        chartCount: root?.querySelectorAll?.(".chart-page__mount")?.length ?? 0
       })
     ],
     console: { error() {} }
@@ -819,7 +872,7 @@ test("createSurfaceInteractionRuntime boots capability hooks after route surface
             const id = String(value).match(/id="([^"]+)"/)?.[1] ?? "surface-chart";
             const root = makeNode(id);
             const chart = makeNode("chart-node");
-            chart.hasChartSpec = true;
+            chart.isChartMount = true;
             root.chartNodes = [chart];
             this.content.firstElementChild = root;
           }
@@ -838,6 +891,13 @@ test("createSurfaceInteractionRuntime boots capability hooks after route surface
         { key: "chart", path: "/chart", surfaceId: "Surface.Chart" }
       ],
       browserRuntimeCapabilities: ["chart.render"],
+      chartSpecs: {
+        ChartSurface: {
+          model: {},
+          view: { id: "ChartSurface", frame: "cartesian", encoding: {}, layers: [], props: {} },
+          params: {}
+        }
+      },
       surfaces: [
         {
           id: "Surface.Home",
@@ -922,10 +982,11 @@ test("createSurfaceInteractionRuntime loads route-local capability assets before
     },
     removeEventListener() {},
     matches(selector) {
-      return selector === "[data-chart-spec]" && this.hasChartSpec === true;
+      return selector === ".chart-page__mount" && this.isChartMount === true;
     },
     querySelectorAll(selector) {
-      return selector === "[data-chart-spec]" ? (this.chartNodes ?? []) : [];
+      if (selector === "*" || selector === ".chart-page__mount") return this.chartNodes ?? [];
+      return [];
     },
     replaceWith(next) {
       nodes.delete(this.id);
@@ -979,6 +1040,13 @@ test("createSurfaceInteractionRuntime loads route-local capability assets before
               { key: "chart", path: "/chart", surfaceId: "Surface.Chart" }
             ],
             browserRuntimeCapabilities: ["chart.render"],
+            chartSpecs: {
+              ChartSurface: {
+                model: {},
+                view: { id: "ChartSurface", frame: "cartesian", encoding: {}, layers: [], props: {} },
+                params: {}
+              }
+            },
             capabilityAssets: {
               stylesheetHrefs: ["/chart.css"],
               scriptSrcs: ["/chart-lib.js"],
@@ -1056,7 +1124,7 @@ test("createSurfaceInteractionRuntime loads route-local capability assets before
               const id = String(value).match(/id="([^"]+)"/)?.[1] ?? "surface-chart";
               const root = makeNode(id);
               const chart = makeNode("chart-node");
-              chart.hasChartSpec = true;
+              chart.isChartMount = true;
               root.chartNodes = [chart];
               this.content.firstElementChild = root;
             }
@@ -1109,6 +1177,21 @@ test("createSurfaceInteractionRuntime loads route-local capability assets before
             propTargets: {},
             interactionTargets: { primary: [{ id: "home-to-chart" }] }
           }
+        },
+        {
+          id: "Surface.Chart",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: ["chart.render"],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-chart",
+            propTargets: {},
+            interactionTargets: {}
+          }
         }
       ],
       processWitnesses: [
@@ -1138,7 +1221,7 @@ test("createSurfaceInteractionRuntime loads route-local capability assets before
   runtime.destroy();
 });
 
-test("createSurfaceInteractionRuntime swaps to the fetched route-local process fragment", async () => {
+test("createSurfaceInteractionRuntime swaps to the fetched same-shell route fragment without replacing the process runtime", async () => {
   const listeners = new Map();
   const nodes = new Map();
   const makeNode = id => ({
@@ -1345,16 +1428,47 @@ test("createSurfaceInteractionRuntime swaps to the fetched route-local process f
             propTargets: {},
             interactionTargets: { primary: [{ id: "login-button" }] }
           }
+        },
+        {
+          id: "Surface.Home",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-home",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        },
+        {
+          id: "Surface.Signout",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-signout",
+            propTargets: {},
+            interactionTargets: {}
+          }
         }
       ],
       processWitnesses: [
         { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "login" } },
         { process: "desire.defineType", body: { id: "AuthStatus", role: "state", valueType: "text", initial: "idle" } },
         { process: "desire.defineMessage", body: { id: "SignIn", role: "event", writes: {} } },
+        { process: "desire.defineMessage", body: { id: "SignOut", role: "event", writes: {} } },
         { process: "desire.defineProcess", body: {
           id: "ShellNavigation",
           state: ["ActiveRoute", "AuthStatus"],
-          handles: ["SignIn"],
+          handles: ["SignIn", "SignOut"],
           emits: [],
           rules: [
             {
@@ -1363,6 +1477,10 @@ test("createSurfaceInteractionRuntime swaps to the fetched route-local process f
                 { kind: "setState", state: "ActiveRoute", value: "home" },
                 { kind: "setState", state: "AuthStatus", value: "signedIn" }
               ]
+            },
+            {
+              trigger: "SignOut",
+              steps: [{ kind: "setState", state: "ActiveRoute", value: "signout" }]
             }
           ]
         } }
@@ -1383,7 +1501,7 @@ test("createSurfaceInteractionRuntime swaps to the fetched route-local process f
   runtime.destroy();
 });
 
-test("createSurfaceInteractionRuntime keeps the swapped fragment alive across delayed route-changing rules", async () => {
+test("createSurfaceInteractionRuntime keeps the swapped fragment alive across delayed route-changing rules in a single runtime", async () => {
   const listeners = new Map();
   const nodes = new Map();
   const makeNode = id => ({
@@ -1592,16 +1710,47 @@ test("createSurfaceInteractionRuntime keeps the swapped fragment alive across de
             propTargets: {},
             interactionTargets: { primary: [{ id: "login-button" }] }
           }
+        },
+        {
+          id: "Surface.Home",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-home",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        },
+        {
+          id: "Surface.Signout",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-signout",
+            propTargets: {},
+            interactionTargets: {}
+          }
         }
       ],
       processWitnesses: [
         { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "login" } },
         { process: "desire.defineType", body: { id: "AuthStatus", role: "state", valueType: "text", initial: "idle" } },
         { process: "desire.defineMessage", body: { id: "SignIn", role: "event", writes: {} } },
+        { process: "desire.defineMessage", body: { id: "SignOut", role: "event", writes: {} } },
         { process: "desire.defineProcess", body: {
           id: "ShellNavigation",
           state: ["ActiveRoute", "AuthStatus"],
-          handles: ["SignIn"],
+          handles: ["SignIn", "SignOut"],
           emits: [],
           rules: [
             {
@@ -1614,6 +1763,10 @@ test("createSurfaceInteractionRuntime keeps the swapped fragment alive across de
                 { kind: "setState", state: "ActiveRoute", value: "home" },
                 { kind: "setState", state: "AuthStatus", value: "signedIn" }
               ]
+            },
+            {
+              trigger: "SignOut",
+              steps: [{ kind: "setState", state: "ActiveRoute", value: "signout" }]
             }
           ]
         } }
@@ -1809,15 +1962,32 @@ test("createSurfaceInteractionRuntime refetches an active route when the cached 
             propTargets: {},
             interactionTargets: { primary: [{ id: "login-button" }] }
           }
+        },
+        {
+          id: "Surface.Home",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-home",
+            propTargets: {},
+            interactionTargets: {}
+          }
         }
       ],
       processWitnesses: [
         { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "login" } },
+        { process: "desire.defineType", body: { id: "ProfileMenuVisible", role: "state", valueType: "bool", initial: false } },
         { process: "desire.defineMessage", body: { id: "SignIn", role: "event", writes: { ActiveRoute: "home" } } },
+        { process: "desire.defineMessage", body: { id: "SignOut", role: "event", writes: {} } },
         { process: "desire.defineProcess", body: {
           id: "ShellNavigation",
-          state: ["ActiveRoute"],
-          handles: ["SignIn"],
+          state: ["ActiveRoute", "ProfileMenuVisible"],
+          handles: ["SignIn", "SignOut"],
           emits: [],
           rules: []
         } }
@@ -1981,6 +2151,235 @@ test("createSurfaceInteractionRuntime maps browser back through explicit authore
 
   runtime.destroy();
   assert.equal(listeners.has("popstate"), false);
+});
+
+test("createSurfaceInteractionRuntime keeps a single process runtime across same-shell route changes", async () => {
+  const listeners = new Map();
+  const nodes = new Map();
+  const pushed = [];
+  const replaced = [];
+  const createdRuntimes = [];
+  const makeNode = id => ({
+    id,
+    parentNode: null,
+    className: "",
+    style: {},
+    addEventListener(eventName, listener) {
+      listeners.set(`${id}:${eventName}`, listener);
+    },
+    removeEventListener(eventName) {
+      listeners.delete(`${id}:${eventName}`);
+    },
+    setAttribute(name, value) {
+      this[name] = value;
+    },
+    removeAttribute(name) {
+      delete this[name];
+    },
+    replaceWith(next) {
+      nodes.delete(this.id);
+      nodes.set(next.id, next);
+      next.parentNode = this.parentNode;
+      replaced.push(next.id);
+    }
+  });
+  const millForceRoot = makeNode("surface-mill-force");
+  const homeButton = makeNode("home-button");
+  millForceRoot.parentNode = { nodeType: 1 };
+  nodes.set(millForceRoot.id, millForceRoot);
+  nodes.set(homeButton.id, homeButton);
+
+  class FakeDomParser {
+    parseFromString(html) {
+      const manifestMatch = String(html).match(
+        /<script type="application\/json" id="surface-runtime-manifest">([\s\S]*?)<\/script>/i
+      );
+      const rootId = String(html).match(/<main id="([^"]+)"/i)?.[1] ?? null;
+      const manifest = manifestMatch ? JSON.parse(manifestMatch[1]) : null;
+      return {
+        getElementById(id) {
+          if (id === "surface-runtime-manifest" && manifest) {
+            return { textContent: JSON.stringify(manifest) };
+          }
+          if (id === rootId && rootId) {
+            return { outerHTML: `<main id="${rootId}"></main>` };
+          }
+          return null;
+        },
+        body: {
+          firstElementChild: rootId ? { outerHTML: `<main id="${rootId}"></main>` } : null
+        }
+      };
+    }
+  }
+
+  const manifestForPath = pathname => ({
+    activeSurfaceId: pathname === "/home" ? "Surface.Home" : "Surface.MillForce",
+    requestPathname: pathname,
+    routeState: {
+      process: "ShellNavigation",
+      state: "ActiveRoute"
+    },
+    routeTargets: [
+      { key: "login", path: "/login", surfaceId: "Surface.Login" },
+      { key: "home", path: "/home", surfaceId: "Surface.Home" },
+      { key: "mill-force", path: "/mill-force", surfaceId: "Surface.MillForce" }
+    ],
+    surfaces: [
+      {
+        id: "Surface.Home",
+        runtime: {
+          processRef: "ShellNavigation",
+          projectionRefs: [],
+          capabilityRefs: [],
+          bindings: [],
+          interactions: []
+        },
+        view: {
+          rootId: "surface-home",
+          propTargets: {},
+          interactionTargets: {}
+        }
+      },
+      {
+        id: "Surface.MillForce",
+        runtime: {
+          processRef: "ShellNavigation",
+          projectionRefs: [],
+          capabilityRefs: [],
+          bindings: [],
+          interactions: [
+            {
+              target: "home",
+              event: "click",
+              action: { kind: "deliver", message: "NavigateHome" }
+            }
+          ]
+        },
+        view: {
+          rootId: "surface-mill-force",
+          propTargets: {},
+          interactionTargets: { home: [{ id: "home-button" }] }
+        }
+      }
+    ],
+    processWitnesses: [
+      { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "login" } },
+      { process: "desire.defineMessage", body: { id: "NavigateHome", role: "event", writes: {} } },
+      { process: "desire.defineProcess", body: {
+        id: "ShellNavigation",
+        state: ["ActiveRoute"],
+        handles: ["NavigateHome"],
+        emits: [],
+        rules: []
+      } }
+    ]
+  });
+
+  const runtimeWindow = {
+    location: {
+      pathname: "/mill-force"
+    },
+    history: {
+      pushState(_state, _title, path) {
+        pushed.push(path);
+        runtimeWindow.location.pathname = path;
+      },
+      replaceState(_state, _title, path) {
+        runtimeWindow.location.pathname = path;
+      }
+    },
+    async fetch(path) {
+      const manifest = manifestForPath(path);
+      const rootId = manifest.activeSurfaceId === "Surface.Home" ? "surface-home" : "surface-mill-force";
+      return {
+        ok: true,
+        async text() {
+          return `<html><body><main id="${rootId}"></main><script type="application/json" id="surface-runtime-manifest">${JSON.stringify(manifest)}</script></body></html>`;
+        }
+      };
+    },
+    DOMParser: FakeDomParser,
+    addEventListener(eventName, listener) {
+      listeners.set(eventName, listener);
+    },
+    removeEventListener(eventName) {
+      listeners.delete(eventName);
+    },
+    console: { error() {} }
+  };
+
+  const createStubRuntime = witnesses => {
+    const state = new Map(
+      witnesses
+        .filter(witness => witness?.process === "desire.defineType" && witness?.body?.role === "state")
+        .map(witness => [witness.body.id, witness.body.initial])
+    );
+    const subscribers = new Set();
+    let resolveIdle = null;
+    const idle = new Promise(resolve => {
+      resolveIdle = resolve;
+    });
+    const runtime = {
+      value(stateId) {
+        return state.get(stateId);
+      },
+      set(stateId, value) {
+        const previous = state.get(stateId);
+        state.set(stateId, value);
+        if (previous === value) return;
+        const observation = { changes: [{ field: stateId, from: previous, to: value }] };
+        for (const subscriber of [...subscribers]) subscriber(observation);
+      },
+      subscribe(listener) {
+        subscribers.add(listener);
+        return () => subscribers.delete(listener);
+      },
+      async deliverAuthored(message) {
+        if (message === "NavigateHome") runtime.set("ActiveRoute", "home");
+      },
+      whenIdle() {
+        return idle;
+      },
+      resolveIdle() {
+        resolveIdle?.();
+      }
+    };
+    createdRuntimes.push(runtime);
+    return runtime;
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document: {
+      getElementById(id) {
+        return nodes.get(id) ?? null;
+      },
+      createElement(tagName) {
+        assert.equal(tagName, "template");
+        return {
+          content: { firstElementChild: null },
+          set innerHTML(value) {
+            const id = String(value).match(/id="([^"]+)"/)?.[1] ?? "surface-home";
+            this.content.firstElementChild = makeNode(id);
+          }
+        };
+      }
+    },
+    window: runtimeWindow,
+    manifest: manifestForPath("/mill-force"),
+    createProcessRuntimeImpl({ witnesses }) {
+      return createStubRuntime(witnesses);
+    }
+  });
+
+  await listeners.get("home-button:click")({ preventDefault() {}, target: homeButton });
+  assert.equal(runtimeWindow.location.pathname, "/home");
+  assert.equal(runtime.processRuntime.value("ActiveRoute"), "home");
+  assert.deepEqual(replaced, ["surface-home"]);
+  assert.equal(createdRuntimes.length, 1);
+  assert.equal(runtime.processRuntime, createdRuntimes[0]);
+
+  runtime.destroy();
 });
 
 test("createSurfaceInteractionRuntime ignores non-route processes during browser route-state sync", () => {
@@ -2235,6 +2634,7 @@ test("createSurfaceInteractionRuntime surfaces missing capability controllers as
   await Promise.resolve();
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(Boolean(runtimeWindow.world), true);
+  await runtime.whenSettled();
   const probe = await runtime.rerunProbe();
   assert.equal(probe.missingCapabilityControllers.some(entry => entry.surfaceId === "Surface.Chart"), true);
   assert.equal(runtimeWindow.world.issues.some(issue =>
@@ -2919,7 +3319,7 @@ test("createSurfaceInteractionRuntime falls back to full document navigation whe
   assert.equal(runtimeWindow.location.pathname, "/home");
 });
 
-test("buildSurfaceRuntimeManifest only carries process witnesses reachable from active runtime surfaces", () => {
+test("buildSurfaceRuntimeManifest carries the whole shell runtime closure while preserving the active route", () => {
   const world = {
     allWitnesses() {
       return [
@@ -2987,15 +3387,18 @@ test("buildSurfaceRuntimeManifest only carries process witnesses reachable from 
 
   assert.deepEqual(
     manifest.processWitnesses.map(witness => witness.body.id).sort(),
-    ["ActiveRoute", "OpenHome", "ShellNavigation"]
+    ["ActiveRoute", "AuthStatus", "GoodmanControls", "GoodmanMode", "OpenGoodman", "OpenHome", "ShellNavigation", "SignInRequested"]
   );
   const shellProcess = manifest.processWitnesses.find(witness => witness.body.id === "ShellNavigation");
-  assert.deepEqual(shellProcess.body.state, ["ActiveRoute"]);
-  assert.deepEqual(shellProcess.body.handles, ["OpenHome"]);
-  assert.deepEqual(shellProcess.body.rules, []);
+  assert.deepEqual(shellProcess.body.state, ["ActiveRoute", "AuthStatus"]);
+  assert.deepEqual(shellProcess.body.handles, ["OpenHome", "SignInRequested"]);
+  assert.equal(shellProcess.body.rules.length, 1);
   assert.equal(manifest.diagnostics.activeSurfaceId, "Surface.Home");
-  assert.deepEqual(manifest.diagnostics.includedSurfaceIds.sort(), ["Surface.Home", "Surface.Root"]);
-  assert.deepEqual(manifest.diagnostics.includedRuntimeIds.sort(), ["ActiveRoute", "OpenHome", "ShellNavigation"]);
+  assert.deepEqual(manifest.diagnostics.includedSurfaceIds.sort(), ["Surface.Goodman", "Surface.Home", "Surface.Root"]);
+  assert.deepEqual(
+    manifest.diagnostics.includedRuntimeIds.sort(),
+    ["ActiveRoute", "AuthStatus", "GoodmanControls", "GoodmanMode", "OpenGoodman", "OpenHome", "ShellNavigation", "SignInRequested"]
+  );
   assert.equal(manifest.diagnostics.serializedBytes > 0, true);
 });
 

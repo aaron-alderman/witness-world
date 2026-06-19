@@ -54,7 +54,17 @@ to = "file:plugins/chart-runtime/dataflow-eval.js"
 [[relation]]
 from = "folder:plugins/chart-runtime"
 rel = "contains"
+to = "folder:plugins/chart-runtime/graphics"
+
+[[relation]]
+from = "folder:plugins/chart-runtime"
+rel = "contains"
 to = "file:plugins/chart-runtime/gog-runtime.js"
+
+[[relation]]
+from = "folder:plugins/chart-runtime"
+rel = "contains"
+to = "folder:plugins/chart-runtime/plan"
 
 [[relation]]
 from = "folder:plugins/chart-runtime"
@@ -64,7 +74,17 @@ to = "json:plugins/chart-runtime/plugin.json"
 [[relation]]
 from = "folder:plugins/chart-runtime"
 rel = "contains"
+to = "folder:plugins/chart-runtime/ports"
+
+[[relation]]
+from = "folder:plugins/chart-runtime"
+rel = "contains"
 to = "file:plugins/chart-runtime/runtime.js"
+
+[[relation]]
+from = "folder:plugins/chart-runtime"
+rel = "contains"
+to = "folder:plugins/chart-runtime/scene"
 
 [[relation]]
 from = "folder:plugins/chart-runtime"

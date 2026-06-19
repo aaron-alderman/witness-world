@@ -66,7 +66,8 @@ export function bindBootstrapCapabilitySubmit({
   contractsByFamily = bootstrapCapabilitySubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
-  if (!resolvedTarget?.addEventListener) return null;
+  const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
+  if (!resolvedDocument?.getElementById) return null;
   const handler = event => {
     const detail = event?.detail || {};
     if (!["bootstrap-capability-controls", "bootstrap-remove-controls"].includes(detail.source)) return false;
@@ -79,6 +80,19 @@ export function bindBootstrapCapabilitySubmit({
       contractsByFamily
     });
   };
-  resolvedTarget.addEventListener("witness:bootstrap-capability-submit", handler);
+  for (const detail of [
+    { source: "bootstrap-capability-controls", family: "capability-create", formId: "capability-form", statusId: "capability-status" },
+    { source: "bootstrap-capability-controls", family: "capability-install", formId: "capability-install-form", statusId: "capability-install-status" },
+    { source: "bootstrap-remove-controls", family: "capability-remove", formId: "capability-remove-form", statusId: "capability-remove-status" }
+  ]) {
+    const form = resolvedDocument?.getElementById?.(detail.formId);
+    if (!form || form.__bootstrapCapabilitySubmitBound) continue;
+    form.__bootstrapCapabilitySubmitBound = true;
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      void handler({ detail: { ...detail, ...data } });
+    });
+  }
   return handler;
 }

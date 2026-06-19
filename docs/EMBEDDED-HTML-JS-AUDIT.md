@@ -1,5 +1,25 @@
 # Embedded HTML / JS Audit
 
+## Current Status (2026-06-19)
+
+`dispatchDomEvent` is retired. It is no longer an acceptable shared frontend
+op or bootstrap integration seam.
+
+Current native replacements are:
+
+- route refresh through canonical `page.surface` refresh behavior
+- same-document route changes through authored `navigate`
+- submit and recompute flows through authored surface interactions, process
+  state, boundary operations, and policy writes
+- query mutation through authored state and canonical URL synchronization
+- host or desktop actions through explicit capability-backed or runtime-owned
+  action contracts, not arbitrary named DOM events
+
+`witness:*` page bridge families in older tranche notes below are historical
+migration records, not current design guidance. The live bootstrap/browser path
+no longer depends on named page-local `witness:*` DOM-event seams to stay
+coherent.
+
 ## Scope
 
 Audit target: HTML, CSS, and browser behavior authored inline inside JavaScript modules, where the content should instead be represented as composable authored surfaces such as `DESIRE`, `RVM`, or `WTOML`.
@@ -120,13 +140,16 @@ Remaining frontier for this tranche:
 - [x] reduce or extract the remaining thin shell-local tutorial/host adapter glue only after its contract is explicit enough to preserve current bootstrap navigation and tutorial semantics
 - [x] reduce or extract the remaining shell-local render/runtime glue that still sequences shared seams inside `render()` without pushing bootstrap semantics back into generic helpers
 - [x] keep the document aligned to those exact residual owners; do not broaden the tranche back into generic architecture cleanup unless the code frontier actually changes
-## Current Non-Stop Handoff Snapshot
+## Historical Non-Stop Handoff Snapshot (Pre-Retirement Provenance)
 
-This snapshot is the current execution handoff for unattended work. It exists so a later pass can continue from repository truth instead of chat memory.
+This snapshot is retained as provenance for earlier extraction tranches. It
+includes intermediate `witness:*` bridge families that were retired later.
+Read it as implementation history, not as the current recommended contract for
+new work.
 
-- [x] the current generic extraction baseline is real and re-proved: authored `load`, `change`, `input`, `keydown`, `navigate`, `setQueryParam`, `dispatchDomEvent`, `setHidden`, `setDisabled`, checkbox coercion, dynamic repeated widget ids, refresh-projection initial-state resync, and WTOML/apply-path parity for renderer-supported `label`/`textarea`/`details`/`summary`/`valueEditor`
-- [x] the bootstrap top-card, backend authoring controls, backend-version controls, proposal create controls, proposal review controls, proposal-adjacent runtime-plugin/MCP proposal controls, scoped context/stewardship create-remove controls, scoped option-refresh trigger bridges, capability define/install controls, and runtime-plugin/MCP-tool/capability remove controls are the currently proven embedded authored slices
-- [x] the bootstrap page-main runtime-plugin review selects now also use an authored semantic change bridge: `plugins/bootstrap/bootstrap-page-main.wtoml` defines `bootstrap_page_main_program` with `dispatchDomEvent` steps for the runner/plugin review selects, `plugins/bootstrap/bootstrap-page-main.js` now renders that page-main program with its own explicit `frontendProgramScriptId`, and `plugins/bootstrap/bootstrap-runtime-plugin-review-sync.js` now listens for the named `witness:bootstrap-runtime-plugin-review-sync` host event instead of binding raw field-local `change` listeners
+- [x] the current generic extraction baseline is real and re-proved for authored `load`, `change`, `input`, `keydown`, `navigate`, `setQueryParam`, `setHidden`, `setDisabled`, checkbox coercion, dynamic repeated widget ids, refresh-projection initial-state resync, and WTOML/apply-path parity for renderer-supported `label`/`textarea`/`details`/`summary`/`valueEditor`; `dispatchDomEvent` is retired and no longer part of the supported baseline
+- [x] the bootstrap top-card, backend authoring controls, backend-version controls, proposal create controls, proposal review controls, proposal-adjacent runtime-plugin/MCP proposal controls, scoped context/stewardship create-remove controls, capability define/install controls, and runtime-plugin/MCP-tool/capability remove controls are the currently proven embedded authored slices
+- [x] the bootstrap page-main runtime-plugin review selects now use direct authored semantic change handling without a named host-event bridge: `plugins/bootstrap/bootstrap-page-main.wtoml` preserves the authored review-select structure, while `plugins/bootstrap/bootstrap-runtime-plugin-review-sync.js` now binds the live review fields directly instead of routing through `dispatchDomEvent` or `witness:bootstrap-runtime-plugin-review-sync`
 - [x] the bootstrap runtime-plugin review detail mount no longer depends on HTML-string assembly plus `innerHTML`: `plugins/bootstrap/bootstrap-runtime-plugin-review-view.js` now returns structured `detailItems`, `plugins/bootstrap/bootstrap-state-list-render.js` now owns the reusable `renderBootstrapStateItems(...)` DOM seam for `surface-state-item` / `surface-empty` sections, and `plugins/bootstrap/bootstrap-client-runtime.js` now renders the review detail through that shared state-item path instead of injecting raw review HTML into `#runtime-plugin-review-detail`
 - [x] the bootstrap browser-runtime construction layer now owns more of the event-time recompute builder packet explicitly through `plugins/bootstrap/bootstrap-controls-runtime.js`: `createBootstrapControlsRuntimeFromBootstrap(...)` now exposes `buildProposalAdjacentSyncDeps`, `buildScopedControlsSyncDeps`, and `buildRouteAuthoringSyncDeps` alongside the existing backend/proposal/direct-runtime-integration/capability seams, and `plugins/bootstrap/bootstrap-client-runtime.js` now consumes those shared builders instead of re-constructing proposal-adjacent, scoped, and route-authoring deps builders locally
 - [x] the bootstrap browser-runtime transport helper is no longer a local closure inside `startBootstrapClientRuntime(...)`: `plugins/bootstrap/bootstrap-client-http.js` now owns `createBootstrapClientHttp(...)` plus `renderBootstrapClientHttpFactory()`, `plugins/bootstrap/bootstrap-page-script.js` injects that helper factory into the browser bundle, and `plugins/bootstrap/bootstrap-client-runtime.js` now consumes `{ request, postJson }` from the shared helper instead of defining request/post wrappers inline. Focused proof: `cmd /c node --test plugins\\bootstrap\\bootstrap-client-http.test.js plugins\\bootstrap\\bootstrap-page-script.test.js plugins\\bootstrap\\bootstrap-client-runtime.test.js plugins\\bootstrap\\bootstrap.test.js`
@@ -176,7 +199,7 @@ The following current-state facts are confirmed and should be assumed by later m
 - [x] `src/runtime-host-route-factory.js` and `src/runtime-builtins.js` now expose a shared `navigate` frontend op for authored URL changes
 - [x] `plugins/inspect/widget-page.js` now exposes a generic `setQueryParam` frontend op so authored flows can update current-page query state without page-local `history.replaceState(...)` handlers
 - [x] `plugins/inspect/widget-page.js` `readForm(...)` now supports generic checkbox-to-boolean coercion for authored forms that must submit real boolean payloads instead of raw `"on"`/missing form values
-- [x] `plugins/inspect/widget-page.js` now exposes a generic `dispatchDomEvent` frontend op so embedded authored runtimes can signal host-page adapters without reclaiming page-local submit ownership
+- [x] `plugins/inspect/widget-page.js` and `src/runtime-widget-page.js` now fail fast when authored material still tries to use `dispatchDomEvent`, forcing native `page.surface` refresh, navigation, boundary, policy, or capability semantics instead of a generic host-event bridge
 - [x] `plugins/inspect/widget-page.js` now resolves authored runtime `fetchJson`/`postJson`/`patchJson`/`deleteJson` URLs against the active page origin so embedded authored runtimes still work under `page.setContent(...)` and similar browser-proof hosts instead of assuming raw relative fetch URLs are always valid
 - [x] `plugins/inspect/widget-page.js` `renderCollection(...)` now accepts direct interpolated array input for nested authored collections
 - [x] repeated template instances now have an explicit runtime-supported dynamic widget-id mechanism without overloading template lookup ids
@@ -816,13 +839,13 @@ When deciding where an interaction outcome should land, use this ownership mappi
 
 When authored flows need help from a containing page shell, the bridge must remain explicit and thin:
 
-- [x] authored semantic actions may use shared generic frontend ops such as `dispatchDomEvent`, `navigate`, and `setQueryParam`
-- [x] the current generic host-bridge path is `dispatchDomEvent`, which allows authored programs to name a host event and payload without reclaiming submit/click ownership in page-local JS
+- [x] authored semantic actions may use native route refresh, `navigate`, canonical query-state synchronization, and route-backed boundary operations
+- [x] there is no longer a generic host-bridge frontend op; reusable behavior must lower into first-class route, surface, process, boundary, policy, or capability semantics
 - [ ] host listeners should act as adapters that translate one named semantic outcome into one existing shell/runtime capability; they should not become a second hidden controller for the whole page
 - [ ] when a host listener exists, record the producer action, event name, receiving adapter, and remaining reason it cannot yet collapse into a shared runtime seam
 - [ ] do not encode endpoint choreography, edit-mode branching, or product validation logic inside host listeners just because the listener is now "generic"
 - [ ] if multiple authored actions start dispatching the same host event, document the expected contract and payload shape here before expanding that pattern further
-- [ ] do not use `dispatchDomEvent` as a generic escape hatch for arbitrary page scripting; if the receiving behavior is broadly reusable, promote it into a shared runtime op instead
+- [x] do not use `dispatchDomEvent` as a generic escape hatch for arbitrary page scripting; the primitive is retired, and reusable behavior must be promoted into first-class native runtime semantics instead
 - [ ] do not let host listeners become the hidden owner of external state changes simply because the initiating click or submit is now authored
 - [ ] if a host action can target the current URL, document whether the contract expects assign-style navigation, reload semantics, or explicit shell handoff; same-URL navigation inside embedded shells is a recurring drift trap
 
@@ -851,7 +874,7 @@ The next migrations should assume these shared seams are the correct place to ad
 - [x] add shared `navigate` frontend op support in `src/runtime-host-route-factory.js`, `src/runtime-builtins.js`, and the widget-page runtime so authored programs can own URL changes
 - [x] add generic `setQueryParam` support in `plugins/inspect/widget-page.js`, `src/runtime-host-route-factory.js`, and `src/runtime-builtins.js` so authored flows can mutate current-page query state without bespoke page-local URL handlers
 - [x] add generic authored `readForm(...)` checkbox coercion in `plugins/inspect/widget-page.js` so authored forms can opt into real boolean payloads for checkbox fields instead of page-local `boolValue(...)` transforms
-- [x] add generic `dispatchDomEvent` support in `plugins/inspect/widget-page.js`, `src/runtime-host-route-factory.js`, and `src/runtime-builtins.js` so embedded authored runtimes can request host-page adapter work without inventing page-specific runtime ops
+- [x] remove generic `dispatchDomEvent` support from `plugins/inspect/widget-page.js`, `src/runtime-host-route-factory.js`, and `src/runtime-builtins.js`, and fail fast when authored material still attempts to use it
 - [x] keep shared WTOML/apply-path coverage aligned with renderer-supported widget sections by adding native runtime declaration support for `label`, `textarea`, `details`, `summary`, and `valueEditor` in `src/desire/apply.js`, then re-prove that parity in `test/dsl.test.js`
 - [x] extend `renderCollection(...)` to accept either a state-path string or a direct interpolated array value
 - [x] add an explicit runtime-supported way to assign dynamic instance widget ids for repeated templates while keeping template ids stable for lookup
@@ -1212,14 +1235,16 @@ The starter slice now has enough moving parts that unattended work should not in
 - if a later slice changes starter request ordering, route/home-page authoring order, or the `serverRunner.handlerSet = "demo"` invariant, record the new invariant list here and re-prove it with the dedicated starter browser command in the same change
 - do not let a future starter slice hide persistent creation semantics inside host listeners or DOM-only status mutation; the resulting world/app state must still land server-side first and be re-read before navigation
 
-### Bootstrap preserved DOM and event contracts
+### Historical Bootstrap DOM and Event Contracts
 
-Unattended work should treat these identifiers as live compatibility constraints unless the same change intentionally updates code, tests, and this audit together.
+Unattended work should treat the DOM ids below as compatibility constraints
+only where current code and tests still prove them. The host-event names in
+this historical section are provenance, not a recommended lane for new work.
 
 - [x] preserved scoped create/remove DOM ids include `#context-binding-form`, `#context-binding-target`, `#context-binding-remove-form`, `#context-export-form`, `#context-export-target`, `#context-export-remove-form`, `#context-import-form`, `#context-import-export-name`, `#context-import-remove-form`, `#context-import-remove-export-name`, `#stewardship-form`, and `#stewardship-remove-form`
 - [x] preserved direct runtime-integration DOM ids currently include `#runtime-plugin-install-form`, `#runtime-plugin-install-status`, `#runtime-plugin-install-runner`, `#runtime-plugin-install-plugin`, `#mcp-server-form`, `#mcp-server-status`, `#mcp-server-runner`, `#mcp-server-help`, `#mcp-tool-install-form`, `#mcp-tool-install-status`, `#mcp-tool-install-server`, `#mcp-tool-install-tool`, and `#mcp-tool-install-acting-mode`; those anchors now survive through authored `WTOML` plus shared submit/recompute seams, and any later rename still needs proof plus an audit update in the same change
 - [x] preserved starter/identity/top-card DOM ids include `#identity-form`, `#identity-status`, `#session-form`, `#session-summary`, `#create-todo-starter`, `#starter-status`, and `#open-app-link`
-- [x] preserved bootstrap host-event names currently include `witness:host-refresh`, `witness:bootstrap-backend-authoring-sync`, `witness:bootstrap-proposal-adjacent-submit`, `witness:bootstrap-proposal-adjacent-sync`, `witness:bootstrap-runtime-integration-direct-submit`, `witness:bootstrap-runtime-integration-direct-sync`, `witness:bootstrap-dependent-select-sync`, `witness:bootstrap-backend-help-sync`, `witness:bootstrap-proposal-create-help-sync`, `witness:bootstrap-proposal-approve-help-sync`, `witness:bootstrap-scoped-submit`, `witness:bootstrap-top-cards-submit`, and `witness:bootstrap-host-action`
+- [x] historical bootstrap host-event names formerly included `witness:host-refresh`, `witness:bootstrap-backend-authoring-sync`, `witness:bootstrap-proposal-adjacent-submit`, `witness:bootstrap-proposal-adjacent-sync`, `witness:bootstrap-runtime-integration-direct-submit`, `witness:bootstrap-runtime-integration-direct-sync`, `witness:bootstrap-dependent-select-sync`, `witness:bootstrap-backend-help-sync`, `witness:bootstrap-proposal-create-help-sync`, `witness:bootstrap-proposal-approve-help-sync`, `witness:bootstrap-scoped-submit`, `witness:bootstrap-top-cards-submit`, and `witness:bootstrap-host-action`
 - do not treat DOM-id preservation as a mere testing concern; these ids are also runtime anchors for refresh, tutorial, and host-bridge behavior
 - if a slice renames any of the above ids or host events, the same change must update the focused proof and the corresponding residual-debt note so the next unattended pass does not follow stale contracts
 

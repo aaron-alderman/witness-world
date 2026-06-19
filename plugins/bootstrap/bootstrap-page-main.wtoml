@@ -264,22 +264,6 @@ class = "surface-state-list"
 id = "bootstrap_page_main_program"
 rootWidget = "bootstrap_page_main_root"
 
-[[step]]
-program = "bootstrap_page_main_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_review_runner_select"
-eventName = "witness:bootstrap-runtime-plugin-review-sync"
-detail = { source = "bootstrap-page-main", family = "runtime-plugin-review", trigger = "server-runner" }
-
-[[step]]
-program = "bootstrap_page_main_program"
-order = 0
-op = "dispatchDomEvent"
-on = "change:bootstrap_runtime_plugin_review_plugin_select"
-eventName = "witness:bootstrap-runtime-plugin-review-sync"
-detail = { source = "bootstrap-page-main", family = "runtime-plugin-review", trigger = "plugin" }
-
 [[box]]
 id = "bootstrap_runtime_plugin_install_slot"
 domId = "bootstrap-runtime-plugin-install-slot"

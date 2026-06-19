@@ -15,6 +15,7 @@ test("sql plugin exposes datasource CRUD and explicit db.sql operations", () => 
   assert.equal(handlerCatalog.dispatchHandlers.includes("db.sql.datasource.test"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("db.sql.query"), true);
   assert.deepEqual(desireExtensions.rvmForms.map(entry => entry.kind), ["sql_table"]);
+  assert.deepEqual(desireExtensions.runtimeDeclarations.map(entry => entry.kind), ["sql_table"]);
 });
 
 test("sql plugin projectors track datasource test state and clear stale errors on success", () => withRegisteredPluginProjectors(providers, () => {

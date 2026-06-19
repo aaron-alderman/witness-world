@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 import { loadAppProject } from "../../src/app-project.js";
 import { createWorld } from "../../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../../src/host.js";
-import { applyWitnessDocs, applyWitnessToml, loadWitnessAppFile } from "../../src/dsl.js";
+import { applyWitnessDocsWithRuntimePlugins, applyWitnessToml } from "../../src/dsl.js";
 import { applyDesire } from "../../src/desire/index.js";
 import { startBlankRuntime } from "../../src/runtime-local-launcher.js";
 
@@ -39,10 +39,10 @@ export async function startUiServer({
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile });
 
-  const appProject = await loadAppProject(dslPath);
-  const loaded = await loadWitnessAppFile(dslPath);
-  applyWitnessDocs(world, loaded.witnessDocs);
-  for (const desire of loaded.authoredDesireDocs) applyDesire(world, desire);
+  const appProject = await loadAppProject(dslPath, { runtimeProfile });
+  await applyWitnessDocsWithRuntimePlugins(world, appProject.witnessDocs, { runtimeProfile });
+  const runtimeDeclarationRegistry = appProject.runtimePluginRegistries?.runtimeDeclarationRegistry ?? null;
+  for (const desire of appProject.authoredDesireDocs) applyDesire(world, desire, { runtimeDeclarationRegistry });
   if (extraWitnessToml.trim()) applyWitnessToml(world, extraWitnessToml);
 
   const server = await startServer(world, {

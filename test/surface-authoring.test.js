@@ -57,6 +57,12 @@ test("requestSurfaceDefine preserves canonical runtime binding semantics on auth
       interactions: [
         { target: "primaryAction", event: "click", action: { kind: "setState", state: "ReplayTitle", value: { literal: "Updated" } } }
       ],
+      repeat: {
+        collection: "ReplayOptions",
+        template: "ReplayOptionTemplate",
+        itemAs: "option",
+        indexAs: "index"
+      },
       props: {
         routeKey: "login",
         title: "Initial"
@@ -68,11 +74,23 @@ test("requestSurfaceDefine preserves canonical runtime binding semantics on auth
   assert.equal(result.surfaces[0].processRef, "ReplayFlow");
   assert.deepEqual(result.surfaces[0].projectionRefs, ["ReplayClosed"]);
   assert.deepEqual(result.surfaces[0].capabilityRefs, ["plugin.chart-runtime"]);
+  assert.deepEqual(result.surfaces[0].repeat, {
+    collection: "ReplayOptions",
+    template: "ReplayOptionTemplate",
+    itemAs: "option",
+    indexAs: "index"
+  });
   assert.equal(result.surfaces[0].bindings[0].prop, "title");
   assert.equal(result.surfaces[0].interactions[0].target, "primaryAction");
   const witness = world.allWitnesses().find(entry => entry.process === "desire.defineSurface" && entry.body?.id === "ReplayInteractive");
   assert.equal(witness?.body?.processRef, "ReplayFlow");
   assert.deepEqual(witness?.body?.projectionRefs, ["ReplayClosed"]);
+  assert.deepEqual(witness?.body?.repeat, {
+    collection: "ReplayOptions",
+    template: "ReplayOptionTemplate",
+    itemAs: "option",
+    indexAs: "index"
+  });
 });
 
 test("requestSurfaceDefine accepts an ordered array and preserves witness order", () => {
@@ -315,7 +333,23 @@ test("route.create accepts page.surface rootSurface params and rejects missing r
       routeState: {
         process: "ReplayFlow",
         state: "ReplayActiveRoute"
-      }
+      },
+      preloadPolicies: [{
+        id: "ReplayLoad",
+        when: { kind: "routeEnter", route: "replay_surface_route" },
+        targets: [{
+          kind: "route",
+          route: "replay_surface_route",
+          command: "ReplayLoadCommand",
+          load: ["command"]
+        }]
+      }],
+      queryBindings: [{
+        param: "mode",
+        process: "ReplayFlow",
+        state: "ReplayActiveRoute",
+        defaultValue: "login"
+      }]
     },
     ...routeSupport()
   });
@@ -326,6 +360,22 @@ test("route.create accepts page.surface rootSurface params and rejects missing r
     process: "ReplayFlow",
     state: "ReplayActiveRoute"
   });
+  assert.deepEqual(okRoute.route.params.preloadPolicies, [{
+    id: "ReplayLoad",
+    when: { kind: "routeEnter", route: "replay_surface_route" },
+    targets: [{
+      kind: "route",
+      route: "replay_surface_route",
+      command: "ReplayLoadCommand",
+      load: ["command"]
+    }]
+  }]);
+  assert.deepEqual(okRoute.route.params.queryBindings, [{
+    param: "mode",
+    process: "ReplayFlow",
+    state: "ReplayActiveRoute",
+    defaultValue: "login"
+  }]);
 
   const missingRootSurface = requestBootstrapRouteDefine(world, {
     actor: "aaron",

@@ -136,6 +136,31 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "Persists source edits immediately through the snapshot manager after authoring-policy checks; there is no proposal fallback.",
     { operationSemantics: "operational-mutation", sharedAuthorityPath: false }
   ),
+  "app.preview.session.create": directAuthority(
+    "session-state",
+    "Preview-session creation mutates only per-user local preview state and never writes authored source or shared runtime objects.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
+  ),
+  "app.preview.session.patchSources": directAuthority(
+    "session-state",
+    "Preview source overlays mutate only per-user local preview state and never persist authored source.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
+  ),
+  "app.preview.session.patchCandidates": directAuthority(
+    "session-state",
+    "Preview candidate overlays mutate only per-user local preview state and replay witness-level evolution inside the preview world.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
+  ),
+  "app.preview.session.properties.patch": directAuthority(
+    "session-state",
+    "Preview property edits mutate only per-user local preview state and rewrite preview overlays without persisting authored source.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
+  ),
+  "app.preview.session.delete": directAuthority(
+    "session-state",
+    "Preview-session deletion clears only per-user local preview state.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
+  ),
   "asset.attach": proposalFallback(
     "context-or-target-authority",
     "Attempts shared target authority first and routes to bootstrap proposal creation when direct attachment is not allowed."
@@ -291,6 +316,14 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-target-authority",
     "Bootstrap authoring attempts shared frontend-program authority first and routes to proposal creation when direct frontend-step creation is not allowed."
   ),
+  "frontend.migrateLegacy": proposalFallback(
+    "bootstrap-target-authority",
+    "Legacy frontend migration attempts shared route authority across every affected page.home route first and routes to proposal creation when direct migration is not allowed."
+  ),
+  "frontend.upliftLegacy": proposalFallback(
+    "bootstrap-target-authority",
+    "Legacy frontend uplift attempts shared route authority across every bridge-backed route first and routes to proposal creation when direct native uplift is not allowed."
+  ),
   "fs.blob.delete": directAuthority(
     "storage-scope-authority",
     "Blob deletion is immediate but scoped through shared storage and context authority helpers.",
@@ -370,6 +403,18 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-context-authority",
     "Message definition attempts shared context authority first and routes to proposal creation when direct authored definition is not allowed."
   ),
+  "boundary.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Boundary definition attempts shared context authority first and routes to proposal creation when direct authored definition is not allowed."
+  ),
+  "bootstrap.appBoundary.establish": proposalFallback(
+    "bootstrap-context-or-target-authority",
+    "Bootstrap app-boundary establishment attempts shared canonical boundary authority first and routes to proposal creation when direct authored takeover is not allowed."
+  ),
+  "policy.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Policy definition attempts shared context authority first and routes to proposal creation when direct authored definition is not allowed."
+  ),
   "package.create": proposalFallback(
     "bootstrap-context-authority",
     "Package creation attempts shared package-scope context authority first and routes to proposal creation when direct package definition is not allowed."
@@ -416,6 +461,12 @@ const HANDLER_GOVERNANCE = Object.freeze({
   ),
   "platform.branch.create": operatorOnly(
     "Platform branches are first-class platform nouns, but this route is still bootstrap-operator-only instead of shared target authority."
+  ),
+  "platform.branch.push": operatorOnly(
+    "Platform branch push mutates the tracked remote publication state and remains bootstrap-operator-only instead of shared target authority."
+  ),
+  "platform.branch.ship": operatorOnly(
+    "Platform branch ship mutates tracked release publication state and remains bootstrap-operator-only instead of shared target authority."
   ),
   "platform.changeSet.abandon": operatorOnly(
     "Platform change-set lifecycle is first-class, but this route is still bootstrap-operator-only instead of shared target authority."
@@ -537,6 +588,10 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-context-authority",
     "Surface definition attempts shared context authority on each authored document first and routes to proposal creation when direct authored definition is not allowed."
   ),
+  "collection.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Collection definition attempts shared context authority first and routes to proposal creation when direct authored definition is not allowed."
+  ),
   "session.logout": directAuthority(
     "credential-session",
     "Session logout clears only the caller session and does not use proposal or shared target authority.",
@@ -563,6 +618,14 @@ const HANDLER_GOVERNANCE = Object.freeze({
   "widgets.update": proposalFallback(
     "bootstrap-target-authority",
     "Widget updates attempt shared widget authority first and route to proposal creation when direct mutation is not allowed."
+  ),
+  "widgets.replace": proposalFallback(
+    "bootstrap-target-authority",
+    "Widget replacement attempts shared widget authority first and routes to proposal creation when direct governed evolution is not allowed."
+  ),
+  "widgets.replace.rollback": proposalFallback(
+    "bootstrap-target-authority",
+    "Widget replacement rollback attempts shared widget authority first and routes to proposal creation when direct rollback is not allowed."
   )
 });
 
@@ -695,6 +758,10 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
     "bootstrap-context-authority",
     "Surface-define proposals execute through shared context authority on each authored document once approved."
   ),
+  "collection.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Collection-define proposals execute through shared context authority on the authored collection context once approved."
+  ),
   "process.define": proposalTarget(
     "bootstrap-context-authority",
     "Process-define proposals execute through shared context authority on the authored process context once approved."
@@ -710,6 +777,18 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   "message.define": proposalTarget(
     "bootstrap-context-authority",
     "Message-define proposals execute through shared context authority on the authored message context once approved."
+  ),
+  "boundary.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Boundary-define proposals execute through shared context authority on the authored boundary context once approved."
+  ),
+  "bootstrap.appBoundary.establish": proposalTarget(
+    "bootstrap-context-or-target-authority",
+    "Bootstrap app-boundary proposals execute through the shared bootstrap boundary planner and the same authored route, surface, runner, and plugin helpers once approved."
+  ),
+  "policy.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Policy-define proposals execute through shared context authority on the authored policy context once approved."
   ),
   "package.define": proposalTarget(
     "bootstrap-context-authority",
@@ -746,6 +825,14 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   "widget.update": proposalTarget(
     "bootstrap-target-authority",
     "Widget-update proposals execute through shared target authority on the widget once approved."
+  ),
+  "widget.replace": proposalTarget(
+    "bootstrap-target-authority",
+    "Widget-replace proposals execute through shared target authority on the widget once approved."
+  ),
+  "widget.replace.rollback": proposalTarget(
+    "bootstrap-target-authority",
+    "Widget-replace rollback proposals execute through shared target authority on the widget once approved."
   ),
   "widgetVersion.activate": proposalTarget(
     "bootstrap-target-authority",
@@ -800,6 +887,14 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   "route.define": proposalTarget(
     "bootstrap-target-authority",
     "Route-define proposals execute through shared target authority and contextual visibility checks once approved."
+  ),
+  "frontend.migrateLegacy": proposalTarget(
+    "bootstrap-target-authority",
+    "Legacy frontend migration proposals execute through shared route authority before rewriting page.home routes onto page.surface compatibility surfaces."
+  ),
+  "frontend.upliftLegacy": proposalTarget(
+    "bootstrap-target-authority",
+    "Legacy frontend uplift proposals execute through shared route authority before rewriting compatibility routes onto native page.surface authored surfaces."
   ),
   "serve.define": proposalTarget(
     "bootstrap-target-authority",
@@ -861,6 +956,15 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   ),
   "branch.rebase": proposalTargetOperatorOnly(
     "Platform branch-rebase proposals currently execute only through the platform operator lane."
+  ),
+  "branch.push": proposalTargetOperatorOnly(
+    "Platform branch-push proposals currently execute only through the platform operator lane."
+  ),
+  "branch.ship": proposalTargetOperatorOnly(
+    "Platform branch-ship proposals currently execute only through the platform operator lane."
+  ),
+  "branch.rollback": proposalTargetOperatorOnly(
+    "Platform branch-rollback proposals currently execute only through the platform operator lane."
   ),
   "changeSet.create": proposalTargetOperatorOnly(
     "Platform change-set create proposals currently execute only through the platform operator lane."

@@ -12,10 +12,13 @@ import {
   requestBootstrapStewardshipRevoke,
   resolveStewardshipTargetInput,
   requestSurfaceDefine,
+  requestCollectionDefine,
   requestProcessDefine,
   requestTypeDefine,
   requestProjectionDefine,
   requestMessageDefine,
+  requestBoundaryDefine,
+  requestPolicyDefine,
   requestPackageDefine,
   requestPackageRevisionDefine,
   requestPackageRevisionPublish,
@@ -27,9 +30,16 @@ import {
   requireCoveredAuthoringRefInput,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
+  requestBootstrapFrontendMigrateLegacy,
+  requestBootstrapFrontendUpliftLegacy,
   requestWidgetDefine,
+  requestWidgetReplace,
+  requestWidgetReplaceRollback,
   requestWidgetUpdate
 } from "./authoring-core-processes.js";
+import { frontendLegacyMigrationAuthorityTargets } from "../../src/frontend-legacy-migration.js";
+import { frontendLegacyUpliftAuthorityTargets } from "../../src/frontend-legacy-uplift.js";
+import { resolveAuthoringHandlerSupport } from "../../src/runtime-authoring-handler-support.js";
 
 function surfaceProposalContexts(body) {
   const docs = Array.isArray(body) ? body : [body];
@@ -38,17 +48,20 @@ function surfaceProposalContexts(body) {
     .filter(context => typeof context === "string" && context.trim());
 }
 
-export function executeAuthoringCoreProposalTarget({
+export async function executeAuthoringCoreProposalTarget({
   world,
   actor,
   backendHost,
   proposal,
   body,
+  runtimeProfile,
   supportedHandlers,
+  supportedPageHandlers = [],
   supportedHandlerMetadata,
   ensureIdentityAuthority,
   ensureContextAuthority,
-  ensureTargetAuthority
+  ensureTargetAuthority,
+  getRuntimePluginCatalog = async () => ({ packages: [] })
 }) {
   switch (proposal.targetProcess) {
     case "identity.update": {
@@ -147,6 +160,12 @@ export function executeAuthoringCoreProposalTarget({
         ? { ok: true, witnessIds: (result.witnesses ?? []).map(entry => entry.id).filter(Boolean) }
         : result;
     }
+    case "collection.define": {
+      const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestCollectionDefine(world, { actor, backendHost, body });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
     case "process.define": {
       const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
@@ -169,6 +188,18 @@ export function executeAuthoringCoreProposalTarget({
       const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
       const result = requestMessageDefine(world, { actor, backendHost, body });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "boundary.define": {
+      const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestBoundaryDefine(world, { actor, backendHost, body });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "policy.define": {
+      const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestPolicyDefine(world, { actor, backendHost, body });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "package.define": {
@@ -297,15 +328,67 @@ export function executeAuthoringCoreProposalTarget({
       const result = requestWidgetUpdate(world, { actor, backendHost, body });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
+    case "widget.replace": {
+      const gate = ensureTargetAuthority(actor, body.id || "");
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestWidgetReplace(world, { actor, backendHost, body });
+      return result.ok
+        ? { ok: true, witnessIds: (result.witnesses || [result.witness]).map(entry => entry?.id).filter(Boolean) }
+        : result;
+    }
+    case "widget.replace.rollback": {
+      const gate = ensureTargetAuthority(actor, body.id || "");
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestWidgetReplaceRollback(world, { actor, backendHost, body });
+      return result.ok
+        ? { ok: true, witnessIds: (result.witnesses || [result.witness]).map(entry => entry?.id).filter(Boolean) }
+        : result;
+    }
     case "route.define": {
       const gate = ensureContextAuthority(actor, body.context ?? null);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const routeAuthoringSupport = await resolveAuthoringHandlerSupport({
+        supportedHandlerSets: [],
+        supportedHandlers,
+        supportedPageHandlers,
+        supportedHandlerMetadata,
+        pluginCatalog: await getRuntimePluginCatalog({
+          activeProfile: body.runtimeProfile ?? runtimeProfile ?? null,
+          serverRunnerId: null,
+          configuredPluginIds: [],
+          authoredPluginIds: []
+        })
+      });
       const result = requestBootstrapRouteDefine(world, {
         actor,
         backendHost,
         body,
-        allowedHandlers: supportedHandlers,
-        handlerMetadataById: supportedHandlerMetadata
+        allowedHandlers: routeAuthoringSupport.supportedHandlers,
+        handlerMetadataById: routeAuthoringSupport.supportedHandlerMetadata
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "frontend.migrateLegacy": {
+      const migration = frontendLegacyMigrationAuthorityTargets(world);
+      for (const entry of migration.targets) {
+        const gate = ensureTargetAuthority(actor, entry.target);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      }
+      const result = requestBootstrapFrontendMigrateLegacy(world, {
+        actor,
+        backendHost
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "frontend.upliftLegacy": {
+      const uplift = frontendLegacyUpliftAuthorityTargets(world);
+      for (const entry of uplift.targets) {
+        const gate = ensureTargetAuthority(actor, entry.target);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      }
+      const result = requestBootstrapFrontendUpliftLegacy(world, {
+        actor,
+        backendHost
       });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }

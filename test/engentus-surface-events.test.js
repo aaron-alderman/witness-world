@@ -1229,7 +1229,8 @@ test("Engentus Mill Charge route mounts the authored disc chart through chart.re
     assert.match(html, /id="mill-metrics-panel"/);
     assert.match(html, /COM offset/);
     assert.match(html, /CATARACTING/);
-    assert.match(html, /<canvas id="mill-canvas" class="chart-page__mount chart-page__mount--mill-charge" data-chart-spec=/);
+    assert.match(html, /<canvas id="mill-canvas" class="chart-page__mount chart-page__mount--mill-charge" data-chart-id="MillChargeCrossSection">/);
+    assert.match(html, /<script type="application\/json" id="surface-runtime-manifest">[\s\S]*"chartSpecs":\{"MillChargeCrossSection":/);
     assert.match(html, /\/app-static\/app\/chart-functions\/mill-charge-kernels\.js/);
     assert.match(html, /registerChartSurfaceCapabilityBoot\(__chartRuntimeFunctions\)/);
     assert.doesNotMatch(html, /bootChartsFromDom\(document, __chartRuntimeFunctions\)/);

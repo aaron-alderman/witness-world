@@ -73,6 +73,18 @@ test("syncWorldTutorialCompanionShell ranks live guidance suggestions on the com
   assert.equal(shell.suggestions.innerHTML.includes("Show Current Control"), true);
 });
 
+test("sourcery companion shell can stay visible when pinned without active issues", () => {
+  const document = createFakeDocument();
+  const window = {};
+  const shell = getOrCreateSourceryCompanionShell({ document, window, enabled: true });
+
+  assert.equal(shell.root.hidden, true);
+  shell.setPinned(true);
+  assert.equal(shell.root.hidden, false);
+  shell.setPinned(false);
+  assert.equal(shell.root.hidden, true);
+});
+
 test("world tutorial companion factory exposes browser helpers", () => {
   const factory = renderWorldTutorialCompanionFactory();
   assert.equal(factory.includes("const syncWorldTutorialCompanionShell ="), true);

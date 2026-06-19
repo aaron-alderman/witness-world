@@ -21,11 +21,14 @@ import {
   forceDocumentNavigation,
   loadRouteSurfacePage,
   parseFirstElement,
+  queryBindingsForProcess,
   routeStateBindingForProcess,
   routeTargetForManifestState,
   routeTargetForProcessState,
   supportsSameDocumentRouteReplacement,
+  syncQueryStateToUrl,
   syncRouteStateToUrl,
+  syncUrlToQueryState,
   syncUrlToRouteState
 } from "./runtime-surface-route-runtime.js";
 import {
@@ -42,6 +45,9 @@ import {
   surfaceExpectedVisible,
   surfaceHasVisibleBinding
 } from "./runtime-surface-diagnostics.js";
+import {
+  normalizeCapabilityAssets as normalizeSharedCapabilityAssets
+} from "./runtime-surface-runtime-shared.js";
 
 const processWitnessCatalogCache = new WeakMap();
 
@@ -79,16 +85,87 @@ function cloneInspectionValue(value) {
 }
 
 function normalizeCapabilityAssets(value) {
-  const assets = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const readList = key => [...new Set((Array.isArray(assets[key]) ? assets[key] : [])
-    .map(entry => String(entry ?? "").trim())
+  return normalizeSharedCapabilityAssets(value);
+}
+
+function normalizePreloadPolicyWhen(value) {
+  const when = value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  const kind = trimString(when?.kind);
+  if (!kind) return null;
+  if (kind === "boot") return { kind };
+  if (kind === "routeEnter") {
+    const route = trimString(when?.route);
+    return route ? { kind, route } : null;
+  }
+  if (kind === "idleAfterRoute") {
+    const route = trimString(when?.route);
+    const delayMs = Number(when?.delayMs);
+    if (!route || !Number.isFinite(delayMs) || delayMs < 0) return null;
+    return { kind, route, delayMs };
+  }
+  return null;
+}
+
+function normalizePreloadPolicyLoadList(load, allowed = []) {
+  const loads = [...new Set((Array.isArray(load) ? load : [])
+    .map(entry => trimString(entry))
     .filter(Boolean))];
-  return {
-    stylesheetHrefs: readList("stylesheetHrefs"),
-    scriptSrcs: readList("scriptSrcs"),
-    inlineCss: readList("inlineCss"),
-    scriptBodies: readList("scriptBodies")
-  };
+  return loads.filter(entry => allowed.includes(entry));
+}
+
+function normalizePreloadPolicyTarget(value) {
+  const target = value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  const kind = trimString(target?.kind);
+  if (kind === "route") {
+    const route = trimString(target?.route);
+    const load = normalizePreloadPolicyLoadList(target?.load, ["manifest", "capabilityAssets"]);
+    if (!route || !load.length) return null;
+    return { kind, route, load };
+  }
+  if (kind === "capability") {
+    const capability = trimString(target?.capability);
+    const load = normalizePreloadPolicyLoadList(target?.load, ["assets"]);
+    if (!capability || !load.length) return null;
+    return { kind, capability, load };
+  }
+  return null;
+}
+
+function normalizePreloadPolicies(value) {
+  return (Array.isArray(value) ? value : [])
+    .map(policy => {
+      const normalizedPolicy = policy && typeof policy === "object" && !Array.isArray(policy) ? policy : null;
+      const id = trimString(normalizedPolicy?.id);
+      const when = normalizePreloadPolicyWhen(normalizedPolicy?.when);
+      const targets = (Array.isArray(normalizedPolicy?.targets) ? normalizedPolicy.targets : [])
+        .map(normalizePreloadPolicyTarget)
+        .filter(Boolean);
+      if (!id || !when || !targets.length) return null;
+      return { id, when, targets };
+    })
+    .filter(Boolean);
+}
+
+function normalizeCapabilityPreloadAssets(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([capability, assets]) => [trimString(capability), normalizeCapabilityAssets(assets)])
+      .filter(([capability]) => capability)
+  );
+}
+
+export function syncSurfaceRuntimeManifestScript(document, manifest) {
+  if (!document?.createElement || !document?.body?.appendChild) return null;
+  let node = document.getElementById?.("surface-runtime-manifest") ?? null;
+  if (!node) {
+    node = document.createElement("script");
+    node.id = "surface-runtime-manifest";
+    node.type = "application/json";
+    document.body.appendChild(node);
+  }
+  node.textContent = JSON.stringify(manifest ?? null);
+  return node;
 }
 
 function runtimeSpecForSurface(surface) {
@@ -204,7 +281,7 @@ function buildProcessWitnessCatalog(world) {
   return catalog;
 }
 
-function collectRelevantProcessWitnesses(world, surfaceEntries = [], routeStateDescriptor = null) {
+function collectRelevantProcessWitnesses(world, surfaceEntries = [], routeStateDescriptor = null, queryBindings = [], preloadPolicies = []) {
   const catalog = buildProcessWitnessCatalog(world);
   const relevant = {
     processes: new Set(),
@@ -250,6 +327,15 @@ function collectRelevantProcessWitnesses(world, surfaceEntries = [], routeStateD
   }
   markDefinition(routeStateDescriptor?.process ?? routeStateDescriptor?.processRef);
   markDefinition(routeStateDescriptor?.state ?? routeStateDescriptor?.stateRef);
+  for (const binding of normalizeQueryBindings(queryBindings)) {
+    markDefinition(binding.process ?? binding.processRef);
+    markDefinition(binding.state ?? binding.stateRef);
+  }
+  for (const policy of normalizePreloadPolicies(preloadPolicies)) {
+    for (const target of policy.targets ?? []) {
+      if (target?.kind === "route") markDefinition(target?.command);
+    }
+  }
 
   let changed = true;
   while (changed) {
@@ -311,17 +397,17 @@ function collectRelevantProcessWitnesses(world, surfaceEntries = [], routeStateD
       const processDef = catalog.definitions.get(processId);
       if (!processDef) continue;
       for (const stateId of processDef.body?.state ?? []) {
-        if (relevant.states.has(trimString(stateId))) changed = markDefinition(stateId) || changed;
+        changed = markDefinition(stateId) || changed;
       }
       for (const messageId of processDef.body?.handles ?? []) {
-        if (relevant.messages.has(trimString(messageId))) changed = markDefinition(messageId) || changed;
+        changed = markDefinition(messageId) || changed;
       }
       for (const messageId of processDef.body?.emits ?? []) {
-        if (relevant.messages.has(trimString(messageId))) changed = markDefinition(messageId) || changed;
+        changed = markDefinition(messageId) || changed;
       }
       for (const rule of processDef.body?.rules ?? []) {
         const trigger = trimString(rule?.trigger);
-        if (!trigger || !relevant.messages.has(trigger)) continue;
+        if (!trigger) continue;
         changed = markDefinition(trigger) || changed;
         const refs = collectRuleStepReferences(rule.steps ?? []);
         for (const stateId of refs.states) changed = markDefinition(stateId) || changed;
@@ -437,6 +523,29 @@ function normalizeRouteStateDescriptor(value) {
     : null;
 }
 
+function normalizeQueryBindings(value) {
+  return (Array.isArray(value) ? value : [])
+    .map(binding => {
+      if (!binding || typeof binding !== "object" || Array.isArray(binding)) return null;
+      const param = trimString(binding.param);
+      const processRef = trimString(binding.processRef ?? binding.process);
+      const stateRef = trimString(binding.stateRef ?? binding.state);
+      if (!param || !processRef || !stateRef) return null;
+      const next = {
+        param,
+        processRef,
+        process: processRef,
+        stateRef,
+        state: stateRef
+      };
+      if (Object.prototype.hasOwnProperty.call(binding, "defaultValue")) {
+        next.defaultValue = cloneInspectionValue(binding.defaultValue);
+      }
+      return next;
+    })
+    .filter(Boolean);
+}
+
 function classTokensForSurface(surface) {
   const tokens = [];
   const push = value => {
@@ -548,9 +657,13 @@ export function buildSurfaceRuntimeManifest({
   browserRuntimeCapabilities = [],
   capabilityAssets = null,
   rootSurfaceId = null,
+  route = null,
   requestPathname = "/",
   describeSurfaceRuntimeViewImpl = null,
   routeStateDescriptor = null,
+  queryBindings = [],
+  preloadPolicies = [],
+  capabilityPreloadAssets = {},
   surfaceRenderers = [],
   initialState = null,
   projectionState = {},
@@ -558,6 +671,7 @@ export function buildSurfaceRuntimeManifest({
 }) {
   const rootId = rootSurfaceId ?? root?.id ?? activeSurface.id;
   const parentById = new Map();
+  const shellSurfaceIds = [];
   const fullQueue = [{ id: rootId, parentId: null }];
   const fullSeen = new Set();
   while (fullQueue.length) {
@@ -566,14 +680,26 @@ export function buildSurfaceRuntimeManifest({
     fullSeen.add(next.id);
     const surface = surfaces.get(next.id);
     if (!surface) continue;
+    shellSurfaceIds.push(surface.id);
     parentById.set(surface.id, next.parentId ?? null);
     for (const childId of Array.isArray(surface.children) ? surface.children : []) {
       fullQueue.push({ id: childId, parentId: surface.id });
     }
   }
   const routeTargets = collectRouteTargets(surfaces, rootId);
-  const includedIds = new Set();
-  const includedParentById = new Map();
+  if (!routeTargets.length) {
+    const routeId = trimString(route?.id);
+    const routePath = trimString(route?.path) || trimString(requestPathname);
+    if (routePath) {
+      routeTargets.push({
+        key: routeId || routePath,
+        path: routePath,
+        surfaceId: activeSurface.id
+      });
+    }
+  }
+  const includedIds = new Set(shellSurfaceIds);
+  const includedParentById = new Map(parentById);
   const markActiveClosure = surfaceId => {
     const queue = [{
       id: trimString(surfaceId),
@@ -608,7 +734,7 @@ export function buildSurfaceRuntimeManifest({
   const surfaceEntries = [];
   const referencedTemplateIds = new Set();
   const referencedCollectionIds = new Set();
-  for (const surfaceId of includedIds) {
+  for (const surfaceId of shellSurfaceIds) {
     const surface = surfaces.get(surfaceId);
     if (!surface) continue;
     if (!includedIds.has(surfaceId)) continue;
@@ -672,7 +798,7 @@ export function buildSurfaceRuntimeManifest({
       ...declaredCollections,
       ...referencedCollectionIds
     ])].map(id => ({ id }));
-    const runtimeFragment = collectRelevantProcessWitnesses(world, surfaceEntries, routeStateDescriptor);
+    const runtimeFragment = collectRelevantProcessWitnesses(world, surfaceEntries, routeStateDescriptor, queryBindings, preloadPolicies);
   const diagnostics = buildRuntimeManifestDiagnostics({
     requestPathname,
     activeSurfaceId: activeSurface.id,
@@ -681,10 +807,12 @@ export function buildSurfaceRuntimeManifest({
     runtimeIds: runtimeFragment.runtimeIds
   });
   const manifest = {
-    rootSurfaceId,
+    rootSurfaceId: rootId,
     activeSurfaceId: activeSurface.id,
     requestPathname,
     routeTargets,
+      preloadPolicies: normalizePreloadPolicies(preloadPolicies),
+      capabilityPreloadAssets: normalizeCapabilityPreloadAssets(capabilityPreloadAssets),
       browserRuntimeCapabilities: [...new Set((browserRuntimeCapabilities ?? []).map(value => String(value || "")).filter(Boolean))],
       capabilityAssets: normalizeCapabilityAssets(capabilityAssets),
       surfaces: surfaceEntries,
@@ -693,6 +821,7 @@ export function buildSurfaceRuntimeManifest({
       processWitnesses: runtimeFragment.processWitnesses,
       initialStateOverrides: normalizeRuntimeObject(initialStateOverrides),
       routeState: normalizeRouteStateDescriptor(routeStateDescriptor),
+      queryBindings: normalizeQueryBindings(queryBindings),
       diagnostics
   };
   manifest.diagnostics.serializedBytes = Buffer.byteLength(JSON.stringify(manifest), "utf8");
@@ -875,6 +1004,9 @@ export function createSurfaceInteractionRuntime({
   const issueLedger = createSurfaceRuntimeIssueLedger();
   const diagnosticsOverlayEnabled = surfaceDiagnosticsOverlayEnabled(window);
   const runtimeDisposers = [];
+  manifest.preloadPolicies = normalizePreloadPolicies(manifest?.preloadPolicies);
+  manifest.queryBindings = normalizeQueryBindings(manifest?.queryBindings);
+  manifest.capabilityPreloadAssets = normalizeCapabilityPreloadAssets(manifest?.capabilityPreloadAssets);
   const declaredCollectionIds = new Set((manifest?.collections ?? []).map(entry => trimString(entry?.id)).filter(Boolean));
   const collectionValues = new Map([...declaredCollectionIds].map(id => [id, []]));
   const ensureDeclaredCollection = id => {
@@ -1019,17 +1151,205 @@ export function createSurfaceInteractionRuntime({
   const disposers = [];
   let processRuntime = null;
   let unsubscribeProcessRuntime = null;
-  const inFlightRuntimeBridges = new Set();
   let lastRouteSwap = null;
   let lastReconcileSummary = null;
   let fallbackNavigationPath = null;
   const routeDebugLog = [];
+  const preloadTasks = new Map();
+  const completedPreloadOperations = new Set();
+  const inFlightPreloadOperations = new Map();
+  const preloadIdleTimers = new Map();
+  let bootPreloadsTriggered = false;
+  let lastStablePreloadRouteKey = null;
   const pushRouteDebug = entry => {
     routeDebugLog.push({
       at: Date.now(),
       ...entry
     });
     if (routeDebugLog.length > 40) routeDebugLog.shift();
+  };
+  const updatePreloadTask = (operationKey, update = {}) => {
+    const previous = preloadTasks.get(operationKey) ?? {
+      key: operationKey,
+      attempts: 0
+    };
+    const next = {
+      ...previous,
+      ...update
+    };
+    preloadTasks.set(operationKey, next);
+    return next;
+  };
+  const clearPreloadIdleTimers = () => {
+    for (const timer of preloadIdleTimers.values()) clearTimeout(timer);
+    preloadIdleTimers.clear();
+  };
+  const preloadOperationKeyFor = (target, load) => {
+    if (target?.kind === "route") {
+      const command = trimString(target?.command);
+      return command && load === "command"
+        ? `route:${target.route}:command:${command}`
+        : `route:${target.route}:${load}`;
+    }
+    if (target?.kind === "capability") return `capability:${target.capability}:${load}`;
+    return `unknown:${load}`;
+  };
+  const executePreloadOperation = async ({ policyId, target, load, triggerKind, triggerRoute = null, correlationId }) => {
+    const operationKey = preloadOperationKeyFor(target, load);
+    if (completedPreloadOperations.has(operationKey)) return "completed";
+    if (inFlightPreloadOperations.has(operationKey)) return inFlightPreloadOperations.get(operationKey);
+    updatePreloadTask(operationKey, {
+      policyId,
+      triggerKind,
+      triggerRoute,
+      targetKind: target?.kind ?? null,
+      targetRoute: target?.route ?? null,
+      targetCapability: target?.capability ?? null,
+      load,
+      status: "running",
+      attempts: Number(preloadTasks.get(operationKey)?.attempts || 0) + 1,
+      startedAt: Date.now(),
+      error: null
+    });
+    const run = executionRunner.track("preload", async () => {
+      if (target?.kind === "route") {
+        if (load === "command") {
+          const commandId = trimString(target?.command);
+          if (!commandId) throw new Error(`preload route command missing for ${target.route}`);
+          await processRuntime.stepViaRoute(commandId);
+          return "completed";
+        }
+        const routeTarget = (manifest?.routeTargets ?? []).find(candidate => trimString(candidate?.key) === trimString(target.route));
+        if (!routeTarget) throw new Error(`preload route target not found: ${target.route}`);
+        const page = await loadRouteSurfacePage({
+          document,
+          window,
+          manifest,
+          surfaceById,
+          target: routeTarget,
+          requireManifest: true
+        });
+        if (!page?.manifest?.surfaces) throw new Error(`preload route manifest missing for ${target.route}`);
+        if (load === "capabilityAssets") {
+          await ensureSurfaceCapabilityAssets(document, window, page.manifest.capabilityAssets);
+        }
+        return "completed";
+      }
+      if (target?.kind === "capability") {
+        const assets = manifest?.capabilityPreloadAssets?.[target.capability] ?? null;
+        if (!assets) throw new Error(`preload capability assets not found: ${target.capability}`);
+        await ensureSurfaceCapabilityAssets(document, window, assets);
+        return "completed";
+      }
+      throw new Error(`unsupported preload target kind: ${target?.kind ?? "unknown"}`);
+    }, {
+      phase: "preload",
+      correlationId,
+      route: triggerRoute,
+      surfaceId: activeSurfaceId,
+      details: {
+        policyId,
+        triggerKind,
+        targetKind: target?.kind ?? null,
+        targetRoute: target?.route ?? null,
+        targetCapability: target?.capability ?? null,
+        load
+      }
+    })
+      .then(result => {
+        completedPreloadOperations.add(operationKey);
+        updatePreloadTask(operationKey, {
+          status: "completed",
+          completedAt: Date.now(),
+          error: null
+        });
+        return result;
+      })
+      .catch(error => {
+        updatePreloadTask(operationKey, {
+          status: "failed",
+          failedAt: Date.now(),
+          error: String(error?.message || error)
+        });
+        throw error;
+      })
+      .finally(() => {
+        inFlightPreloadOperations.delete(operationKey);
+        diagnosticsOverlay.render();
+      });
+    inFlightPreloadOperations.set(operationKey, run);
+    diagnosticsOverlay.render();
+    return run;
+  };
+  const runPreloadPolicy = (policy, { triggerKind, triggerRoute = null }) => {
+    const normalizedPolicy = policy && typeof policy === "object" ? policy : null;
+    if (!normalizedPolicy) return;
+    const correlationId = issueLedger.nextCorrelationId(`preload:${triggerKind}`);
+    for (const target of normalizedPolicy.targets ?? []) {
+      for (const load of target.load ?? []) {
+        const operationKey = preloadOperationKeyFor(target, load);
+        if (completedPreloadOperations.has(operationKey)) continue;
+        updatePreloadTask(operationKey, {
+          policyId: normalizedPolicy.id,
+          triggerKind,
+          triggerRoute,
+          targetKind: target?.kind ?? null,
+          targetRoute: target?.route ?? null,
+          targetCapability: target?.capability ?? null,
+          load,
+          status: "scheduled",
+          scheduledAt: Date.now(),
+          error: null
+        });
+        Promise.resolve()
+          .then(() => executePreloadOperation({
+            policyId: normalizedPolicy.id,
+            target,
+            load,
+            triggerKind,
+            triggerRoute,
+            correlationId
+          }))
+          .catch(() => {});
+      }
+    }
+    diagnosticsOverlay.render();
+  };
+  const scheduleStableRoutePreloads = () => {
+    const policies = normalizePreloadPolicies(manifest?.preloadPolicies);
+    if (!policies.length) return;
+    const currentRouteKey = trimString(activeRouteTargetForPath(manifest, window?.location?.pathname)?.key);
+    if (!bootPreloadsTriggered) {
+      bootPreloadsTriggered = true;
+      for (const policy of policies.filter(candidate => candidate.when.kind === "boot")) {
+        runPreloadPolicy(policy, { triggerKind: "boot", triggerRoute: currentRouteKey });
+      }
+    }
+    if (currentRouteKey === lastStablePreloadRouteKey) return;
+    clearPreloadIdleTimers();
+    lastStablePreloadRouteKey = currentRouteKey;
+    if (!currentRouteKey) return;
+    for (const policy of policies.filter(candidate => candidate.when.kind === "routeEnter" && candidate.when.route === currentRouteKey)) {
+      runPreloadPolicy(policy, { triggerKind: "routeEnter", triggerRoute: currentRouteKey });
+    }
+    for (const policy of policies.filter(candidate => candidate.when.kind === "idleAfterRoute" && candidate.when.route === currentRouteKey)) {
+      const timerKey = policy.id;
+      updatePreloadTask(`idle:${timerKey}`, {
+        key: `idle:${timerKey}`,
+        policyId: policy.id,
+        triggerKind: "idleAfterRoute",
+        triggerRoute: currentRouteKey,
+        status: "scheduled",
+        scheduledAt: Date.now(),
+        delayMs: policy.when.delayMs
+      });
+      const timer = setTimeout(() => {
+        preloadIdleTimers.delete(timerKey);
+        runPreloadPolicy(policy, { triggerKind: "idleAfterRoute", triggerRoute: currentRouteKey });
+      }, policy.when.delayMs);
+      preloadIdleTimers.set(timerKey, timer);
+    }
+    diagnosticsOverlay.render();
   };
   const syncLocationToManifestRequestPath = reason => {
     const manifestPath = trimString(manifest?.requestPathname);
@@ -1217,44 +1537,9 @@ export function createSurfaceInteractionRuntime({
       routeInvoker: createBrowserRouteInvoker(window, { collectionStore })
     });
   };
-  const replaceProcessRuntime = nextWitnesses => {
-    const witnesses = Array.isArray(nextWitnesses) ? nextWitnesses : [];
-    const previousRuntime = processRuntime;
+  const initializeProcessRuntime = witnesses => {
     const nextRuntime = instantiateProcessRuntime(witnesses);
-    if (previousRuntime) {
-      for (const stateId of stateIdsFromWitnesses(witnesses)) {
-        const previousValue = previousRuntime.value(stateId);
-        if (previousValue === undefined) continue;
-        nextRuntime.set(stateId, previousValue);
-      }
-      if (typeof previousRuntime.subscribe === "function") {
-        const bridge = previousRuntime.subscribe(observation => {
-          let mirrored = false;
-          for (const change of observation?.changes ?? []) {
-            const stateId = trimString(change?.field);
-            if (!stateId) continue;
-            if (nextRuntime.value(stateId) === undefined) continue;
-            nextRuntime.set(stateId, change.to);
-            mirrored = true;
-          }
-          if (mirrored) void requestSyncRouteAndRefresh();
-        });
-        inFlightRuntimeBridges.add(bridge);
-        void executionRunner.track("runtime-bridge", () =>
-          Promise.resolve(typeof previousRuntime.whenIdle === "function" ? previousRuntime.whenIdle() : null)
-        , {
-          phase: "manifest-replacement",
-          correlationId: issueLedger.nextCorrelationId("runtime-bridge"),
-          details: {
-            previousRuntimeStateCount: stateIdsFromWitnesses(witnesses).length
-          }
-        })
-          .finally(() => {
-            bridge();
-            inFlightRuntimeBridges.delete(bridge);
-          });
-      }
-    }
+    const routeStateId = trimString(routeStateBindingForProcess(manifest)?.state);
     if (manifest?.initialStateOverrides && typeof manifest.initialStateOverrides === "object") {
       for (const [stateId, value] of Object.entries(manifest.initialStateOverrides)) {
         if (nextRuntime.value(stateId) === undefined) continue;
@@ -1263,13 +1548,31 @@ export function createSurfaceInteractionRuntime({
     }
     unsubscribeProcessRuntime?.();
     processRuntime = nextRuntime;
+    if (routeStateId) {
+      syncUrlToRouteState({
+        manifest,
+        processRuntime,
+        processRef: routeStateBindingForProcess(manifest)?.processRef,
+        window
+      });
+    }
+    const queryProcessRefs = [...new Set([
+      ...((manifest.surfaces ?? [])
+        .map(surface => resolveSurfaceRuntimeBinding(manifest, surface.id).processRef)
+        .filter(Boolean)),
+      ...queryBindingsForProcess(manifest).map(binding => binding.processRef).filter(Boolean),
+      trimString(routeStateBindingForProcess(manifest)?.processRef)
+    ].filter(Boolean))];
+    for (const processRef of queryProcessRefs) {
+      syncUrlToQueryState({ manifest, processRuntime, processRef, window });
+    }
     unsubscribeProcessRuntime = typeof processRuntime.subscribe === "function"
       ? processRuntime.subscribe(() => {
           void requestSyncRouteAndRefresh();
         })
       : null;
   };
-  replaceProcessRuntime(manifest.processWitnesses || []);
+  initializeProcessRuntime(manifest.processWitnesses || []);
   const capabilityOutputs = {};
   const readExistingCapabilityOutputs = root => {
     const queryRoot = root ?? document;
@@ -1455,6 +1758,72 @@ export function createSurfaceInteractionRuntime({
         route: trimString(target?.path),
         surfaceId: trimString(target?.surfaceId)
       });
+      const fetchedTarget = page?.manifest ? activeRouteTargetForPath(page.manifest, target?.path) : null;
+      const manifestRootSurfaceId = trimString(manifest?.rootSurfaceId);
+      const pageRootSurfaceId = trimString(page?.manifest?.rootSurfaceId);
+      const fetchedManifestMatchesShell = Boolean(
+        page?.manifest?.surfaces
+        && (!manifestRootSurfaceId || !pageRootSurfaceId || manifestRootSurfaceId === pageRootSurfaceId)
+        && trimString(fetchedTarget?.key) === trimString(target?.key)
+        && trimString(fetchedTarget?.surfaceId) === trimString(target?.surfaceId)
+      );
+      if (!fetchedManifestMatchesShell) {
+        lastRouteSwap = {
+          ok: false,
+          reason: "manifest-mismatch",
+          targetSurfaceId: target.surfaceId,
+          hasManifest: Boolean(page?.manifest?.surfaces)
+        };
+        pushRouteDebug({
+          kind: "replace:manifest-mismatch",
+          targetSurfaceId: target.surfaceId,
+          manifestRootSurfaceId: pageRootSurfaceId,
+          manifestActiveSurfaceId: trimString(page?.manifest?.activeSurfaceId),
+          manifestRequestPathname: trimString(page?.manifest?.requestPathname)
+        });
+        reportIssue({
+          id: `surface-runtime:route-swap-manifest-mismatch:${target.surfaceId}`,
+          severity: "error",
+          phase: "route-swap",
+          kind: "route-swap",
+          message: "Fetched route manifest did not match the active shell or requested route",
+          surfaceId: target.surfaceId,
+          details: {
+            manifestRootSurfaceId: pageRootSurfaceId,
+            manifestActiveSurfaceId: trimString(page?.manifest?.activeSurfaceId),
+            manifestRequestPathname: trimString(page?.manifest?.requestPathname)
+          },
+          correlationId
+        });
+        return false;
+      }
+      const nextActiveSurfaceId = trimString(page.manifest.activeSurfaceId) || target.surfaceId;
+      if (!surfaceById.has(nextActiveSurfaceId)) {
+        lastRouteSwap = {
+          ok: false,
+          reason: "unknown-target-surface",
+          targetSurfaceId: target.surfaceId,
+          activeSurfaceId: nextActiveSurfaceId
+        };
+        pushRouteDebug({
+          kind: "replace:unknown-target-surface",
+          targetSurfaceId: target.surfaceId,
+          activeSurfaceId: nextActiveSurfaceId
+        });
+        reportIssue({
+          id: `surface-runtime:route-swap-unknown-surface:${target.surfaceId}`,
+          severity: "error",
+          phase: "route-swap",
+          kind: "route-swap",
+          message: "Fetched route manifest activated a surface outside the bootstrapped shell manifest",
+          surfaceId: target.surfaceId,
+          details: {
+            activeSurfaceId: nextActiveSurfaceId
+          },
+          correlationId
+        });
+        return false;
+      }
       const nextRoot = parseFirstElement(document, page?.fragment ?? null);
       if (!currentRoot || !nextRoot) {
         lastRouteSwap = {
@@ -1491,31 +1860,27 @@ export function createSurfaceInteractionRuntime({
       }
       disposeInteractions();
       currentRoot.replaceWith(nextRoot);
-      if (page?.manifest?.surfaces) {
-        pushRouteDebug({
-          kind: "replace:manifest",
-          targetSurfaceId: target.surfaceId,
-          manifestActiveSurfaceId: trimString(page.manifest.activeSurfaceId),
-          manifestRequestPathname: trimString(page.manifest.requestPathname),
-          manifestSurfaceCount: Array.isArray(page.manifest.surfaces) ? page.manifest.surfaces.length : 0
-        });
-        manifest.surfaces = page.manifest.surfaces;
-        manifest.requestPathname = page.manifest.requestPathname ?? manifest.requestPathname;
-        manifest.routeTargets = page.manifest.routeTargets ?? manifest.routeTargets;
-          manifest.routeState = page.manifest.routeState ?? manifest.routeState;
-          manifest.browserRuntimeCapabilities = page.manifest.browserRuntimeCapabilities ?? manifest.browserRuntimeCapabilities;
-          manifest.capabilityAssets = normalizeCapabilityAssets(page.manifest.capabilityAssets ?? manifest.capabilityAssets);
-          manifest.collections = page.manifest.collections ?? manifest.collections;
-          manifest.templates = page.manifest.templates ?? manifest.templates;
-          manifest.processWitnesses = page.manifest.processWitnesses ?? manifest.processWitnesses;
-          collectionStore.syncDeclarations(manifest.collections ?? []);
-          replaceProcessRuntime(manifest.processWitnesses || []);
-        surfaceById = new Map((manifest.surfaces ?? []).map(surface => [surface.id, surface]));
-        activeSurfaceId = trimString(page.manifest.activeSurfaceId) || target.surfaceId;
-      } else {
-        activeSurfaceId = target.surfaceId;
-      }
+      pushRouteDebug({
+        kind: "replace:manifest",
+        targetSurfaceId: target.surfaceId,
+        manifestActiveSurfaceId: trimString(page.manifest.activeSurfaceId),
+        manifestRequestPathname: trimString(page.manifest.requestPathname),
+        manifestSurfaceCount: Array.isArray(page.manifest.surfaces) ? page.manifest.surfaces.length : 0
+      });
+      const nextCapabilityAssets = Object.prototype.hasOwnProperty.call(page.manifest, "capabilityAssets")
+        ? page.manifest.capabilityAssets
+        : manifest.capabilityAssets;
+      manifest.requestPathname = page.manifest.requestPathname ?? target.path ?? manifest.requestPathname;
+      manifest.routeState = page.manifest.routeState ?? manifest.routeState;
+      manifest.browserRuntimeCapabilities = page.manifest.browserRuntimeCapabilities ?? manifest.browserRuntimeCapabilities;
+      manifest.chartSpecs = Object.prototype.hasOwnProperty.call(page.manifest, "chartSpecs")
+        ? normalizeRuntimeObject(page.manifest.chartSpecs)
+        : manifest.chartSpecs;
+      manifest.capabilityAssets = normalizeCapabilityAssets(nextCapabilityAssets);
+      manifest.diagnostics = page.manifest.diagnostics ?? manifest.diagnostics;
+      activeSurfaceId = nextActiveSurfaceId;
       manifest.activeSurfaceId = activeSurfaceId;
+      syncSurfaceRuntimeManifestScript(document, manifest);
       syncLocationToManifestRequestPath("route-swap");
       fallbackNavigationPath = null;
       try {
@@ -1598,9 +1963,13 @@ export function createSurfaceInteractionRuntime({
         correlationId: issueLedger.nextCorrelationId("boot")
       });
     });
-  const currentProcessRefs = () => [...new Set((manifest.surfaces ?? [])
-    .map(surface => resolveSurfaceRuntimeBinding(manifest, surface.id).processRef)
-    .filter(Boolean))];
+  const currentProcessRefs = () => [...new Set([
+    ...(manifest.surfaces ?? [])
+      .map(surface => resolveSurfaceRuntimeBinding(manifest, surface.id).processRef)
+      .filter(Boolean),
+    ...queryBindingsForProcess(manifest).map(binding => binding.processRef).filter(Boolean),
+    trimString(routeStateBindingForProcess(manifest)?.processRef)
+  ].filter(Boolean))];
   const runSettleProbe = async (phase = "settle-probe", correlationId = issueLedger.nextCorrelationId("probe")) => {
     const snapshot = createSurfaceRuntimeProbe({
       document,
@@ -1613,7 +1982,7 @@ export function createSurfaceInteractionRuntime({
       issueLedger,
       boundInteractionCount: disposers.length,
       expectationProviders,
-      runtimeBridgeCount: inFlightRuntimeBridges.size
+      runtimeBridgeCount: 0
     });
     syncProbeIssues(snapshot, phase, correlationId);
     const nextSnapshot = {
@@ -1669,6 +2038,7 @@ export function createSurfaceInteractionRuntime({
     await refresh(correlationId);
     for (const processRef of currentProcessRefs()) {
       const routeTarget = syncRouteStateToUrl({ manifest, processRuntime, processRef, window });
+      syncQueryStateToUrl({ manifest, processRuntime, processRef, window });
       if (routeTarget?.surfaceId && await replaceActiveRouteSurface(routeTarget)) {
         bindInteractions();
         await refresh(correlationId);
@@ -1679,6 +2049,7 @@ export function createSurfaceInteractionRuntime({
       await refresh(correlationId);
     }
     await runSettleProbe("settle-probe", correlationId);
+    Promise.resolve().then(() => scheduleStableRoutePreloads());
   };
   let syncInFlight = null;
   let syncQueued = false;
@@ -1706,11 +2077,13 @@ export function createSurfaceInteractionRuntime({
   syncLocationToManifestRequestPath("boot");
   for (const processRef of currentProcessRefs()) {
     syncUrlToRouteState({ manifest, processRuntime, processRef, window });
+    syncUrlToQueryState({ manifest, processRuntime, processRef, window });
   }
   if (window && typeof window.addEventListener === "function") {
     const onPopState = async () => {
       for (const processRef of currentProcessRefs()) {
         syncUrlToRouteState({ manifest, processRuntime, processRef, window });
+        syncUrlToQueryState({ manifest, processRuntime, processRef, window });
       }
       await requestSyncRouteAndRefresh("popstate");
     };
@@ -1854,21 +2227,52 @@ export function createSurfaceInteractionRuntime({
     activeSurfaceId: { get() { return activeSurfaceId; } },
     manifestDiagnostics: { get() { return manifest?.diagnostics ?? null; } },
     routeTargets: { get() { return manifest?.routeTargets ?? []; } },
+    preloadPolicies: { get() { return normalizePreloadPolicies(manifest?.preloadPolicies); } },
+    queryBindings: { get() { return normalizeQueryBindings(manifest?.queryBindings); } },
+    capabilityPreloadAssets: { get() { return normalizeCapabilityPreloadAssets(manifest?.capabilityPreloadAssets); } },
+    preloadTasks: { get() { return [...preloadTasks.values()].map(task => cloneInspectionValue(task)); } },
     surfaceIds: { get() { return [...surfaceById.keys()]; } },
     lastRouteSwap: { get() { return lastRouteSwap; } },
     lastReconcileSummary: { get() { return lastReconcileSummary; } },
     routeDebugLog: { get() { return [...routeDebugLog]; } },
     processRuntime: { get() { return processRuntime; } },
-    runtimeBridgeCount: { get() { return inFlightRuntimeBridges.size; } },
+    runtimeBridgeCount: { get() { return 0; } },
     settleSnapshot: { get() { return executionRunner.settledSnapshot(); } }
   });
   runtime.destroy = () => {
     disposeInteractions();
     unsubscribeProcessRuntime?.();
-    for (const bridge of inFlightRuntimeBridges) bridge();
-    inFlightRuntimeBridges.clear();
+    clearPreloadIdleTimers();
     for (const dispose of runtimeDisposers.splice(0)) dispose();
   };
   void requestSyncRouteAndRefresh("boot");
   return runtime;
 }
+
+export {
+  currentWitnessCount,
+  resolvedSurfaceDomId,
+  normalizeRuntimeArray,
+  normalizeRuntimeObject,
+  normalizePreloadPolicyWhen,
+  normalizePreloadPolicyLoadList,
+  normalizePreloadPolicyTarget,
+  normalizePreloadPolicies,
+  normalizeQueryBindings,
+  normalizeCapabilityPreloadAssets,
+  runtimeSpecForSurface,
+  surfaceHasRuntimeMeaning,
+  trimmedIdSet,
+  addToGroupedSet,
+  addToIndexedSet,
+  collectRuleStepReferences,
+  buildProcessWitnessCatalog,
+  collectRelevantProcessWitnesses,
+  buildRuntimeManifestDiagnostics,
+  childSurfaceIds,
+  collectRouteTargets,
+  normalizeViewTargets,
+  classTokensForSurface,
+  genericSurfaceRuntimeView,
+  createBlockedInteractionRuntime
+};

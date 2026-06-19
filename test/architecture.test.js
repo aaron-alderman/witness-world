@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createWorld, createThing } from "../src/kernel.js";
+import { createWorld, createThing, projectors } from "../src/kernel.js";
 import { WitnessLog } from "../src/witness-log.js";
 import { thingId, versionId } from "../src/ids.js";
 import { todoState, privateNotesFor, publicWitnessesFor } from "../plugins/demo/projections.js";
@@ -70,4 +70,36 @@ test("witness log preserves observed repetitions and replace preserves ordering"
   assert.deepEqual(log.all().map(w => w.process), ["first", "first again"]);
   log.replace([{ id: "w2", process: "second" }, { id: "w3", process: "third" }]);
   assert.deepEqual(log.all().map(w => w.process), ["second", "third"]);
+});
+
+test("witness log can buffer startup persistence and preserve ordered replay", async () => {
+  const file = await tempFile("buffered-witnesses.jsonl");
+  const log = new WitnessLog({ file, bufferedPersistence: true });
+  log.append({ id: "w1", process: "first" });
+  log.append({ id: "w2", process: "second" });
+  await log.commitBufferedPersistence({ mode: "post-ready" });
+  log.append({ id: "w3", process: "third" });
+  await log.flushPersistence();
+
+  const replayed = new WitnessLog({ file });
+  assert.deepEqual(replayed.all().map(w => w.process), ["first", "second", "third"]);
+});
+
+test("world exposes reusable indexes and keeps built-in projections consistent", () => {
+  const world = createWorld();
+  world.registerIndex("custom.count", {
+    seed: witnesses => witnesses.length,
+    apply: state => state + 1,
+    snapshot: state => state
+  });
+
+  createThing(world, { actor: "adam", id: "aaron" });
+  createThing(world, { actor: "adam", id: "callan" });
+
+  assert.equal(world.readIndex("custom.count"), world.allWitnesses().length);
+  assert.deepEqual([...world.project(projectors.things)].sort(), [...projectors.things(world.allWitnesses())].sort());
+
+  const replaced = world.allWitnesses().slice(0, 2);
+  world._replaceWitnesses(replaced);
+  assert.equal(world.readIndex("custom.count"), replaced.length);
 });

@@ -48,7 +48,10 @@ export async function createRuntimeAppContext({
   }
 
   const resolvedIdentityIndex = identityIndex ?? world.project(moduleProjectors.identityIndex);
-  const project = projector => world.project(projector, { projectionContext });
+  const project = projector => world.project(projector, {
+    projectionContext,
+    observations: world.allObservations()
+  });
   const actors = Array.isArray(serverRunner.actors) && serverRunner.actors.length
     ? [...serverRunner.actors]
     : actorsFromIdentities(resolvedIdentityIndex.rows);
