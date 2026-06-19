@@ -7,7 +7,15 @@ export const handlerCatalog = Object.freeze({
   pageHandlers: Object.freeze([]),
   dispatchHandlers: Object.freeze([
     "docs.read",
-    "doc.put"
+    "recognized.read",
+    "identities.read",
+    "identity.claim",
+    "identity.recognize",
+    "doc.put",
+    "repos.read",
+    "repo.announce",
+    "repo.open",
+    "repo.close"
   ]),
   handlerMetadata: Object.freeze({})
 });

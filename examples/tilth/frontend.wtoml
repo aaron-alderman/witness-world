@@ -1,75 +1,272 @@
-# Tilth frontend: the browser app. A list of imported conversation sessions,
-# each with a button to mark it DESIRE-related. Renders at / via page.home.
+# Tilth frontend: conversation sessions plus an inverted repo view.
+# Renders at / via page.home.
 
 [[defaults]]
 context = "frontend"
-program = "tilth_program"
+program = "tilth_program_repo_filters"
 
 [[page]]
-id = "tilth_page"
-children = ["tilth_title", "tilth_status", "tilth_list"]
-title = "Tilth — Conversations"
+id = "tilth_page_repo_filters"
+children = ["tilth_title_repo_filters", "tilth_status_repo_filters", "tilth_nav_repo_filters", "tilth_filter_bar_repo_filters", "repo_section_repo_filters", "sessions_section_repo_filters"]
+title = "Tilth"
 
 [[heading]]
-id = "tilth_title"
-text = "Conversations"
+id = "tilth_title_repo_filters"
+text = "Tilth"
 level = 1
 
 [[text]]
-id = "tilth_status"
+id = "tilth_status_repo_filters"
 text = ""
 class = "status"
 role = "app-status"
 
 [[box]]
-id = "tilth_list"
+id = "tilth_nav_repo_filters"
+children = ["repo_nav_button_repo_filters", "sessions_nav_button_repo_filters"]
+role = "view-nav"
+class = "surface-actions"
+
+[[button]]
+id = "repo_nav_button_repo_filters"
+text = "Repos"
+type = "button"
+action = "showRepos"
+
+[[button]]
+id = "sessions_nav_button_repo_filters"
+text = "Sessions"
+type = "button"
+action = "showSessions"
+
+[[box]]
+id = "tilth_filter_bar_repo_filters"
+children = ["filter_all_button_repo_filters", "filter_desire_button_repo_filters", "filter_indexed_button_repo_filters"]
+role = "filter-bar"
+class = "surface-actions"
+
+[[button]]
+id = "filter_all_button_repo_filters"
+text = "All"
+type = "button"
+action = "filterAll"
+
+[[button]]
+id = "filter_desire_button_repo_filters"
+text = "DESIRE"
+type = "button"
+action = "filterDesire"
+
+[[button]]
+id = "filter_indexed_button_repo_filters"
+text = "Indexed"
+type = "button"
+action = "filterIndexed"
+
+[[box]]
+id = "repo_section_repo_filters"
+children = ["repo_index_list_repo_filters"]
+role = "repo-view"
+
+[[box]]
+id = "repo_index_list_repo_filters"
+role = "repo-index-list"
+class = "surface-list"
+
+[[box]]
+id = "sessions_section_repo_filters"
+children = ["sessions_list_repo_filters"]
+role = "session-view"
+hidden = true
+
+[[box]]
+id = "sessions_list_repo_filters"
 role = "session-list"
 class = "surface-list"
 
 [[frontendProgram]]
-id = "tilth_program"
-rootWidget = "tilth_page"
+id = "tilth_program_repo_filters"
+rootWidget = "tilth_page_repo_filters"
 
-# --- row template -----------------------------------------------------------
+# --- repo template ----------------------------------------------------------
 [[box]]
-id = "session_item_template"
+id = "repo_item_template_clean"
 template = true
-children = ["session_item_title", "session_item_meta", "session_item_preview", "session_item_desire_button"]
+children = ["repo_item_title_clean", "repo_item_meta_clean", "repo_item_remote_clean", "repo_item_sessions_clean", "repo_item_paths_preview_clean", "repo_item_paths_details_clean"]
+class = "surface-card repo-card"
+
+[[heading]]
+id = "repo_item_title_clean"
+template = true
+text = "${item.name || item.root}"
+level = 3
+
+[[text]]
+id = "repo_item_meta_clean"
+template = true
+text = "${item.displayRoot || item.root} · ${item.sessionCount} ${item.sessionCount === 1 ? 'session' : 'sessions'} · ${item.mentionText || (item.mentionCount + ' mentions')}"
+class = "surface-status"
+
+[[text]]
+id = "repo_item_sessions_clean"
+template = true
+text = "${item.sessionText || 'No indexed sessions yet'}"
+class = "surface-lede"
+
+[[text]]
+id = "repo_item_remote_clean"
+template = true
+text = "${item.remoteText ? 'Remote: ' + item.remoteText : 'Remote: none'}"
+class = "surface-status"
+
+[[text]]
+id = "repo_item_paths_preview_clean"
+template = true
+text = "${item.pathPreviewText ? 'Mentioned paths: ' + item.pathPreviewText : 'No displayable mentioned paths'}"
+class = "surface-status"
+
+[[details]]
+id = "repo_item_paths_details_clean"
+template = true
+children = ["repo_item_paths_summary_clean", "repo_item_paths_detail_clean"]
+class = "repo-paths-panel"
+
+[[summary]]
+id = "repo_item_paths_summary_clean"
+template = true
+text = "Show paths"
+class = "surface-card-title"
+
+[[text]]
+id = "repo_item_paths_detail_clean"
+template = true
+text = "${item.pathDetailText || 'No displayable mentioned paths'}"
+class = "surface-state-list surface-note surface-mono repo-paths-list"
+
+# --- session template -------------------------------------------------------
+[[box]]
+id = "session_item_template_repo_clean"
+template = true
+children = ["session_item_title_repo_clean", "session_item_meta_repo_clean", "session_item_preview_repo_clean", "session_item_desire_button_repo_clean", "session_item_transcript_button_repo_clean", "session_item_ai_summary_button_repo_clean", "session_item_repo_button_repo_clean", "session_item_repo_index_repo_clean", "session_item_transcript_status_repo_clean", "session_item_ai_summary_status_repo_clean", "session_item_ai_summary_details_repo_clean", "session_item_transcript_details_repo_clean"]
 class = "${item.desire ? 'surface-card session-card desire' : 'surface-card session-card'}"
 
 [[heading]]
-id = "session_item_title"
+id = "session_item_title_repo_clean"
 template = true
 text = "${item.title || item.id}"
 level = 3
 class = "session-title"
 
 [[text]]
-id = "session_item_meta"
+id = "session_item_meta_repo_clean"
 template = true
 text = "${item.project} · ${item.msgCount} msgs · origin ${item.origin || '—'}${item.desire ? ' · marked by ' + (item.markedBy || '—') : ''}"
 class = "surface-status"
 
 [[text]]
-id = "session_item_preview"
+id = "session_item_preview_repo_clean"
 template = true
 text = "${item.preview || ''}"
 class = "surface-lede session-preview"
 
 [[button]]
-id = "session_item_desire_button"
+id = "session_item_desire_button_repo_clean"
 template = true
 text = "${item.desire ? 'DESIRE ✓' : 'Mark DESIRE'}"
 type = "button"
 action = "markDesire"
 data-id = "${item.id}"
 
+[[button]]
+id = "session_item_transcript_button_repo_clean"
+template = true
+text = "${item.transcriptPreview && item.transcriptPreview.status === 'completed' ? 'Refresh text' : 'Preview text'}"
+type = "button"
+action = "previewTranscript"
+data-id = "${item.id}"
+
+[[button]]
+id = "session_item_ai_summary_button_repo_clean"
+template = true
+text = "${item.aiSummary && item.aiSummary.status === 'completed' ? 'Refresh summary' : 'Summarize'}"
+type = "button"
+action = "summarizeSession"
+data-id = "${item.id}"
+
+[[button]]
+id = "session_item_repo_button_repo_clean"
+template = true
+text = "${item.repoIndex && item.repoIndex.status === 'completed' ? 'Refresh repo index' : 'Index repos'}"
+type = "button"
+action = "indexRepos"
+data-id = "${item.id}"
+
+[[text]]
+id = "session_item_repo_index_repo_clean"
+template = true
+text = "${item.repoIndex && item.repoIndex.summary ? item.repoIndex.summary : 'Repo index not run'}"
+class = "surface-status"
+
+[[text]]
+id = "session_item_transcript_status_repo_clean"
+template = true
+text = "${item.transcriptPreview && item.transcriptPreview.summary ? item.transcriptPreview.summary : 'Transcript preview not loaded'}"
+class = "surface-status"
+
+[[text]]
+id = "session_item_ai_summary_status_repo_clean"
+template = true
+text = "${item.aiSummary && item.aiSummary.summary ? item.aiSummary.summary : 'AI summary not run'}"
+class = "surface-status"
+
+[[details]]
+id = "session_item_ai_summary_details_repo_clean"
+template = true
+children = ["session_item_ai_summary_summary_repo_clean", "session_item_ai_summary_text_repo_clean", "session_item_ai_summary_bullets_repo_clean"]
+class = "session-transcript-panel"
+
+[[summary]]
+id = "session_item_ai_summary_summary_repo_clean"
+template = true
+text = "AI summary"
+class = "surface-card-title"
+
+[[text]]
+id = "session_item_ai_summary_text_repo_clean"
+template = true
+text = "${item.aiSummary && item.aiSummary.text ? item.aiSummary.text : ''}"
+class = "surface-note"
+
+[[text]]
+id = "session_item_ai_summary_bullets_repo_clean"
+template = true
+text = "${item.aiSummary && item.aiSummary.bulletText ? item.aiSummary.bulletText : ''}"
+class = "surface-state-list surface-note session-transcript-preview"
+
+[[details]]
+id = "session_item_transcript_details_repo_clean"
+template = true
+children = ["session_item_transcript_summary_repo_clean", "session_item_transcript_text_repo_clean"]
+class = "session-transcript-panel"
+
+[[summary]]
+id = "session_item_transcript_summary_repo_clean"
+template = true
+text = "Transcript"
+class = "surface-card-title"
+
+[[text]]
+id = "session_item_transcript_text_repo_clean"
+template = true
+text = "${item.transcriptPreview && item.transcriptPreview.text ? item.transcriptPreview.text : ''}"
+class = "surface-state-list surface-note surface-mono session-transcript-preview"
+
 # --- load -------------------------------------------------------------------
 [[step]]
 order = 0
 op = "setText"
 on = "load"
-widget = "tilth_status"
+widget = "tilth_status_repo_filters"
 text = "Loading..."
 
 [[step]]
@@ -81,25 +278,202 @@ into = "sessionsResponse"
 
 [[step]]
 order = 2
-op = "renderCollection"
+op = "fetchJson"
 on = "load"
-widget = "tilth_list"
-from = "sessionsResponse.sessions"
-template = "session_item_template"
+url = "/api/repo-index/repos"
+into = "repoIndexResponse"
 
 [[step]]
 order = 3
+op = "renderCollection"
+on = "load"
+widget = "repo_index_list_repo_filters"
+from = "repoIndexResponse.repos"
+template = "repo_item_template_clean"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "load"
+widget = "sessions_list_repo_filters"
+from = "sessionsResponse.sessions"
+template = "session_item_template_repo_clean"
+
+[[step]]
+order = 5
 op = "setText"
 on = "load"
-widget = "tilth_status"
-text = "${state.sessionsResponse && state.sessionsResponse.sessions ? state.sessionsResponse.sessions.length + ' conversations' : 'No conversations yet'}"
+widget = "tilth_status_repo_filters"
+text = "${state.sessionsResponse && state.sessionsResponse.sessions ? state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : 'No conversations yet'}"
+
+# --- nav --------------------------------------------------------------------
+[[step]]
+order = 0
+op = "setHidden"
+on = "click:showRepos"
+widget = "repo_section_repo_filters"
+hidden = false
+
+[[step]]
+order = 1
+op = "setHidden"
+on = "click:showRepos"
+widget = "sessions_section_repo_filters"
+hidden = true
+
+[[step]]
+order = 0
+op = "setHidden"
+on = "click:showSessions"
+widget = "repo_section_repo_filters"
+hidden = true
+
+[[step]]
+order = 1
+op = "setHidden"
+on = "click:showSessions"
+widget = "sessions_section_repo_filters"
+hidden = false
+
+# --- filters ----------------------------------------------------------------
+[[step]]
+order = 0
+op = "setText"
+on = "click:filterAll"
+widget = "tilth_status_repo_filters"
+text = "Loading all..."
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "click:filterAll"
+url = "/api/sessions"
+into = "sessionsResponse"
+
+[[step]]
+order = 2
+op = "fetchJson"
+on = "click:filterAll"
+url = "/api/repo-index/repos"
+into = "repoIndexResponse"
+
+[[step]]
+order = 3
+op = "renderCollection"
+on = "click:filterAll"
+widget = "repo_index_list_repo_filters"
+from = "repoIndexResponse.repos"
+template = "repo_item_template_clean"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "click:filterAll"
+widget = "sessions_list_repo_filters"
+from = "sessionsResponse.sessions"
+template = "session_item_template_repo_clean"
+
+[[step]]
+order = 5
+op = "setText"
+on = "click:filterAll"
+widget = "tilth_status_repo_filters"
+text = "${state.sessionsResponse && state.sessionsResponse.sessions ? 'All · ' + state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : 'All'}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:filterDesire"
+widget = "tilth_status_repo_filters"
+text = "Loading DESIRE..."
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "click:filterDesire"
+url = "/api/sessions?filter=desire"
+into = "sessionsResponse"
+
+[[step]]
+order = 2
+op = "fetchJson"
+on = "click:filterDesire"
+url = "/api/repo-index/repos?filter=desire"
+into = "repoIndexResponse"
+
+[[step]]
+order = 3
+op = "renderCollection"
+on = "click:filterDesire"
+widget = "repo_index_list_repo_filters"
+from = "repoIndexResponse.repos"
+template = "repo_item_template_clean"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "click:filterDesire"
+widget = "sessions_list_repo_filters"
+from = "sessionsResponse.sessions"
+template = "session_item_template_repo_clean"
+
+[[step]]
+order = 5
+op = "setText"
+on = "click:filterDesire"
+widget = "tilth_status_repo_filters"
+text = "${state.sessionsResponse && state.sessionsResponse.sessions ? 'DESIRE · ' + state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : 'DESIRE'}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:filterIndexed"
+widget = "tilth_status_repo_filters"
+text = "Loading indexed..."
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "click:filterIndexed"
+url = "/api/sessions?filter=indexed"
+into = "sessionsResponse"
+
+[[step]]
+order = 2
+op = "fetchJson"
+on = "click:filterIndexed"
+url = "/api/repo-index/repos?filter=indexed"
+into = "repoIndexResponse"
+
+[[step]]
+order = 3
+op = "renderCollection"
+on = "click:filterIndexed"
+widget = "repo_index_list_repo_filters"
+from = "repoIndexResponse.repos"
+template = "repo_item_template_clean"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "click:filterIndexed"
+widget = "sessions_list_repo_filters"
+from = "sessionsResponse.sessions"
+template = "session_item_template_repo_clean"
+
+[[step]]
+order = 5
+op = "setText"
+on = "click:filterIndexed"
+widget = "tilth_status_repo_filters"
+text = "${state.sessionsResponse && state.sessionsResponse.sessions ? 'Indexed · ' + state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : 'Indexed'}"
 
 # --- click: mark a session DESIRE-related -----------------------------------
 [[step]]
 order = 0
 op = "setText"
 on = "click:markDesire"
-widget = "tilth_status"
+widget = "tilth_status_repo_filters"
 text = "Marking..."
 
 [[step]]
@@ -116,3 +490,75 @@ order = 2
 op = "run"
 on = "click:markDesire"
 event = "load"
+
+# --- click: request repo-location indexing ---------------------------------
+[[step]]
+order = 0
+op = "setText"
+on = "click:indexRepos"
+widget = "tilth_status_repo_filters"
+text = "Requesting repo index..."
+
+[[step]]
+order = 1
+op = "postJson"
+on = "click:indexRepos"
+url = "/api/sessions/${event.id}/repo-index/request"
+method = "POST"
+body = {}
+into = "repoIndexRequest"
+
+[[step]]
+order = 2
+op = "setText"
+on = "click:indexRepos"
+widget = "tilth_status_repo_filters"
+text = "Repo index requested. Refresh in a few seconds."
+
+# --- click: request readable transcript preview ----------------------------
+[[step]]
+order = 0
+op = "setText"
+on = "click:previewTranscript"
+widget = "tilth_status_repo_filters"
+text = "Requesting transcript preview..."
+
+[[step]]
+order = 1
+op = "postJson"
+on = "click:previewTranscript"
+url = "/api/sessions/${event.id}/transcript-preview/request"
+method = "POST"
+body = {}
+into = "transcriptPreviewRequest"
+
+[[step]]
+order = 2
+op = "setText"
+on = "click:previewTranscript"
+widget = "tilth_status_repo_filters"
+text = "Transcript preview requested. Refresh in a few seconds."
+
+# --- click: request AI summary ---------------------------------------------
+[[step]]
+order = 0
+op = "setText"
+on = "click:summarizeSession"
+widget = "tilth_status_repo_filters"
+text = "Requesting AI summary..."
+
+[[step]]
+order = 1
+op = "postJson"
+on = "click:summarizeSession"
+url = "/api/sessions/${event.id}/ai-summary/request"
+method = "POST"
+body = {}
+into = "aiSummaryRequest"
+
+[[step]]
+order = 2
+op = "setText"
+on = "click:summarizeSession"
+widget = "tilth_status_repo_filters"
+text = "AI summary requested. Refresh in a few seconds."

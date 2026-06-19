@@ -23,7 +23,7 @@ method = "GET"
 path = "/"
 serves = "tilthView"
 handler = "page.home"
-params = { rootWidget = "tilth_page", frontendProgram = "tilth_program", page = "home" }
+params = { rootWidget = "tilth_page_repo_filters", frontendProgram = "tilth_program_repo_filters", page = "home" }
 
 [[serve]]
 serverRunner = "tilth_server"
@@ -64,3 +64,126 @@ handler = "session.markDesire"
 [[serve]]
 serverRunner = "tilth_server"
 route = "tilth_mark_desire_route"
+
+# Request repo-location indexing for a known local session. The external
+# daemon performs the filesystem/git scan and reports the result back.
+[[route]]
+id = "tilth_repo_index_request_route"
+method = "POST"
+path = "/api/sessions/:id/repo-index/request"
+serves = "tilthSessions"
+handler = "session.repoIndex.request"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_index_request_route"
+
+# Request a readable text transcript preview. The daemon recovers the local
+# JSONL active path and reports the sanitized text back.
+[[route]]
+id = "tilth_transcript_preview_request_route"
+method = "POST"
+path = "/api/sessions/:id/transcript-preview/request"
+serves = "tilthSessions"
+handler = "session.transcriptPreview.request"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_transcript_preview_request_route"
+
+# Request an AI summary for a DESIRE-marked session. The external tilth-daemon
+# performs the model call and reports the result back.
+[[route]]
+id = "tilth_ai_summary_request_route"
+method = "POST"
+path = "/api/sessions/:id/ai-summary/request"
+serves = "tilthSessions"
+handler = "session.aiSummary.request"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_ai_summary_request_route"
+
+# Pending repo-index jobs for the daemon worker.
+[[route]]
+id = "tilth_repo_index_requests_read_route"
+method = "GET"
+path = "/api/repo-index/requests"
+serves = "tilthRepoIndexRequests"
+handler = "repoIndex.requests.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_index_requests_read_route"
+
+# Pending transcript-preview jobs for the daemon worker.
+[[route]]
+id = "tilth_transcript_preview_requests_read_route"
+method = "GET"
+path = "/api/transcript-preview/requests"
+serves = "tilthTranscriptPreviewRequests"
+handler = "transcriptPreview.requests.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_transcript_preview_requests_read_route"
+
+# Pending AI-summary jobs for the daemon worker.
+[[route]]
+id = "tilth_ai_summary_requests_read_route"
+method = "GET"
+path = "/api/ai-summary/requests"
+serves = "tilthAiSummaryRequests"
+handler = "aiSummary.requests.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_ai_summary_requests_read_route"
+
+# Repo-centric projection: each repo with the DESIRE sessions that mention it.
+[[route]]
+id = "tilth_repo_index_repos_read_route"
+method = "GET"
+path = "/api/repo-index/repos"
+serves = "tilthRepoIndexRepos"
+handler = "repoIndex.repos.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_index_repos_read_route"
+
+# Repo-index result reporting from the daemon worker.
+[[route]]
+id = "tilth_repo_index_result_route"
+method = "POST"
+path = "/api/repo-index/requests/:requestId/result"
+serves = "tilthRepoIndexRequests"
+handler = "repoIndex.request.result"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_index_result_route"
+
+# Transcript-preview result reporting from the daemon worker.
+[[route]]
+id = "tilth_transcript_preview_result_route"
+method = "POST"
+path = "/api/transcript-preview/requests/:requestId/result"
+serves = "tilthTranscriptPreviewRequests"
+handler = "transcriptPreview.request.result"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_transcript_preview_result_route"
+
+# AI-summary result reporting from the daemon worker.
+[[route]]
+id = "tilth_ai_summary_result_route"
+method = "POST"
+path = "/api/ai-summary/requests/:requestId/result"
+serves = "tilthAiSummaryRequests"
+handler = "aiSummary.request.result"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_ai_summary_result_route"

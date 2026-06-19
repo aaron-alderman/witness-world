@@ -40,7 +40,7 @@ handler = "docs.read"
 serverRunner = "tilth_net_server"
 route = "tilth_net_docs_read_route"
 
-# Put a new version (the browser form posts here; actor in body simulates a peer)
+# Put a new version (signed by a recognized member's daemon)
 [[route]]
 id = "tilth_net_doc_put_route"
 method = "POST"
@@ -51,3 +51,98 @@ handler = "doc.put"
 [[serve]]
 serverRunner = "tilth_net_server"
 route = "tilth_net_doc_put_route"
+
+# Membership: self-claim an identity ("I am X")
+[[route]]
+id = "tilth_net_identity_claim_route"
+method = "POST"
+path = "/api/identity/claim"
+serves = "tilthNetMembers"
+handler = "identity.claim"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_identity_claim_route"
+
+# Membership: recognize another member ("I recognize X")
+[[route]]
+id = "tilth_net_identity_recognize_route"
+method = "POST"
+path = "/api/identity/recognize"
+serves = "tilthNetMembers"
+handler = "identity.recognize"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_identity_recognize_route"
+
+# The recognized roster (projection over claims + recognitions)
+[[route]]
+id = "tilth_net_recognized_read_route"
+method = "GET"
+path = "/api/recognized"
+serves = "tilthNetMembers"
+handler = "recognized.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_recognized_read_route"
+
+# The identity directory: all declared identities, recognized or pending
+[[route]]
+id = "tilth_net_identities_read_route"
+method = "GET"
+path = "/api/identities"
+serves = "tilthNetMembers"
+handler = "identities.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_identities_read_route"
+
+# Repos available to share (daemon announces; projection of open/closed state)
+[[route]]
+id = "tilth_net_repos_read_route"
+method = "GET"
+path = "/api/repos"
+serves = "tilthNetRepos"
+handler = "repos.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_repos_read_route"
+
+# Daemon announces an available repo (sanitized metadata)
+[[route]]
+id = "tilth_net_repo_announce_route"
+method = "POST"
+path = "/api/repos/announce"
+serves = "tilthNetRepos"
+handler = "repo.announce"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_repo_announce_route"
+
+# Browser toggles sharing open / closed
+[[route]]
+id = "tilth_net_repo_open_route"
+method = "POST"
+path = "/api/repos/:name/open"
+serves = "tilthNetRepos"
+handler = "repo.open"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_repo_open_route"
+
+[[route]]
+id = "tilth_net_repo_close_route"
+method = "POST"
+path = "/api/repos/:name/close"
+serves = "tilthNetRepos"
+handler = "repo.close"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_repo_close_route"

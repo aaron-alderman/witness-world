@@ -38,7 +38,7 @@ Tenet (`https://github.com/aaron-alderman/witness-world/blob/tilth/README.md`):
 > Things and relations are inert. Processes attempt change. **Witnesses record
 > what happened.** Projections render meaning for a context.
 
-Two processes write, one projection reads:
+Two core processes write, one projection reads:
 
 - **`session.import`** — emits a witness creating the session as a thing, with
   provenance: `thing(id)`, `relation(id,"origin",author)`,
@@ -49,6 +49,11 @@ Two processes write, one projection reads:
   mutable flag — provenance (who marked it) lives in the witness `actor`.
 - **`sessions` projection** — folds the append-only log into the current set of
   sessions, preserving a DESIRE mark across a re-import.
+
+Repo-location indexing adds a request/result loop: Tilth witnesses that a known
+local session should be indexed, then the external daemon reads the full local
+transcript and filesystem/git state before reporting discovered repos back
+across the membrane.
 
 Marking is idiomatic to witness-world precisely because it is witnessed: the
 `actor` is who marked it, the `cause` chain is the provenance trail. "Cloned
@@ -69,7 +74,8 @@ Boundary leaf (JS, the only writers/readers of witnesses):
 
 - `plugins/tilth/plugin.json` — plugin manifest (`plugin.tilth` / `bundle-tilth`)
 - `plugins/tilth/runtime.js` — bundle wiring (dispatch handlers)
-- `plugins/tilth/tilth-sessions.js` — the two processes + the projection
+- `plugins/tilth/tilth-sessions.js` — session processes, repo-index request
+  processes, and projections
 - `store/seeds/first-party-plugin-catalog.json` — registers `plugin.tilth`
 
 ---
@@ -82,11 +88,27 @@ Boundary leaf (JS, the only writers/readers of witnesses):
 | GET    | `/api/sessions`            | `sessions.read`      | the projection as JSON               |
 | POST   | `/api/sessions`            | `session.import`     | import one session (daemon → world)  |
 | POST   | `/api/sessions/:id/desire` | `session.markDesire` | mark a session DESIRE-related        |
+| POST   | `/api/sessions/:id/transcript-preview/request` | `session.transcriptPreview.request` | request readable transcript text |
+| GET    | `/api/transcript-preview/requests` | `transcriptPreview.requests.read` | pending transcript-preview work queue |
+| POST   | `/api/transcript-preview/requests/:requestId/result` | `transcriptPreview.request.result` | daemon transcript-preview result |
+| POST   | `/api/sessions/:id/repo-index/request` | `session.repoIndex.request` | request repo-location indexing |
+| GET    | `/api/repo-index/requests` | `repoIndex.requests.read` | pending daemon work queue |
+| GET    | `/api/repo-index/repos` | `repoIndex.repos.read` | repo-centric projection with sessions |
+| POST   | `/api/repo-index/requests/:requestId/result` | `repoIndex.request.result` | daemon repo-index result |
 
 Import payload: `{ id, title, preview, project, origin, started, msgCount }`.
 Import is **idempotent on content** — the same title/preview/msgCount is a
 no-op; a change (e.g. a sanitization fix) re-witnesses an update, and the
 projection preserves the DESIRE mark across it.
+
+Transcript-preview result payload:
+`{ status: "completed", text }` or `{ status: "failed", error }`. The daemon
+recovers only the active Claude Code JSONL path and sanitizes local roots before
+posting the text.
+
+Repo-index result payload:
+`{ status: "completed", repos: [{ root, name, mentions: [{ path, raw, role, timestamp }] }] }`
+or `{ status: "failed", error }`. Paths are absolute in v1.
 
 ---
 

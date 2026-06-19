@@ -8,7 +8,17 @@ export const handlerCatalog = Object.freeze({
   dispatchHandlers: Object.freeze([
     "sessions.read",
     "session.import",
-    "session.markDesire"
+    "session.markDesire",
+    "session.repoIndex.request",
+    "session.transcriptPreview.request",
+    "session.aiSummary.request",
+    "repoIndex.requests.read",
+    "repoIndex.repos.read",
+    "repoIndex.request.result",
+    "transcriptPreview.requests.read",
+    "transcriptPreview.request.result",
+    "aiSummary.requests.read",
+    "aiSummary.request.result"
   ]),
   handlerMetadata: Object.freeze({})
 });
