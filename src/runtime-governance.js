@@ -161,6 +161,16 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "Preview-session deletion clears only per-user local preview state.",
     { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
   ),
+  "app.snapshot.promoteCurrent": directAuthority(
+    "session-state",
+    "Marks the current locally-rendered app snapshot as the serving stable snapshot for this runtime without mutating authored source.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
+  ),
+  "app.snapshot.rollbackStable": directAuthority(
+    "session-state",
+    "Pins the live runtime back to its current stable snapshot without mutating authored source.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
+  ),
   "asset.attach": proposalFallback(
     "context-or-target-authority",
     "Attempts shared target authority first and routes to bootstrap proposal creation when direct attachment is not allowed."
@@ -598,7 +608,7 @@ const HANDLER_GOVERNANCE = Object.freeze({
   ),
   "starter.todo.apply": directAuthority(
     "bootstrap-target-authority",
-    "The maintained bootstrap starter shortcut applies a curated starter blueprint and immediately uplifts its retired frontend route through the signed-in bootstrap operator lane."
+    "The maintained bootstrap starter shortcut authors the curated native todo starter directly onto canonical page.surface nouns through the signed-in bootstrap operator lane."
   ),
   "stewardship.create": proposalFallback(
     "bootstrap-target-authority",

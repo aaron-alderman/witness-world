@@ -68,6 +68,7 @@ import { buildRuntimeOperatorContract } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService } from "./runtime-operator-service.js";
 import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.js";
 import { createStartupTelemetry } from "./startup-telemetry.js";
+import { createWitnessCoreBridge, createWitnessCoreStatusStore } from "./witness-core-bridge.js";
 import { retiredLegacyFrontendRouteState } from "./legacy-frontend-bridge.js";
 
 function surfaceRowsFromWitnesses(witnesses = []) {
@@ -295,12 +296,21 @@ export async function startRuntimeServer(world, {
   };
   const requestScopedAppContext = appContext => {
     const liveSnapshotManager = appContext?.appSnapshotManager ?? null;
-    const snapshot = liveSnapshotManager?.getActiveSnapshot?.() ?? null;
+    const witnessCoreStatus = appContext?.witnessCoreStatusStore?.getStatus?.()
+      ? {
+          ...(appContext.witnessCoreStatusStore.getStatus() ?? {}),
+          latestState: appContext.witnessCoreStatusStore.getLatestState?.() ?? null
+        }
+      : null;
+    const snapshot = liveSnapshotManager?.getServingSnapshot?.({ witnessCoreStatus })
+      ?? liveSnapshotManager?.getActiveSnapshot?.()
+      ?? null;
     if (!appContext || !liveSnapshotManager || !snapshot) return appContext;
     const scoped = Object.create(appContext);
     scoped.appSnapshotManager = pinnedSnapshotManager(liveSnapshotManager, snapshot);
     scoped.requestSnapshot = snapshot;
     scoped.requestAppRevision = Number(snapshot.appRevision || 0);
+    scoped.requestServingState = liveSnapshotManager?.servingState?.({ witnessCoreStatus }) ?? null;
     return scoped;
   };
   const activeDevMode = devMode ?? (runtimeStartupMode === "serve" && appProject != null);
@@ -687,6 +697,17 @@ export async function startRuntimeServer(world, {
     appContext.activeRuntimePluginIds = runnerState.runtimePluginCatalog.activePluginIds;
     appContext.activeDispatchHandlers = runnerState.activeDispatchHandlers;
     appContext.startupTelemetry = startupTelemetry;
+    appContext.witnessCoreUrl = typeof env.WITNESS_CORE_URL === "string" && env.WITNESS_CORE_URL.trim()
+      ? env.WITNESS_CORE_URL.trim()
+      : null;
+    appContext.witnessCoreBridge = createWitnessCoreBridge({
+      coreUrl: appContext.witnessCoreUrl,
+      logger
+    });
+    appContext.witnessCoreStatusStore = createWitnessCoreStatusStore({
+      coreUrl: appContext.witnessCoreUrl,
+      logger
+    });
     appContext.resourceProbes = startupTelemetry.probeCollector ?? null;
     appContext.materializedViews = createMaterializedViewRegistry({
       world,
@@ -1510,6 +1531,7 @@ export async function startRuntimeServer(world, {
         appContext.appSnapshotManager = appSnapshotManager;
         appContext.appPreviewSessionManager = new AppPreviewSessionManager({
           appSnapshotManager,
+          generationBridge: appContext.witnessCoreBridge,
           logger,
           fsModule
         });
@@ -1562,6 +1584,7 @@ export async function startRuntimeServer(world, {
       sseClients.clear();
       for (const context of new Set(runtimeContexts.values())) context?.close?.();
       const appContextClose = typeof appContext.close === "function" ? appContext.close.bind(appContext) : null;
+      appContext.witnessCoreStatusStore?.close?.();
       await appContextClose?.();
       await Promise.allSettled(backgroundStartupTasks);
       await world.flushPersistence?.();

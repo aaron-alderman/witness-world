@@ -23,6 +23,15 @@ function injectInteractionRuntime(html, manifest) {
     : `${html}\n${manifestScript}\n${script}`;
 }
 
+function injectWitnessCoreUrl(html, witnessCoreUrl = null) {
+  const url = typeof witnessCoreUrl === "string" && witnessCoreUrl.trim() ? witnessCoreUrl.trim() : "";
+  if (!url) return html;
+  const script = `<script data-witness-core-url="1">window.__witnessCoreUrl = ${JSON.stringify(url)};</script>`;
+  return String(html).includes("</body>")
+    ? String(html).replace("</body>", `    ${script}\n  </body>`)
+    : `${html}\n${script}`;
+}
+
 function uniqueStrings(values = []) {
   return [...new Set(values.map(value => String(value ?? "").trim()).filter(Boolean))];
 }
@@ -251,7 +260,8 @@ export function renderSurfacePage(world, {
   surfaceRuntimeSupportAssets = [],
   devMode = false,
   initialStateOverrides = null,
-  stylesheetQuery = null
+  stylesheetQuery = null,
+  witnessCoreUrl = null
 } = {}) {
   const initialState = readInitialStateFromWorld(world);
   const mergedInitialState = initialStateOverrides && typeof initialStateOverrides === "object"
@@ -359,8 +369,8 @@ export function renderSurfacePage(world, {
   if (manifest?.diagnostics) {
     manifest.diagnostics.serializedBytes = Buffer.byteLength(JSON.stringify(manifest), "utf8");
   }
-  return injectInteractionRuntime(injectCapabilityAssets(shell.html, [
+  return injectInteractionRuntime(injectWitnessCoreUrl(injectCapabilityAssets(shell.html, [
     ...surfaceRenderers,
     ...runtimeSupportAssets
-  ]), manifest);
+  ]), witnessCoreUrl), manifest);
 }

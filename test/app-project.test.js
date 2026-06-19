@@ -9,11 +9,13 @@ import { createWorld } from "../src/kernel.js";
 import {
   APP_MANIFEST_BASENAME,
   loadAppProject,
+  loadAppProjectWithStableFallback,
   resolveAppProjectEntry,
   resolveDesktopTarget,
   resolveMcpTarget,
   resolveServeTarget
 } from "../src/app-project.js";
+import { persistStableAppSourceCache } from "../src/runtime-stable-source-cache.js";
 
 async function writeFile(targetPath, contents) {
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
@@ -161,4 +163,37 @@ imports = ["../../examples_rvm/engentus/PIPELINE.rvm"]
 test("examples root contains only the standardized app directories and shared library", async () => {
   const entries = (await fs.readdir(path.join(process.cwd(), "examples"))).sort();
   assert.deepEqual(entries, ["_lib", "demo-todo-app", "eden", "engentus", "master"]);
+});
+
+test("app project loader can fall back to the persisted stable source cache", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-app-stable-fallback-"));
+  const appRoot = path.join(tempRoot, "app");
+  const manifestPath = path.join(appRoot, "app.wtoml");
+  await writeFile(manifestPath, "[app\nid = \"broken\"\n");
+
+  await persistStableAppSourceCache(manifestPath, {
+    appProject: { appRoot },
+    compiledUnits: new Map([[
+      manifestPath,
+      {
+        filePath: manifestPath,
+        sourceId: "app.wtoml",
+        sourceLanguage: "wtoml",
+        contentHash: "stable-hash",
+        content: "[app]\nid = \"stable_app\"\n"
+      }
+    ]])
+  }, {
+    cwd: tempRoot
+  });
+
+  try {
+    const loaded = await loadAppProjectWithStableFallback(appRoot, { cwd: tempRoot });
+    assert.equal(loaded.fallbackUsed, true);
+    assert.equal(loaded.source, "stable-cache");
+    assert.equal(loaded.appProject.appId, "stable_app");
+    assert.equal(loaded.appProject.stableSourceCacheUsed, true);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
 });

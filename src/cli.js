@@ -2,6 +2,7 @@ import path from "node:path";
 import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import { launchDesktopProcess } from "./desktop-cli.js";
+import { runOperatorTui } from "./operator-tui.js";
 import { createWorld } from "./kernel.js";
 import {
   DEFAULT_BOOTSTRAP_RUNTIME_PROFILE,
@@ -13,7 +14,7 @@ import { resolveRuntimeOperatorPaths } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService, runtimeOperatorMutations } from "./runtime-operator-service.js";
 import { startBlankRuntime } from "./runtime-local-launcher.js";
 import { createLogger } from "./logger.js";
-import { loadAppProject, resolveMcpTarget, resolveServeTarget } from "./app-project.js";
+import { loadAppProjectWithStableFallback, resolveMcpTarget, resolveServeTarget } from "./app-project.js";
 import { startAppRuntime } from "./app-runtime.js";
 import { createStartupTelemetry } from "./startup-telemetry.js";
 
@@ -38,6 +39,8 @@ if (command === "serve") {
   await runMcp(rest);
 } else if (command === "operator") {
   await runOperator(rest);
+} else if (command === "tui") {
+  await runTui(rest);
 } else {
   console.error(usageText());
   process.exit(1);
@@ -53,13 +56,14 @@ async function runServe(args) {
   let selection = null;
   const startupTelemetry = createStartupTelemetry({ mode: "serve" });
   try {
-    appProject = await startupTelemetry.runPhase("app.project.load", () => loadAppProject(parsed.appPath, {
+    const loaded = await startupTelemetry.runPhase("app.project.load", () => loadAppProjectWithStableFallback(parsed.appPath, {
       runtimeProfile: parsed.runtimeProfile,
       runtimePluginIds: parsed.runtimePluginIds,
       env: process.env
     }), {
       label: "Load app project"
     });
+    appProject = loaded.appProject;
     selection = resolveServeTarget(appProject, { serverRunnerId: parsed.serverRunnerId });
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -189,13 +193,14 @@ async function runMcp(args) {
   let selection = null;
   const startupTelemetry = createStartupTelemetry({ mode: "mcp" });
   try {
-    appProject = await startupTelemetry.runPhase("app.project.load", () => loadAppProject(parsed.appPath, {
+    const loaded = await startupTelemetry.runPhase("app.project.load", () => loadAppProjectWithStableFallback(parsed.appPath, {
       runtimeProfile: parsed.runtimeProfile,
       runtimePluginIds: parsed.runtimePluginIds,
       env: process.env
     }), {
       label: "Load app project"
     });
+    appProject = loaded.appProject;
     selection = resolveMcpTarget(appProject, { mcpServerId: parsed.mcpServerId });
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -440,6 +445,22 @@ async function runOperator(args) {
 
   console.error(`Unknown operator action: ${parsed.action}\n${usageText()}`);
   process.exit(1);
+}
+
+async function runTui(args) {
+  try {
+    const exitCode = await runOperatorTui({
+      args,
+      cwd: process.cwd(),
+      env: process.env,
+      stdin: process.stdin,
+      stdout: process.stdout
+    });
+    process.exit(exitCode ?? 0);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
 
 function parseServeArgs(args) {
@@ -811,6 +832,7 @@ function usageText() {
     "  node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--release] [--startup-telemetry]",
     "  node src/cli.js bootstrap [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]",
     "  node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
+    "  node src/cli.js tui [<app-dir|app.wtoml>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--command <text>]",
     "  node src/cli.js mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]",
     "  node src/cli.js operator backup --world-home <path> [--label <text>] [--include-derived]",
     "  node src/cli.js operator export --world-home <path> [--label <text>]",

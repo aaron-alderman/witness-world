@@ -1,0 +1,16 @@
+[watch]
+roots = ["src", "plugins", "examples/engentus"]
+ignore = ["node_modules", "target", ".git", ".witness-core"]
+
+[proof]
+fast = "node --test src/runtime-surface-interaction-runtime.test.js"
+full = "npm test"
+slow_ms = 15000
+
+[package]
+include = ["src/**", "plugins/**", "examples/engentus/**"]
+
+[supervise]
+command = "npm run engentus"
+working_dir = "."
+restart_on_exit = true

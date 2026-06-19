@@ -66,7 +66,7 @@ test("authoring bundle services approve todo proposals through the shared propos
       byUsername: {}
     }),
     supportedHandlerSets: [],
-    supportedHandlers: ["page.home"],
+    supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     mcpToolNames: () => []
   });
@@ -172,7 +172,7 @@ test("authoring bundle services approve asset attachment proposals through the s
       byUsername: {}
     }),
     supportedHandlerSets: [],
-    supportedHandlers: ["page.home"],
+    supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
     mcpToolNames: () => []
@@ -253,7 +253,7 @@ test("authoring bundle services approve shared canvas thing proposals through th
       byUsername: {}
     }),
     supportedHandlerSets: [],
-    supportedHandlers: ["page.home"],
+    supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
     mcpToolNames: () => []
@@ -335,7 +335,7 @@ test("authoring bundle services approve shared canvas batch proposals through th
       byUsername: {}
     }),
     supportedHandlerSets: [],
-    supportedHandlers: ["page.home"],
+    supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
     mcpToolNames: () => []
@@ -409,7 +409,7 @@ test("authoring bundle services approve shared canvas duplicate and removeMany p
       byUsername: {}
     }),
     supportedHandlerSets: [],
-    supportedHandlers: ["page.home"],
+    supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
     mcpToolNames: () => []
@@ -511,7 +511,7 @@ test("authoring bundle services approve shared canvas place proposals through th
       byUsername: {}
     }),
     supportedHandlerSets: [],
-    supportedHandlers: ["page.home"],
+    supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
     mcpToolNames: () => []
@@ -560,7 +560,7 @@ test("authoring bundle services allow bootstrap access before the first identity
     backendHost: "backendHost",
     currentIdentityIndex: () => ({ rows, byId: {}, byUsername: {} }),
     supportedHandlerSets: [],
-    supportedHandlers: ["page.home"],
+    supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     mcpToolNames: () => []
   });
@@ -617,7 +617,7 @@ test("authoring bundle services approve runtime plugin install proposals through
       byUsername: {}
     }),
     supportedHandlerSets: [],
-    supportedHandlers: ["page.home"],
+    supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
     mcpToolNames: () => [],

@@ -53,7 +53,7 @@ export function createAuthoringBundleServices({
   });
   return {
     ...accessServices,
-    executeBootstrapProposal: (createAuthoringProposalExecutorImpl ?? (() => async () => ({
+    executeBootstrapProposal: (createAuthoringProposalExecutorImpl ?? (() => () => async () => ({
       ok: false,
       status: 503,
       reason: "proposal executor unavailable in active runtime composition"

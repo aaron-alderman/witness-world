@@ -53,6 +53,26 @@ export async function runGuidanceSuggestionAction(suggestion, handlers = {}) {
     await handlers.copyRuntimeInspection?.();
     return true;
   }
+  if (action.kind === "openWitnessCore") {
+    await handlers.openWitnessCore?.(action.url ?? null);
+    return true;
+  }
+  if (action.kind === "promoteWitnessCoreGeneration") {
+    await handlers.promoteWitnessCoreGeneration?.(action.generationId ?? null, action.url ?? null);
+    return true;
+  }
+  if (action.kind === "rollbackWitnessCoreGeneration") {
+    await handlers.rollbackWitnessCoreGeneration?.(action.generationId ?? null, action.url ?? null);
+    return true;
+  }
+  if (action.kind === "restartWitnessCoreProcess") {
+    await handlers.restartWitnessCoreProcess?.(action.url ?? null);
+    return true;
+  }
+  if (action.kind === "stopWitnessCoreProcess") {
+    await handlers.stopWitnessCoreProcess?.(action.url ?? null);
+    return true;
+  }
   return false;
 }
 

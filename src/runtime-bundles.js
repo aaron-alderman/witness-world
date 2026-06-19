@@ -183,6 +183,8 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         patternRoute("DELETE", /^\/api\/tutorial-progress\/([^/]+)$/, "guidance.progress.delete", ["tutorialId"]),
         exactRoute("GET", "/api/runtime/app-revisions/events", "app.revision.events"),
         exactRoute("GET", "/api/runtime/backend-revisions/events", "backend.revision.events"),
+        exactRoute("POST", "/api/runtime/app-snapshot/promote-current", "app.snapshot.promoteCurrent"),
+        exactRoute("POST", "/api/runtime/app-snapshot/rollback-stable", "app.snapshot.rollbackStable"),
         exactRoute("POST", "/api/runtime/app-preview-sessions", "app.preview.session.create"),
         patternRoute("GET", /^\/api\/runtime\/app-preview-sessions\/([^/]+)$/, "app.preview.session.read", ["id"]),
         patternRoute("PATCH", /^\/api\/runtime\/app-preview-sessions\/([^/]+)\/sources$/, "app.preview.session.patchSources", ["id"]),

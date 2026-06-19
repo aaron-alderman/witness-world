@@ -278,6 +278,42 @@ export function startTutorialClientRuntimeApp({
         anchor.click?.();
         anchor.parentNode?.removeChild?.(anchor);
         URLApi.revokeObjectURL?.(href);
+      },
+      openWitnessCore: async url => {
+        const targetUrl = typeof url === "string" && url.trim()
+          ? url.trim()
+          : (typeof windowTarget?.__witnessCoreUrl === "string" ? windowTarget.__witnessCoreUrl.trim() : "");
+        if (targetUrl) windowTarget?.open?.(targetUrl, "_blank", "noopener");
+      },
+      promoteWitnessCoreGeneration: async (_generationId, url) => {
+        const targetUrl = typeof url === "string" && url.trim() ? url.trim() : "";
+        if (!targetUrl || typeof windowTarget?.fetch !== "function") return;
+        const response = await windowTarget.fetch(targetUrl, { method: "POST" });
+        if (!response?.ok) throw new Error(await response.text().catch(() => "Witness core promote failed"));
+        await windowTarget.fetch?.("/api/runtime/app-snapshot/promote-current", { method: "POST" }).catch(() => null);
+        await windowTarget?.__sourceryCompanionShell?.__refreshWitnessCoreStatus?.();
+      },
+      rollbackWitnessCoreGeneration: async (_generationId, url) => {
+        const targetUrl = typeof url === "string" && url.trim() ? url.trim() : "";
+        if (!targetUrl || typeof windowTarget?.fetch !== "function") return;
+        const response = await windowTarget.fetch(targetUrl, { method: "POST" });
+        if (!response?.ok) throw new Error(await response.text().catch(() => "Witness core rollback failed"));
+        await windowTarget.fetch?.("/api/runtime/app-snapshot/rollback-stable", { method: "POST" }).catch(() => null);
+        await windowTarget?.__sourceryCompanionShell?.__refreshWitnessCoreStatus?.();
+      },
+      restartWitnessCoreProcess: async url => {
+        const targetUrl = typeof url === "string" && url.trim() ? url.trim() : "";
+        if (!targetUrl || typeof windowTarget?.fetch !== "function") return;
+        const response = await windowTarget.fetch(targetUrl, { method: "POST" });
+        if (!response?.ok) throw new Error(await response.text().catch(() => "Witness core restart failed"));
+        await windowTarget?.__sourceryCompanionShell?.__refreshWitnessCoreStatus?.();
+      },
+      stopWitnessCoreProcess: async url => {
+        const targetUrl = typeof url === "string" && url.trim() ? url.trim() : "";
+        if (!targetUrl || typeof windowTarget?.fetch !== "function") return;
+        const response = await windowTarget.fetch(targetUrl, { method: "POST" });
+        if (!response?.ok) throw new Error(await response.text().catch(() => "Witness core stop failed"));
+        await windowTarget?.__sourceryCompanionShell?.__refreshWitnessCoreStatus?.();
       }
     });
   };

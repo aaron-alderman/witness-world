@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getOrCreateSourceryCompanionShell } from "./runtime-guidance-companion-shell.js";
+import {
+  buildWitnessCoreSuggestions,
+  getOrCreateSourceryCompanionShell,
+  renderSourceryCompanionShellFactory
+} from "./runtime-guidance-companion-shell.js";
 
 class FakeElement {
   constructor(ownerDocument, tagName = "div") {
@@ -176,4 +180,82 @@ test("sourcery companion hides copy issues when the issue list is empty", () => 
   const copyIssuesButton = document.getElementById("sourcery-companion-copy-issues-action");
   assert.equal(copyIssuesButton?.hidden, true);
   shell.destroy();
+});
+
+test("sourcery companion renders witness core status independently of issues", () => {
+  const document = createFakeDocument();
+  const window = {};
+  const shell = getOrCreateSourceryCompanionShell({
+    document,
+    window,
+    enabled: true,
+    inspection: { inspect() { return {}; } },
+    issueLedger: {
+      list() {
+        return [];
+      },
+      subscribe() {
+        return () => {};
+      }
+    }
+  });
+
+  shell.setCoreStatusSuggestions([
+    {
+      id: "witness-core-status",
+      title: "Witness Core Live",
+      body: "latest: gen_a / green_local\nstable: gen_stable",
+      severity: "info",
+      buttonLabel: "Open Core",
+      action: { kind: "openWitnessCore", url: "http://127.0.0.1:8788/generations" }
+    }
+  ]);
+
+  const suggestions = document.getElementById("sourcery-companion-suggestions");
+  assert.equal(suggestions?.hidden, false);
+  assert.match(suggestions?.innerHTML ?? "", /Witness Core Live/);
+  assert.match(suggestions?.innerHTML ?? "", /gen_a \/ green_local/);
+  shell.destroy();
+});
+
+test("witness core suggestions expose promote and rollback actions from status aliases", () => {
+  const rows = buildWitnessCoreSuggestions({
+    aliases: {
+      current_stable: "gen_stable",
+      current_green_local: "gen_green",
+      last_good: "gen_stable"
+    },
+    process: {
+      command: "npm run engentus",
+      workingDir: ".",
+      running: true,
+      pid: 1234,
+      restartCount: 2,
+      lastExitCode: 1,
+      lastError: "process wait failed"
+    },
+    generations: [
+      { id: "gen_stable", state: "stable" },
+      { id: "gen_failed", state: "proof_failed" }
+    ]
+  }, "http://127.0.0.1:8788");
+
+  assert.equal(rows.length, 6);
+  assert.equal(rows[0].id, "witness-core-status");
+  assert.equal(rows[1].id, "witness-core-process");
+  assert.match(rows[1].body, /restarts: 2/);
+  assert.equal(rows[1].action.url, "http://127.0.0.1:8788/processes");
+  assert.equal(rows[2].action.kind, "restartWitnessCoreProcess");
+  assert.equal(rows[2].action.url, "http://127.0.0.1:8788/processes/restart");
+  assert.equal(rows[3].action.kind, "promoteWitnessCoreGeneration");
+  assert.equal(rows[3].action.url, "http://127.0.0.1:8788/generations/gen_green/promote");
+  assert.equal(rows[4].action.kind, "rollbackWitnessCoreGeneration");
+  assert.equal(rows[4].action.url, "http://127.0.0.1:8788/generations/gen_stable/rollback");
+  assert.equal(rows[5].action.kind, "stopWitnessCoreProcess");
+  assert.equal(rows[5].action.url, "http://127.0.0.1:8788/processes/stop");
+});
+
+test("sourcery companion browser factory includes guidance suggestion action runtime", () => {
+  const source = renderSourceryCompanionShellFactory();
+  assert.match(source, /const runGuidanceSuggestionAction = /);
 });

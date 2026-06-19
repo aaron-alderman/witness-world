@@ -1,0 +1,147 @@
+{
+  "name": "witness-world-operator",
+  "displayName": "Witness World Operator",
+  "description": "VS Code operator client for Witness World app projects.",
+  "version": "0.1.0",
+  "publisher": "witness-world",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:witnessWorld.operatorView",
+    "onCommand:witnessWorld.refreshWorkspace",
+    "onCommand:witnessWorld.selectAppProject",
+    "onCommand:witnessWorld.runOperatorCommand",
+    "onCommand:witnessWorld.startPreviewRuntime",
+    "onCommand:witnessWorld.stopPreviewRuntime",
+    "onCommand:witnessWorld.openPreviewRuntime",
+    "onCommand:witnessWorld.createNote",
+    "onCommand:witnessWorld.createProcessBlock",
+    "onCommand:witnessWorld.openNode",
+    "onCommand:witnessWorld.selectNodeAsThis",
+    "onCommand:witnessWorld.assignAliasFromNode",
+    "onCommand:witnessWorld.copyDeepLink",
+    "onUri"
+  ],
+  "main": "./src/extension.js",
+  "type": "module",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "witnessWorld",
+          "title": "Witness",
+          "icon": "media/operator.svg"
+        }
+      ]
+    },
+    "views": {
+      "witnessWorld": [
+        {
+          "id": "witnessWorld.operatorView",
+          "name": "Operator Workbench"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "witnessWorld.refreshWorkspace",
+        "title": "Witness World: Refresh Workspace"
+      },
+      {
+        "command": "witnessWorld.selectAppProject",
+        "title": "Witness World: Select App Project"
+      },
+      {
+        "command": "witnessWorld.runOperatorCommand",
+        "title": "Witness World: Run Operator Command"
+      },
+      {
+        "command": "witnessWorld.startPreviewRuntime",
+        "title": "Witness World: Start Preview Runtime"
+      },
+      {
+        "command": "witnessWorld.stopPreviewRuntime",
+        "title": "Witness World: Stop Preview Runtime"
+      },
+      {
+        "command": "witnessWorld.openPreviewRuntime",
+        "title": "Witness World: Open Preview Runtime"
+      },
+      {
+        "command": "witnessWorld.createNote",
+        "title": "Witness World: Create Note"
+      },
+      {
+        "command": "witnessWorld.createProcessBlock",
+        "title": "Witness World: Create Process Block"
+      },
+      {
+        "command": "witnessWorld.openNode",
+        "title": "Witness World: Open Source"
+      },
+      {
+        "command": "witnessWorld.selectNodeAsThis",
+        "title": "Witness World: Select As This"
+      },
+      {
+        "command": "witnessWorld.assignAliasFromNode",
+        "title": "Witness World: Assign Alias"
+      },
+      {
+        "command": "witnessWorld.copyDeepLink",
+        "title": "Witness World: Copy Deep Link"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "witnessWorld.refreshWorkspace",
+          "when": "view == witnessWorld.operatorView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "witnessWorld.selectAppProject",
+          "when": "view == witnessWorld.operatorView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "witnessWorld.runOperatorCommand",
+          "when": "view == witnessWorld.operatorView",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "witnessWorld.openNode",
+          "when": "view == witnessWorld.operatorView && viewItem == node",
+          "group": "inline@1"
+        },
+        {
+          "command": "witnessWorld.openNode",
+          "when": "view == witnessWorld.operatorView && viewItem == artifact",
+          "group": "inline@1"
+        },
+        {
+          "command": "witnessWorld.selectNodeAsThis",
+          "when": "view == witnessWorld.operatorView && viewItem == node",
+          "group": "inline@2"
+        },
+        {
+          "command": "witnessWorld.assignAliasFromNode",
+          "when": "view == witnessWorld.operatorView && viewItem == node",
+          "group": "inline@3"
+        },
+        {
+          "command": "witnessWorld.copyDeepLink",
+          "when": "view == witnessWorld.operatorView && viewItem == node",
+          "group": "inline@4"
+        }
+      ]
+    }
+  }
+}

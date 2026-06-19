@@ -4,7 +4,11 @@
   "type": "module",
   "scripts": {
     "test": "node scripts/run-tests.mjs",
+    "test:vscode-extension": "node --test test/vscode-extension.test.js",
+    "test:vscode-extension:unit": "node --test test/vscode-extension.test.js",
+    "test:vscode-extension:host": "node scripts/run-vscode-extension-host-smoke.mjs",
     "bootstrap": "node src/cli.js bootstrap",
+    "tui": "node src/cli.js tui",
     "authoring:server": "node src/cli.js bootstrap --runtime-profile authoring --runtime-plugin plugin.mcp",
     "authoring:probe": "node scripts/mcp-authoring-replay-probe.mjs",
     "desktop": "node src/cli.js desktop",

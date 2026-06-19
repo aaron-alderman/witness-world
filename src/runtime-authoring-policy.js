@@ -426,11 +426,6 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
             reason: "the routing cluster is now pathway-proven end to end on canonical page.surface routes"
           })
         }
-      },
-      "page.home": {
-        consumes: ["widget", "frontendProgram"],
-        status: "legacy_only",
-        reason: "page.home is retired for app-serving frontend; retained only as historical route state discoverable through frontendLegacyUplift retirement diagnostics"
       }
     },
     pairings: [
@@ -455,12 +450,6 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         limitationType: null,
         reason: "page.surface now projects authored projection-bound surface output on canonical routes through shared runtime rules"
       },
-      {
-        authoring: ["widget", "frontendProgram", "frontendStep"],
-        runtime: "page.home",
-        status: "legacy_only",
-        reason: "legacy widget-program records remain available for inspect and uplift analysis only; retired routes must move onto canonical page.surface before they can run"
-      }
     ],
     constrainedMcp: {
       publicActions: [...normalizedPolicy.publicMcpActions],

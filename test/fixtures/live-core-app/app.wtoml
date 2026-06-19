@@ -1,0 +1,34 @@
+[app]
+id = "live_core_fixture_app"
+imports = ["./app/content.wtoml"]
+spawn = ["backend", "frontend"]
+
+[[serverRunner]]
+actor = "tester"
+id = "fixture_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+default = true
+allowActorHeader = false
+
+[[process]]
+actor = "tester"
+id = "LiveCoreFlow"
+state = []
+handles = []
+emits = []
+rules = []
+
+[[route]]
+actor = "tester"
+id = "live_core_home_route"
+path = "/live-core"
+serves = "LiveCoreRoot"
+method = "GET"
+handler = "page.surface"
+params = { rootSurface = "LiveCoreRoot", defaultScreen = "LiveCoreHome" }
+
+[[serve]]
+actor = "tester"
+serverRunner = "fixture_server"
+route = "live_core_home_route"

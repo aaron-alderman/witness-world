@@ -33,7 +33,8 @@ export async function startUiServer({
   logger = silentLogger,
   runtimeProfile = "full",
   devMode = true,
-  upliftLegacyFrontend = false
+  upliftLegacyFrontend = false,
+  env = process.env
 } = {}) {
   const world = createWorld();
   const runtimeRoot = await tempRuntimeRoot();
@@ -57,7 +58,8 @@ export async function startUiServer({
     appProject,
     runtimeProfile,
     logger,
-    devMode
+    devMode,
+    env
   });
 
   if (!server.ok) {

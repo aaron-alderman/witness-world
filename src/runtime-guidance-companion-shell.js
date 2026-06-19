@@ -3,11 +3,15 @@ import {
   summarizeCompanionAttention
 } from "./runtime-guidance-runtime-issue-suggestions.js";
 import { summarizeSurfaceRuntimeIssues } from "./runtime-guidance-runtime-issue-suggestions.js";
-import { runGuidanceSuggestionAction } from "./runtime-guidance-companion-actions.js";
+import {
+  renderGuidanceCompanionActionsFactory,
+  runGuidanceSuggestionAction
+} from "./runtime-guidance-companion-actions.js";
 import { renderRuntimeIssueSuggestionsFactory } from "./runtime-guidance-runtime-issue-suggestions.js";
 
 export function renderSourceryCompanionShellFactory() {
   return String.raw`
+    ${renderGuidanceCompanionActionsFactory()}
     ${renderRuntimeIssueSuggestionsFactory()}
     const COMPANION_GLOBAL_KEY = "__sourceryCompanionShell";
     const escapeHtml = ${escapeHtml.toString()};
@@ -17,6 +21,11 @@ export function renderSourceryCompanionShellFactory() {
     const triggerJsonDownload = ${triggerJsonDownload.toString()};
     const copyTextToClipboard = ${copyTextToClipboard.toString()};
     const buildIssueClipboardPayload = ${buildIssueClipboardPayload.toString()};
+    const buildWitnessCoreSuggestions = ${buildWitnessCoreSuggestions.toString()};
+    const buildWitnessCoreSuggestion = ${buildWitnessCoreSuggestion.toString()};
+    const refreshWitnessCoreStatus = ${refreshWitnessCoreStatus.toString()};
+    const postWitnessCoreGenerationAction = ${postWitnessCoreGenerationAction.toString()};
+    const startWitnessCoreStatusPolling = ${startWitnessCoreStatusPolling.toString()};
     const renderIssueListHtml = ${renderIssueListHtml.toString()};
     const renderSuggestionListHtml = ${renderSuggestionListHtml.toString()};
     const ensureSourceryCompanionShellStyles = ${ensureSourceryCompanionShellStyles.toString()};
@@ -109,6 +118,180 @@ function buildIssueClipboardPayload({ issues = [], window } = {}) {
     exportedAt: new Date().toISOString(),
     issues: exportedIssues
   };
+}
+
+export function buildWitnessCoreSuggestions(status = null, coreUrl = "") {
+  if (!status || typeof status !== "object") return [];
+  const generations = Array.isArray(status.generations) ? status.generations : [];
+  const latest = generations[generations.length - 1] ?? null;
+  const aliases = status.aliases ?? {};
+  const process = status.process && typeof status.process === "object" ? status.process : null;
+  const state = latest?.state || "unknown";
+  const failed = ["compile_failed", "proof_failed"].includes(state);
+  const running = ["candidate", "proof_running"].includes(state);
+  const severity = failed ? "error" : (running ? "warning" : "info");
+  const latestLabel = latest?.id ? `${latest.id} / ${state}` : "no generations yet";
+  const stableLabel = aliases.current_stable || aliases.last_good || "-";
+  const coreRoot = coreUrl ? coreUrl.replace(/\/$/, "") : "";
+  const suggestions = [{
+    id: "witness-core-status",
+    title: failed ? "Witness Core Proof Failed" : (running ? "Witness Core Proof Running" : "Witness Core Live"),
+    body: `latest: ${latestLabel}\nstable: ${stableLabel}`,
+    severity,
+    buttonLabel: "Open Core",
+    action: { kind: "openWitnessCore", url: coreUrl ? `${coreUrl.replace(/\/$/, "")}/generations` : null }
+  }];
+  let deferredProcessStopSuggestion = null;
+  if (process?.command) {
+    const processRunning = process.running === true;
+    const processSeverity = processRunning
+      ? ((Number(process.restartCount || 0) > 0 || process.lastError) ? "warning" : "info")
+      : "error";
+    const processSummary = processRunning
+      ? `running pid=${process.pid ?? "-"}`
+      : `exited code=${process.lastExitCode ?? "unknown"}`;
+    const processDetail = [
+      process.command ? `command: ${process.command}` : "",
+      process.workingDir ? `cwd: ${process.workingDir}` : "",
+      `restarts: ${Number(process.restartCount || 0)}`,
+      process.lastError ? `error: ${process.lastError}` : ""
+    ].filter(Boolean).join("\n");
+    suggestions.push({
+      id: "witness-core-process",
+      title: processRunning ? "Witness Core App Process Running" : "Witness Core App Process Exited",
+      body: [processSummary, processDetail].filter(Boolean).join("\n"),
+      severity: processSeverity,
+      buttonLabel: "Open Core",
+      action: { kind: "openWitnessCore", url: coreUrl ? `${coreUrl.replace(/\/$/, "")}/processes` : null }
+    });
+    if (coreRoot) {
+      suggestions.push({
+        id: "witness-core-process-restart",
+        title: processRunning ? "Restart App Process" : "Start App Process",
+        body: processRunning ? "restart the supervised app child process" : "start the supervised app child process",
+        severity: processRunning ? "warning" : "info",
+        buttonLabel: processRunning ? "Restart" : "Start",
+        action: {
+          kind: "restartWitnessCoreProcess",
+          url: `${coreRoot}/processes/restart`
+        }
+      });
+      if (processRunning) {
+        deferredProcessStopSuggestion = {
+          id: "witness-core-process-stop",
+          title: "Stop App Process",
+          body: "stop the supervised app child process and leave the core running",
+          severity: "warning",
+          buttonLabel: "Stop",
+          action: {
+            kind: "stopWitnessCoreProcess",
+            url: `${coreRoot}/processes/stop`
+          }
+        };
+      }
+    }
+  }
+  const greenLocal = typeof aliases.current_green_local === "string" && aliases.current_green_local.trim()
+    ? aliases.current_green_local.trim()
+    : "";
+  const currentStable = typeof aliases.current_stable === "string" && aliases.current_stable.trim()
+    ? aliases.current_stable.trim()
+    : "";
+  const lastGood = typeof aliases.last_good === "string" && aliases.last_good.trim()
+    ? aliases.last_good.trim()
+    : "";
+  if (greenLocal && greenLocal !== currentStable && coreRoot) {
+    suggestions.push({
+      id: "witness-core-promote",
+      title: "Promote Green Local",
+      body: `promote ${greenLocal} to stable`,
+      severity: failed ? "warning" : "info",
+      buttonLabel: "Promote",
+      action: {
+        kind: "promoteWitnessCoreGeneration",
+        generationId: greenLocal,
+        url: `${coreRoot}/generations/${encodeURIComponent(greenLocal)}/promote`
+      }
+    });
+  }
+  if (failed && lastGood && coreRoot) {
+    suggestions.push({
+      id: "witness-core-rollback",
+      title: "Rollback To Last Good",
+      body: `restore ${lastGood} as stable`,
+      severity: "warning",
+      buttonLabel: "Rollback",
+      action: {
+        kind: "rollbackWitnessCoreGeneration",
+        generationId: lastGood,
+        url: `${coreRoot}/generations/${encodeURIComponent(lastGood)}/rollback`
+      }
+    });
+  }
+  if (deferredProcessStopSuggestion) {
+    suggestions.push(deferredProcessStopSuggestion);
+  }
+  return suggestions;
+}
+
+function buildWitnessCoreSuggestion(status = null, coreUrl = "") {
+  return buildWitnessCoreSuggestions(status, coreUrl)[0] ?? null;
+}
+
+async function refreshWitnessCoreStatus({ window, shell, coreUrl = "" } = {}) {
+  const normalizedCoreUrl = trimString(coreUrl) || trimString(window?.__witnessCoreUrl);
+  if (!normalizedCoreUrl || typeof window?.fetch !== "function") return;
+  try {
+    const [generationsResponse, healthResponse] = await Promise.all([
+      window.fetch(`${normalizedCoreUrl.replace(/\/$/, "")}/generations`, { cache: "no-store" }),
+      window.fetch(`${normalizedCoreUrl.replace(/\/$/, "")}/health`, { cache: "no-store" })
+    ]);
+    if (!generationsResponse?.ok && !healthResponse?.ok) {
+      shell?.setCoreStatusSuggestions?.([]);
+      return;
+    }
+    const generations = generationsResponse?.ok ? await generationsResponse.json() : {};
+    const health = healthResponse?.ok ? await healthResponse.json() : {};
+    const status = {
+      ...(generations ?? {}),
+      process: health?.process ?? null,
+      service: health?.service ?? "witness-core",
+      ok: health?.ok !== false
+    };
+    const suggestions = buildWitnessCoreSuggestions(status, normalizedCoreUrl);
+    shell?.setCoreStatusSuggestions?.(suggestions);
+  } catch {
+    shell?.setCoreStatusSuggestions?.([]);
+  }
+}
+
+async function postWitnessCoreGenerationAction({ window, shell, url } = {}) {
+  const targetUrl = trimString(url);
+  if (!targetUrl || typeof window?.fetch !== "function") return false;
+  const response = await window.fetch(targetUrl, {
+    method: "POST"
+  });
+  if (!response?.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(message || `Witness core action failed (${response?.status || "unknown"})`);
+  }
+  await refreshWitnessCoreStatus({ window, shell });
+  return true;
+}
+
+function startWitnessCoreStatusPolling({ window, shell, intervalMs = 2500 } = {}) {
+  const coreUrl = typeof window?.__witnessCoreUrl === "string" && window.__witnessCoreUrl.trim()
+    ? window.__witnessCoreUrl.trim()
+    : "";
+  if (!coreUrl || !shell || shell.__witnessCorePollingStarted) return;
+  shell.__witnessCorePollingStarted = true;
+  const poll = async () => {
+    await refreshWitnessCoreStatus({ window, shell, coreUrl });
+  };
+  void poll();
+  const timer = window.setInterval?.(poll, intervalMs);
+  shell.__witnessCorePollingTimer = timer ?? null;
+  shell.__refreshWitnessCoreStatus = () => refreshWitnessCoreStatus({ window, shell, coreUrl });
 }
 
 export function ensureSourceryCompanionShellStyles(document) {
@@ -268,6 +451,7 @@ export function getOrCreateSourceryCompanionShell({
   let open = false;
   let guidanceState = { visible: false, label: "Sourcery", onResume: null };
   let extraSuggestions = [];
+  let coreStatusSuggestions = [];
   let rankedSuggestions = [];
   let shellInspection = inspection;
   let shellIssueLedger = issueLedger;
@@ -328,6 +512,24 @@ export function getOrCreateSourceryCompanionShell({
         filename: `sourcery-${surfaceSegment}-${routeSegment}.json`,
         payload
       });
+    },
+    openWitnessCore: async url => {
+      const targetUrl = trimString(url) || trimString(window?.__witnessCoreUrl);
+      if (targetUrl) window?.open?.(targetUrl, "_blank", "noopener");
+    },
+    promoteWitnessCoreGeneration: async (_generationId, url) => {
+      await postWitnessCoreGenerationAction({ window, shell, url });
+      await window?.fetch?.("/api/runtime/app-snapshot/promote-current", { method: "POST" }).catch(() => null);
+    },
+    rollbackWitnessCoreGeneration: async (_generationId, url) => {
+      await postWitnessCoreGenerationAction({ window, shell, url });
+      await window?.fetch?.("/api/runtime/app-snapshot/rollback-stable", { method: "POST" }).catch(() => null);
+    },
+    restartWitnessCoreProcess: async url => {
+      await postWitnessCoreGenerationAction({ window, shell, url });
+    },
+    stopWitnessCoreProcess: async url => {
+      await postWitnessCoreGenerationAction({ window, shell, url });
     }
   };
 
@@ -356,7 +558,7 @@ export function getOrCreateSourceryCompanionShell({
       issues: issueRows,
       inspection: shellInspection
     });
-    const allSuggestions = [...issueSuggestions, ...extraSuggestions];
+    const allSuggestions = [...issueSuggestions, ...coreStatusSuggestions, ...extraSuggestions];
     rankedSuggestions = allSuggestions;
     const attention = summarizeCompanionAttention({
       issueSummary,
@@ -430,6 +632,10 @@ export function getOrCreateSourceryCompanionShell({
       extraSuggestions = Array.isArray(rows) ? [...rows] : [];
       render();
     },
+    setCoreStatusSuggestions(rows = []) {
+      coreStatusSuggestions = Array.isArray(rows) ? [...rows] : [];
+      render();
+    },
     setPanelAction(action = null) {
       panelAction = action && typeof action === "object"
         ? {
@@ -447,12 +653,14 @@ export function getOrCreateSourceryCompanionShell({
     },
     destroy() {
       issueLedgerUnsubscribe();
+      if (shell.__witnessCorePollingTimer != null) window?.clearInterval?.(shell.__witnessCorePollingTimer);
       root.parentNode?.removeChild?.(root);
       if (window?.[COMPANION_GLOBAL_KEY] === shell) delete window[COMPANION_GLOBAL_KEY];
     }
   };
 
   if (window && typeof window === "object") window[COMPANION_GLOBAL_KEY] = shell;
+  startWitnessCoreStatusPolling({ window, shell });
   return shell;
 }
 

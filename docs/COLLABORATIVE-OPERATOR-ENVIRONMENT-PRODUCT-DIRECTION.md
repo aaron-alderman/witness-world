@@ -717,6 +717,142 @@ The platform should standardize:
 
 Long-lived runtime code should be harder to improvise than short-lived feature code.
 
+### 11.7 Execution Substrate Boundary
+
+The smallest durable kernel should not own all application semantics.
+
+It should own:
+
+- lifecycle and supervision
+- module/generation registry
+- hot-swap and rollback mechanics
+- capability mediation for side effects
+- resource accounting and budgets
+- durable telemetry and provenance events
+- sync, reconciliation, and package promotion state
+
+It should not own:
+
+- application-specific HTML/view semantics
+- most authored business logic
+- operator UX behavior
+- high-churn presentation rules
+
+That boundary keeps the stable substrate small and allows the semantic surface to evolve live.
+
+### 11.8 Rust Generation Manager, Wasm Semantic Modules
+
+The preferred end-state execution shape is:
+
+- a small Rust generation manager
+- hot-swappable semantic modules compiled to Wasm
+- durable storage and indexing underneath
+- operator surfaces attached to the same live model
+
+The Rust side should act as a generation manager, not a monolithic app runtime.
+
+Its minimum responsibilities are:
+
+- watch local authored source roots in development
+- compile changed semantic modules in isolation
+- stage content-addressed module generations
+- run the smallest impacted proof set
+- promote or reject candidate generations
+- notify the invoking surface/session continuously
+- drain and retire previous generations safely
+
+### 11.9 Hot Reload As Generation Management
+
+Hot reload should be modeled as generation replacement, not in-process mutation without structure.
+
+The basic flow is:
+
+- source change detected
+- candidate generation compiled in isolation
+- candidate staged locally if compile succeeds
+- impacted tests/proofs run
+- candidate promoted to local green on success
+- candidate promoted to shared stable only by policy
+- previous generation drained once quiescent
+
+This lets the host remain up while semantics change around it.
+
+### 11.10 Capability-Mediated Effects
+
+Semantic modules should not own ambient side effects directly.
+
+They should request capabilities such as:
+
+- send email
+- write durable fact
+- schedule retry
+- read projection
+- emit notification
+
+The host/substrate should own:
+
+- policy enforcement
+- effect execution
+- task claiming
+- retries
+- provenance
+- correlation
+- cancellation
+
+This keeps hot-swappable code replaceable and bounded.
+
+### 11.11 Promotion States And Drain Strategy
+
+Promotion should have explicit states.
+
+At minimum:
+
+- candidate
+- green-local
+- green-shared-canary
+- stable
+- retired
+
+The system should support blue/green style settling:
+
+- existing consumers stay pinned until handoff or quiescence
+- new consumers resolve through the current alias/policy
+- rollback to the last good generation is immediate
+- consumers referencing older stable packages can continue until drained
+
+### 11.12 Dev Versus Production Inputs
+
+Development and production should not ingest change the same way.
+
+Development input:
+
+- local file watches
+- immediate compile/test feedback
+- nearest-surface notifications
+
+Production input:
+
+- promoted package feed
+- signed or policy-approved generations
+- replicated registry/gossip stream
+
+This keeps local iteration live without making production depend on filesystem behavior.
+
+### 11.13 Compact Typed Transport
+
+The substrate boundary should use compact, typed, versioned envelopes.
+
+Messages should carry:
+
+- generation id
+- module id
+- session/surface correlation id
+- task/provenance id
+- authority context
+- payload version
+
+The transport can be binary and low-copy, but it must stay inspectable and evolvable.
+
 ---
 
 ## 12. Collaboration, Presence, And Impersonation
@@ -993,6 +1129,8 @@ Shared substrate:
 - command and operation engine
 - representation and deep-link layer
 - runtime integrity substrate
+- generation/package registry
+- capability-mediated effect host
 
 ---
 
@@ -1010,6 +1148,8 @@ Build:
 - restart/rehydration pathways
 - sync/reconciliation contracts
 - leak/handle/queue/cache instrumentation
+- generation manager contract
+- capability host contract
 
 This is the floor for trustworthy 24/7 operation.
 
@@ -1022,10 +1162,24 @@ Build:
 - alias/`this` resolution
 - undo/redo/history model
 - deep-link primitives
+- semantic module ABI
 
 This is the foundation for all clients.
 
-### 19.3 Layer 3: Browser Operator Surface
+### 19.3 Layer 3: Hot Module Packaging And Proof
+
+Build:
+
+- content-addressed semantic module artifacts
+- local file-watch compile pipeline
+- isolated compile workers
+- impacted-test/proof selection
+- local `candidate -> green-local` promotion flow
+- surface/session status notifications for compile, slow test, red, and green states
+
+This is the minimum path to live change without process restart.
+
+### 19.4 Layer 4: Browser Operator Surface
 
 Turn the current sidecar direction into the first real operator client.
 
@@ -1039,7 +1193,7 @@ Deliver:
 - provenance panel
 - representation status and binding indicators
 
-### 19.4 Layer 4: Attached And Detached TUI
+### 19.5 Layer 5: Attached And Detached TUI
 
 Deliver:
 
@@ -1049,7 +1203,7 @@ Deliver:
 - command mode
 - history and replay
 
-### 19.5 Layer 5: VS Code Client
+### 19.6 Layer 6: VS Code Client
 
 Deliver:
 
@@ -1060,7 +1214,7 @@ Deliver:
 - preview-aware authored editing
 - notes and process blocks
 
-### 19.6 Layer 6: Collaboration And Presence
+### 19.7 Layer 7: Collaboration And Presence
 
 Deliver:
 
@@ -1070,7 +1224,17 @@ Deliver:
 - authority-aware impersonation
 - layered visibility and disclosure controls
 
-### 19.7 Layer 7: Platform Convergence
+### 19.8 Layer 8: Shared Promotion, Canary, And Gossip
+
+Deliver:
+
+- local-to-shared promotion policy
+- canary and stable aliases
+- drain/rollback semantics
+- package/generation propagation across the network
+- settlement and health signals for newly promoted generations
+
+### 19.9 Layer 9: Platform Convergence
 
 Deliver:
 
@@ -1080,7 +1244,7 @@ Deliver:
 - governance and authority views
 - participatory maps and diagrams with explicit binding/status
 
-### 19.8 Layer 8: User-Defined Workbenches
+### 19.10 Layer 10: User-Defined Workbenches
 
 Deliver:
 
@@ -1127,6 +1291,14 @@ If the execution substrate keeps leaking, racing, or accumulating orphaned work,
 
 If long-lived runtime code can be changed without shared lifecycle, supervision, and recovery rules, parallel development will keep reintroducing memory leaks, open handles, and race conditions.
 
+### 20.9 Ambient Side Effects In Hot Modules
+
+If hot-swappable semantic modules can directly own files, sockets, timers, or external side effects, generation replacement and rollback will be unsafe.
+
+### 20.10 Unstructured Promotion
+
+If local compile success immediately becomes global truth without staged proof, canary, and drain semantics, the network will become unstable.
+
 ---
 
 ## 21. Decisions Locked By This Direction
@@ -1141,6 +1313,9 @@ If long-lived runtime code can be changed without shared lifecycle, supervision,
 - require explicit status and mapping for proxies, aliases, and participatory representations
 - require every major platform area to gain representation over time
 - require runtime ownership, restart safety, and bounded resource discipline as platform law
+- require a stable host / hot semantic generation split
+- require capability-mediated side effects for hot-swappable code
+- require staged promotion with rollback and drain semantics
 
 ---
 
@@ -1157,14 +1332,15 @@ The next step should be to break it into:
 The natural chapter boundaries are:
 
 1. runtime integrity and continuous execution
-2. engine and session model
-3. browser operator client
-4. TUI client
-5. VS Code client
-6. collaboration and authority
-7. provenance and deep links
-8. platform convergence and source-control awareness
-9. user-defined workbenches
+2. execution substrate boundary and hot module lifecycle
+3. engine and session model
+4. browser operator client
+5. TUI client
+6. VS Code client
+7. collaboration and authority
+8. provenance and deep links
+9. platform convergence and source-control awareness
+10. user-defined workbenches
 
 That breakdown should preserve one invariant:
 

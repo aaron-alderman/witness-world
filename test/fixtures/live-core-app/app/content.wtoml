@@ -1,0 +1,19 @@
+[[surface]]
+actor = "tester"
+id = "LiveCoreRoot"
+surfaceKind = "app-root"
+processRef = "LiveCoreFlow"
+children = ["LiveCoreHome"]
+
+[[surface]]
+actor = "tester"
+id = "LiveCoreHome"
+surfaceKind = "content-panel"
+props = { routePath = "/live-core", title = "Live Core Fixture", body = "Live Core baseline body" }
+children = ["LiveCoreMessage"]
+
+[[surface]]
+actor = "tester"
+id = "LiveCoreMessage"
+surfaceKind = "text"
+props = { domId = "live-core-message", text = "Live Core Baseline" }

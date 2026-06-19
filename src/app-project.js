@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadRuntimePluginRegistriesForDocs, loadWitnessAppFile } from "./dsl.js";
+import { createStableAppOverlayReadFile, readStableAppSourceCache } from "./runtime-stable-source-cache.js";
 
 export const APP_MANIFEST_BASENAME = "app.wtoml";
 
@@ -285,6 +286,42 @@ export async function loadAppProject(entryPath, options = {}) {
       imports: groupedImports
     }
   };
+}
+
+export async function loadAppProjectWithStableFallback(entryPath, options = {}) {
+  try {
+    return {
+      appProject: await loadAppProject(entryPath, options),
+      source: "live",
+      fallbackUsed: false,
+      liveError: null
+    };
+  } catch (liveError) {
+    const resolvedEntry = await resolveAppProjectEntry(entryPath, options).catch(() => null);
+    const cache = resolvedEntry
+      ? await readStableAppSourceCache(resolvedEntry.manifestPath, {
+          cwd: options?.cwd ?? process.cwd(),
+          fsModule: options?.fsModule ?? fs
+        })
+      : null;
+    if (!cache) throw liveError;
+    const readFile = createStableAppOverlayReadFile(cache, {
+      fsModule: options?.fsModule ?? fs,
+      parentReadFile: options?.readFile ?? null
+    });
+    const appProject = await loadAppProject(entryPath, {
+      ...options,
+      readFile
+    });
+    appProject.stableSourceCacheUsed = true;
+    appProject.stableSourceCache = cache;
+    return {
+      appProject,
+      source: "stable-cache",
+      fallbackUsed: true,
+      liveError
+    };
+  }
 }
 
 export function resolveServeTarget(appProject, { serverRunnerId = null } = {}) {

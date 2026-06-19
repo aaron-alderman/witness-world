@@ -18,7 +18,8 @@ import {
 } from "./backend-programs.js";
 import { normalizePathname, readSurfaceMapFromWorld } from "./runtime-surface-shell.js";
 import { renderSurfacePage } from "./runtime-surface-page.js";
-import { createGuidanceBundleHandlers } from "./runtime-guidance.js";
+import { createGuidanceBundleHandlers, guidanceConfigForSession } from "./runtime-guidance.js";
+import { renderGuidanceClient } from "./runtime-guidance-client.js";
 import {
   AUTHORING_MODE_MCP_ONLY,
   blockedDirectMutationResponse,
@@ -52,6 +53,41 @@ function injectRuntimeWindowValue(html, globalName, value) {
   return String(html).includes("</body>")
     ? String(html).replace("</body>", `${script}</body>`)
     : `${html}\n${script}`;
+}
+
+function escapeBodyAttr(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function injectHtmlBeforeBodyEnd(html, fragment = "") {
+  if (!fragment) return html;
+  return String(html).includes("</body>")
+    ? String(html).replace("</body>", `${fragment}</body>`)
+    : `${html}\n${fragment}`;
+}
+
+function injectBodyAttributes(html, attrs = {}) {
+  const serialized = Object.entries(attrs)
+    .map(([key, value]) => {
+      const normalizedKey = String(key || "").trim();
+      const normalizedValue = String(value || "").trim();
+      return normalizedKey && normalizedValue ? `${normalizedKey}="${escapeBodyAttr(normalizedValue)}"` : "";
+    })
+    .filter(Boolean)
+    .join(" ");
+  if (!serialized) return html;
+  return String(html).replace(/<body(?![^>]*\bdata-surface-context=)([^>]*)>/i, (match, rest) => `<body${rest} ${serialized}>`);
+}
+
+function resolveGuidanceRuntimeContributions(primary = null, fallback = null) {
+  const primaryCount = Array.isArray(primary?.guidanceDefinitions) ? primary.guidanceDefinitions.length : 0;
+  if (primaryCount > 0) return primary;
+  const fallbackCount = Array.isArray(fallback?.guidanceDefinitions) ? fallback.guidanceDefinitions.length : 0;
+  return fallbackCount > 0 ? fallback : primary;
 }
 
 function injectPreviewSessionClient(html, {
@@ -1174,13 +1210,35 @@ export function createCoreRuntimeBundleHandlers({
         surfaceCapabilityRenderers: appContext?.runtimeContributions?.surfaceCapabilityRenderers ?? [],
         capabilityPreloadProviders: appContext?.runtimeContributions?.capabilityPreloadProviders ?? [],
         surfaceRuntimeSupportAssets: appContext?.runtimeContributions?.surfaceRuntimeSupportAssets ?? [],
-        devMode: appContext?.devMode === true
+        devMode: appContext?.devMode === true,
+        witnessCoreUrl: appContext?.witnessCoreUrl ?? null
       });
       if (!html) {
         sendJson(res, 404, { error: "surface page not found", rootSurface: rootSurfaceId });
         return;
       }
       let responseHtml = html;
+      const surfaceGuidance = guidanceConfigForSession({
+        requestSession,
+        tutorialProgressFor,
+        guidanceProgressFor,
+        runtimeContributions: resolveGuidanceRuntimeContributions(
+          appContext?.runtimeContributions ?? null,
+          runtimeContributions
+        ),
+        surface: {
+          page: "app",
+          context: route?.context ?? "frontend",
+          routeId: route?.id ?? null,
+          rootWidgetId: null,
+          frontendProgramId: null
+        }
+      });
+      responseHtml = injectBodyAttributes(responseHtml, {
+        "data-surface-context": route?.context ?? "frontend",
+        "data-surface-route": route?.id ?? null
+      });
+      responseHtml = injectHtmlBeforeBodyEnd(responseHtml, renderGuidanceClient(surfaceGuidance));
       if (previewResolution.ok) {
         responseHtml = injectPreviewSessionClient(responseHtml, {
           previewSessionId,
@@ -1251,14 +1309,70 @@ export function createCoreRuntimeBundleHandlers({
       });
     },
 
-    "app.preview.session.create": async ({ res, appContext }) => {
+    "app.snapshot.promoteCurrent": async ({ res, appContext }) => {
+      const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
+      if (!snapshotManager) {
+        sendJson(res, 503, { error: "app snapshot manager unavailable" });
+        return;
+      }
+      const promoted = snapshotManager.promoteActiveSnapshot?.() ?? null;
+      if (!promoted) {
+        sendJson(res, 409, { error: "active snapshot unavailable" });
+        return;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        snapshot: promoted,
+        servingState: snapshotManager.servingState?.({
+          witnessCoreStatus: appContext?.witnessCoreStatusStore?.getStatus?.()
+            ? {
+                ...(appContext.witnessCoreStatusStore.getStatus() ?? {}),
+                latestState: appContext.witnessCoreStatusStore.getLatestState?.() ?? null
+              }
+            : null
+        }) ?? null
+      });
+    },
+
+    "app.snapshot.rollbackStable": async ({ res, appContext }) => {
+      const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
+      if (!snapshotManager) {
+        sendJson(res, 503, { error: "app snapshot manager unavailable" });
+        return;
+      }
+      const rolledBack = snapshotManager.rollbackToStable?.() ?? null;
+      if (!rolledBack) {
+        sendJson(res, 409, { error: "stable snapshot unavailable" });
+        return;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        snapshot: rolledBack,
+        servingState: snapshotManager.servingState?.({
+          witnessCoreStatus: appContext?.witnessCoreStatusStore?.getStatus?.()
+            ? {
+                ...(appContext.witnessCoreStatusStore.getStatus() ?? {}),
+                latestState: appContext.witnessCoreStatusStore.getLatestState?.() ?? null
+              }
+            : null
+        }) ?? null
+      });
+    },
+
+    "app.preview.session.create": async ({ res, appContext, requestActor, requestSession }) => {
       const previewManager = await resolvePreviewManager(appContext);
       if (!previewManager) {
         sendJson(res, 503, { error: "app preview sessions unavailable" });
         return;
       }
       try {
-        const previewSession = previewManager.createSession();
+        const previewSession = previewManager.createSession({
+          correlation: {
+            sessionId: requestSession?.id ?? null,
+            surfaceId: null,
+            actor: requestActor ?? null
+          }
+        });
         sendJson(res, 201, { previewSession });
       } catch (error) {
         sendJson(res, 409, {
@@ -1325,7 +1439,7 @@ export function createCoreRuntimeBundleHandlers({
         sendJson(res, 503, { error: "app preview sessions unavailable" });
         return;
       }
-      if (!previewManager.deleteSession(params?.id ?? "")) {
+      if (!await previewManager.deleteSession(params?.id ?? "")) {
         sendJson(res, 404, { error: "preview session not found" });
         return;
       }

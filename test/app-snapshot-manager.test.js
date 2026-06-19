@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import fs from "node:fs/promises";
+import os from "node:os";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import { AppPreviewSessionManager, AppSnapshotManager } from "../src/app-snapshot-manager.js";
+import { loadAppProject } from "../src/app-project.js";
+import { persistStableAppSourceCache } from "../src/runtime-stable-source-cache.js";
 import { activateWidgetVersion, defineWidget, defineWidgetVersion, defineWidgetVersionTransition, widgetDefinitions } from "../src/widgets.js";
 
 function createManager(fsModule) {
@@ -26,6 +30,11 @@ function createManager(fsModule) {
     ]
   };
   return manager;
+}
+
+async function writeFile(targetPath, contents) {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.writeFile(targetPath, contents, "utf8");
 }
 
 test("AppSnapshotManager.detectChangedPaths uses file stat data rather than re-reading source contents", async () => {
@@ -131,6 +140,81 @@ test("AppPreviewSessionManager marks sessions stale when the active app revision
 
   assert.equal(stale.status, "stale");
   assert.match(stale.invalidReason, /expected app revision 4, active revision 5/);
+});
+
+test("AppPreviewSessionManager mirrors preview revisions into witness core generations and preserves last good state on failure", async () => {
+  const generationCalls = [];
+  const previewManager = new AppPreviewSessionManager({
+    appSnapshotManager: {
+      manifestPath: "C:/tmp/app.wtoml",
+      appRoot: "C:/tmp",
+      runtimeProfile: "full",
+      runtimePluginIds: [],
+      env: {},
+      getActiveSnapshot() {
+        return { appRevision: 7 };
+      }
+    },
+    generationBridge: {
+      async publishGeneration(input) {
+        generationCalls.push(structuredClone(input));
+        return {
+          id: input.id,
+          state: input.state,
+          createdAt: `gen-${generationCalls.length}`
+        };
+      }
+    }
+  });
+
+  const session = previewManager.createSession({
+    correlation: {
+      sessionId: "user-session-1",
+      surfaceId: "route.goodman",
+      actor: "operator"
+    }
+  });
+  const internalSession = previewManager.sessions.get(session.id);
+  previewManager.rebuildPreviewSnapshot = async (_currentSession, { previewRevision } = {}) => ({
+    world: { allWitnesses() { return []; } },
+    appProject: { sourceFiles: [], runtimePluginRegistries: null },
+    sourceIndex: [],
+    compiledUnits: new Map(),
+    previewRevision
+  });
+
+  const first = await previewManager.patchSources(session.id, [{
+    path: "app/shell.rvm",
+    content: "(surface ShellUpdated)"
+  }]);
+
+  assert.equal(first.previewRevision, 1);
+  assert.equal(first.generation.currentId, `preview-${session.id}-g1`);
+  assert.equal(first.generation.lastGoodId, `preview-${session.id}-g1`);
+  assert.equal(first.generation.latestState, "green_local");
+  assert.equal(generationCalls[0].state, "green_local");
+  assert.equal(generationCalls[0].correlation.sessionId, "user-session-1");
+  assert.deepEqual(generationCalls[0].sourcePaths, ["app/shell.rvm"]);
+
+  previewManager.rebuildPreviewSnapshot = async () => {
+    throw new Error("preview rebuild failed");
+  };
+
+  await assert.rejects(
+    previewManager.patchSources(session.id, [{
+      path: "app/shell.rvm",
+      content: "(surface Broken)"
+    }]),
+    /preview rebuild failed/
+  );
+
+  assert.equal(internalSession.previewRevision, 1);
+  assert.equal(internalSession.currentGenerationId, `preview-${session.id}-g1`);
+  assert.equal(internalSession.lastGoodGenerationId, `preview-${session.id}-g1`);
+  assert.equal(internalSession.latestGenerationId, `preview-${session.id}-g2`);
+  assert.equal(internalSession.latestGenerationState, "compile_failed");
+  assert.equal(generationCalls[1].state, "compile_failed");
+  assert.match(generationCalls[1].message, /preview rebuild failed/);
 });
 
 test("AppPreviewSessionManager resolves source associations by target query", () => {
@@ -748,4 +832,111 @@ view EngentusLoginPasswordField {
   );
   assert.match(internalSession.overlaySources.get(resolvedSourcePath), /prop label = Passcode/);
   assert.equal(internalSession.previewRevision, 1);
+});
+
+test("AppSnapshotManager serves the stable snapshot when witness core reports a failed latest generation", () => {
+  const manager = createManager({
+    async stat() {
+      return { mtimeMs: 10, size: 100 };
+    }
+  });
+
+  manager.activeSnapshot = {
+    appRevision: 2,
+    changedSources: ["app/shell.rvm"],
+    world: {}
+  };
+  manager.stableSnapshot = {
+    appRevision: 1,
+    changedSources: [],
+    world: {}
+  };
+
+  const liveSnapshot = manager.getServingSnapshot({
+    witnessCoreStatus: { latestState: "green_local" }
+  });
+  const failedSnapshot = manager.getServingSnapshot({
+    witnessCoreStatus: { latestState: "proof_failed" }
+  });
+
+  assert.equal(liveSnapshot.appRevision, 2);
+  assert.equal(failedSnapshot.appRevision, 1);
+  assert.equal(manager.servingState({
+    witnessCoreStatus: { latestState: "proof_failed" }
+  }).mode, "stable");
+});
+
+test("AppSnapshotManager promote and rollback controls move the serving pointer intentionally", () => {
+  const manager = createManager({
+    async stat() {
+      return { mtimeMs: 10, size: 100 };
+    }
+  });
+
+  manager.activeSnapshot = {
+    appRevision: 3,
+    changedSources: ["app/chart.rvm"],
+    world: {}
+  };
+  manager.stableSnapshot = {
+    appRevision: 1,
+    changedSources: [],
+    world: {}
+  };
+
+  const rolledBack = manager.rollbackToStable();
+  assert.equal(rolledBack.appRevision, 1);
+  assert.equal(manager.getServingSnapshot({
+    witnessCoreStatus: { latestState: "green_local" }
+  }).appRevision, 1);
+
+  const promoted = manager.promoteActiveSnapshot();
+  assert.equal(promoted.appRevision, 3);
+  assert.equal(manager.getStableSnapshot().appRevision, 3);
+  assert.equal(manager.getServingSnapshot({
+    witnessCoreStatus: { latestState: "green_local" }
+  }).appRevision, 3);
+});
+
+test("AppSnapshotManager loads a persisted stable snapshot cache on startup", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-stable-snapshot-startup-"));
+  const appRoot = path.join(tempRoot, "app");
+  const manifestPath = path.join(appRoot, "app.wtoml");
+  await writeFile(manifestPath, "[app]\nid = \"live_app\"\n");
+
+  await persistStableAppSourceCache(manifestPath, {
+    appProject: { appRoot },
+    compiledUnits: new Map([[
+      manifestPath,
+      {
+        filePath: manifestPath,
+        sourceId: "app.wtoml",
+        sourceLanguage: "wtoml",
+        contentHash: "stable-hash",
+        content: "[app]\nid = \"stable_app\"\n"
+      }
+    ]])
+  }, {
+    cwd: tempRoot,
+    fsModule: fs
+  });
+
+  try {
+    const appProject = await loadAppProject(appRoot, { cwd: tempRoot, fsModule: fs });
+    const manager = await AppSnapshotManager.create({
+      appProject,
+      runtimeProfile: "full",
+      cacheCwd: tempRoot,
+      devMode: false,
+      fsModule: fs
+    });
+
+    assert.equal(manager.getActiveSnapshot().appProject.appId, "live_app");
+    assert.equal(manager.getStableSnapshot().appProject.appId, "stable_app");
+    assert.equal(manager.getServingSnapshot({
+      witnessCoreStatus: { latestState: "proof_failed" }
+    }).appProject.appId, "stable_app");
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
 });

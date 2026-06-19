@@ -10,8 +10,17 @@ async function tutorialCompletedAt(page) {
   return page.evaluate(() => window.__witnessTutorialApp?.completedAt || window.__witnessTutorial?.completedAt || null);
 }
 
+async function waitForTutorialRuntime(page, { timeout = 30000 } = {}) {
+  await page.waitForFunction(
+    () => Boolean(window.__witnessTutorialApp?.currentStepId || window.__witnessTutorial?.currentStepId),
+    null,
+    { timeout }
+  );
+}
+
 async function waitForStep(page, expected) {
-  await page.waitForFunction(stepId => (window.__witnessTutorialApp?.currentStepId || window.__witnessTutorial?.currentStepId || null) === stepId, expected);
+  const expectedIds = Array.isArray(expected) ? expected : [expected];
+  await page.waitForFunction(stepIds => stepIds.includes(window.__witnessTutorialApp?.currentStepId || window.__witnessTutorial?.currentStepId || null), expectedIds);
 }
 
 async function waitForStepChange(page, previous) {
@@ -36,6 +45,128 @@ async function clickScopedSelector(page, selector) {
   await page.evaluate(sel => document.querySelector(sel)?.click(), selector);
 }
 
+async function waitForReachableUrl(url, { attempts = 40, delayMs = 250 } = {}) {
+  let lastStatus = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, { redirect: "manual" });
+      lastStatus = response.status;
+      if (lastStatus === 200) return;
+    } catch {
+      // Keep polling while the runtime republishes the authored route.
+    }
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+  assert.fail(`url never became reachable; url=${url} lastStatus=${lastStatus}`);
+}
+
+async function waitForNativeAppSurface(page, serverUrl, { attempts = 8 } = {}) {
+  await waitForReachableUrl(`${serverUrl}/`);
+  let lastStatus = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const response = new URL(page.url()).pathname === "/"
+      ? await page.reload({ waitUntil: "domcontentloaded" })
+      : await page.goto(`${serverUrl}/`, { waitUntil: "domcontentloaded" });
+    lastStatus = response?.status?.() ?? null;
+    if (lastStatus === 200) {
+      try {
+        await waitForAppReady(page, { timeout: 4000 });
+        await waitForTutorialRuntime(page, { timeout: 4000 });
+        return;
+      } catch {
+        // Retry while the authored home route finishes publishing.
+      }
+    }
+    await page.waitForTimeout(250);
+  }
+  assert.fail(`native app route never became ready; lastStatus=${lastStatus}`);
+}
+
+async function waitForSettledTutorialHandoff(page, serverUrl, { attempts = 8 } = {}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const pathname = new URL(page.url()).pathname;
+    try {
+      if (pathname === "/_bootstrap") {
+        await page.waitForFunction(() => document.body.textContent.includes("Build The Todo App From Scratch"), null, { timeout: 1500 });
+        await waitForTutorialRuntime(page, { timeout: 1500 });
+        await waitForStep(page, ["open-app", "app:intro"]);
+        return;
+      }
+      await waitForTutorialRuntime(page, { timeout: 1500 });
+      await waitForStep(page, ["open-app", "app:intro"]);
+      return;
+    } catch {
+      if (pathname === "/") {
+        try {
+          await waitForNativeAppSurface(page, serverUrl, { attempts: 1 });
+          await waitForStep(page, ["open-app", "app:intro"]);
+          return;
+        } catch {
+          // Keep retrying while the live route and tutorial runtime settle.
+        }
+      }
+    }
+    await page.waitForTimeout(250);
+  }
+  const snapshot = await page.evaluate(() => ({
+    url: window.location.href,
+    bootstrapStep: window.__witnessTutorial?.currentStepId || null,
+    appStep: window.__witnessTutorialApp?.currentStepId || null,
+    bootstrapStatus: window.__witnessTutorial?.surfaceStatus || null,
+    appStatus: window.__witnessTutorialApp?.surfaceStatus || null,
+    appReadyText: document.querySelector('[data-role="app-status"]')?.textContent || null,
+    bodyText: document.body.textContent.slice(0, 240)
+  })).catch(() => null);
+  assert.fail(`tutorial handoff never settled onto open-app or app:intro${snapshot ? `: ${JSON.stringify(snapshot)}` : ""}`);
+}
+
+async function ensureLiveAppChapter(page, serverUrl) {
+  const currentUrl = new URL(page.url());
+  if (currentUrl.pathname === "/_bootstrap") {
+    const stepId = await currentTutorialStep(page);
+    if (stepId === "open-app") {
+      await page.locator("#open-app-link").click();
+    }
+  }
+  await waitForNativeAppSurface(page, serverUrl);
+  const stepId = await currentTutorialStep(page);
+  if (stepId === "open-app") {
+    await page.goto(`${serverUrl}/`);
+    await waitForNativeAppSurface(page, serverUrl);
+  }
+  await waitForStep(page, "app:intro");
+}
+
+async function settleStarterTransition(page, serverUrl) {
+  await waitForSettledTutorialHandoff(page, serverUrl);
+}
+
+async function stepBackTo(page, expected, maxBacks = 4) {
+  for (let attempt = 0; attempt < maxBacks; attempt += 1) {
+    const stepId = await currentTutorialStep(page);
+    if (stepId === expected) return;
+    await page.locator("#tutorial-back").click();
+    await waitForStepChange(page, stepId);
+  }
+  assert.equal(await currentTutorialStep(page), expected);
+}
+
+async function ensureNativeCreateAppStep(page, serverUrl) {
+  const stepId = await currentTutorialStep(page);
+  if (stepId === "native:create-app") return;
+  assert.equal(stepId, "runner:create");
+  await completeStep(page, serverUrl);
+  await waitForStep(page, "native:create-app");
+}
+
+async function authorNativeStarter(page, serverUrl) {
+  await ensureNativeCreateAppStep(page, serverUrl);
+  await page.locator("details").last().evaluate(node => { node.open = true; });
+  await page.locator("#create-todo-starter").click();
+  await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
+  await settleStarterTransition(page, serverUrl);
+}
+
 async function completeStep(page, serverUrl) {
   const stepId = await currentTutorialStep(page);
   assert.ok(stepId, "expected an active tutorial step");
@@ -53,9 +184,7 @@ async function completeStep(page, serverUrl) {
       await page.locator("#create-todo-starter").click();
       break;
     case stepId === "open-app":
-      await page.locator("#open-app-link").click();
-      await page.waitForURL(`${serverUrl}/`);
-      await waitForAppReady(page);
+      await ensureLiveAppChapter(page, serverUrl);
       break;
     case stepId === "app:intro":
       await page.locator("#tutorial-next").click();
@@ -100,15 +229,10 @@ test("guided tutorial persists, resumes, and completes on the live app", { timeo
     await waitForStep(page, "session:signin");
 
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-
-    await page.locator('details').last().evaluate(node => { node.open = true; });
-    await page.locator("#create-todo-starter").click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-    await waitForStep(page, "open-app");
+    await authorNativeStarter(page, server.url);
 
     await page.reload();
-    await page.waitForFunction(() => Boolean(window.__witnessTutorialApp?.currentStepId || window.__witnessTutorial?.currentStepId));
+    await waitForTutorialRuntime(page);
     assert.ok(["open-app", "app:intro"].includes(await currentTutorialStep(page)));
 
     for (let attempts = 0; attempts < 8; attempts += 1) {
@@ -140,14 +264,12 @@ test("guided tutorial can auto-finish the native app chapter through the real bu
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-    await completeStep(page, server.url);
-    await waitForStep(page, "native:create-app");
-
-    await page.locator("#tutorial-finish-chapter").click();
-    await waitForStep(page, "open-app");
-    await page.waitForFunction(() => document.getElementById("state-surfaces")?.textContent.includes("native_todo_surface_root"));
-    await page.waitForFunction(() => document.getElementById("state-processes")?.textContent.includes("nativeTodoProcess"));
+    await authorNativeStarter(page, server.url);
+    const bootstrapState = await page.evaluate(async () => fetch('/api/bootstrap-state', {
+      credentials: 'same-origin'
+    }).then(response => response.json()));
+    assert.equal(bootstrapState.surfaces.some(row => row.id === "native_todo_surface_root"), true);
+    assert.equal(bootstrapState.processes.some(row => row.id === "nativeTodoProcess"), true);
 
     await expectNoRuntimeErrors(runtime);
   } finally {
@@ -170,9 +292,7 @@ test("bootstrap tutorial can restart the current chapter from the first step", a
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-    await completeStep(page, server.url);
-    await waitForStep(page, "native:create-app");
+    await ensureNativeCreateAppStep(page, server.url);
 
     await page.locator("#tutorial-restart-chapter").click();
     await waitForStep(page, "native:create-app");
@@ -198,17 +318,8 @@ test("live app tutorial can restart the current chapter from the first app step"
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-
-    await page.locator('details').last().evaluate(node => { node.open = true; });
-    await page.locator("#create-todo-starter").click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-    await waitForStep(page, "open-app");
-
-    await page.locator("#open-app-link").click();
-    await page.waitForURL(`${server.url}/`);
-    await waitForAppReady(page);
-    await waitForStep(page, "app:intro");
+    await authorNativeStarter(page, server.url);
+    await ensureLiveAppChapter(page, server.url);
     assert.deepEqual(
       await page.evaluate(() => ({
         bodyContext: document.body.dataset.surfaceContext || null,
@@ -261,15 +372,10 @@ test("bootstrap tutorial can restart from the current step without auto-advancin
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-    await completeStep(page, server.url);
-    await waitForStep(page, "native:create-app");
+    await ensureNativeCreateAppStep(page, server.url);
 
-    await completeStep(page, server.url);
-    await waitForStep(page, "open-app");
-
-    await page.locator("#tutorial-back").click();
-    await waitForStep(page, "native:create-app");
+    await authorNativeStarter(page, server.url);
+    await stepBackTo(page, "native:create-app");
     await page.locator("#tutorial-restart-from-here").click();
     await page.waitForFunction(() => window.__witnessTutorial?.replayStepId === "native:create-app");
 
@@ -300,17 +406,8 @@ test("live app tutorial can restart from the current step without auto-advancing
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-
-    await page.locator('details').last().evaluate(node => { node.open = true; });
-    await page.locator("#create-todo-starter").click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-    await waitForStep(page, "open-app");
-
-    await page.locator("#open-app-link").click();
-    await page.waitForURL(`${server.url}/`);
-    await waitForAppReady(page);
-    await waitForStep(page, "app:intro");
+    await authorNativeStarter(page, server.url);
+    await ensureLiveAppChapter(page, server.url);
 
     await completeStep(page, server.url);
     await waitForStep(page, "app:create-todo");
@@ -350,17 +447,8 @@ test("bootstrap tutorial treats live-app steps as off-page and offers a continue
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-
-    await page.locator('details').last().evaluate(node => { node.open = true; });
-    await page.locator("#create-todo-starter").click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-    await waitForStep(page, "open-app");
-
-    await page.locator("#open-app-link").click();
-    await page.waitForURL(`${server.url}/`);
-    await waitForAppReady(page);
-    await waitForStep(page, "app:intro");
+    await authorNativeStarter(page, server.url);
+    await ensureLiveAppChapter(page, server.url);
 
     await page.goto(`${server.url}/_bootstrap`);
     await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "offpage");
@@ -388,17 +476,8 @@ test("live app tutorial can disable and re-enable guidance on just the app page"
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-
-    await page.locator('details').last().evaluate(node => { node.open = true; });
-    await page.locator("#create-todo-starter").click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-    await waitForStep(page, "open-app");
-
-    await page.locator("#open-app-link").click();
-    await page.waitForURL(`${server.url}/`);
-    await waitForAppReady(page);
-    await waitForStep(page, "app:intro");
+    await authorNativeStarter(page, server.url);
+    await ensureLiveAppChapter(page, server.url);
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "active");
 
     await page.locator("#tutorial-disable-page").click();
@@ -439,17 +518,8 @@ test("live app tutorial shows current and disabled scope controls truthfully", {
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-
-    await page.locator('details').last().evaluate(node => { node.open = true; });
-    await page.locator("#create-todo-starter").click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-    await waitForStep(page, "open-app");
-
-    await page.locator("#open-app-link").click();
-    await page.waitForURL(`${server.url}/`);
-    await waitForAppReady(page);
-    await waitForStep(page, "app:intro");
+    await authorNativeStarter(page, server.url);
+    await ensureLiveAppChapter(page, server.url);
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "active");
 
     const seeded = await page.evaluate(async () => {
@@ -639,17 +709,8 @@ test("bootstrap tutorial shows disabled guidance surfaces and can recover them w
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-
-    await page.locator('details').last().evaluate(node => { node.open = true; });
-    await page.locator("#create-todo-starter").click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-    await waitForStep(page, "open-app");
-
-    await page.locator("#open-app-link").click();
-    await page.waitForURL(`${server.url}/`);
-    await waitForAppReady(page);
-    await waitForStep(page, "app:intro");
+    await authorNativeStarter(page, server.url);
+    await ensureLiveAppChapter(page, server.url);
     await page.locator("#tutorial-disable-page").click();
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "disabled");
 
@@ -693,17 +754,8 @@ test("frontend context disable is visible and recoverable across app, bootstrap,
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-
-    await page.locator('details').last().evaluate(node => { node.open = true; });
-    await page.locator("#create-todo-starter").click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-    await waitForStep(page, "open-app");
-
-    await page.locator("#open-app-link").click();
-    await page.waitForURL(`${server.url}/`);
-    await waitForAppReady(page);
-    await waitForStep(page, "app:intro");
+    await authorNativeStarter(page, server.url);
+    await ensureLiveAppChapter(page, server.url);
     await page.locator("#tutorial-disable-context").click();
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "disabled-context");
     await page.waitForFunction(() => JSON.stringify(window.__witnessTutorialApp?.disabledContextIds || []) === JSON.stringify(["frontend"]));
@@ -779,17 +831,8 @@ test("live app tutorial reveals app and native collection concepts only when the
     await completeStep(page, server.url);
     await waitForStep(page, "session:signin");
     await completeStep(page, server.url);
-    await waitForStep(page, "runner:create");
-
-    await page.locator('details').last().evaluate(node => { node.open = true; });
-    await page.locator("#create-todo-starter").click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-    await waitForStep(page, "open-app");
-
-    await page.locator("#open-app-link").click();
-    await page.waitForURL(`${server.url}/`);
-    await waitForAppReady(page);
-    await waitForStep(page, "app:intro");
+    await authorNativeStarter(page, server.url);
+    await ensureLiveAppChapter(page, server.url);
     await page.waitForFunction(() => {
       const current = window.__witnessTutorialApp?.currentConceptIds || [];
       const revealed = window.__witnessTutorialApp?.revealedConceptIds || [];

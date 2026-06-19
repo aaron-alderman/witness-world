@@ -30,6 +30,12 @@ import {
   serializeDesirePlusToWtoml
 } from "./desire/index.js";
 import { widgetDefinitions, widgetVersions } from "./widgets.js";
+import { previewGenerationContentHash } from "./witness-core-bridge.js";
+import {
+  createStableAppOverlayReadFile,
+  persistStableAppSourceCache,
+  readStableAppSourceCache
+} from "./runtime-stable-source-cache.js";
 
 const MANIFEST_ONLY_DOC_KINDS = new Set(["desktopTarget"]);
 const previewResolverCatalogCache = new WeakMap();
@@ -39,8 +45,18 @@ export const BACKEND_REVISION_EVENTS_PATH = "/api/runtime/backend-revisions/even
 export const APP_SOURCE_WRITE_PATH = "/api/runtime/app-sources";
 export const APP_PREVIEW_SESSIONS_PATH = "/api/runtime/app-preview-sessions";
 
+const FAILED_WITNESS_CORE_STATES = new Set(["compile_failed", "proof_failed"]);
+
 function hashContent(text) {
   return crypto.createHash("sha256").update(String(text ?? ""), "utf8").digest("hex");
+}
+
+function snapshotIdentity(snapshot = null) {
+  if (!snapshot?.sourceIndex?.length) return "";
+  return snapshot.sourceIndex
+    .map(row => `${String(row.sourceId || row.filePath || "")}\u0000${String(row.contentHash || "")}`)
+    .sort()
+    .join("\u0001");
 }
 
 function normalizeSlashes(value) {
@@ -446,6 +462,7 @@ export class AppSnapshotManager {
     runtimeProfile,
     runtimePluginIds = [],
     env = process.env,
+    cacheCwd = process.cwd(),
     devMode = false,
     logger = null,
     fsModule = fs,
@@ -456,12 +473,15 @@ export class AppSnapshotManager {
     this.runtimeProfile = runtimeProfile;
     this.runtimePluginIds = runtimePluginIds;
     this.env = env;
+    this.cacheCwd = path.resolve(String(cacheCwd || process.cwd()));
     this.devMode = devMode;
     this.logger = logger;
     this.fs = fsModule;
     this.fsWatch = fsWatchModule;
     this.activeSnapshot = null;
     this.lastGoodSnapshot = null;
+    this.stableSnapshot = null;
+    this.servingPreference = "live";
     this.buildErrors = [];
     this.pendingDirtySources = new Set();
     this.appRevision = 0;
@@ -487,6 +507,7 @@ export class AppSnapshotManager {
     runtimeProfile,
     runtimePluginIds = [],
     env = process.env,
+    cacheCwd = process.cwd(),
     devMode = false,
     logger = null,
     fsModule = fs,
@@ -498,16 +519,23 @@ export class AppSnapshotManager {
       runtimeProfile,
       runtimePluginIds,
       env,
+      cacheCwd,
       devMode,
       logger,
       fsModule,
       fsWatchModule
     });
+    await manager.loadStableSnapshotFromCache();
     await manager.rebuildFromProject({
       appProject,
       dirtyPaths: appProject.sourceFiles.map(row => row.file),
       trigger: "initial"
     });
+    if (appProject?.stableSourceCacheUsed === true && manager.stableSnapshot) {
+      manager.servingPreference = "stable";
+      manager.activeSnapshot = manager.stableSnapshot;
+      manager.appRevision = Number(manager.activeSnapshot?.appRevision || manager.appRevision || 0);
+    }
     if (devMode) manager.startWatchers();
     return manager;
   }
@@ -520,6 +548,62 @@ export class AppSnapshotManager {
 
   getActiveSnapshot() {
     return this.activeSnapshot;
+  }
+
+  getStableSnapshot() {
+    return this.stableSnapshot;
+  }
+
+  getServingSnapshot({
+    witnessCoreStatus = null
+  } = {}) {
+    const latestState = typeof witnessCoreStatus?.latestState === "string"
+      ? witnessCoreStatus.latestState
+      : (typeof witnessCoreStatus?.state === "string" ? witnessCoreStatus.state : null);
+    if ((this.servingPreference === "stable" || FAILED_WITNESS_CORE_STATES.has(latestState)) && this.stableSnapshot) {
+      return this.stableSnapshot;
+    }
+    return this.activeSnapshot ?? this.stableSnapshot ?? null;
+  }
+
+  servingState({
+    witnessCoreStatus = null
+  } = {}) {
+    const servingSnapshot = this.getServingSnapshot({ witnessCoreStatus });
+    const latestState = typeof witnessCoreStatus?.latestState === "string"
+      ? witnessCoreStatus.latestState
+      : (typeof witnessCoreStatus?.state === "string" ? witnessCoreStatus.state : null);
+    return {
+      mode: servingSnapshot?.appRevision === this.stableSnapshot?.appRevision ? "stable" : "live",
+      preference: this.servingPreference,
+      latestWitnessCoreState: latestState,
+      activeRevision: Number(this.activeSnapshot?.appRevision || 0),
+      stableRevision: Number(this.stableSnapshot?.appRevision || 0),
+      servingRevision: Number(servingSnapshot?.appRevision || 0)
+    };
+  }
+
+  promoteActiveSnapshot() {
+    if (!this.activeSnapshot) return null;
+    this.stableSnapshot = this.activeSnapshot;
+    this.lastGoodSnapshot = this.activeSnapshot;
+    this.servingPreference = "live";
+    void this.persistStableSnapshotCache();
+    return {
+      appRevision: Number(this.activeSnapshot.appRevision || 0),
+      changedSources: [...(this.activeSnapshot.changedSources ?? [])],
+      mode: "live"
+    };
+  }
+
+  rollbackToStable() {
+    if (!this.stableSnapshot) return null;
+    this.servingPreference = "stable";
+    return {
+      appRevision: Number(this.stableSnapshot.appRevision || 0),
+      changedSources: [...(this.stableSnapshot.changedSources ?? [])],
+      mode: "stable"
+    };
   }
 
   getLastRevisionEvent() {
@@ -536,8 +620,66 @@ export class AppSnapshotManager {
       pendingDirtySources: [...this.pendingDirtySources].map(filePath => sourceIdForPath(this.appRoot, filePath)),
       sourceCount: this.activeSnapshot?.appProject?.sourceFiles?.length ?? 0,
       devMode: this.devMode,
+      stableAppRevision: Number(this.stableSnapshot?.appRevision || 0),
+      servingPreference: this.servingPreference,
       lastRevisionEvent: this.getLastRevisionEvent()
     };
+  }
+
+  async persistStableSnapshotCache() {
+    if (!this.stableSnapshot) return null;
+    try {
+      return await persistStableAppSourceCache(this.manifestPath, this.stableSnapshot, {
+        cwd: this.cacheCwd,
+        fsModule: this.fs
+      });
+    } catch (error) {
+      this.logger?.warn?.("app.snapshot.persistStableCache.failed", { error });
+      return null;
+    }
+  }
+
+  async loadStableSnapshotFromCache() {
+    const cache = await readStableAppSourceCache(this.manifestPath, {
+      cwd: this.cacheCwd,
+      fsModule: this.fs
+    });
+    if (!cache) return null;
+    const overlayReadFile = createStableAppOverlayReadFile(cache, {
+      fsModule: this.fs
+    });
+    try {
+      const stableAppProject = await loadAppProject(this.manifestPath, {
+        runtimeProfile: this.runtimeProfile,
+        runtimePluginIds: this.runtimePluginIds,
+        env: this.env,
+        readFile: overlayReadFile
+      });
+      const stableCompiled = await buildCompiledSnapshot({
+        manifestPath: this.manifestPath,
+        appRoot: this.appRoot,
+        appProject: stableAppProject,
+        runtimeProfile: this.runtimeProfile,
+        runtimePluginIds: this.runtimePluginIds,
+        env: this.env,
+        fsModule: this.fs,
+        previousUnits: null,
+        dirtyPaths: stableAppProject.sourceFiles.map(row => row.file),
+        sourceOverlayByPath: new Map(cache.sources.map(row => [row.file, row.content]))
+      });
+      const stableSnapshot = {
+        appRevision: this.activeSnapshot?.appRevision ?? 0,
+        trigger: "stable-cache",
+        ...stableCompiled
+      };
+      if (!this.stableSnapshot || snapshotIdentity(stableSnapshot) !== snapshotIdentity(this.activeSnapshot)) {
+        this.stableSnapshot = stableSnapshot;
+      }
+      return this.stableSnapshot;
+    } catch (error) {
+      this.logger?.warn?.("app.snapshot.loadStableCache.failed", { error });
+      return null;
+    }
   }
 
   async ensureFresh({ trigger = "request", branchId = null, changeSetId = null, status = null } = {}) {
@@ -675,6 +817,10 @@ export class AppSnapshotManager {
       trigger,
       ...compiled
     };
+    if (!this.stableSnapshot) {
+      this.stableSnapshot = this.activeSnapshot;
+      void this.persistStableSnapshotCache();
+    }
     this.buildErrors = [];
     this.lastRevisionEvent = normalizeRevisionEvent({
       revision: this.appRevision,
@@ -1607,13 +1753,32 @@ function replayPreviewCandidates(world, candidates = [], actor = "preview") {
   return candidates.map(candidate => runPreviewCandidate(world, candidate, actor));
 }
 
+function previewGenerationSourcePaths({
+  changedSources = [],
+  candidates = []
+} = {}) {
+  const explicit = [...new Set((Array.isArray(changedSources) ? changedSources : [])
+    .map(value => String(value ?? "").trim())
+    .filter(Boolean))];
+  if (explicit.length) return explicit;
+  const derivedCandidates = (Array.isArray(candidates) ? candidates : [])
+    .map(candidate => {
+      const kind = typeof candidate?.kind === "string" ? candidate.kind.trim() : "";
+      return kind ? `preview-candidate:${kind}` : "";
+    })
+    .filter(Boolean);
+  return [...new Set(derivedCandidates)];
+}
+
 export class AppPreviewSessionManager {
   constructor({
     appSnapshotManager,
+    generationBridge = null,
     logger = null,
     fsModule = fs
   } = {}) {
     this.appSnapshotManager = appSnapshotManager ?? null;
+    this.generationBridge = generationBridge ?? null;
     this.logger = logger;
     this.fs = fsModule;
     this.sessions = new Map();
@@ -1623,7 +1788,9 @@ export class AppPreviewSessionManager {
     return this.appSnapshotManager?.getActiveSnapshot?.() ?? null;
   }
 
-  createSession() {
+  createSession({
+    correlation = null
+  } = {}) {
     const activeSnapshot = this.currentActiveSnapshot();
     if (!activeSnapshot) {
       throw new Error("active app snapshot unavailable");
@@ -1643,6 +1810,17 @@ export class AppPreviewSessionManager {
       candidates: [],
       candidateResults: [],
       snapshot: null,
+      correlation: {
+        sessionId: typeof correlation?.sessionId === "string" && correlation.sessionId.trim() ? correlation.sessionId.trim() : null,
+        surfaceId: typeof correlation?.surfaceId === "string" && correlation.surfaceId.trim() ? correlation.surfaceId.trim() : null,
+        actor: typeof correlation?.actor === "string" && correlation.actor.trim() ? correlation.actor.trim() : null
+      },
+      generationSequence: 0,
+      currentGenerationId: null,
+      lastGoodGenerationId: null,
+      latestGenerationId: null,
+      latestGenerationState: null,
+      generationHistory: [],
       listeners: new Set()
     };
     this.sessions.set(id, session);
@@ -1689,6 +1867,13 @@ export class AppPreviewSessionManager {
       changedSources: [...(refreshed.changedSources ?? [])],
       candidates: (refreshed.candidates ?? []).map(candidate => clonePreviewCandidate(candidate)),
       candidateResults: Array.isArray(refreshed.candidateResults) ? structuredClone(refreshed.candidateResults) : [],
+      generation: {
+        currentId: refreshed.currentGenerationId ?? null,
+        lastGoodId: refreshed.lastGoodGenerationId ?? null,
+        latestId: refreshed.latestGenerationId ?? null,
+        latestState: refreshed.latestGenerationState ?? null,
+        history: Array.isArray(refreshed.generationHistory) ? structuredClone(refreshed.generationHistory) : []
+      },
       sources: [...refreshed.overlaySources.keys()].map(filePath => ({
         file: filePath,
         sourceId: sourceIdForPath(this.appSnapshotManager?.appRoot ?? path.dirname(filePath), filePath)
@@ -1766,6 +1951,65 @@ export class AppPreviewSessionManager {
     };
   }
 
+  async publishPreviewGeneration(session, {
+    state,
+    overlaySources = null,
+    candidates = null,
+    changedSources = [],
+    previewRevision = session?.previewRevision ?? 0,
+    message = null,
+    promotionDecision = null
+  } = {}) {
+    if (!session || !this.generationBridge?.publishGeneration) return null;
+    const nextSequence = Number(session.generationSequence || 0) + 1;
+    const generationId = `preview-${session.id}-g${nextSequence}`;
+    const sourcePaths = previewGenerationSourcePaths({
+      changedSources,
+      candidates
+    });
+    try {
+      const generation = await this.generationBridge.publishGeneration({
+        id: generationId,
+        state,
+        contentHash: previewGenerationContentHash({
+          sessionId: session.id,
+          baseAppRevision: session.baseAppRevision,
+          previewRevision,
+          overlaySources,
+          candidates
+        }),
+        parentId: session.currentGenerationId || session.lastGoodGenerationId || null,
+        sourcePaths,
+        correlation: session.correlation ?? null,
+        promotionDecision,
+        message
+      });
+      session.generationSequence = nextSequence;
+      const record = {
+        id: generation?.id ?? generationId,
+        state: generation?.state ?? state,
+        previewRevision: Number(previewRevision || 0),
+        createdAt: generation?.createdAt ?? isoNow(),
+        sourcePaths
+      };
+      session.latestGenerationId = record.id;
+      session.latestGenerationState = record.state;
+      session.generationHistory = [...(Array.isArray(session.generationHistory) ? session.generationHistory : []), record];
+      if (record.state === "green_local" || record.state === "stable") {
+        session.currentGenerationId = record.id;
+        session.lastGoodGenerationId = record.id;
+      }
+      return record;
+    } catch (error) {
+      this.logger?.warn?.("preview generation publish failed", {
+        previewSessionId: session.id,
+        state,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return null;
+    }
+  }
+
   async patchSources(sessionId, edits = []) {
     const session = this.sessions.get(String(sessionId || ""));
     if (!session) throw new Error("preview session not found");
@@ -1789,10 +2033,23 @@ export class AppPreviewSessionManager {
     const nextOverlaySources = new Map(session.overlaySources);
     for (const edit of resolvedEdits) nextOverlaySources.set(edit.filePath, edit.content);
     const nextPreviewRevision = Number(session.previewRevision || 0) + 1;
-    const nextSnapshot = await this.rebuildPreviewSnapshot(session, {
-      overlaySources: nextOverlaySources,
-      previewRevision: nextPreviewRevision
-    });
+    let nextSnapshot = null;
+    try {
+      nextSnapshot = await this.rebuildPreviewSnapshot(session, {
+        overlaySources: nextOverlaySources,
+        previewRevision: nextPreviewRevision
+      });
+    } catch (error) {
+      await this.publishPreviewGeneration(session, {
+        state: "compile_failed",
+        overlaySources: nextOverlaySources,
+        candidates: session.candidates,
+        changedSources: resolvedEdits.map(edit => edit.sourceId),
+        previewRevision: nextPreviewRevision,
+        message: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
     session.overlaySources = nextOverlaySources;
     session.previewRevision = nextPreviewRevision;
     session.changedSources = resolvedEdits.map(edit => edit.sourceId);
@@ -1801,6 +2058,13 @@ export class AppPreviewSessionManager {
     session.candidateResults = structuredClone(nextSnapshot?.candidateResults ?? []);
     session.status = "active";
     session.invalidReason = null;
+    await this.publishPreviewGeneration(session, {
+      state: "green_local",
+      overlaySources: session.overlaySources,
+      candidates: session.candidates,
+      changedSources: session.changedSources,
+      previewRevision: session.previewRevision
+    });
     this.emitSession(session);
     return this.sessionShape(session);
   }
@@ -1816,22 +2080,52 @@ export class AppPreviewSessionManager {
       };
     }
     if (!Array.isArray(candidates)) throw new Error("preview candidates must be an array");
-    session.candidates = candidates.map(candidate => clonePreviewCandidate(candidate));
-    session.previewRevision = Number(session.previewRevision || 0) + 1;
+    const nextCandidates = candidates.map(candidate => clonePreviewCandidate(candidate));
+    const nextPreviewRevision = Number(session.previewRevision || 0) + 1;
+    let nextSnapshot = null;
+    let nextCandidateResults = [];
+    try {
+      if (session.overlaySources.size || nextCandidates.length) {
+        nextSnapshot = await this.rebuildPreviewSnapshot({
+          ...session,
+          candidates: nextCandidates
+        }, {
+          overlaySources: session.overlaySources,
+          previewRevision: nextPreviewRevision
+        });
+        nextCandidateResults = structuredClone(nextSnapshot?.candidateResults ?? []);
+      }
+    } catch (error) {
+      await this.publishPreviewGeneration(session, {
+        state: "compile_failed",
+        overlaySources: session.overlaySources,
+        candidates: nextCandidates,
+        changedSources: previewGenerationSourcePaths({ candidates: nextCandidates }),
+        previewRevision: nextPreviewRevision,
+        message: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }
+    session.candidates = nextCandidates;
+    session.previewRevision = nextPreviewRevision;
     session.changedSources = [];
     session.updatedAt = isoNow();
     if (session.overlaySources.size || session.candidates.length) {
-      session.snapshot = await this.rebuildPreviewSnapshot(session, {
-        overlaySources: session.overlaySources,
-        previewRevision: session.previewRevision
-      });
-      session.candidateResults = structuredClone(session.snapshot?.candidateResults ?? []);
+      session.snapshot = nextSnapshot;
+      session.candidateResults = nextCandidateResults;
     } else {
       session.snapshot = null;
       session.candidateResults = [];
     }
     session.status = "active";
     session.invalidReason = null;
+    await this.publishPreviewGeneration(session, {
+      state: "green_local",
+      overlaySources: session.overlaySources,
+      candidates: session.candidates,
+      changedSources: previewGenerationSourcePaths({ candidates: session.candidates }),
+      previewRevision: session.previewRevision
+    });
     this.emitSession(session);
     return {
       previewSession: this.sessionShape(session),
@@ -1839,10 +2133,20 @@ export class AppPreviewSessionManager {
     };
   }
 
-  deleteSession(sessionId) {
+  async deleteSession(sessionId) {
     const key = String(sessionId || "");
     const session = this.sessions.get(key);
     if (!session) return false;
+    if (session.currentGenerationId) {
+      await this.publishPreviewGeneration(session, {
+        state: "retired",
+        overlaySources: session.overlaySources,
+        candidates: session.candidates,
+        changedSources: session.changedSources,
+        previewRevision: session.previewRevision,
+        promotionDecision: "preview-session-ended"
+      });
+    }
     session.status = "deleted";
     session.invalidReason = null;
     session.updatedAt = isoNow();

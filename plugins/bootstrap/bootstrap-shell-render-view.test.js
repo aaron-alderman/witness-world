@@ -128,7 +128,7 @@ test("bootstrap shell select fill applies the documented select inventories and 
       widgetKinds: ["Panel"],
       supportedFrontendOps: ["setText"],
       supportedMethods: ["GET"],
-      supportedHandlers: ["page.home"],
+      supportedHandlers: ["page.surface"],
       supportedHandlerSets: ["demo"],
       backendHosts: [{ id: "backendHost" }],
       frontendHosts: [{ id: "frontendHost" }]

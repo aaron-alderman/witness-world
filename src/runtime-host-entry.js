@@ -40,6 +40,7 @@ export async function startServer(world, {
   runtimeStartupMode = "serve",
   runtimeOperatorContract = null,
   devMode = null,
+  env = process.env,
   startupPersistenceCommitMode = "post-ready",
   startupTelemetry = null
 }) {
@@ -64,6 +65,7 @@ export async function startServer(world, {
     runtimeStartupMode,
     runtimeOperatorContract,
     devMode: devMode ?? (runtimeStartupMode === "serve" && appProject != null),
+    env,
     startupPersistenceCommitMode,
     startupTelemetry
   }, {

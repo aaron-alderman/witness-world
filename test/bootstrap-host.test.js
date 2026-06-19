@@ -552,7 +552,7 @@ test("bootstrap route authoring validates backendProgram.run shape", async () =>
       path: "/api/mixed-backend-program",
       serves: "backendProgram",
       method: "GET",
-      handler: "page.home",
+      handler: "page.surface",
       backendProgramSoul: "backend.echo"
     });
     assert.equal(mixedShape.status, 400);

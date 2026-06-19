@@ -66,7 +66,7 @@ test("runtime-surface-page composes static surface HTML with the generic interac
     requestPathname: "/login"
   });
 
-  assert.match(html, /<button id="primary-action">Sign in<\/button>/);
+  assert.match(html, /<button[^>]*id="primary-action"[^>]*>Sign in<\/button>/);
   assert.match(html, /surfaceRuntimeManifest/);
   assert.match(html, /SignInRequested/);
   assert.match(html, /createSurfaceInteractionRuntime/);
@@ -76,6 +76,37 @@ test("runtime-surface-page composes static surface HTML with the generic interac
   assert.doesNotMatch(html, /routeSurfaceFragments/);
   assert.doesNotMatch(html, /<script type="module">\s*const __surfaceRuntimeGlobal/);
   assert.doesNotMatch(html, FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN);
+});
+
+test("runtime-surface-page can expose optional witness core URL to the browser runtime", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "ShellNavigation",
+        state: [],
+        handles: [],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "ShellNavigation",
+        props: { label: "Root" }
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/",
+    witnessCoreUrl: "http://127.0.0.1:8788"
+  });
+
+  assert.match(html, /data-witness-core-url="1"/);
+  assert.match(html, /window\.__witnessCoreUrl = "http:\/\/127\.0\.0\.1:8788"/);
 });
 
 test("runtime-surface-page emits generic fallback ids for interactive surfaces without authored domId", () => {
