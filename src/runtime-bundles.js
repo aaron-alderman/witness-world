@@ -422,7 +422,7 @@ function compositionOptions(options = {}) {
   };
 }
 
-function runtimeCompositionStory({
+export function runtimeCompositionStory({
   startupRunner = null,
   startupMode = "serve",
   profilePluginIds = [],

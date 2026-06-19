@@ -1051,6 +1051,57 @@ sourceContext = "ctx_source"
 exportName = "replaySurface"
 name = "replaySurface"
 
+[[process]]
+actor = "system"
+id = "ReplayFlow"
+context = "ctx_source"
+state = ["ReplayActiveRoute"]
+
+[[contextBinding]]
+actor = "system"
+context = "ctx_source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextExport]]
+actor = "system"
+context = "ctx_source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextImport]]
+actor = "system"
+context = "ctx_target"
+sourceContext = "ctx_source"
+exportName = "replayFlow"
+name = "replayFlow"
+
+[[type]]
+actor = "system"
+id = "ReplayActiveRoute"
+context = "ctx_source"
+role = "state"
+valueType = "text"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx_source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextExport]]
+actor = "system"
+context = "ctx_source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextImport]]
+actor = "system"
+context = "ctx_target"
+sourceContext = "ctx_source"
+exportName = "activeRoute"
+name = "activeRoute"
+
 [[route]]
 actor = "system"
 id = "landing_route"
@@ -1070,7 +1121,7 @@ handler = "page.surface"
 servesRef = "replaySurface"
 rootSurfaceRef = "replaySurface"
 defaultScreen = "login"
-routeState = { process = "ReplayFlow", state = "ReplayActiveRoute" }
+routeState = { processRef = "replayFlow", stateRef = "activeRoute" }
 excludeWidgetRoles = ["debug"]
 
 [[contextBinding]]

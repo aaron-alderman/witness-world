@@ -75,6 +75,19 @@ test("bootstrap version guidance summarizes governed proposal targets and body i
     proposalBodyIssues({ targetProcess: "backendProgramVersion.rollback", targetId: "todo.todos.list", body: {} }),
     ["Body JSON must include soul."]
   );
+  assert.deepEqual(
+    proposalBodyIssues({
+      targetProcess: "packagePatch.define",
+      targetId: "packageRevision.plugin.inspect.v1",
+      body: {}
+    }),
+    [
+      "Body JSON must include package or packageRef.",
+      "Body JSON must include path.",
+      "Body JSON must include operation.",
+      "Body JSON must include sourceLanguage."
+    ]
+  );
   const backendRollback = summarizeVersionedProposalTarget({
     domain: "backend",
     change: "rollback",
@@ -99,6 +112,18 @@ test("bootstrap version guidance summarizes governed proposal targets and body i
   assert.equal(widgetActivate.includes("Widget version activation proposal for soul todo.root."), true);
   assert.equal(widgetActivate.includes("Requested version: todo.root.v2."), true);
   assert.equal(widgetActivate.includes("Approval requires authority on the governed widget target."), true);
+
+  const packageDefine = summarizeGovernedProposalTarget({
+    targetProcess: "package.define",
+    targetKind: "context",
+    targetId: "ctx.packages",
+    body: { id: "package.plugin.inspect", packageKind: "plugin" },
+    authoritySummaryText: authoritySummary("ctx.packages", [])
+  });
+  assert.equal(packageDefine.includes("Package definition proposal for context ctx.packages."), true);
+  assert.equal(packageDefine.includes("Package id: package.plugin.inspect."), true);
+  assert.equal(packageDefine.includes("Package kind: plugin."), true);
+  assert.equal(packageDefine.includes("Current actor is outside mutation context ctx.packages; direct actions may require a stewarded path."), true);
 });
 
 test("bootstrap version guidance summarizes governed proposal targets from supplied state rows", () => {
@@ -139,6 +164,20 @@ test("bootstrap version guidance summarizes governed proposal targets from suppl
     }),
     "Proposal targets perspective.define on context ctx.docs. Approval will run later through the open proposal queue."
   );
+
+  const packagePublish = summarizeGovernedProposalTarget({
+    targetProcess: "packageRevision.publish",
+    targetKind: "packageRevision",
+    targetId: "packageRevision.plugin.inspect.v1",
+    body: {},
+    packageRows: [{ id: "package.plugin.inspect", context: "ctx.packages" }],
+    packageRevisionRows: [{ id: "packageRevision.plugin.inspect.v1", package: "package.plugin.inspect", status: "draft" }],
+    authoritySummaryText: authoritySummary("ctx.packages", ["ctx.packages"])
+  });
+  assert.equal(packagePublish.includes("Package revision publish proposal for packageRevision.plugin.inspect.v1."), true);
+  assert.equal(packagePublish.includes("Current status: draft."), true);
+  assert.equal(packagePublish.includes("Package: package.plugin.inspect."), true);
+  assert.equal(packagePublish.includes("Current actor can mutate context ctx.packages directly."), true);
 });
 
 test("bootstrap version guidance summarizes governed proposal targets directly from bootstrap authored state", () => {
@@ -166,6 +205,26 @@ test("bootstrap version guidance summarizes governed proposal targets directly f
   assert.equal(summary.includes("Requested version: todo.todos.list.v2."), true);
   assert.equal(summary.includes("Transition strategy: compatible."), true);
   assert.equal(summary.includes("Current actor can mutate context backend directly."), true);
+
+  const packageSummary = summarizeGovernedProposalTargetFromBootstrap({
+    targetProcess: "packagePatch.define",
+    targetId: "packageRevision.plugin.inspect.v1",
+    body: {
+      package: "package.plugin.inspect",
+      path: "plugins/inspect/runtime.js",
+      operation: "replace",
+      sourceLanguage: "js"
+    },
+    authored: {
+      packages: [{ id: "package.plugin.inspect", context: "ctx.packages" }],
+      packageRevisions: [{ id: "packageRevision.plugin.inspect.v1", package: "package.plugin.inspect", status: "draft" }],
+      authority: { mutationContexts: ["ctx.packages"] }
+    }
+  });
+  assert.equal(packageSummary.includes("Package patch proposal for revision packageRevision.plugin.inspect.v1."), true);
+  assert.equal(packageSummary.includes("Path: plugins/inspect/runtime.js."), true);
+  assert.equal(packageSummary.includes("Package: package.plugin.inspect."), true);
+  assert.equal(packageSummary.includes("Current actor can mutate context ctx.packages directly."), true);
 });
 
 test("bootstrap version guidance factory exposes the helper seam to embedded browser runtimes", () => {

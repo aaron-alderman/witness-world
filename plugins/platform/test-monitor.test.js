@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
 import { createWorld } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
+import { resolveRunnerVerificationPolicy } from "../../src/runtime-verification-policy.js";
 import { createPlatformTestMonitorRuntime } from "./provider-runtime.js";
 import { selectContinuousTestGates } from "./test-gate-catalog.js";
 
@@ -50,6 +51,41 @@ test("continuous test gate selection prefers direct file coverage over broad tes
 
 test("platform test monitor runs selected source gates without overlap", async () => {
   const world = createWorld();
+  const persisted = {
+    verificationFreshness: [],
+    verificationInvalidations: [],
+    verificationQueue: [],
+    verificationExecutions: []
+  };
+  const fakePersistence = {
+    readModelRows() {
+      return {
+        verificationFreshness: persisted.verificationFreshness.map(row => ({ ...row })),
+        verificationInvalidations: persisted.verificationInvalidations.map(row => ({ ...row })),
+        verificationQueue: persisted.verificationQueue.map(row => ({ ...row })),
+        verificationExecutions: persisted.verificationExecutions.map(row => ({ ...row })),
+        verificationPolicies: [],
+        testRuns: [],
+        testResults: [],
+        testArtifacts: [],
+        testSuites: [],
+        testCases: [],
+        testReports: []
+      };
+    },
+    async recordFreshnessRows(rows = []) {
+      if (rows.length) persisted.verificationFreshness = rows.map(row => ({ ...row }));
+    },
+    async recordInvalidationRows(rows = []) {
+      persisted.verificationInvalidations.push(...rows.map(row => ({ ...row })));
+    },
+    async recordQueueRow(row = null) {
+      if (row) persisted.verificationQueue.push({ ...row });
+    },
+    async recordExecutionRow(row = null) {
+      if (row) persisted.verificationExecutions.push({ ...row });
+    }
+  };
   const gates = [
     {
       id: "gate:runtime",
@@ -134,6 +170,162 @@ test("platform test monitor runs selected source gates without overlap", async (
       { phase: "start", gateId: "gate:runtime" },
       { phase: "finish", gateId: "gate:runtime" }
     ]);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("platform test monitor initialization computes freshness before startup queueing", async () => {
+  const world = createWorld();
+  const persistenceEvents = [];
+  const fakePersistence = {
+    readModelRows() {
+      return {
+        verificationFreshness: [],
+        verificationInvalidations: [],
+        verificationQueue: [],
+        verificationExecutions: [],
+        verificationPolicies: [],
+        testRuns: [],
+        testResults: [],
+        testArtifacts: [],
+        testSuites: [],
+        testCases: [],
+        testReports: []
+      };
+    },
+    async recordFreshnessRows(rows = []) {
+      if (rows.length) persistenceEvents.push("freshness");
+    },
+    async recordInvalidationRows(rows = []) {
+      if (rows.length) persistenceEvents.push("invalidation");
+    },
+    async recordQueueRow(row = null) {
+      if (row) persistenceEvents.push("queue");
+    },
+    async recordExecutionRow(row = null) {
+      if (row) persistenceEvents.push("execution");
+    }
+  };
+  const gates = [{
+    id: "gate:startup",
+    sourcePath: "test/runtime-server.test.js",
+    command: "node --test test/runtime-server.test.js",
+    sourceDependencies: ["src/runtime-server.js"],
+    protectedObjects: ["runtime.core"],
+    costEstimate: "low"
+  }];
+  const runtime = createPlatformTestMonitorRuntime({
+    world,
+    runtimeConfig: {
+      platform: {
+        testMonitor: {
+          enabled: true,
+          watchFs: false
+        }
+      }
+    },
+    serverRunnerId: "serverRunner.test",
+    getAppContext: () => ({
+      runtimeProfile: "full",
+      verificationPolicy: resolveRunnerVerificationPolicy({
+        serverRunner: {
+          id: "serverRunner.test",
+          values: {
+            verification: {
+              defaults: {
+                startup: true,
+                watch: false,
+                onChangeSet: true
+              }
+            }
+          }
+        },
+        runtimeProfile: "full",
+        runtimeConfig: {}
+      }),
+      verificationPersistence: fakePersistence,
+      project(projector) {
+        if (projector === moduleProjectors.testGates) return gates;
+        return [];
+      }
+    })
+  }, {
+    runPlatformTestGateImpl: async (_world, { gate }) => ({
+      ok: true,
+      testRun: { id: `testRun:${gate.id}` },
+      latestResult: { status: "passed" }
+    })
+  });
+
+  try {
+    await runtime.initialize();
+    await waitForIdle(runtime);
+    assert.ok(persistenceEvents.includes("freshness"));
+    assert.ok(persistenceEvents.includes("queue"));
+    assert.ok(persistenceEvents.indexOf("freshness") < persistenceEvents.indexOf("queue"));
+  } finally {
+    runtime.close();
+  }
+});
+
+test("platform test monitor synthesized policy does not invent startup verification work", async () => {
+  const world = createWorld();
+  const persistenceEvents = [];
+  const runtime = createPlatformTestMonitorRuntime({
+    world,
+    runtimeConfig: {},
+    serverRunnerId: "serverRunner.test",
+    getAppContext: () => ({
+      runtimeProfile: "full",
+      verificationPersistence: {
+        readModelRows() {
+          return {
+            verificationFreshness: [],
+            verificationInvalidations: [],
+            verificationQueue: [],
+            verificationExecutions: [],
+            verificationPolicies: [],
+            testRuns: [],
+            testResults: [],
+            testArtifacts: [],
+            testSuites: [],
+            testCases: [],
+            testReports: []
+          };
+        },
+        async recordFreshnessRows(rows = []) {
+          if (rows.length) persistenceEvents.push("freshness");
+        },
+        async recordQueueRow(row = null) {
+          if (row) persistenceEvents.push("queue");
+        }
+      },
+      project(projector) {
+        if (projector === moduleProjectors.testGates) {
+          return [{
+            id: "gate:startup",
+            sourcePath: "test/runtime-server.test.js",
+            command: "node --test test/runtime-server.test.js",
+            sourceDependencies: ["src/runtime-server.js"],
+            protectedObjects: ["runtime.core"],
+            costEstimate: "low"
+          }];
+        }
+        return [];
+      }
+    })
+  });
+
+  try {
+    await runtime.initialize();
+    await waitForIdle(runtime);
+    const inspect = runtime.inspect();
+    assert.equal(inspect.defaults.startup, false);
+    assert.equal(inspect.watchFs, false);
+    assert.deepEqual(persistenceEvents, []);
+    assert.equal(inspect.queueCount, 0);
+    assert.equal(inspect.pendingSourceCount, 0);
   } finally {
     runtime.close();
   }

@@ -127,6 +127,31 @@ export function renderBootstrapStateInventory({
   renderList("state-perspectives", authored.perspectives || [], row => row.id + (row.context ? " @" + row.context : ""));
   renderList("state-stewardships", authored.stewardships || [], row => row.steward + " -> " + row.target);
   renderList("state-proposals", authored.proposals || [], row => row.id + " [" + row.status + "] " + row.targetProcess);
+  renderList("state-packages", authored.packages || [], row => row.id + (row.context ? " @" + row.context : "") + (row.packageKind ? " [" + row.packageKind + "]" : ""));
+  renderList("state-package-revisions", authored.packageRevisions || [], row =>
+    row.id + " -> " + row.package + (row.version ? " [" + row.version + "]" : "") + (row.status ? " [" + row.status + "]" : "")
+  );
+  renderList("state-package-patches", authored.packagePatches || [], row =>
+    row.id + " -> " + row.revision + " :: " + row.path + (row.operation ? " [" + row.operation + "]" : "")
+  );
+  renderList("state-package-namespaces", authored.packageNamespaces || [], row =>
+    row.id + " -> " + row.package + (row.context ? " @" + row.context : "") + (row.revision ? " [" + row.revision + "]" : "")
+  );
+  renderList("state-package-dependencies", authored.packageDependencies || [], row =>
+    row.id + " :: " + row.sourceRevision + " -> " + row.targetKind + " " + row.targetId
+  );
+  renderList("state-package-transformers", authored.packageTransformers || [], row =>
+    row.id + " :: " + (row.sourceNamespace || row.sourceRevision || "(none)") + " -> " + (row.targetNamespace || row.targetRevision || "(none)")
+  );
+  renderList("state-package-coexistence", authored.packageCoexistence || [], row =>
+    row.packageId + " [" + (row.coexistenceMode || "unknown") + "] -> " + (((row.selectedRevisionIds || []).join(", ")) || "(none)")
+  );
+  renderList("state-package-convergence", authored.packageConvergence || [], row =>
+    row.packageId + " [" + (row.status || "unknown") + "] -> " + (((row.transformerIds || []).join(", ")) || "(no transformers)")
+  );
+  renderList("state-package-apply-previews", authored.packageApplyPreviews || [], row =>
+    row.packageId + " :: " + row.revisionId + " [" + (row.status || "unknown") + "]"
+  );
   renderList("state-authority", authored.authority ? [
     "actor: " + (authored.authority.actor || "(none)"),
     "contexts: " + (authored.authority.mutationContexts || []).join(", ")

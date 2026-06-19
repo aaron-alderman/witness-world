@@ -1,3 +1,5 @@
+import { runtimeCompositionStory } from "../../src/runtime-bundles.js";
+
 export function diagnosticsFromPlatformAppContext(appContext) {
   const summary = appContext?.runtimeBundleSummary ?? {};
   const snapshotManager = appContext?.appSnapshotManager ?? null;
@@ -7,6 +9,17 @@ export function diagnosticsFromPlatformAppContext(appContext) {
   const lastGoodSnapshot = snapshotManager?.lastGoodSnapshot ?? activeSnapshot ?? null;
   const testMonitor = appContext?.providerRuntimes?.["platform.testMonitor"]?.inspect?.() ?? null;
   const verificationPersistence = appContext?.verificationPersistence?.inspect?.() ?? null;
+  const composition = runtimeCompositionStory({
+    startupRunner: {
+      id: appContext?.serverRunnerId ?? null,
+      bootstrapOnly: appContext?.bootstrapOnly === true
+    },
+    startupMode: appContext?.runtimeStartupMode ?? "serve",
+    profilePluginIds: summary.profilePluginIds ?? [],
+    authoredPluginIds: appContext?.authoredRuntimePluginIds ?? [],
+    operatorPluginIds: appContext?.operatorRuntimePluginIds ?? [],
+    effectivePluginIds: appContext?.effectiveRuntimePluginIds ?? []
+  });
   return {
     activeProfile: appContext?.runtimeProfile ?? summary.profile ?? null,
     activeBundles: (summary.bundles ?? []).map(bundle => ({
@@ -23,6 +36,7 @@ export function diagnosticsFromPlatformAppContext(appContext) {
       effectivePluginIds: [...(appContext?.effectiveRuntimePluginIds ?? appContext?.runtimePluginCatalog?.effectivePluginIds ?? [])],
       rejectedPlugins: [...(appContext?.runtimePluginCatalog?.rejectedPlugins ?? [])]
     },
+    composition,
     testMonitor: testMonitor
       ? {
           enabled: testMonitor.enabled === true,
@@ -55,6 +69,12 @@ export function diagnosticsFromPlatformAppContext(appContext) {
           pendingChangeSetCount: Number(testMonitor.pendingChangeSetCount || 0),
           queue: Array.isArray(testMonitor.queue) ? testMonitor.queue.map(row => ({ ...row })) : [],
           queueCount: Number(testMonitor.queueCount || 0),
+          freshness: Array.isArray(testMonitor.freshness)
+            ? testMonitor.freshness.map(row => ({ ...row }))
+            : [],
+          freshnessCounts: testMonitor.freshnessCounts && typeof testMonitor.freshnessCounts === "object"
+            ? { ...testMonitor.freshnessCounts }
+            : {},
           activeExecution: testMonitor.activeExecution && typeof testMonitor.activeExecution === "object"
             ? { ...testMonitor.activeExecution }
             : null,

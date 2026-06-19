@@ -24,8 +24,16 @@ const FALLBACK_LAYOUT = Object.freeze({
       "PlatformVerificationRunsPage",
       "PlatformVerificationRuntimePage",
       "PlatformKnowledgePage",
+      "PlatformKnowledgeDocsPage",
+      "PlatformKnowledgeFoldersPage",
+      "PlatformKnowledgeRoadmapPage",
       "PlatformSignalsPage",
+      "PlatformSignalsGapsPage",
+      "PlatformSignalsCatalogPage",
       "PlatformModelPage",
+      "PlatformModelObjectsPage",
+      "PlatformModelProfilesPage",
+      "PlatformModelCoveragePage",
       "PlatformPackageApplyPreviewPage"
     ])
   }),
@@ -181,36 +189,132 @@ const FALLBACK_LAYOUT = Object.freeze({
       className: "platform-knowledge",
       pageId: "knowledge",
       props: Object.freeze({
-        modelView: "knowledge",
-        summaryCards: "Governed Docs=docs@count|Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
+        modelView: "knowledgeOverview",
+        summaryCards: "Governed Docs=docs@count|Folders=folders@count|Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
       }),
       title: "Knowledge",
-      summary: "Governed docs, roadmap tasks, epics, and features.",
-      children: ["PlatformKnowledgeList", "PlatformKnowledgeDetail"]
+      summary: "Knowledge landing page with links into narrower docs, folders (this.folder.wtoml), and roadmap views.",
+      children: []
+    }),
+    fallbackSurface("PlatformKnowledgeDocsPage", {
+      surfaceKind: "page",
+      className: "platform-knowledge",
+      pageId: "knowledgeDocs",
+      props: Object.freeze({
+        modelView: "knowledgeDocs",
+        summaryCards: "Governed Docs=docs@count|Fresh=docs@countWhere:freshness.status=fresh|Stale=docs@countWhere:freshness.status=stale|Tasks=docTasks@count"
+      }),
+      title: "Knowledge Docs",
+      summary: "Governed documents, authored references, and document detail.",
+      children: ["PlatformKnowledgeDocsList", "PlatformKnowledgeDocsDetail"]
+    }),
+    fallbackSurface("PlatformKnowledgeFoldersPage", {
+      surfaceKind: "page",
+      className: "platform-knowledge",
+      pageId: "knowledgeFolders",
+      props: Object.freeze({
+        modelView: "knowledgeFolders",
+        summaryCards: "Folders=folders@count"
+      }),
+      title: "Knowledge Folders",
+      summary: "Folders with this.folder.wtoml metadata and their linked platform concepts.",
+      children: ["PlatformKnowledgeFoldersList", "PlatformKnowledgeFoldersDetail"]
+    }),
+    fallbackSurface("PlatformKnowledgeRoadmapPage", {
+      surfaceKind: "page",
+      className: "platform-knowledge",
+      pageId: "knowledgeRoadmap",
+      props: Object.freeze({
+        modelView: "knowledgeRoadmap",
+        summaryCards: "Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
+      }),
+      title: "Knowledge Roadmap",
+      summary: "Roadmap tasks, epics, features, and linked platform work.",
+      children: ["PlatformKnowledgeRoadmapList", "PlatformKnowledgeRoadmapDetail"]
     }),
     fallbackSurface("PlatformSignalsPage", {
       surfaceKind: "page",
       className: "platform-signals",
       pageId: "signals",
       props: Object.freeze({
-        modelView: "signals",
+        modelView: "signalsOverview",
         summaryCards: "Gaps=gaps@count|Telemetry Metrics=nodes@countKind:telemetryMetric|Defect Clusters=nodes@countKind:defectCluster|Boundaries=nodes@countKind:boundary"
       }),
       title: "Signals",
-      summary: "Gaps, telemetry, defect clusters, and boundary actors.",
-      children: ["PlatformGapList", "PlatformSignalList", "PlatformSignalDetail"]
+      summary: "Signals landing page with links into narrower gap and signal-catalog views.",
+      children: []
+    }),
+    fallbackSurface("PlatformSignalsGapsPage", {
+      surfaceKind: "page",
+      className: "platform-signals",
+      pageId: "signalsGaps",
+      props: Object.freeze({
+        modelView: "signalsGaps",
+        summaryCards: "Gaps=gaps@count"
+      }),
+      title: "Signals Gaps",
+      summary: "Gap inventory, selector drift, and gap detail.",
+      children: ["PlatformGapList", "PlatformGapDetail"]
+    }),
+    fallbackSurface("PlatformSignalsCatalogPage", {
+      surfaceKind: "page",
+      className: "platform-signals",
+      pageId: "signalsCatalog",
+      props: Object.freeze({
+        modelView: "signalsCatalog",
+        summaryCards: "Telemetry Metrics=nodes@countKind:telemetryMetric|Defect Clusters=nodes@countKind:defectCluster|Boundaries=nodes@countKind:boundary"
+      }),
+      title: "Signals Catalog",
+      summary: "Telemetry metrics, defect clusters, boundaries, and linked signal-node detail.",
+      children: ["PlatformSignalList", "PlatformSignalCatalogDetail"]
     }),
     fallbackSurface("PlatformModelPage", {
       surfaceKind: "page",
       className: "platform-model",
       pageId: "model",
       props: Object.freeze({
-        modelView: "model",
+        modelView: "modelOverview",
         summaryCards: "Platform Objects=nodes@count|Relationships=edges@count|Profiles=profiles@count|Coverage Edges=coverageEdges@count"
       }),
       title: "Model",
-      summary: "Platform objects, relationships, runtime profiles, and dependency evidence.",
-      children: ["PlatformProfileComparison", "PlatformModelList", "PlatformModelDetail", "PlatformCoverageMatrix"]
+      summary: "Model landing page with links into narrower objects, profiles, and coverage views.",
+      children: []
+    }),
+    fallbackSurface("PlatformModelObjectsPage", {
+      surfaceKind: "page",
+      className: "platform-model",
+      pageId: "modelObjects",
+      props: Object.freeze({
+        modelView: "modelObjects",
+        summaryCards: "Platform Objects=nodes@count|Relationships=edges@count"
+      }),
+      title: "Model Objects",
+      summary: "Platform objects, their properties, and linked relationships.",
+      children: ["PlatformModelList", "PlatformModelDetail"]
+    }),
+    fallbackSurface("PlatformModelProfilesPage", {
+      surfaceKind: "page",
+      className: "platform-model",
+      pageId: "modelProfiles",
+      props: Object.freeze({
+        modelView: "modelProfiles",
+        summaryCards: "Profiles=profiles@count"
+      }),
+      title: "Model Profiles",
+      summary: "Runtime profile exposure and composition evidence.",
+      children: ["PlatformProfileComparison"]
+    }),
+    fallbackSurface("PlatformModelCoveragePage", {
+      surfaceKind: "page",
+      className: "platform-model",
+      pageId: "modelCoverage",
+      props: Object.freeze({
+        modelView: "modelCoverage",
+        summaryCards: "Coverage Edges=coverageEdges@count"
+      }),
+      title: "Model Coverage",
+      summary: "Coverage edges between gates and protected platform targets.",
+      children: ["PlatformCoverageMatrix"]
     }),
     fallbackSurface("PlatformPackageApplyPreviewPage", {
       surfaceKind: "page",

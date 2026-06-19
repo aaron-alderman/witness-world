@@ -84,6 +84,8 @@ export function applyBootstrapShellSelectFill({
   fillSelect("program-context", authored.contexts || [], x => x.id, x => x.id);
   fillSelect("route-root-widget", authored.widgets || [], x => x.id, x => x.id);
   fillSelect("route-frontend-program", authored.frontendPrograms || [], x => x.id, x => x.id);
+  fillSelect("route-state-process", authored.processes || [], x => x.id, x => x.id);
+  fillSelect("route-state-state", (authored.types || []).filter(row => row.role === "state"), x => x.id, x => x.id);
   fillSelect("route-backend-program-soul", authored.backendPrograms || [], x => x.soul, x => x.soul);
   fillSelect("route-context", authored.contexts || [], x => x.id, x => x.id);
   fillSelect("step-program", authored.frontendPrograms || [], x => x.id, x => x.id, { includeBlank: false });

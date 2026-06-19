@@ -24,6 +24,11 @@ test("live page inspector exposes right-click widget inspection, version activat
     await page.goto(`${server.url}/`);
     await waitForAppReady(page);
     await signIn(page);
+    const diagnostics = await page.evaluate(async () => {
+      const response = await fetch("/api/runtime/diagnostics");
+      return await response.json();
+    });
+    const composition = diagnostics?.composition || {};
 
     await page.waitForFunction(() => {
       const banner = document.querySelector('[data-widget="todo_versioned_banner"]');
@@ -47,6 +52,7 @@ test("live page inspector exposes right-click widget inspection, version activat
         && inspector.textContent
         && inspector.textContent.includes("todo_versioned_banner")
         && inspector.textContent.includes("Runtime Owner")
+        && inspector.textContent.includes("Runtime Composition")
         && inspector.textContent.includes("Runtime Profile")
         && inspector.textContent.includes("demo_server")
         && inspector.textContent.includes("plugin.inspect")
@@ -54,6 +60,18 @@ test("live page inspector exposes right-click widget inspection, version activat
         && inspector.textContent.includes("todo_versioned_banner_v2")
       );
     });
+    if (composition.storyId) {
+      assert.match((await panel.textContent()) || "", new RegExp(composition.storyId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    if (composition.activeRunnerId) {
+      assert.match((await panel.textContent()) || "", new RegExp(composition.activeRunnerId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    if (composition.activeRunnerSource) {
+      assert.match((await panel.textContent()) || "", new RegExp(composition.activeRunnerSource.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    if (composition.activePluginSource) {
+      assert.match((await panel.textContent()) || "", new RegExp(composition.activePluginSource.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
 
     await page.locator('[data-surface-inspector-activate="todo_versioned_banner"][data-surface-inspector-version="todo_versioned_banner_v2"]').click();
     await page.waitForFunction(() => {
@@ -207,6 +225,66 @@ test("live page inspector can hand off a selected widget to its owning backend p
   }
 });
 
+test("live page inspector can hand off a selected widget to its context and active capability", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_add_button"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_add_button")
+        && inspector.textContent.includes("Surface Scope")
+        && inspector.textContent.includes("Show Context")
+      );
+    });
+    await page.locator('.surface-inspector-panel button', { hasText: "Show Capability" }).first().waitFor();
+
+    await page.locator('.surface-inspector-panel button', { hasText: "Show Context" }).click();
+    await page.waitForURL(url => url.pathname === "/world" && Boolean(url.searchParams.get("select")));
+    const contextTarget = await page.evaluate(() => new URL(window.location.href).searchParams.get("select") || "");
+    assert.equal(Boolean(contextTarget), true);
+    await page.waitForFunction(expected => {
+      const inspector = document.querySelector('.world-graph-inspector');
+      return Boolean(inspector && inspector.textContent && inspector.textContent.includes(expected));
+    }, contextTarget);
+
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_add_button"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    const capabilityButton = page.locator('.surface-inspector-panel button', { hasText: "Show Capability" }).first();
+    const capabilityTarget = await capabilityButton.getAttribute('data-surface-inspector-world-select');
+    assert.equal(Boolean(capabilityTarget), true);
+    await capabilityButton.click();
+    await page.waitForURL(url => url.pathname === "/world" && url.searchParams.get("select") === capabilityTarget);
+    await page.waitForFunction(expected => {
+      const inspector = document.querySelector('.world-graph-inspector');
+      return Boolean(inspector && inspector.textContent && inspector.textContent.includes(expected));
+    }, capabilityTarget);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
 test("live page inspector can save a narrow widget edit back into the world when the actor stewards the frontend context", async () => {
   const { server, close: closeServer } = await startUiDemoServer({});
   const {
@@ -333,6 +411,377 @@ test("live page inspector can hide and show a rendered widget through real widge
   }
 });
 
+test("live page inspector can create a real child widget under an authored container through shared widget.define semantics", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_form"]').dispatchEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+      buttons: 2,
+      clientX: 20,
+      clientY: 20
+    });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_form")
+        && inspector.textContent.includes("Child Widget")
+        && inspector.textContent.includes("Add Child Widget")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-child-create-form] input[name="id"]').fill("todo_live_note");
+    await page.locator('[data-surface-inspector-child-create-form] select[name="kind"]').selectOption("Text");
+    await page.locator('[data-surface-inspector-child-create-form] textarea[name="text"]').fill("Live Child Note");
+    const createRequest = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/widgets"
+      && response.status() === 201
+    );
+    await page.locator('[data-surface-inspector-child-create]').click();
+    await createRequest;
+
+    await page.waitForFunction(() => {
+      const note = document.querySelector('[data-widget="todo_live_note"]');
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        note
+        && note.textContent
+        && note.textContent.includes("Live Child Note")
+        && inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Created todo_live_note under todo_form.")
+      );
+    });
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can propose child widget creation for a read-only actor and live-refresh after approval", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    browser,
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+  let approverContext = null;
+  let approverPage = null;
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "callan", password: "callan", label: "Callan" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_form"]').dispatchEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+      buttons: 2,
+      clientX: 20,
+      clientY: 20
+    });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_form")
+        && inspector.textContent.includes("Child Widget")
+        && inspector.textContent.includes("Request Child Widget")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-child-create-form] input[name="id"]').fill("todo_proposed_note");
+    await page.locator('[data-surface-inspector-child-create-form] select[name="kind"]').selectOption("Text");
+    await page.locator('[data-surface-inspector-child-create-form] textarea[name="text"]').fill("Proposed Child Note");
+    await page.locator('[data-surface-inspector-child-create-form] input[name="reason"]').fill("Need a shared child note");
+    const proposalResponse = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/widgets"
+      && response.status() === 202
+    );
+    await page.locator('[data-surface-inspector-child-create]').click();
+    const proposalBody = await (await proposalResponse).json();
+    const proposalId = proposalBody?.proposal?.id || "";
+    assert.equal(Boolean(proposalId), true);
+
+    await page.waitForFunction(expected => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Proposed child widget under todo_form as " + expected + ".")
+      );
+    }, proposalId);
+
+    approverContext = await browser.newContext();
+    approverPage = await approverContext.newPage();
+    await approverPage.goto(`${server.url}/`);
+    await waitForAppReady(approverPage);
+    await signIn(approverPage, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    const approved = await approverPage.evaluate(async id => {
+      const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const body = await response.json().catch(() => ({}));
+      return { status: response.status, body };
+    }, proposalId);
+    assert.equal(approved.status, 200);
+
+    await page.waitForFunction(() => {
+      const note = document.querySelector('[data-widget="todo_proposed_note"]');
+      return Boolean(note && note.textContent && note.textContent.includes("Proposed Child Note"));
+    });
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    if (approverContext) await approverContext.close();
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can install and remove explicit context capabilities through the shared capability runtime", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({
+    extraWitnessToml: `
+[[capability]]
+actor = "aaron"
+id = "surface.audit"
+label = "Surface Audit"
+provenance = { source = "ui.live-inspector.test" }
+dependsOn = ["dom.render"]
+placement = ["context"]
+`
+  });
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_add_button"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Authored Capabilities")
+        && inspector.textContent.includes("surface.audit")
+        && inspector.textContent.includes("Install Capability")
+      );
+    });
+
+    const installRequest = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/capability-installs"
+      && response.status() === 201
+    );
+    await page.locator('[data-surface-inspector-capability-install-form] select[name="capability"]').selectOption("surface.audit");
+    await page.locator('[data-surface-inspector-capability-install]').click();
+    await installRequest;
+
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Installed surface.audit on frontend.")
+        && inspector.textContent.includes("Remove")
+      );
+    });
+
+    const removeRequest = page.waitForResponse(response =>
+      response.request().method() === "DELETE"
+      && new URL(response.url()).pathname === "/api/capability-installs"
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-inspector-capability-remove="surface.audit"]').click();
+    await removeRequest;
+
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Removed surface.audit from frontend.")
+        && inspector.textContent.includes("surface.audit")
+        && inspector.textContent.includes("Install Capability")
+      );
+    });
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can propose capability install and removal for a read-only actor and refresh after approval", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({
+    extraWitnessToml: `
+[[capability]]
+actor = "aaron"
+id = "surface.audit"
+label = "Surface Audit"
+provenance = { source = "ui.live-inspector.test" }
+dependsOn = ["dom.render"]
+placement = ["context"]
+`
+  });
+  const {
+    browser,
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+  let approverContext = null;
+  let approverPage = null;
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "callan", password: "callan", label: "Callan" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_add_button"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Authored Capabilities")
+        && inspector.textContent.includes("surface.audit")
+        && inspector.textContent.includes("Request Install")
+      );
+    });
+
+    const installProposalResponse = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/capability-installs"
+      && response.status() === 202
+    );
+    await page.locator('[data-surface-inspector-capability-install-form] select[name="capability"]').selectOption("surface.audit");
+    await page.locator('[data-surface-inspector-capability-install]').click();
+    const installProposalBody = await (await installProposalResponse).json();
+    const installProposalId = installProposalBody?.proposal?.id || "";
+    assert.equal(Boolean(installProposalId), true);
+
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Proposed install of surface.audit on frontend")
+      );
+    });
+
+    approverContext = await browser.newContext();
+    approverPage = await approverContext.newPage();
+    await approverPage.goto(`${server.url}/`);
+    await waitForAppReady(approverPage);
+    await signIn(approverPage, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    const installApproved = await approverPage.evaluate(async id => {
+      const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const body = await response.json().catch(() => ({}));
+      return { status: response.status, body };
+    }, installProposalId);
+    assert.equal(installApproved.status, 200);
+
+    await page.waitForFunction(() => {
+      const removeButton = document.querySelector('[data-surface-inspector-capability-remove="surface.audit"]');
+      return Boolean(removeButton && removeButton.textContent && removeButton.textContent.includes("Request Remove"));
+    });
+
+    const removeProposalResponse = page.waitForResponse(response =>
+      response.request().method() === "DELETE"
+      && new URL(response.url()).pathname === "/api/capability-installs"
+      && response.status() === 202
+    );
+    await page.locator('[data-surface-inspector-capability-remove="surface.audit"]').click();
+    const removeProposalBody = await (await removeProposalResponse).json();
+    const removeProposalId = removeProposalBody?.proposal?.id || "";
+    assert.equal(Boolean(removeProposalId), true);
+
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Proposed removal of surface.audit from frontend")
+      );
+    });
+
+    const removeApproved = await approverPage.evaluate(async id => {
+      const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const body = await response.json().catch(() => ({}));
+      return { status: response.status, body };
+    }, removeProposalId);
+    assert.equal(removeApproved.status, 200);
+
+    await page.waitForFunction(() => {
+      const installForm = document.querySelector('[data-surface-inspector-capability-install-form] select[name="capability"]');
+      const removeButton = document.querySelector('[data-surface-inspector-capability-remove="surface.audit"]');
+      return Boolean(
+        installForm
+        && Array.from(installForm.options || []).some(option => option.value === "surface.audit")
+        && !removeButton
+      );
+    });
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    if (approverContext) await approverContext.close();
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
 test("live page inspector can create a real widget.update proposal for a read-only widget and live-refresh after approval", async () => {
   const { server, close: closeServer } = await startUiDemoServer({});
   const {
@@ -381,14 +830,14 @@ test("live page inspector can create a real widget.update proposal for a read-on
     const proposalId = proposalBody?.proposal?.id || "";
     assert.equal(proposalId, "proposal.authoringCore.callan.widget.update.widget.todo_title");
 
-    await page.waitForFunction(() => {
+    await page.waitForFunction(expected => {
       const inspector = document.querySelector('.surface-inspector-panel');
       return Boolean(
         inspector
         && inspector.textContent
-        && inspector.textContent.includes("Proposed todo_title as proposal.widget.update.todo_title.")
+        && inspector.textContent.includes("Proposed todo_title as " + expected + ".")
       );
-    });
+    }, proposalId);
 
     approverContext = await browser.newContext();
     approverPage = await approverContext.newPage();
@@ -463,14 +912,14 @@ test("live page inspector can create a real widgetVersion.activate proposal for 
     const proposalId = proposalBody?.proposal?.id || "";
     assert.match(proposalId, /^proposal\.widgetVersion\.activate\.todo_versioned_banner\./);
 
-    await page.waitForFunction(() => {
+    await page.waitForFunction(expected => {
       const inspector = document.querySelector('.surface-inspector-panel');
       return Boolean(
         inspector
         && inspector.textContent
-        && inspector.textContent.includes("Proposed activate todo_versioned_banner_v2 as proposal.widgetVersion.activate.todo_versioned_banner.")
+        && inspector.textContent.includes("Proposed activate todo_versioned_banner_v2 as " + expected + ".")
       );
-    });
+    }, proposalId);
 
     approverContext = await browser.newContext();
     approverPage = await approverContext.newPage();
@@ -561,14 +1010,14 @@ test("live page inspector can create a real widgetVersion.rollback proposal for 
     const proposalId = proposalBody?.proposal?.id || "";
     assert.match(proposalId, /^proposal\.widgetVersion\.rollback\.todo_versioned_banner\./);
 
-    await page.waitForFunction(() => {
+    await page.waitForFunction(expected => {
       const inspector = document.querySelector('.surface-inspector-panel');
       return Boolean(
         inspector
         && inspector.textContent
-        && inspector.textContent.includes("Proposed rollback todo_versioned_banner as proposal.widgetVersion.rollback.todo_versioned_banner.")
+        && inspector.textContent.includes("Proposed rollback todo_versioned_banner as " + expected + ".")
       );
-    });
+    }, proposalId);
 
     const approved = await approverPage.evaluate(async id => {
       const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/approve`, {

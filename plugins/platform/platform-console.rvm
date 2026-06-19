@@ -76,8 +76,16 @@ view PlatformConsolePage {
     PlatformVerificationRunsPage
     PlatformVerificationRuntimePage
     PlatformKnowledgePage
+    PlatformKnowledgeDocsPage
+    PlatformKnowledgeFoldersPage
+    PlatformKnowledgeRoadmapPage
     PlatformSignalsPage
+    PlatformSignalsGapsPage
+    PlatformSignalsCatalogPage
     PlatformModelPage
+    PlatformModelObjectsPage
+    PlatformModelProfilesPage
+    PlatformModelCoveragePage
     PlatformBridgesPage
     PlatformGovernancePage
     PlatformSemanticsPage
@@ -234,13 +242,51 @@ view PlatformKnowledgePage {
   kind page
   class platform-knowledge
   prop pageId = "knowledge"
-  prop modelView = "knowledge"
-  prop summaryCards = "Governed Docs=docs@count|Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
+  prop modelView = "knowledgeOverview"
+  prop summaryCards = "Governed Docs=docs@count|Folders=folders@count|Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
   prop title = "Knowledge"
-  prop summary = "Governed docs, roadmap tasks, epics, features, and intent-linked knowledge."
+  prop summary = "Knowledge landing page with links into narrower docs, folders (this.folder.wtoml), and roadmap views."
+}
+
+view PlatformKnowledgeDocsPage {
+  kind page
+  class platform-knowledge
+  prop pageId = "knowledgeDocs"
+  prop modelView = "knowledgeDocs"
+  prop summaryCards = "Governed Docs=docs@count|Fresh=docs@countWhere:freshness.status=fresh|Stale=docs@countWhere:freshness.status=stale|Tasks=docTasks@count"
+  prop title = "Knowledge Docs"
+  prop summary = "Governed documents, authored references, and document detail."
   children {
-    PlatformKnowledgeList
-    PlatformKnowledgeDetail
+    PlatformKnowledgeDocsList
+    PlatformKnowledgeDocsDetail
+  }
+}
+
+view PlatformKnowledgeFoldersPage {
+  kind page
+  class platform-knowledge
+  prop pageId = "knowledgeFolders"
+  prop modelView = "knowledgeFolders"
+  prop summaryCards = "Folders=folders@count"
+  prop title = "Knowledge Folders"
+  prop summary = "Folders with this.folder.wtoml metadata and their linked platform concepts."
+  children {
+    PlatformKnowledgeFoldersList
+    PlatformKnowledgeFoldersDetail
+  }
+}
+
+view PlatformKnowledgeRoadmapPage {
+  kind page
+  class platform-knowledge
+  prop pageId = "knowledgeRoadmap"
+  prop modelView = "knowledgeRoadmap"
+  prop summaryCards = "Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
+  prop title = "Knowledge Roadmap"
+  prop summary = "Roadmap tasks, epics, features, and linked platform work."
+  children {
+    PlatformKnowledgeRoadmapList
+    PlatformKnowledgeRoadmapDetail
   }
 }
 
@@ -248,14 +294,37 @@ view PlatformSignalsPage {
   kind page
   class platform-signals
   prop pageId = "signals"
-  prop modelView = "signals"
+  prop modelView = "signalsOverview"
   prop summaryCards = "Gaps=gaps@count|Telemetry Metrics=nodes@countKind:telemetryMetric|Defect Clusters=nodes@countKind:defectCluster|Boundaries=nodes@countKind:boundary"
   prop title = "Signals"
-  prop summary = "Gaps, telemetry, defect clusters, and boundary actors."
+  prop summary = "Signals landing page with links into narrower gap and signal-catalog views."
+}
+
+view PlatformSignalsGapsPage {
+  kind page
+  class platform-signals
+  prop pageId = "signalsGaps"
+  prop modelView = "signalsGaps"
+  prop summaryCards = "Gaps=gaps@count"
+  prop title = "Signals Gaps"
+  prop summary = "Gap inventory, selector drift, and gap detail."
   children {
     PlatformGapList
+    PlatformGapDetail
+  }
+}
+
+view PlatformSignalsCatalogPage {
+  kind page
+  class platform-signals
+  prop pageId = "signalsCatalog"
+  prop modelView = "signalsCatalog"
+  prop summaryCards = "Telemetry Metrics=nodes@countKind:telemetryMetric|Defect Clusters=nodes@countKind:defectCluster|Boundaries=nodes@countKind:boundary"
+  prop title = "Signals Catalog"
+  prop summary = "Telemetry metrics, defect clusters, boundaries, and linked signal-node detail."
+  children {
     PlatformSignalList
-    PlatformSignalDetail
+    PlatformSignalCatalogDetail
   }
 }
 
@@ -263,14 +332,48 @@ view PlatformModelPage {
   kind page
   class platform-model
   prop pageId = "model"
-  prop modelView = "model"
+  prop modelView = "modelOverview"
   prop summaryCards = "Platform Objects=nodes@count|Relationships=edges@count|Profiles=profiles@count|Coverage Edges=coverageEdges@count"
   prop title = "Model"
-  prop summary = "Platform objects, relationships, runtime profiles, and dependency evidence."
+  prop summary = "Model landing page with links into narrower objects, profiles, and coverage views."
+}
+
+view PlatformModelObjectsPage {
+  kind page
+  class platform-model
+  prop pageId = "modelObjects"
+  prop modelView = "modelObjects"
+  prop summaryCards = "Platform Objects=nodes@count|Relationships=edges@count"
+  prop title = "Model Objects"
+  prop summary = "Platform objects, their properties, and linked relationships."
   children {
-    PlatformProfileComparison
     PlatformModelList
     PlatformModelDetail
+  }
+}
+
+view PlatformModelProfilesPage {
+  kind page
+  class platform-model
+  prop pageId = "modelProfiles"
+  prop modelView = "modelProfiles"
+  prop summaryCards = "Profiles=profiles@count"
+  prop title = "Model Profiles"
+  prop summary = "Runtime profile exposure and composition evidence."
+  children {
+    PlatformProfileComparison
+  }
+}
+
+view PlatformModelCoveragePage {
+  kind page
+  class platform-model
+  prop pageId = "modelCoverage"
+  prop modelView = "modelCoverage"
+  prop summaryCards = "Coverage Edges=coverageEdges@count"
+  prop title = "Model Coverage"
+  prop summary = "Coverage edges between gates and protected platform targets."
+  children {
     PlatformCoverageMatrix
   }
 }
@@ -1351,20 +1454,38 @@ view PlatformSignalList {
   }
 }
 
-view PlatformSignalDetail {
+view PlatformGapDetail {
   kind region
   class platform-signal-detail
-  prop title = "Signal Detail"
-  prop summary = "Properties and linked relationships for the selected signal."
+  prop title = "Gap Detail"
+  prop summary = "Properties and linked relationships for the selected gap."
   prop detailSource = "signals"
-  prop detailSelectionSources = "gaps|telemetryMetric|defectCluster|boundary"
+  prop detailSelectionSources = "gaps"
   prop gapIdPrefixes = "gap."
-  prop signalNodeKinds = "telemetryMetric|defectCluster|boundary"
   prop emptyTitle = "Detail"
-  prop emptyState = "No signal rows are projected yet."
+  prop emptyState = "No gaps are projected yet."
   children {
     PlatformSignalPrimaryPanel
     PlatformSignalRelatedPanel
+    PlatformSignalRelationships
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformSignalCatalogDetail {
+  kind region
+  class platform-signal-detail
+  prop title = "Signal Detail"
+  prop summary = "Properties and linked relationships for the selected signal node."
+  prop detailSource = "signals"
+  prop detailSelectionSources = "telemetryMetric|defectCluster|boundary"
+  prop signalNodeKinds = "telemetryMetric|defectCluster|boundary"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No signal nodes are projected yet."
+  children {
+    PlatformSignalPrimaryPanel
     PlatformSignalRelationships
   }
   projections {
@@ -1421,9 +1542,9 @@ view PlatformProfileComparison {
   prop title = "Runtime Profiles"
   prop summary = "Profile exposure and plugin composition differences."
   prop listSource = "profileComparisonRows"
-  prop columns = "Profile|Status|Plugins|Capabilities"
-  prop rowFields = "Profile=id|Status=status|Plugins=pluginCount|Capabilities=capabilityCount"
-  prop sortOptions = "profile=id|status=status|plugins=pluginCount|capabilities=capabilityCount"
+  prop columns = "Profile|Status|Runner|Composition|Plugins|Capabilities"
+  prop rowFields = "Profile=id|Status=status|Runner=runnerSummary|Composition=compositionSummary|Plugins=pluginCount|Capabilities=capabilityCount"
+  prop sortOptions = "profile=id|status=status|runner=runnerSummary|composition=compositionSummary|plugins=pluginCount|capabilities=capabilityCount"
   prop defaultSort = "profile:asc"
   prop emptyState = "No runtime profiles."
   prop pageSize = "12"
@@ -1432,37 +1553,67 @@ view PlatformProfileComparison {
   }
 }
 
-view PlatformKnowledgeList {
+view PlatformKnowledgeDocsList {
   kind table
   class platform-knowledge-list
-  prop title = "Knowledge Items"
-  prop summary = "Paginated list of docs, roadmap tasks, epics, and features."
+  prop title = "Governed Docs"
+  prop summary = "Paginated list of governed documents."
   prop listSource = "knowledgeItems"
-  prop columns = "Kind|Status|Resource|Scope|Summary"
-  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
-  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
-  prop defaultSort = "kind:asc"
-  prop emptyState = "No knowledge rows."
-  prop pageSize = "20"
+  prop columns = "Freshness|Document|Role|Summary"
+  prop rowFields = "Freshness=status|Document=id@concept|Role=scope@value|Summary=summary"
+  prop sortOptions = "freshness=status|document=title|role=scope|summary=summary"
+  prop defaultSort = "document:asc"
+  prop emptyState = "No governed docs."
+  prop pageSize = "12"
   projections {
     PlatformModelRead
   }
 }
 
-view PlatformKnowledgeDetail {
+view PlatformKnowledgeRoadmapList {
+  kind table
+  class platform-knowledge-list
+  prop title = "Roadmap Work"
+  prop summary = "Paginated list of roadmap tasks, epics, and features."
+  prop listSource = "knowledgeItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No roadmap work."
+  prop pageSize = "12"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformKnowledgeFoldersList {
+  kind table
+  class platform-knowledge-list
+  prop title = "Folders"
+  prop summary = "Folders with this.folder.wtoml metadata (contains + links to docs/intents/code)."
+  prop listSource = "knowledgeItems"
+  prop columns = "Kind|Folder|Path|Summary"
+  prop rowFields = "Kind=pageKind|Folder=folderLink@concept|Path=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|folder=title|path=scope|summary=summary"
+  prop defaultSort = "folder:asc"
+  prop emptyState = "No folder metas."
+  prop pageSize = "12"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformKnowledgeDocsDetail {
   kind region
   class platform-knowledge-detail
-  prop title = "Knowledge Detail"
-  prop summary = "Properties and linked resources for the selected knowledge object."
+  prop title = "Knowledge Doc Detail"
+  prop summary = "Properties and linked resources for the selected governed document."
   prop detailSource = "knowledge"
-  prop detailSelectionSources = "docs|roadmapTasks|epics|features"
+  prop detailSelectionSources = "docs"
   prop documentPathField = "path"
-  prop roadmapTaskIdPrefixes = "roadmapTask:"
-  prop roadmapTaskFallbackField = "doc"
-  prop epicIdPrefixes = "epic:"
-  prop featureIdPrefixes = "feature:"
   prop emptyTitle = "Detail"
-  prop emptyState = "No knowledge rows are projected yet."
+  prop emptyState = "No governed docs are projected yet."
   children {
     PlatformKnowledgePrimaryPanel
     PlatformKnowledgeRelatedPanel
@@ -1474,11 +1625,50 @@ view PlatformKnowledgeDetail {
   }
 }
 
+view PlatformKnowledgeFoldersDetail {
+  kind region
+  class platform-knowledge-detail
+  prop title = "Knowledge Folder Detail"
+  prop summary = "Properties and linked resources for the selected folder when available."
+  prop detailSource = "knowledge"
+  prop detailSelectionSources = "folders"
+  prop documentPathField = "documentPath"
+  prop folderIdPrefixes = "folder:"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No folder metadata is projected yet."
+  children {
+    PlatformKnowledgePrimaryPanel
+    PlatformKnowledgeRelatedPanel
+  }
+}
+
+view PlatformKnowledgeRoadmapDetail {
+  kind region
+  class platform-knowledge-detail
+  prop title = "Knowledge Roadmap Detail"
+  prop summary = "Properties and linked resources for the selected roadmap object."
+  prop detailSource = "knowledge"
+  prop detailSelectionSources = "roadmapTasks|epics|features"
+  prop roadmapTaskIdPrefixes = "roadmapTask:"
+  prop roadmapTaskFallbackField = "doc"
+  prop epicIdPrefixes = "epic:"
+  prop featureIdPrefixes = "feature:"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No roadmap work is projected yet."
+  children {
+    PlatformKnowledgePrimaryPanel
+    PlatformKnowledgeRelatedPanel
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
 view PlatformKnowledgePrimaryPanel {
   kind region
   class platform-knowledge-primary
   prop detailPanelRole = "primary"
-  prop detailKinds = "document|roadmapTask|epic|feature"
+  prop detailKinds = "document|roadmapTask|epic|feature|folder"
   prop title = "Primary Detail"
   prop summary = "Selected knowledge object properties and long-tail fields."
   prop longTailCardTitle = "Properties"
@@ -1495,13 +1685,16 @@ view PlatformKnowledgePrimaryPanel {
   prop featureLongTailExcludedFields = "defectClusterIds"
   prop featureCardTitle = "Feature Detail"
   prop featureFields = "Feature=id@concept|Status=status|Epic=epicId@concept|Branches=branchIds@count|Verification gates=gateIds@count|Docs=docIds@count|API resource=id@api"
+  prop folderLongTailExcludedFields = "linkedConcepts"
+  prop folderCardTitle = "Folder Detail"
+  prop folderFields = "Folder=id@concept|Path=path|Facet=facet|Source=source|API resource=id@api"
 }
 
 view PlatformKnowledgeRelatedPanel {
   kind region
   class platform-knowledge-related
   prop detailPanelRole = "related"
-  prop detailKinds = "document|roadmapTask|epic|feature"
+  prop detailKinds = "document|roadmapTask|epic|feature|folder"
   prop title = "Related Resources"
   prop summary = "Linked platform resources and supporting context for the selected knowledge object."
   prop cardItemLimit = "12"
@@ -1510,6 +1703,7 @@ view PlatformKnowledgeRelatedPanel {
     PlatformKnowledgeRoadmapTaskLinks
     PlatformKnowledgeEpicLinks
     PlatformKnowledgeFeatureLinks
+    PlatformKnowledgeFolderLinks
   }
 }
 
@@ -1545,6 +1739,14 @@ view PlatformKnowledgeFeatureLinks {
   prop linkCardEmptyStates = "Branches=No branches linked to this feature.|Verification Gates=No verification gates linked to this feature.|Docs=No docs linked to this feature."
 }
 
+view PlatformKnowledgeFolderLinks {
+  kind region
+  class platform-knowledge-folder-links
+  prop detailKinds = "folder"
+  prop linkCards = "Linked Concepts=linkedConcepts"
+  prop linkCardEmptyStates = "Linked Concepts=No linked concepts were projected for this folder."
+}
+
 view PlatformKnowledgeSections {
   kind table
   class platform-knowledge-sections
@@ -1564,7 +1766,7 @@ view PlatformKnowledgeTasks {
   prop detailPanelRole = "tasks"
   prop detailKinds = "document"
   prop title = "Tasks"
-  prop summary = "Document or roadmap tasks for the selected knowledge object when available."
+  prop summary = "Document tasks for the selected governed document when available."
   prop columns = "Status|Task|Line|Section"
   prop rowFields = "Status=status|Task=id@concept|Line=line|Section=section"
   prop emptyState = "No tasks projected for this document."

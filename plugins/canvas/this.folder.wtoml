@@ -1,0 +1,156 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/canvas"
+path = "plugins/canvas"
+label = "canvas"
+summary = "Auto-generated folder metadata for plugins/canvas."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-asset-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-client-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-core.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-gesture-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-history-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-inspector-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-interaction-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-io-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-page-document.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-page-script.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-page-styles.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-page.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-processes.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-projection.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-render-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-session-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-sync-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-toolbar-runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas-undo.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/canvas.test.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "json:plugins/canvas/plugin.json"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/projectors-core.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "file:plugins/canvas/runtime.js"
+
+[[relation]]
+from = "folder:plugins/canvas"
+rel = "contains"
+to = "wtoml:plugins/canvas/this.folder.wtoml"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/canvas"
+# rel = "describedBy"
+# to = "doc:..."

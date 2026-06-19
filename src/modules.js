@@ -126,6 +126,7 @@ function normalizePackageExports(exports) {
 
 function normalizePackageDefinition({
   id,
+  context = null,
   label = id,
   packageKind = "plugin",
   version = null,
@@ -139,6 +140,7 @@ function normalizePackageDefinition({
 }) {
   return {
     id: String(id),
+    context: typeof context === "string" && context.trim() ? context.trim() : null,
     label: String(label ?? id),
     packageKind: typeof packageKind === "string" && packageKind.trim() ? packageKind.trim() : "plugin",
     version: typeof version === "string" && version.trim() ? version.trim() : null,
@@ -812,6 +814,7 @@ export function removeRuntimePlugin(world, {
 export function definePackage(world, {
   actor,
   id,
+  context = null,
   label = id,
   packageKind = "plugin",
   version = null,
@@ -827,6 +830,7 @@ export function definePackage(world, {
   createThing(world, { actor, id, owner });
   const normalized = normalizePackageDefinition({
     id,
+    context,
     label,
     packageKind,
     version,
@@ -843,6 +847,7 @@ export function definePackage(world, {
     actor,
     claims: [
       relation(id, "hasModuleKind", "package"),
+      ...(normalized.context ? [relation(id, "inContext", normalized.context)] : []),
       ...(normalized.defaultNamespace ? [relation(id, "packageDefaultNamespace", normalized.defaultNamespace)] : []),
       ...(normalized.version ? [relation(id, "packageVersionLabel", normalized.version)] : []),
       ...normalized.compatibleRuntimeProfiles.map(profile => relation(id, "packageCompatibleRuntimeProfile", profile)),
@@ -2730,11 +2735,7 @@ export const moduleProjectors = {
   },
 
   capabilityRevisionHistory(witnesses) {
-    const rows = capabilityDefinitionHistoryRows(witnesses);
-    return rows.sort((a, b) =>
-      String(a.capabilityId).localeCompare(String(b.capabilityId))
-      || String(a.witnessId).localeCompare(String(b.witnessId))
-    );
+    return capabilityDefinitionHistoryRows(witnesses);
   },
 
   capabilityRevisionHistoryIndex(witnesses) {

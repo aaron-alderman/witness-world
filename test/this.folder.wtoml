@@ -1,0 +1,876 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:test"
+path = "test"
+label = "test"
+summary = "Auto-generated folder metadata for test."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/app-project.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/app-snapshot-manager.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/app-snapshot-runtime.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/architecture.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/auth-oauth-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/backend-program-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/backend-programs.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/backend-seam-contract.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/bootstrap-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/bootstrap-runtime-composition.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/bootstrap-shell-desktop.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/canvas-core.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/canvas-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/canvas-processes.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/canvas-projection.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/canvas-undo.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/capability-compatibility.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/capability-legacy-migration.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/cli.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/compatibility-bridges.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/db-sql-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/demo-entrypoint.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-burst-fit-real.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-chart.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-clip-in-ir.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-clip-real.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-eval.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-forms.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-frames.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-health-in-ir.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-health-r-real.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-health-real.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-host-op.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-in-ir.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-kalman-in-ir.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-kalman-real.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-mc-chart.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-mc-eval.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-millcharge-anim.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-millcharge-chart.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-millcharge-eval.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-millforce-chart.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-millforce-eval.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-pipeline-exec.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-pipeline.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-prepare-angles-real.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-probe.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-real-golden.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-rotation-real.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-engentus-shell.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-surface-identity.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire-sync.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desire.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/desktop-shell.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/dsl-ergonomics.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/dsl.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/eden-entrypoint.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/eden-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/eden-projection.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/engentus-authoring-pathway.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/engentus-no-cheat-boundary.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/engentus-route-local-transport.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/engentus-surface-events.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/engentus-wcss-identity-first.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/engentus-wcss-theme.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "folder:test/fixtures"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/hardening.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/http-outbound.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/inspect-projector-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/jobs-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/kernel.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/mcp-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/module-projector-plugins.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/modules.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/notify-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/package-authorship-world.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/package-authorship.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/platform-runtime-ownership.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/plugin-boundaries.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/plugin-test-utils.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/process-eval-execution-runner.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/process-graph.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/process-view.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-active-contributions.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-app-context.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-asset-derived-utils.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-auth-oauth-support-services.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-authgate-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-authoring-policy.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-authoring-services.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-authz.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-browser-app-state.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-builtin-job-handlers.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-builtins.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-bundle-generic-handlers.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-bundle-handler-assembly.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-bundle-handlers.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-bundle-support-services.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-config-utils.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-context-resolver.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-execution-runner.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-governance.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-guidance-action-registry.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-guidance-companion-shell.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-guidance-companion-sync.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-guidance-runtime-issue-suggestions.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-guidance-scope-anchors.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-guidance-scope-inventory.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-guidance.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-host-entry.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-host-route-factory.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-host-utils.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-http-utils.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-local-launcher.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-multihost-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-oauth-multiprovider-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-operator-contract.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-ownership.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-page-state.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-plugin-loader.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-plugin-utils.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-practical-backend-asset-services.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-practical-backend-db-search-services.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-practical-backend-glue.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-practical-backend-io-services.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-practical-backend-support-services.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-presentation.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-profile.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-provider-runtimes.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-reconcile-service.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-route-handlers.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-routing.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-semantics.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-server-authz.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-server.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-session-services.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-startup-services.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-stream-utils.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-surface-capability-runtime.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-surface-diagnostics.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-surface-dom-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-surface-interaction-runtime-source-guard.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-surface-interaction-runtime.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-surface-page.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-surface-route-runtime.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/runtime-surface-shell-reset.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/search-index-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "folder:test/support"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/surface-authoring.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "wtoml:test/this.folder.wtoml"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/tutorials.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/type-model.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/ui.bootstrap.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/ui.canvas.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/ui.eden-canvas.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/ui.generated-runtime.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/ui.interactions.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/ui.live-inspector.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/ui.process-view.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/ui.tutorial.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/ui.world-browser.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/wcss-grammar.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/webhook-host.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/whtml-wcss-uplift.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/widget-define.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/widgets.test.js"
+
+[[relation]]
+from = "folder:test"
+rel = "contains"
+to = "file:test/world-graph.test.js"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:test"
+# rel = "describedBy"
+# to = "doc:..."

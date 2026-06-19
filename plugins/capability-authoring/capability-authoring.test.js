@@ -8,6 +8,8 @@ import {
   requestBootstrapCapabilityDefine,
   requestBootstrapCapabilityInstall,
   requestBootstrapCapabilityMigrateLegacy,
+  requestBootstrapCapabilityRollback,
+  requestBootstrapCapabilityUpdate,
   resolveCapabilityTargetInput
 } from "./capability-processes.js";
 import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
@@ -88,13 +90,17 @@ test("capability-authoring plugin owns capability authoring routes and handlers"
   assert.equal(bundleId, "bundle-capability-authoring");
   assert.deepEqual(handlerCatalog.dispatchHandlers, [
     "capability.create",
+    "capability.update",
     "capability.install",
     "capability.remove",
+    "capability.rollback",
     "capability.migrateLegacy"
   ]);
   assert.equal(routes.some(route => route.path === "/api/capabilities" && route.handler === "capability.create"), true);
+  assert.equal(routes.some(route => route.method === "PATCH" && route.handler === "capability.update"), true);
   assert.equal(routes.some(route => route.path === "/api/capability-installs" && route.handler === "capability.install"), true);
   assert.equal(routes.some(route => route.method === "DELETE" && route.handler === "capability.remove"), true);
+  assert.equal(routes.some(route => route.handler === "capability.rollback"), true);
   assert.equal(routes.some(route => route.path === "/api/capability-migrations/legacy" && route.handler === "capability.migrateLegacy"), true);
 
   const handlers = createHandlers({
@@ -110,8 +116,10 @@ test("capability-authoring plugin owns capability authoring routes and handlers"
     sendJson() {}
   });
   assert.equal(typeof handlers["capability.create"], "function");
+  assert.equal(typeof handlers["capability.update"], "function");
   assert.equal(typeof handlers["capability.install"], "function");
   assert.equal(typeof handlers["capability.remove"], "function");
+  assert.equal(typeof handlers["capability.rollback"], "function");
   assert.equal(typeof handlers["capability.migrateLegacy"], "function");
 });
 
@@ -123,10 +131,14 @@ test("capability-authoring plugin owns process helpers and proposal targets", as
   assert.equal(processesSource.includes("export function requestBootstrapCapabilityDefine"), true);
   assert.equal(processesSource.includes("export function requestBootstrapCapabilityInstall"), true);
   assert.equal(processesSource.includes("export function requestBootstrapCapabilityRemove"), true);
+  assert.equal(processesSource.includes("export function requestBootstrapCapabilityUpdate"), true);
+  assert.equal(processesSource.includes("export function requestBootstrapCapabilityRollback"), true);
   assert.equal(processesSource.includes("export function requestBootstrapCapabilityMigrateLegacy"), true);
   assert.equal(proposalTargetSource.includes("case \"capability.define\""), true);
   assert.equal(proposalTargetSource.includes("case \"capability.install\""), true);
+  assert.equal(proposalTargetSource.includes("case \"capability.update\""), true);
   assert.equal(proposalTargetSource.includes("case \"capability.remove\""), true);
+  assert.equal(proposalTargetSource.includes("case \"capability.rollback\""), true);
   assert.equal(proposalTargetSource.includes("case \"capability.migrateLegacy\""), true);
   await assert.rejects(readFile(new URL("../../src/bootstrap-authoring.js", import.meta.url), "utf8"));
   assert.equal(authoringMeta.runtime, undefined);
@@ -322,6 +334,62 @@ test("capability authoring handlers create proposals instead of dead-end 403s fo
       { targetProcess: "capability.define", targetKind: "context", targetId: "ctx.shared" },
       { targetProcess: "capability.install", targetKind: "context", targetId: "ctx.shared" },
       { targetProcess: "capability.remove", targetKind: "context", targetId: "ctx.shared" }
+    ]
+  );
+});
+
+test("capability update and rollback handlers create proposals instead of dead-end 403s for governed routes", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+version = "1.0.0"
+placement = ["context"]
+`);
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    readJson: async req => req.body ?? {},
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureContextAuthority: () => ({ ok: true }),
+      ensureTargetAuthority: () => ({ ok: false, status: 403, reason: "forbidden target" })
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ kind: "gate", gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ kind: "json", status, body });
+    }
+  });
+
+  await handlers["capability.update"]({
+    req: { body: { version: "2.0.0" } },
+    res: {},
+    params: { id: "notes.sidebar" },
+    requestActor: "callan"
+  });
+  await handlers["capability.rollback"]({
+    req: { body: {} },
+    res: {},
+    params: { id: "notes.sidebar" },
+    requestActor: "callan"
+  });
+
+  assert.equal(sent.some(entry => entry.kind === "gate"), false);
+  assert.deepEqual(sent.map(entry => entry.status), [202, 202]);
+  assert.deepEqual(
+    sent.map(entry => ({
+      targetProcess: entry.body.proposal.targetProcess,
+      targetKind: entry.body.proposal.targetKind,
+      targetId: entry.body.proposal.targetId
+    })),
+    [
+      { targetProcess: "capability.update", targetKind: "capability", targetId: "notes.sidebar" },
+      { targetProcess: "capability.rollback", targetKind: "capability", targetId: "notes.sidebar" }
     ]
   );
 });
@@ -584,6 +652,57 @@ placement = ["context"]
   ), true);
 });
 
+test("capability proposal targets execute update and rollback through the shared helpers", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+version = "1.0.0"
+placement = ["context"]
+`);
+
+  const updated = executeCapabilityAuthoringProposalTarget({
+    world,
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: { targetProcess: "capability.update", targetId: "notes.sidebar" },
+    body: {
+      id: "notes.sidebar",
+      version: "2.0.0"
+    },
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: () => ({ ok: true })
+  });
+  assert.equal(updated?.ok, true);
+  assert.equal(world.project(moduleProjectors.capabilityIndex).byId["notes.sidebar"]?.version, "2.0.0");
+  assert.equal(world.allWitnesses().some(witness =>
+    witness.process === "capability.update"
+    && witness.actor === "aaron"
+    && witness.body?.capability?.id === "notes.sidebar"
+  ), true);
+
+  const rolledBack = executeCapabilityAuthoringProposalTarget({
+    world,
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: { targetProcess: "capability.rollback", targetId: "notes.sidebar" },
+    body: {
+      id: "notes.sidebar"
+    },
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: () => ({ ok: true })
+  });
+  assert.equal(rolledBack?.ok, true);
+  assert.equal(world.project(moduleProjectors.capabilityIndex).byId["notes.sidebar"]?.version, "1.0.0");
+  assert.equal(world.allWitnesses().some(witness =>
+    witness.process === "capability.rollback"
+    && witness.actor === "aaron"
+    && witness.body?.rollbackToVersion === "1.0.0"
+  ), true);
+});
+
 test("capability proposal targets execute legacy migration through the shared helper", () => {
   const world = createWorld();
   applyWitnessToml(world, `
@@ -647,6 +766,121 @@ id = "ctx.shared"
   assert.equal(result.previewBefore.pending.length > 0, true);
   assert.deepEqual(result.previewAfter.pending, []);
   assert.equal(result.witness.process, "capability.migrateLegacy");
+});
+
+test("capability update helper writes an explicit revision change and preserves prior version history", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+version = "1.0.0"
+placement = ["context"]
+`);
+
+  const result = requestBootstrapCapabilityUpdate(world, {
+    actor: "callan",
+    backendHost: "backendHost",
+    body: {
+      id: "notes.sidebar",
+      version: "2.0.0",
+      placementJson: "[\"context\",\"serverRunner\"]"
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.capability.version, "2.0.0");
+  assert.deepEqual(result.capability.placement, ["context", "serverRunner"]);
+  assert.equal(result.witness.process, "capability.update");
+  assert.equal(result.witness.body.previousVersion, "1.0.0");
+  const history = world.project(moduleProjectors.capabilityRevisionHistoryIndex).byCapability["notes.sidebar"] ?? [];
+  assert.deepEqual(history.map(row => row.action), ["define", "update"]);
+  assert.equal(history.at(-1)?.previousVersion, "1.0.0");
+});
+
+test("capability update helper blocks revisions that would invalidate existing installs", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.shared"
+
+[[capability]]
+actor = "system"
+id = "cap.richtext"
+label = "Richtext"
+placement = ["context"]
+
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+version = "1.0.0"
+placement = ["context"]
+`);
+  requestBootstrapCapabilityInstall(world, {
+    actor: "callan",
+    backendHost: "backendHost",
+    body: {
+      capability: "notes.sidebar",
+      target: "ctx.shared",
+      targetKind: "context"
+    }
+  });
+
+  const result = requestBootstrapCapabilityUpdate(world, {
+    actor: "callan",
+    backendHost: "backendHost",
+    body: {
+      id: "notes.sidebar",
+      dependsOnJson: "[\"cap.richtext\"]"
+    }
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "capability update would invalidate existing installs");
+  assert.equal(result.witness.body.blockingInstalls.length, 1);
+  assert.deepEqual(result.witness.body.blockingInstalls[0].compatibility.reasons.map(row => row.code), ["dependency-missing"]);
+});
+
+test("capability rollback helper restores the prior definition through an explicit witnessed operation", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+version = "1.0.0"
+placement = ["context"]
+`);
+  requestBootstrapCapabilityUpdate(world, {
+    actor: "callan",
+    backendHost: "backendHost",
+    body: {
+      id: "notes.sidebar",
+      version: "2.0.0",
+      placementJson: "[\"context\",\"serverRunner\"]"
+    }
+  });
+
+  const result = requestBootstrapCapabilityRollback(world, {
+    actor: "callan",
+    backendHost: "backendHost",
+    body: {
+      id: "notes.sidebar"
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.capability.version, "1.0.0");
+  assert.deepEqual(result.capability.placement, ["context"]);
+  assert.equal(result.witness.process, "capability.rollback");
+  assert.equal(result.witness.body.rollbackToVersion, "1.0.0");
+  assert.equal(result.witness.body.rollbackFromVersion, "2.0.0");
+  const history = world.project(moduleProjectors.capabilityRevisionHistoryIndex).byCapability["notes.sidebar"] ?? [];
+  assert.deepEqual(history.map(row => row.action), ["define", "update", "rollback"]);
+  assert.equal(history.at(-1)?.rollbackFromVersion, "2.0.0");
 });
 
 test("capability define accepts compatibility JSON and persists the normalized contract", () => {

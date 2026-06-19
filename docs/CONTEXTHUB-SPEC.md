@@ -626,9 +626,10 @@ Suggested MCP lanes:
 - `platform.context.align`
 
 First-class documentation MCP (implemented):
-- `platform.docs`, `docs.list` / `docs.read` / `docs.search` / `docs.pack`
-- `docs.pack` produces context packs with doc content + modeled doc↔doc/doc↔code relations (from the knowledge-relations.wtoml + platform knowledge model).
-- Rich responses include modeled relations (from knowledge-relations.wtoml) and links to code/intents.
+- `platform.docs`, `docs.list` / `docs.read` / `docs.search` / `docs.pack`, `platform.folder`
+- Folder metadata via `this.folder.wtoml` (contains + rich links) is loaded into the model and exposed via `platform.read view=folders` and `platform.folder`.
+- `docs.pack` produces context packs with doc content + modeled doc↔doc/doc↔code/folder relations (from the knowledge-relations.wtoml + platform knowledge model).
+- Rich responses include modeled relations (from knowledge-relations.wtoml) and links to code/intents/folders.
 - These give LLMs stable, relation-aware access to docs + the intent registry.
 
 This realizes the suggested MCP lanes for documentation-focused context in section 14.

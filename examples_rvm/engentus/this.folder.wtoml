@@ -1,0 +1,86 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:examples_rvm/engentus"
+path = "examples_rvm/engentus"
+label = "engentus"
+summary = "Auto-generated folder metadata for examples_rvm/engentus."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "folder:examples_rvm/engentus/fixtures"
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "file:examples_rvm/engentus/health-r-kernel.mjs"
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "file:examples_rvm/engentus/host-ops-stub.mjs"
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "file:examples_rvm/engentus/PIPELINE.dsl"
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "rvm:examples_rvm/engentus/PIPELINE.rvm"
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "file:examples_rvm/engentus/prepare-angles-kernel.mjs"
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "file:examples_rvm/engentus/real-golden-replay.mjs"
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "file:examples_rvm/engentus/rotation-kernel.mjs"
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "wtoml:examples_rvm/engentus/this.folder.wtoml"
+
+[[relation]]
+from = "folder:examples_rvm/engentus"
+rel = "contains"
+to = "folder:examples_rvm/engentus/tools"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:examples_rvm/engentus"
+# rel = "describedBy"
+# to = "doc:..."

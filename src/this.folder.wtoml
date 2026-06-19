@@ -1,0 +1,736 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:src"
+path = "src"
+label = "src"
+summary = "Auto-generated folder metadata for src."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/app-project.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/app-runtime.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/app-snapshot-manager.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/backend-programs.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/capability-compatibility.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/capability-legacy-migration.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/cli.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/compatibility-bridges.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/context-naming-world.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "folder:src/desire"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-bridge.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-cli.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-launcher-actions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-launcher-actions.test.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-launcher-page.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-launcher-recent-worlds.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-launcher-recent-worlds.test.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-launcher-runtime.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-launcher-runtime.test.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "wtoml:src/desktop-launcher-shell.wtoml"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-launcher-view.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-launcher-view.test.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-main.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-preload.cjs"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-preload.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/desktop-session-manager.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/dsl.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/gates.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/host.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/ids.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/kernel.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/logger.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/modules.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/package-authorship-world.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/package-authorship.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/process-graph.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/projectors-core.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-active-contributions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-app-context.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-authoring-policy.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-authoring-services.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-authz.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-browser-app-state.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-builtins.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-bundle-handler-assembly.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-bundle-handlers.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-bundle-support-services.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-bundles.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-config-utils.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-context-resolver.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-core-handlers.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-execution-runner.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-governance.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-action-registry.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-card-view.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-card-view.test.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-client.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-controller-client.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-interactions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-interactions.test.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-ui.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-ui.test.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-view.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-bootstrap-view.test.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-client-adapter.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-client-bootstrap.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-client-interactions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-client-runtime.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-client-state.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-client.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-companion-actions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-companion-shell.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-companion-suggestions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-companion-sync.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-disabled-scopes-actions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-disabled-scopes-view.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-live-suggestions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-model.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-overlay-actions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-overlay-dom.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-overlay-drag.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-overlay-interactions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-overlay-view.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-progress-runtime.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-progress-state.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-runtime-actions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-runtime-issue-suggestions.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-scope-anchors.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-scope-inventory-factory.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance-scope-inventory.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-guidance.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-host-entry.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-host-route-factory.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-host-utils.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-http-utils.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-local-launcher.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-operator-contract.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-operator-service.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-ownership.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-page-fallbacks.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-page-state.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-plugin-loader.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-plugin-utils.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-presentation.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-reconcile-service.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-route-handlers.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-routing.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-semantics.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-server.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-session-services.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-shell-contract.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-startup-services.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-store-seeds.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-browser-runtime-module.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-capability-runtime.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-command-primitives.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-content-primitives.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-diagnostics.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-dom-host.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-dom-identity.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-form-controls.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-inspector-primitives.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-interaction-runtime.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-kit.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-page.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-route-runtime.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-runtime-shared.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-shell.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-surface-tutorial-primitives.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-template-utils.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-url-utils.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-verification-persistence.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-verification-policy.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-wcss-adapter.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/runtime-widget-page.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "wtoml:src/this.folder.wtoml"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/type-model.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "folder:src/uplift"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/widgets.js"
+
+[[relation]]
+from = "folder:src"
+rel = "contains"
+to = "file:src/witness-log.js"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:src"
+# rel = "describedBy"
+# to = "doc:..."

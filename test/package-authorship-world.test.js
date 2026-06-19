@@ -6,6 +6,7 @@ import { moduleProjectors, publishPackageRevision } from "../src/modules.js";
 import { materializeCanonicalPackageBundle } from "../src/package-authorship.js";
 import {
   materializeCanonicalPackageBundleFromProject,
+  packageApplyPreviewRowsFromProject,
   packageConvergenceFromProject,
   previewPackageRevisionApplyFromProject
 } from "../src/package-authorship-world.js";
@@ -20,6 +21,7 @@ id = "ctx.packages"
 [[package]]
 actor = "system"
 id = "package.plugin.inspect"
+context = "ctx.packages"
 label = "Inspect"
 packageKind = "plugin"
 version = "0.1.0"
@@ -65,10 +67,12 @@ runtimeProfiles = ["full"]
 
   const packageRow = world.project(moduleProjectors.packageIndex).byId["package.plugin.inspect"];
   assert.ok(packageRow);
+  assert.equal(packageRow.context, "ctx.packages");
   assert.equal(packageRow.packageKind, "plugin");
   assert.equal(packageRow.defaultNamespace, "inspect");
   assert.deepEqual(packageRow.compatibleRuntimeProfiles, ["full", "minimal"]);
   assert.deepEqual(packageRow.exports.map(row => row.id), ["surface.process", "surface.world"]);
+  assert.equal(world.project(moduleProjectors.objectContexts).get("package.plugin.inspect"), "ctx.packages");
 
   const revisionRow = world.project(moduleProjectors.packageRevisionIndex).byId["packageRevision.plugin.inspect.v1"];
   assert.ok(revisionRow);
@@ -115,6 +119,7 @@ test("projected package nouns feed the canonical WTOML bundle serializer", () =>
 [[package]]
 actor = "system"
 id = "package.plugin.inspect"
+context = "ctx.packages"
 label = "Inspect"
 packageKind = "plugin"
 version = "0.1.0"
@@ -180,6 +185,7 @@ targetId = "dom.render"
   const packageDocs = parseWitnessToml(bundle.files[0].content);
   assert.equal(packageDocs[0].kind, "package");
   assert.equal(packageDocs[0].values.id, "package.plugin.inspect");
+  assert.equal(packageDocs[0].values.context, "ctx.packages");
   const revisionDocs = parseWitnessToml(bundle.files[1].content);
   assert.equal(revisionDocs[0].kind, "packageRevision");
   assert.equal(revisionDocs[0].values.package, "package.plugin.inspect");
@@ -491,6 +497,85 @@ revision = "packageRevision.plugin.inspect.v2"
 
   assert.equal(preview.status, "unplanned");
   assert.match(preview.explanation, /no authored transformer contract explains convergence yet/i);
+});
+
+test("package apply preview rows helper builds enriched preview rows and filters by revision-linked ids", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+status = "review"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.alpha:inspectA"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.beta:inspectB"
+context = "ctx.beta"
+name = "inspectB"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1-to-v2"
+package = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+sourceNamespace = "packageNamespace:ctx.alpha:inspectA"
+targetRevision = "packageRevision.plugin.inspect.v2"
+targetNamespace = "packageNamespace:ctx.beta:inspectB"
+strategy = "follow-up-revision"
+status = "active"
+remainingGlue = ["rename remaining runtimePlugin installs"]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+transformer = "packageTransformer.inspect.v1-to-v2"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "migrated" }
+`);
+
+  const rows = packageApplyPreviewRowsFromProject(projector => world.project(projector));
+  assert.equal(rows.length, 2);
+  const filtered = packageApplyPreviewRowsFromProject(projector => world.project(projector), {
+    id: "packageTransformer.inspect.v1-to-v2"
+  });
+  assert.equal(filtered.length, 2);
+  const targetPreview = filtered.find(row => row.revisionId === "packageRevision.plugin.inspect.v2");
+  assert.ok(targetPreview);
+  assert.equal(targetPreview.id, "packageApplyPreview:packageRevision.plugin.inspect.v2");
+  assert.equal(targetPreview.status, "glue-required");
+  assert.equal(targetPreview.bundleHash, targetPreview.bundle.bundleHash);
+  assert.deepEqual(targetPreview.relatedTransformerIds, ["packageTransformer.inspect.v1-to-v2"]);
+  assert.deepEqual(targetPreview.selectedNamespaceIds, ["packageNamespace:ctx.beta:inspectB"]);
 });
 
 test("package revision projection derives published state from publish witnesses", () => {

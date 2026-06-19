@@ -129,6 +129,29 @@ export function previewPackageRevisionApplyFromProject(project, {
   };
 }
 
+function packageApplyPreviewRowFromPreview(preview) {
+  return {
+    ...preview,
+    id: `packageApplyPreview:${preview.revisionId}`,
+    title: preview.selectedRevision?.version
+      ? `${preview.packageId} ${preview.selectedRevision.version}`
+      : preview.revisionId,
+    packageLabel: preview.bundle?.packageRecord?.label ?? preview.packageId,
+    revisionVersion: preview.selectedRevision?.version ?? preview.bundle?.revisionRecord?.version ?? null,
+    revisionStatus: preview.selectedRevision?.status ?? preview.bundle?.revisionRecord?.status ?? null,
+    bundleHash: preview.bundle?.bundleHash ?? null,
+    bundleFileCount: Array.isArray(preview.bundle?.files) ? preview.bundle.files.length : 0,
+    bundleFilePaths: Array.isArray(preview.bundle?.files) ? preview.bundle.files.map(file => file.path) : [],
+    coexistenceId: preview.coexistence?.id ?? null,
+    convergenceId: preview.convergence?.id ?? null,
+    selectedNamespaceIds: (preview.selectedNamespaces ?? []).map(namespace => namespace.id),
+    manifestConflictIds: (preview.manifestPluginConflicts ?? []).map(conflict => conflict.id),
+    relatedTransformerIds: (preview.relatedTransformers ?? []).map(transformer => transformer.id),
+    relatedConvergencePatchIds: (preview.relatedConvergencePatches ?? []).map(patch => patch.id),
+    remainingGlueMessages: (preview.remainingGlue ?? []).map(item => item.message)
+  };
+}
+
 function normalizeRequiredRevisionId(revisionId) {
   const normalizedRevisionId = typeof revisionId === "string" && revisionId.trim() ? revisionId.trim() : "";
   if (!normalizedRevisionId) throw new Error("revisionId is required");
@@ -177,6 +200,48 @@ function packageRevisionApplyPreviewExplanation({
         ? "Revision is inspectable and replayable, and the current coexistence facts do not mark its manifest conflict as blocked."
         : "Revision is inspectable and replayable as the current authored package line with no remaining convergence blockers.";
   }
+}
+
+function matchesPackageApplyPreviewRow(row, id) {
+  const target = typeof id === "string" && id.trim() ? id.trim() : "";
+  if (!target) return true;
+  return row.id === target
+    || row.packageId === target
+    || row.revisionId === target
+    || row.coexistenceId === target
+    || row.convergenceId === target
+    || row.selectedNamespaceIds.includes(target)
+    || row.manifestConflictIds.includes(target)
+    || row.relatedTransformerIds.includes(target)
+    || row.relatedConvergencePatchIds.includes(target);
+}
+
+export function packageApplyPreviewRowsFromProject(project, {
+  id = null
+} = {}) {
+  if (typeof project !== "function") throw new Error("project must be a function");
+  const packageRevisionIndex = project(moduleProjectors.packageRevisionIndex);
+  const revisions = Array.isArray(packageRevisionIndex?.rows) ? packageRevisionIndex.rows : [];
+  const normalizedId = typeof id === "string" && id.trim() ? id.trim() : null;
+  const rows = revisions
+    .map(revision => {
+      try {
+        return packageApplyPreviewRowFromPreview(previewPackageRevisionApplyFromProject(project, {
+          revisionId: revision.id
+        }));
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((left, right) =>
+      String(left.packageId).localeCompare(String(right.packageId))
+      || String(left.revisionVersion ?? "").localeCompare(String(right.revisionVersion ?? ""))
+      || String(left.revisionId).localeCompare(String(right.revisionId))
+    );
+  return normalizedId
+    ? rows.filter(row => matchesPackageApplyPreviewRow(row, normalizedId))
+    : rows;
 }
 
 function cloneProjectedValue(value) {

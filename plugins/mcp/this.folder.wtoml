@@ -1,0 +1,71 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/mcp"
+path = "plugins/mcp"
+label = "mcp"
+summary = "Auto-generated folder metadata for plugins/mcp."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/mcp"
+rel = "contains"
+to = "file:plugins/mcp/mcp-support-services.js"
+
+[[relation]]
+from = "folder:plugins/mcp"
+rel = "contains"
+to = "file:plugins/mcp/mcp-tools.js"
+
+[[relation]]
+from = "folder:plugins/mcp"
+rel = "contains"
+to = "file:plugins/mcp/mcp.test.js"
+
+[[relation]]
+from = "folder:plugins/mcp"
+rel = "contains"
+to = "json:plugins/mcp/plugin.json"
+
+[[relation]]
+from = "folder:plugins/mcp"
+rel = "contains"
+to = "file:plugins/mcp/projections.js"
+
+[[relation]]
+from = "folder:plugins/mcp"
+rel = "contains"
+to = "file:plugins/mcp/runtime.js"
+
+[[relation]]
+from = "folder:plugins/mcp"
+rel = "contains"
+to = "wtoml:plugins/mcp/this.folder.wtoml"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/mcp"
+# rel = "describedBy"
+# to = "doc:..."

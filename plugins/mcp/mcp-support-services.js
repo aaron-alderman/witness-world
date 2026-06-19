@@ -70,6 +70,7 @@ export function createMcpBundleSupportServices({
       case "docs.read":
       case "docs.search":
       case "docs.pack":
+      case "platform.folder":
         return capabilities.has("platform.self");
       default:
         return true;

@@ -5,6 +5,11 @@ import {
   previewLegacyCapabilityMigrationFromProject
 } from "../../src/capability-legacy-migration.js";
 import {
+  packageApplyPreviewRowsFromProject,
+  packageCoexistenceFromProject,
+  packageConvergenceFromProject
+} from "../../src/package-authorship-world.js";
+import {
   CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
   moduleProjectors
 } from "../../src/modules.js";
@@ -166,9 +171,19 @@ export function createBootstrapReadModels({
     const perspectives = project(moduleProjectors.perspectives);
     const stewardships = project(moduleProjectors.stewardships);
     const proposals = project(moduleProjectors.proposals);
+    const packages = project(moduleProjectors.packages);
+    const packageRevisions = project(moduleProjectors.packageRevisions);
+    const packagePatches = project(moduleProjectors.packagePatches);
+    const packageNamespaces = project(moduleProjectors.packageNamespaces);
+    const packageDependencies = project(moduleProjectors.packageDependencies);
+    const packageTransformers = project(moduleProjectors.packageTransformers);
+    const packageCoexistence = packageCoexistenceFromProject(project);
+    const packageConvergence = packageConvergenceFromProject(project);
+    const packageApplyPreviews = packageApplyPreviewRowsFromProject(project);
     const capabilities = project(moduleProjectors.capabilities);
     const capabilityCatalog = project(moduleProjectors.capabilityCatalog);
     const capabilityInstalls = project(moduleProjectors.capabilityInstalls);
+    const capabilityRevisionHistory = project(moduleProjectors.capabilityRevisionHistory);
     const legacyCapabilityCompatibilityMode = legacyCapabilityCompatibilityModeFromProject(project);
     const legacyCapabilityMigration = previewLegacyCapabilityMigrationFromProject(project);
     const compatibilityBridges = buildCompatibilityBridgeLedger({
@@ -234,10 +249,20 @@ export function createBootstrapReadModels({
       stewardships,
       authority: authorityForActor(world, requestActor),
       proposals,
+      packages,
+      packageRevisions,
+      packagePatches,
+      packageNamespaces,
+      packageDependencies,
+      packageTransformers,
+      packageCoexistence,
+      packageConvergence,
+      packageApplyPreviews,
       capabilities,
       capabilityCatalog: capabilityPluginSources.capabilityCatalog,
       capabilityPackageSources: capabilityPluginSources.capabilityPackageSources,
       capabilityInstalls,
+      capabilityRevisionHistory,
       legacyCapabilityCompatibilityMode,
       legacyCapabilityMigration,
       compatibilityBridges,
@@ -318,6 +343,12 @@ export function createBootstrapReadModels({
         ...(authored.identities || []),
         ...(authored.contexts || []),
         ...(authored.perspectives || []),
+        ...(authored.packages || []),
+        ...(authored.packageRevisions || []),
+        ...(authored.packagePatches || []),
+        ...(authored.packageNamespaces || []),
+        ...(authored.packageDependencies || []),
+        ...(authored.packageTransformers || []),
         ...(authored.widgets || []),
         ...(authored.frontendPrograms || []),
         ...(authored.backendPrograms || []),

@@ -1,9 +1,11 @@
 import {
   requestBootstrapCapabilityMigrateLegacy,
   resolveCapabilityTargetInput,
+  requestBootstrapCapabilityRollback,
   requestBootstrapCapabilityDefine,
   requestBootstrapCapabilityInstall,
-  requestBootstrapCapabilityRemove
+  requestBootstrapCapabilityRemove,
+  requestBootstrapCapabilityUpdate
 } from "./capability-processes.js";
 import { previewLegacyCapabilityMigration } from "../../src/capability-legacy-migration.js";
 
@@ -37,6 +39,16 @@ export function executeCapabilityAuthoringProposalTarget({
       });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
+    case "capability.update": {
+      const gate = ensureTargetAuthority(actor, body.id || proposal.targetId || "");
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestBootstrapCapabilityUpdate(world, {
+        actor,
+        backendHost,
+        body
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
     case "capability.remove": {
       const resolvedTarget = resolveCapabilityTargetInput(world, body, {
         label: "capability remove target"
@@ -48,6 +60,16 @@ export function executeCapabilityAuthoringProposalTarget({
         actor,
         backendHost,
         body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "capability.rollback": {
+      const gate = ensureTargetAuthority(actor, body.id || proposal.targetId || "");
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestBootstrapCapabilityRollback(world, {
+        actor,
+        backendHost,
+        body
       });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }

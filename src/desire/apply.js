@@ -1159,6 +1159,7 @@ function applyCoreRuntimeDeclaration(world, doc) {
         definePackage(world, {
           actor: req(values, "actor"),
           id: req(values, "id"),
+          context: values.context ?? null,
           label: values.label ?? values.id,
           packageKind: values.packageKind ?? values.kind ?? "plugin",
           version: values.version ?? null,
@@ -1433,7 +1434,11 @@ function applyCoreRuntimeDeclaration(world, doc) {
         if (!serves.target) return null;
         const params = routeParamsResolved(world, values);
         if (!params.ok) throw new Error(params.error);
-        return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "serves", refField: "servesRef", resolved: serves }),
+          ...(params.refResolutions ?? [])
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, [req(values, "id")], req(values, "actor"), [
           defineRoute(world, {
             actor: req(values, "actor"),
             id: req(values, "id"),
@@ -2021,6 +2026,7 @@ function routeParamsDirect(values) {
 
 function routeParamsResolved(world, values) {
   const params = values.params && typeof values.params === "object" ? { ...values.params } : {};
+  const refResolutions = [];
   const rootWidget = resolveCoveredPreparedDocRef(world, values, {
     idField: "rootWidget",
     refField: "rootWidgetRef",
@@ -2028,6 +2034,7 @@ function routeParamsResolved(world, values) {
   });
   if (!rootWidget.ok) return { ok: false, error: rootWidget.error };
   if (rootWidget.target) params.rootWidget = rootWidget.target;
+  refResolutions.push(docRefResolution({ idField: "rootWidget", refField: "rootWidgetRef", resolved: rootWidget }));
   const rootSurface = resolveCoveredPreparedDocRef(world, values, {
     idField: "rootSurface",
     refField: "rootSurfaceRef",
@@ -2035,8 +2042,16 @@ function routeParamsResolved(world, values) {
   });
   if (!rootSurface.ok) return { ok: false, error: rootSurface.error };
   if (rootSurface.target) params.rootSurface = rootSurface.target;
+  refResolutions.push(docRefResolution({ idField: "rootSurface", refField: "rootSurfaceRef", resolved: rootSurface }));
   if (values.page != null) params.page = values.page;
-  if (values.frontendProgram != null) params.frontendProgram = values.frontendProgram;
+  const frontendProgram = resolveCoveredPreparedDocRef(world, values, {
+    idField: "frontendProgram",
+    refField: "frontendProgramRef",
+    label: "frontend program"
+  });
+  if (!frontendProgram.ok) return { ok: false, error: frontendProgram.error };
+  if (frontendProgram.target) params.frontendProgram = frontendProgram.target;
+  refResolutions.push(docRefResolution({ idField: "frontendProgram", refField: "frontendProgramRef", resolved: frontendProgram }));
   const backendProgramSoul = resolveCoveredPreparedDocRef(world, values, {
     idField: "backendProgramSoul",
     refField: "backendProgramSoulRef",
@@ -2044,14 +2059,27 @@ function routeParamsResolved(world, values) {
   });
   if (!backendProgramSoul.ok) return { ok: false, error: backendProgramSoul.error };
   if (backendProgramSoul.target) params.backendProgramSoul = backendProgramSoul.target;
+  refResolutions.push(docRefResolution({ idField: "backendProgramSoul", refField: "backendProgramSoulRef", resolved: backendProgramSoul }));
   if (values.defaultScreen != null) params.defaultScreen = values.defaultScreen;
   if (values.routeState && typeof values.routeState === "object" && !Array.isArray(values.routeState)) {
-    const process = trimOptionalString(values.routeState.process) ?? trimOptionalString(values.routeState.processRef);
-    const state = trimOptionalString(values.routeState.state) ?? trimOptionalString(values.routeState.stateRef);
-    if (state) {
+    const routeStateProcess = resolveCoveredNestedPreparedDocRef(world, values.context ?? null, values.routeState, {
+      idField: "process",
+      refField: "processRef",
+      label: "route state process"
+    });
+    if (!routeStateProcess.ok) return { ok: false, error: routeStateProcess.error };
+    refResolutions.push(docRefResolution({ idField: "routeState.process", refField: "routeState.processRef", resolved: routeStateProcess }));
+    const routeStateState = resolveCoveredNestedPreparedDocRef(world, values.context ?? null, values.routeState, {
+      idField: "state",
+      refField: "stateRef",
+      label: "route state state"
+    });
+    if (!routeStateState.ok) return { ok: false, error: routeStateState.error };
+    refResolutions.push(docRefResolution({ idField: "routeState.state", refField: "routeState.stateRef", resolved: routeStateState }));
+    if (routeStateState.target) {
       params.routeState = {
-        ...(process ? { process } : {}),
-        state
+        ...(routeStateProcess.target ? { process: routeStateProcess.target } : {}),
+        state: routeStateState.target
       };
     }
   }
@@ -2059,10 +2087,21 @@ function routeParamsResolved(world, values) {
   if (Array.isArray(values.excludeWidgetRoles) && values.excludeWidgetRoles.length) {
     params.excludeWidgetRoles = [...values.excludeWidgetRoles];
   }
-  if (typeof values.defaultRootWidget === "string" && values.defaultRootWidget.trim()) {
-    params.rootWidget = values.defaultRootWidget.trim();
+  const defaultRootWidget = resolveCoveredPreparedDocRef(world, values, {
+    idField: "defaultRootWidget",
+    refField: "defaultRootWidgetRef",
+    label: "default root widget"
+  });
+  if (!defaultRootWidget.ok) return { ok: false, error: defaultRootWidget.error };
+  if (defaultRootWidget.target) {
+    params.rootWidget = defaultRootWidget.target;
   }
-  return { ok: true, value: Object.keys(params).length ? params : null };
+  refResolutions.push(docRefResolution({ idField: "defaultRootWidget", refField: "defaultRootWidgetRef", resolved: defaultRootWidget }));
+  return {
+    ok: true,
+    value: Object.keys(params).length ? params : null,
+    refResolutions: refResolutions.filter(Boolean)
+  };
 }
 
 function trimOptionalString(value) {
@@ -2095,6 +2134,19 @@ function resolveCoveredPreparedDocRef(world, values, {
     context: values[contextField] ?? null,
     id: values[idField] ?? null,
     ref: values[refField] ?? null,
+    label
+  });
+}
+
+function resolveCoveredNestedPreparedDocRef(world, context, values, {
+  idField,
+  refField,
+  label
+}) {
+  return resolveCoveredContextualRef(world.allWitnesses(), {
+    context,
+    id: values?.[idField] ?? null,
+    ref: values?.[refField] ?? null,
     label
   });
 }

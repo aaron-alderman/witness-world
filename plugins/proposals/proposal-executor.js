@@ -360,7 +360,9 @@ export function createAuthoringProposalExecutor({
       }
       case "capability.define":
       case "capability.install":
+      case "capability.update":
       case "capability.remove":
+      case "capability.rollback":
       case "capability.migrateLegacy":
         return executeCapabilityAuthoringProposalTarget({
           world,

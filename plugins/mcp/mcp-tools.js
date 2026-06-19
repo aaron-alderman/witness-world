@@ -4,7 +4,7 @@ import {
 } from "../../src/runtime-authoring-policy.js";
 import {
   materializeCanonicalPackageBundleFromProject,
-  previewPackageRevisionApplyFromProject,
+  packageApplyPreviewRowsFromProject,
   packageCoexistenceFromProject,
   packageConvergenceFromProject
 } from "../../src/package-authorship-world.js";
@@ -13,6 +13,7 @@ import {
   previewLegacyCapabilityMigrationFromProject
 } from "../../src/capability-legacy-migration.js";
 import { contextNamingStateFromProject } from "../../src/context-naming-world.js";
+import { moduleProjectors } from "../../src/modules.js";
 import { PLATFORM_PROPOSAL_ACTIONS } from "../platform/platform-proposals.js";
 
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
@@ -150,7 +151,7 @@ const TOOL_DEFINITIONS = [
     title: "World Read",
     description: "Read bootstrap state, witnesses, source, world graph, process projections, contextual naming state, authored package coexistence, or authoring capability state.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "authoringMatrix"] },
+      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "capabilityRevisionHistory", "authoringMatrix"] },
       id: { type: "string" },
       context: { type: "string" },
       name: { type: "string" },
@@ -170,7 +171,7 @@ const TOOL_DEFINITIONS = [
           ? [args.runId]
           : (args?.view === "contextNaming"
               ? [args?.id, args?.target].filter(Boolean)
-              : ((args?.view === "packageCoexistence" || args?.view === "packageConvergence" || args?.view === "packageApplyPreview" || args?.view === "capabilityLegacyMigration") && args?.id ? [args.id] : []))
+              : ((args?.view === "packageCoexistence" || args?.view === "packageConvergence" || args?.view === "packageApplyPreview" || args?.view === "capabilityLegacyMigration" || args?.view === "capabilityRevisionHistory") && args?.id ? [args.id] : []))
       });
     },
     async run({ args, callHandler, appContext }) {
@@ -274,11 +275,9 @@ const TOOL_DEFINITIONS = [
           }
           try {
             return jsonToolResult({
-              packageApplyPreview: [
-                previewPackageRevisionApplyFromProject(appContext.project, {
-                  revisionId: args.id ?? null
-                })
-              ]
+              packageApplyPreview: packageApplyPreviewRowsFromProject(appContext.project, {
+                id: args.id ?? null
+              })
             });
           } catch (error) {
             return errorToolResult(error instanceof Error ? error.message : String(error), {
@@ -294,6 +293,23 @@ const TOOL_DEFINITIONS = [
             return jsonToolResult({
               legacyCapabilityCompatibilityMode: legacyCapabilityCompatibilityModeFromProject(appContext.project),
               legacyCapabilityMigration: previewLegacyCapabilityMigrationFromProject(appContext.project)
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "capabilityRevisionHistory":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("capabilityRevisionHistory read requires projected world access");
+          }
+          try {
+            const rows = appContext.project(moduleProjectors.capabilityRevisionHistory) ?? [];
+            return jsonToolResult({
+              capabilityRevisionHistory: args.id
+                ? rows.filter(row => row.capabilityId === args.id || row.witnessId === args.id)
+                : rows
             });
           } catch (error) {
             return errorToolResult(error instanceof Error ? error.message : String(error), {
@@ -326,16 +342,16 @@ const TOOL_DEFINITIONS = [
       if (typeof appContext?.project !== "function") {
         return errorToolResult(`package.bundle ${args.operation} requires projected world access`);
       }
-      try {
-        return jsonToolResult(
-          args.operation === "previewApply"
-            ? previewPackageRevisionApplyFromProject(appContext.project, {
-                revisionId: args.revisionId
-              })
-            : materializeCanonicalPackageBundleFromProject(appContext.project, {
-                revisionId: args.revisionId
-              })
-        );
+          try {
+            return jsonToolResult(
+              args.operation === "previewApply"
+                ? packageApplyPreviewRowsFromProject(appContext.project, {
+                  id: args.revisionId
+                })[0]
+                : materializeCanonicalPackageBundleFromProject(appContext.project, {
+                  revisionId: args.revisionId
+                })
+            );
       } catch (error) {
         return errorToolResult(error instanceof Error ? error.message : String(error), {
           operation: args.operation,
@@ -380,8 +396,10 @@ const TOOL_DEFINITIONS = [
           "serve.create",
           "serverRunner.create",
           "capability.create",
+          "capability.update",
           "capability.install",
           "capability.remove",
+          "capability.rollback",
           "capability.migrateLegacy",
           "mcpServer.create",
           "mcpTool.install",
@@ -494,10 +512,26 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "serverRunner.create", method: "POST", path: "/api/server-runners", body });
         case "capability.create":
           return runJsonHandler(callHandler, { handler: "capability.create", method: "POST", path: "/api/capabilities", body });
+        case "capability.update":
+          return runJsonHandler(callHandler, {
+            handler: "capability.update",
+            method: "PATCH",
+            path: `/api/capabilities/${encodeURIComponent(body.id || "")}`,
+            params: { id: body.id || "" },
+            body
+          });
         case "capability.install":
           return runJsonHandler(callHandler, { handler: "capability.install", method: "POST", path: "/api/capability-installs", body });
         case "capability.remove":
           return runJsonHandler(callHandler, { handler: "capability.remove", method: "DELETE", path: "/api/capability-installs", body });
+        case "capability.rollback":
+          return runJsonHandler(callHandler, {
+            handler: "capability.rollback",
+            method: "POST",
+            path: `/api/capabilities/${encodeURIComponent(body.id || "")}/rollback`,
+            params: { id: body.id || "" },
+            body
+          });
         case "capability.migrateLegacy":
           return runJsonHandler(callHandler, { handler: "capability.migrateLegacy", method: "POST", path: "/api/capability-migrations/legacy", body });
         case "mcpServer.create":
@@ -578,9 +612,9 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.read",
     title: "Platform Read",
-    description: "Read the platform self-model (including first-class docs with knowledge relations), gaps, docs, roadmap, telemetry, profiles, compatibility bridges, mutable-surface semantics, governance, branches, change sets, package coexistence, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
+    description: "Read the platform self-model (including first-class docs with knowledge relations, and folders from this.folder.wtoml), gaps, docs, folders, roadmap, telemetry, profiles, compatibility bridges, mutable-surface semantics, governance, branches, change sets, package coexistence, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["model", "gaps", "docs", "roadmap", "telemetry", "profiles", "plugin", "bundle", "capability", "mcp", "bridges", "semantics", "governance", "gates", "proposals", "branches", "changeSets", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
+      view: { type: "string", enum: ["model", "gaps", "docs", "folders", "roadmap", "telemetry", "profiles", "plugin", "bundle", "capability", "mcp", "bridges", "semantics", "governance", "gates", "proposals", "branches", "changeSets", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityRevisionHistory", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
       id: { type: "string" },
       context: { type: "string" },
       name: { type: "string" },
@@ -649,6 +683,52 @@ const TOOL_DEFINITIONS = [
         path: "/api/platform-model",
         query
       });
+    }
+  },
+  {
+    name: "platform.folder",
+    title: "Platform Folder",
+    description: "First-class access to folder metadata from this.folder.wtoml (contains, links to docs/intents/code). Supports list and read.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["list", "read", "pack"] },
+      id: { type: "string" },
+      maxRelations: { type: "number" }
+    }),
+    scope(args) {
+      return scopeResult({ targets: args?.id ? [args.id] : [] });
+    },
+    async run({ args, callHandler }) {
+      const operation = args.operation || "list";
+      if (!["list", "read", "pack"].includes(operation)) {
+        return errorToolResult("unknown platform folder operation", { operation });
+      }
+      const fid = (operation === "read" || operation === "pack") ? (args.id || "") : "";
+      if ((operation === "read" || operation === "pack") && !fid) return errorToolResult("folder id is required", { operation });
+      const query = {
+        view: operation === "pack" ? "model" : "folders",  // pack uses full model for rich relations
+        ...(fid ? { id: fid } : {}),
+        ...(args.maxRelations ? { maxRelations: args.maxRelations } : {})
+      };
+      const resp = await runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query
+      });
+      if (operation === "pack" && !resp.isError) {
+        // Build a simple rich pack from the model data (folders + related via knowledgeRelations etc.)
+        const data = typeof resp.structuredContent === 'object' ? resp.structuredContent : {};
+        const pack = {
+          packFor: fid,
+          folder: (data.folders || []).find(f => f.id === fid) || fid,
+          contains: (data.edges || []).filter(e => e.from === fid && e.rel === 'contains').map(e => e.to),
+          linkedDocs: (data.knowledgeRelations || []).filter(r => (r.from === fid || r.to === fid) && String(r.to || r.from).startsWith('doc:')).map(r => r.to || r.from),
+          linkedIntents: (data.knowledgeRelations || []).filter(r => (r.from === fid || r.to === fid) && String(r.to || r.from).startsWith('intent:')).map(r => r.to || r.from),
+          summary: `Rich folder pack for ${fid} with contains, linked docs and intents from the model.`
+        };
+        return jsonToolResult(pack);
+      }
+      return resp;
     }
   },
   // First-class dedicated documentation tools (richer than thin proxies; consume

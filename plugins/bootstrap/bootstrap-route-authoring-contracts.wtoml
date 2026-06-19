@@ -8,8 +8,8 @@ missingBackendProgramSoulIssue = "choose a backend program soul"
 [[bootstrapRouteAuthoringPolicy]]
 routeKind = "page"
 responseKind = "page"
-enabledFields = ["page", "rootWidget", "rootWidgetRef", "frontendProgram", "liveProjection"]
-fieldSummary = "Enabled fields: page, root widget, frontend program, live projection."
+enabledFields = ["page", "rootWidget", "rootWidgetRef", "frontendProgram", "frontendProgramRef", "routeStateProcess", "routeStateProcessRef", "routeStateState", "routeStateStateRef", "liveProjection"]
+fieldSummary = "Enabled fields: page, root widget, frontend program, route state, live projection."
 
 [[bootstrapRouteAuthoringPolicy]]
 routeKind = "stream"

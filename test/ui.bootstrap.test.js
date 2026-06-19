@@ -1187,6 +1187,111 @@ test("bootstrap UI can reject a governed proposal through the authored review co
   }
 });
 
+test("bootstrap UI renders authored package nouns and convergence rows in the current world inventory", async () => {
+  const { server, close: closeServer } = await startBlankUiServer();
+  const { page, context, runtime, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+
+    await page.fill('#identity-form input[name="id"]', "identity.aaron");
+    await page.fill('#identity-form input[name="actor"]', "aaron");
+    await page.fill('#identity-form input[name="label"]', "Aaron");
+    await page.fill('#identity-form input[name="username"]', "aaron");
+    await page.fill('#identity-form input[name="password"]', "aaron");
+    await page.fill('#identity-form input[name="homePerspective"]', "aaron:personal");
+    await page.locator('#identity-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("identity-status")?.textContent.includes("Identity created."));
+
+    await page.fill('#session-form input[name="username"]', "aaron");
+    await page.fill('#session-form input[name="password"]', "aaron");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
+
+    const cookie = await cookieHeaderFor(context, server.url);
+    const post = (pathname, body) => fetch(`${server.url}${pathname}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(body)
+    });
+
+    assert.equal((await post("/api/contexts", { id: "ctx.packages", label: "Packages" })).status, 201);
+    assert.equal((await post("/api/packages", {
+      id: "package.plugin.inspect",
+      context: "ctx.packages",
+      label: "Inspect",
+      packageKind: "plugin"
+    })).status, 201);
+    assert.equal((await post("/api/package-revisions", {
+      id: "packageRevision.plugin.inspect.v1",
+      package: "package.plugin.inspect",
+      version: "1.0.0",
+      status: "draft"
+    })).status, 201);
+    assert.equal((await post("/api/package-revisions", {
+      id: "packageRevision.plugin.inspect.v2",
+      package: "package.plugin.inspect",
+      version: "2.0.0",
+      status: "draft",
+      supersedes: ["packageRevision.plugin.inspect.v1"]
+    })).status, 201);
+    assert.equal((await post("/api/package-namespaces", {
+      context: "ctx.packages",
+      name: "inspectV1",
+      package: "package.plugin.inspect",
+      revision: "packageRevision.plugin.inspect.v1"
+    })).status, 201);
+    assert.equal((await post("/api/package-namespaces", {
+      context: "ctx.packages",
+      name: "inspectV2",
+      package: "package.plugin.inspect",
+      revision: "packageRevision.plugin.inspect.v2"
+    })).status, 201);
+    assert.equal((await post("/api/package-transformers", {
+      id: "packageTransformer.inspect.v1-to-v2",
+      package: "package.plugin.inspect",
+      sourceRevision: "packageRevision.plugin.inspect.v1",
+      sourceNamespace: "packageNamespace:ctx.packages:inspectV1",
+      targetRevision: "packageRevision.plugin.inspect.v2",
+      targetNamespace: "packageNamespace:ctx.packages:inspectV2",
+      remainingGlue: ["rename remaining runtimePlugin installs"]
+    })).status, 201);
+    assert.equal((await post("/api/package-patches", {
+      package: "package.plugin.inspect",
+      revision: "packageRevision.plugin.inspect.v2",
+      path: "plugins/inspect/plugin.json",
+      operation: "replace",
+      sourceLanguage: "json",
+      transformer: "packageTransformer.inspect.v1-to-v2",
+      body: { id: "plugin.inspect" }
+    })).status, 201);
+    assert.equal((await post("/api/package-dependencies", {
+      sourcePackage: "package.plugin.inspect",
+      sourceRevision: "packageRevision.plugin.inspect.v2",
+      targetKind: "context",
+      targetId: "ctx.packages"
+    })).status, 201);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+    await page.waitForFunction(() => document.getElementById("state-packages")?.textContent.includes("package.plugin.inspect @ctx.packages [plugin]"));
+    await page.waitForFunction(() => document.getElementById("state-package-revisions")?.textContent.includes("packageRevision.plugin.inspect.v2 -> package.plugin.inspect [2.0.0] [draft]"));
+    await page.waitForFunction(() => document.getElementById("state-package-patches")?.textContent.includes("plugins/inspect/plugin.json"));
+    await page.waitForFunction(() => document.getElementById("state-package-namespaces")?.textContent.includes("packageNamespace:ctx.packages:inspectV2"));
+    await page.waitForFunction(() => document.getElementById("state-package-dependencies")?.textContent.includes("packageRevision.plugin.inspect.v2 -> context ctx.packages"));
+    await page.waitForFunction(() => document.getElementById("state-package-transformers")?.textContent.includes("packageTransformer.inspect.v1-to-v2"));
+    await page.waitForFunction(() => document.getElementById("state-package-coexistence")?.textContent.includes("package.plugin.inspect [coexisting]"));
+    await page.waitForFunction(() => document.getElementById("state-package-convergence")?.textContent.includes("package.plugin.inspect [glue-required]"));
+    await page.waitForFunction(() => document.getElementById("state-package-apply-previews")?.textContent.includes("package.plugin.inspect :: packageRevision.plugin.inspect.v2 [glue-required]"));
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
 test("bootstrap UI shows governed backend version and proposal guidance before submit", async () => {
   const { server, close: closeServer } = await startBlankUiServer();
   const { page, context, close: closeBrowser } = await launchBrowser();

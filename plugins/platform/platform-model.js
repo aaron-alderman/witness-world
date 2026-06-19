@@ -590,6 +590,22 @@ function normalizeVerificationPersistence(value = null) {
   };
 }
 
+function normalizeRuntimeComposition(composition = null) {
+  if (!composition || typeof composition !== "object") return null;
+  const notes = Array.isArray(composition.notes) ? composition.notes.map(String) : [];
+  return {
+    storyId: composition.storyId ? String(composition.storyId) : null,
+    startupMode: composition.startupMode ? String(composition.startupMode) : null,
+    activeRunnerId: composition.activeRunnerId ? String(composition.activeRunnerId) : null,
+    activeRunnerSource: composition.activeRunnerSource ? String(composition.activeRunnerSource) : null,
+    activePluginSource: composition.activePluginSource ? String(composition.activePluginSource) : null,
+    usesAuthoredServerRunner: composition.usesAuthoredServerRunner === true,
+    usesAuthoredRuntimePluginInstalls: composition.usesAuthoredRuntimePluginInstalls === true,
+    explanation: composition.explanation ? String(composition.explanation) : null,
+    notes
+  };
+}
+
 function mergeRowsById(durableRows = [], liveRows = []) {
   const byId = new Map();
   for (const row of durableRows) {
@@ -724,6 +740,7 @@ function platformObjectKindForId(targetId, nodes) {
   if (value.startsWith("branch:")) return "branch";
   if (value.startsWith("proposal:")) return "proposal";
   if (value.startsWith("intent:")) return "intent";
+  if (value.startsWith("folder:")) return "folder";
   return "platformObject";
 }
 
@@ -2562,6 +2579,99 @@ async function loadKnowledgeRelationsWtoml() {
   return { entities, relations, sourcePath: relPath };
 }
 
+async function loadFolderMetas() {
+  // Discover all this.folder.wtoml files (the convention for folder metadata)
+  const folderMetaFiles = await listFiles(repoRoot, (f) =>
+    f.endsWith('this.folder.wtoml')
+  );
+
+  const entities = [];
+  const relations = [];
+
+  for (const absPath of folderMetaFiles) {
+    const relPath = slash(path.relative(repoRoot, absPath));
+    const source = await readText(relPath, '');
+    if (!source.trim()) continue;
+
+    let parsed;
+    try {
+      parsed = parseWitnessToml(source);
+    } catch (e) {
+      // tolerate bad meta files
+      continue;
+    }
+
+    const folderEnts = parsed
+      .filter((d) => d.kind === 'entity' || (d.values?.id && d.values.id.startsWith('folder:')))
+      .map((d) => ({
+        id: d.values.id || d.values.name || null,
+        kind: d.values.kind || 'folder',
+        label: d.values.label || d.values.id || null,
+        path: d.values.path || null,
+        facet: d.values.facet || null,
+        lifecycle: d.values.lifecycle || null,
+        owner: d.values.owner || null,
+        description: d.values.description || null,
+        raw: d.values,
+        source: relPath,
+      }))
+      .filter((e) => e.id);
+
+    const folderRels = parsed
+      .filter((d) => d.kind === 'relation')
+      .map((d) => ({
+        from: d.values.from,
+        rel: d.values.rel,
+        to: d.values.to,
+        meta: d.values.meta || null,
+        actor: d.values.actor || null,
+        source: relPath,
+      }))
+      .filter((r) => r.from && r.rel && r.to);
+
+    entities.push(...folderEnts);
+    relations.push(...folderRels);
+  }
+
+  return { entities, relations };
+}
+
+/**
+ * For full DESIRE pipeline integration (so folder metas become witnessed entities/relations).
+ * Call with applyWitnessDocs or similar to a dedicated knowledge context/world.
+ * This makes folder:* first-class in the witnessed model, not just the JS platform builder.
+ */
+export async function loadFolderMetasAsDesireDocs() {
+  const metas = await loadFolderMetas();
+  // Map to WTOML-like docs that can be compiled to desire (entity + relation kinds)
+  const docs = [];
+  for (const ent of metas.entities) {
+    docs.push({
+      kind: 'entity',
+      values: {
+        id: ent.id,
+        kind: ent.kind,
+        label: ent.label,
+        path: ent.path,
+        facet: ent.facet,
+        // etc.
+      }
+    });
+  }
+  for (const rel of metas.relations) {
+    docs.push({
+      kind: 'relation',
+      values: {
+        from: rel.from,
+        rel: rel.rel,
+        to: rel.to,
+        meta: rel.meta
+      }
+    });
+  }
+  return docs;
+}
+
 function platformTargetNodeId(kind, id) {
   if (!id) return null;
   if (String(id).includes(":")) return String(id);
@@ -2658,6 +2768,7 @@ export async function buildPlatformModel({
   const verificationPersistence = normalizeVerificationPersistence(
     diagnostics?.verificationPersistence ?? appContext?.verificationPersistence?.inspect?.() ?? null
   );
+  const runtimeComposition = normalizeRuntimeComposition(diagnostics?.composition ?? null);
   const governanceRoutes = normalizeGovernanceRoutes(
     diagnostics?.governanceRoutes
     ?? buildGovernanceRouteInventory(diagnostics?.routes ?? [])
@@ -2758,11 +2869,33 @@ export async function buildPlatformModel({
     });
   }
 
-  const profiles = Object.entries(profilesSeed.profiles ?? {}).map(([id, profile]) => ({
-    id,
-    coreBundles: [...(profile.coreBundles ?? [])],
-    plugins: [...(profile.plugins ?? [])]
-  }));
+  const profiles = Object.entries(profilesSeed.profiles ?? {}).map(([id, profile]) => {
+    const status = diagnostics?.activeProfile === id ? "active" : "known";
+    const activeComposition = status === "active" ? runtimeComposition : null;
+    const runnerSummary = activeComposition?.activeRunnerId
+      ? `${activeComposition.activeRunnerId} (${activeComposition.activeRunnerSource ?? "runtime"})`
+      : (status === "active" ? (activeComposition?.activeRunnerSource ?? "runtime") : null);
+    const compositionSummary = status === "active"
+      ? (activeComposition?.explanation ?? "Active runtime composition is not yet described.")
+      : "Inactive profile seed.";
+    return {
+      id,
+      status,
+      coreBundles: [...(profile.coreBundles ?? [])],
+      plugins: [...(profile.plugins ?? [])],
+      storyId: activeComposition?.storyId ?? null,
+      startupMode: activeComposition?.startupMode ?? null,
+      activeRunnerId: activeComposition?.activeRunnerId ?? null,
+      activeRunnerSource: activeComposition?.activeRunnerSource ?? null,
+      activePluginSource: activeComposition?.activePluginSource ?? null,
+      usesAuthoredServerRunner: activeComposition?.usesAuthoredServerRunner === true,
+      usesAuthoredRuntimePluginInstalls: activeComposition?.usesAuthoredRuntimePluginInstalls === true,
+      compositionExplanation: activeComposition?.explanation ?? null,
+      compositionNotes: activeComposition?.notes ?? [],
+      runnerSummary,
+      compositionSummary
+    };
+  });
   for (const profile of profiles) {
     addNode(nodes, {
       id: `profile:${profile.id}`,
@@ -2770,7 +2903,7 @@ export async function buildPlatformModel({
       title: profile.id,
       lifecycle: profile.id === "minimal" ? ["execute", "verify"] : ["execute", "ship"],
       owner: "runtime",
-      status: diagnostics?.activeProfile === profile.id ? "active" : "known",
+      status: profile.status,
       source: "store/seeds/runtime-profiles.json"
     });
     for (const plugin of profile.plugins) addEdge(edges, `profile:${profile.id}`, "activates", plugin, "profile");
@@ -3221,6 +3354,27 @@ export async function buildPlatformModel({
   }
   for (const rel of knowledgeRel.relations) {
     addEdge(edges, rel.from, rel.rel, rel.to, "authored-knowledge-wtoml");
+  }
+
+  // Load folder metas (this.folder.wtoml convention)
+  // Provides folder:* nodes + contains relations for the knowledge graph / ContextHub.
+  const folderMetas = await loadFolderMetas();
+  for (const ent of folderMetas.entities) {
+    addNode(nodes, {
+      id: ent.id,
+      kind: ent.kind || 'folder',
+      title: ent.label || ent.id,
+      lifecycle: Array.isArray(ent.lifecycle) ? ent.lifecycle : (ent.lifecycle ? [ent.lifecycle] : ['author', 'steward']),
+      owner: ent.owner || 'plugin.platform',
+      status: 'authored',
+      source: ent.source || 'folder-meta',
+      facet: ent.facet,
+      path: ent.path,
+      description: ent.description
+    });
+  }
+  for (const rel of folderMetas.relations) {
+    addEdge(edges, rel.from, rel.rel, rel.to, 'folder-meta');
   }
 
   // Build maps from authored knowledge relations for merging into docs
@@ -3773,6 +3927,14 @@ export async function buildPlatformModel({
       facet: e.facet,
       lifecycle: e.lifecycle
     })),
+    // Folder metadata from this.folder.wtoml files across the tree
+    folders: folderMetas.entities.map(e => ({
+      id: e.id,
+      title: e.label || e.id,
+      path: e.path,
+      facet: e.facet,
+      source: e.source
+    })),
     testGates: testGateProjection.rows,
     testGateIndex: testGateProjection.index,
     coverageEdges,
@@ -3813,6 +3975,7 @@ export async function buildPlatformModel({
     snapshotDiagnostics,
     testMonitorDiagnostics,
     verificationPersistence,
+    runtimeComposition,
     compatibilityBridges,
     governanceRoutes,
     proposalTargetGovernance,
@@ -3975,10 +4138,10 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       summaries: model.summaries
     };
   }
-  if (view === "knowledge") {
+  if (view === "knowledge" || view === "knowledgeOverview") {
     return {
       docs: model.docs,
-      docSections: model.docSections,
+      folders: model.folders,
       docTasks: model.docTasks,
       roadmapTasks: model.roadmapTasks,
       epics: model.epics,
@@ -3986,7 +4149,48 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       summaries: model.summaries
     };
   }
-  if (view === "signals") {
+  if (view === "knowledgeDocs") {
+    return {
+      docs: model.docs,
+      docSections: model.docSections,
+      docTasks: model.docTasks,
+      summaries: model.summaries
+    };
+  }
+  if (view === "knowledgeFolders") {
+    return {
+      folders: model.folders,
+      edges: model.edges,
+      summaries: model.summaries
+    };
+  }
+  if (view === "knowledgeRoadmap") {
+    return {
+      roadmapTasks: model.roadmapTasks,
+      epics: model.epics,
+      features: model.features,
+      summaries: model.summaries
+    };
+  }
+  if (view === "signals" || view === "signalsOverview") {
+    const signalNodes = (model.nodes ?? []).filter(node =>
+      node.kind === "telemetryMetric"
+      || node.kind === "defectCluster"
+      || node.kind === "boundary"
+    );
+    return {
+      gaps: model.gaps,
+      nodes: signalNodes,
+      summaries: model.summaries
+    };
+  }
+  if (view === "signalsGaps") {
+    return {
+      gaps: model.gaps,
+      summaries: model.summaries
+    };
+  }
+  if (view === "signalsCatalog") {
     const signalNodes = (model.nodes ?? []).filter(node =>
       node.kind === "telemetryMetric"
       || node.kind === "defectCluster"
@@ -3994,19 +4198,44 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
     );
     const signalIds = new Set(signalNodes.map(node => node.id));
     return {
-      gaps: model.gaps,
       nodes: signalNodes,
       edges: (model.edges ?? []).filter(edge => signalIds.has(edge.from) || signalIds.has(edge.to)),
       summaries: model.summaries
     };
   }
   if (!view) return model;
-  if (view === "model") {
+  if (view === "model" || view === "modelOverview") {
     return {
       nodes: model.nodes,
       edges: model.edges,
       profiles: model.profiles,
       coverageEdges: model.coverageEdges,
+      summaries: model.summaries
+    };
+  }
+  if (view === "modelObjects") {
+    return {
+      nodes: model.nodes,
+      edges: model.edges,
+      summaries: model.summaries
+    };
+  }
+  if (view === "modelProfiles") {
+    return {
+      profiles: model.profiles,
+      summaries: model.summaries
+    };
+  }
+  if (view === "modelCoverage") {
+    return {
+      coverageEdges: model.coverageEdges,
+      summaries: model.summaries
+    };
+  }
+  if (view === "folders") {
+    return {
+      folders: model.folders,
+      // folders participate in general nodes/edges too
       summaries: model.summaries
     };
   }

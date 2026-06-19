@@ -221,6 +221,10 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-target-authority",
     "Capability creation attempts shared context authority first and routes to proposal creation when direct definition is not allowed."
   ),
+  "capability.update": proposalFallback(
+    "bootstrap-target-authority",
+    "Capability updates attempt shared capability target authority first and route to proposal creation when direct revision replacement is not allowed."
+  ),
   "capability.install": proposalFallback(
     "bootstrap-target-authority",
     "Capability installation attempts shared target authority first and routes to proposal creation when direct installation is not allowed."
@@ -228,6 +232,10 @@ const HANDLER_GOVERNANCE = Object.freeze({
   "capability.remove": proposalFallback(
     "bootstrap-target-authority",
     "Capability removal attempts shared target authority first and routes to proposal creation when direct removal is not allowed."
+  ),
+  "capability.rollback": proposalFallback(
+    "bootstrap-target-authority",
+    "Capability rollback attempts shared capability target authority first and routes to proposal creation when direct rollback is not allowed."
   ),
   "capability.migrateLegacy": proposalFallback(
     "bootstrap-target-authority",
@@ -809,6 +817,10 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
     "bootstrap-target-authority",
     "Capability-define proposals execute through shared target authority on the authored capability target once approved."
   ),
+  "capability.update": proposalTarget(
+    "bootstrap-target-authority",
+    "Capability-update proposals execute through shared target authority on the authored capability target, while re-checking installed-target compatibility before writing the new revision."
+  ),
   "capability.install": proposalTarget(
     "bootstrap-target-authority",
     "Capability-install proposals execute through shared target authority on the install target once approved."
@@ -816,6 +828,10 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   "capability.remove": proposalTarget(
     "bootstrap-target-authority",
     "Capability-remove proposals execute through shared target authority on the install target once approved."
+  ),
+  "capability.rollback": proposalTarget(
+    "bootstrap-target-authority",
+    "Capability-rollback proposals execute through shared target authority on the authored capability target, while re-checking installed-target compatibility before restoring the previous revision."
   ),
   "capability.migrateLegacy": proposalTarget(
     "bootstrap-target-authority",

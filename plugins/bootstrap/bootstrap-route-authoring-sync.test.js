@@ -28,6 +28,8 @@ test("route authoring contracts load from authored WTOML", async () => {
   assert.equal(contracts.policiesByRouteKind.resource.responseKind, "resource");
   assert.equal(contracts.handlerRulesByHandler["page.world"].requiresRootWidget, true);
   assert.equal(contracts.managedFields.includes("rootWidgetRef"), true);
+  assert.equal(contracts.managedFields.includes("frontendProgramRef"), true);
+  assert.equal(contracts.managedFields.includes("routeStateProcessRef"), true);
 });
 
 function createRouteFormHarness() {
@@ -40,6 +42,11 @@ function createRouteFormHarness() {
     rootWidget: { value: "page_root", disabled: false, type: "select-one" },
     rootWidgetRef: { value: "landingPage", disabled: false, type: "text" },
     frontendProgram: { value: "landing_program", disabled: false, type: "select-one" },
+    frontendProgramRef: { value: "landingProgram", disabled: false, type: "text" },
+    routeStateProcess: { value: "ShellNavigation", disabled: false, type: "select-one" },
+    routeStateProcessRef: { value: "shellNavigation", disabled: false, type: "text" },
+    routeStateState: { value: "ActiveRoute", disabled: false, type: "select-one" },
+    routeStateStateRef: { value: "activeRoute", disabled: false, type: "text" },
     liveProjection: { value: "on", checked: true, disabled: false, type: "checkbox" }
   };
   const routeForm = {
@@ -97,6 +104,9 @@ test("route authoring view explains page handlers and preserves page fields", ()
 
   assert.equal(view.enabledFields.page, true);
   assert.equal(view.enabledFields.backendProgramSoul, false);
+  assert.equal(view.enabledFields.frontendProgramRef, true);
+  assert.equal(view.enabledFields.routeStateProcessRef, true);
+  assert.equal(view.enabledFields.routeStateStateRef, true);
   assert.equal(view.helpText.includes("page.home"), true);
   assert.equal(view.helpText.includes("page -> page"), true);
   assert.equal(view.submitDisabled, false);
@@ -159,6 +169,12 @@ test("route authoring sync disables incompatible fields and blocks invalid backe
   assert.equal(harness.fields.page.value, "");
   assert.equal(harness.fields.rootWidget.disabled, true);
   assert.equal(harness.fields.rootWidget.value, "");
+  assert.equal(harness.fields.frontendProgramRef.disabled, true);
+  assert.equal(harness.fields.frontendProgramRef.value, "");
+  assert.equal(harness.fields.routeStateProcessRef.disabled, true);
+  assert.equal(harness.fields.routeStateProcessRef.value, "");
+  assert.equal(harness.fields.routeStateStateRef.disabled, true);
+  assert.equal(harness.fields.routeStateStateRef.value, "");
   assert.equal(harness.fields.liveProjection.disabled, true);
   assert.equal(harness.fields.liveProjection.checked, false);
   assert.equal(harness.submitButton.disabled, true);

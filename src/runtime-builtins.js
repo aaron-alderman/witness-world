@@ -359,8 +359,10 @@ const PROCESS_SPECS = [
       { name: "handler", accepts: "route.handler", required: true },
       { name: "backendProgramSoul", accepts: "route.backendProgramSoul", required: false },
       { name: "backendProgramSoulRef", accepts: "context.name", required: false },
+      { name: "frontendProgramRef", accepts: "context.name", required: false },
       { name: "rootWidgetRef", accepts: "context.name", required: false },
       { name: "rootSurfaceRef", accepts: "context.name", required: false },
+      { name: "defaultRootWidgetRef", accepts: "context.name", required: false },
       { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "route.id", required: true }]
@@ -497,6 +499,34 @@ const PROCESS_SPECS = [
       { name: "targetKind", accepts: "capability.targetKind", required: true }
     ],
     outputs: [{ name: "capability", accepts: "capability.id", required: true }]
+  },
+  {
+    id: "capability_update_spec",
+    process: "capability.update",
+    inputs: [
+      { name: "id", accepts: "capability.id", required: true },
+      { name: "label", accepts: "capability.label", required: false },
+      { name: "version", accepts: "capability.version", required: false },
+      { name: "provenanceJson", accepts: "json.text", required: false },
+      { name: "dependsOnJson", accepts: "json.text", required: false },
+      { name: "publicApiJson", accepts: "json.text", required: false },
+      { name: "configJson", accepts: "json.text", required: false },
+      { name: "internalsJson", accepts: "json.text", required: false },
+      { name: "authorityJson", accepts: "json.text", required: false },
+      { name: "compatibilityJson", accepts: "json.text", required: false },
+      { name: "placementJson", accepts: "json.text", required: false },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "capability.id", required: true }]
+  },
+  {
+    id: "capability_rollback_spec",
+    process: "capability.rollback",
+    inputs: [
+      { name: "id", accepts: "capability.id", required: true },
+      { name: "version", accepts: "capability.version", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "capability.id", required: true }]
   }
 ];
 

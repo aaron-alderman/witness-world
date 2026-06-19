@@ -288,6 +288,18 @@ test("route.create accepts page.surface rootSurface params and rejects missing r
     ]
   });
   assert.equal(created.ok, true);
+  const createdProcess = requestProcessDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: { id: "ReplayFlow", state: ["ReplayActiveRoute"] }
+  });
+  assert.equal(createdProcess.ok, true);
+  const createdType = requestTypeDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: { id: "ReplayActiveRoute", role: "state", valueType: "text" }
+  });
+  assert.equal(createdType.ok, true);
 
   const okRoute = requestBootstrapRouteDefine(world, {
     actor: "aaron",
@@ -373,6 +385,57 @@ context = "ctx.target"
 sourceContext = "ctx.source"
 exportName = "replaySurface"
 name = "replaySurface"
+
+[[process]]
+actor = "system"
+id = "ReplayFlow"
+context = "ctx.source"
+state = ["ReplayActiveRoute"]
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replayFlow"
+name = "replayFlow"
+
+[[type]]
+actor = "system"
+id = "ReplayActiveRoute"
+context = "ctx.source"
+role = "state"
+valueType = "text"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "activeRoute"
+name = "activeRoute"
 `);
 
   const okRoute = requestBootstrapRouteDefine(world, {
@@ -388,8 +451,8 @@ name = "replaySurface"
       rootSurfaceRef: "replaySurface",
       defaultScreen: "login",
       routeState: {
-        process: "ReplayFlow",
-        state: "ReplayActiveRoute"
+        processRef: "replayFlow",
+        stateRef: "activeRoute"
       }
     },
     ...routeSupport()
@@ -420,4 +483,184 @@ name = "replaySurface"
   assert.equal(hiddenCanonical.ok, false);
   assert.equal(hiddenCanonical.status, 400);
   assert.match(hiddenCanonical.error, /route root surface id targets HiddenRoot.*not visible in authoring context ctx\.target/);
+});
+
+test("route.create lowers page.home frontend-program, default-root-widget, and route-state refs", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+attach = false
+
+[[widget]]
+actor = "system"
+id = "secret_page"
+kind = "Page"
+context = "ctx.source"
+attach = false
+
+[[frontendProgram]]
+actor = "system"
+id = "landing_program"
+context = "ctx.source"
+rootWidget = "page_root"
+
+[[process]]
+actor = "system"
+id = "ReplayFlow"
+context = "ctx.source"
+state = ["ReplayActiveRoute"]
+
+[[type]]
+actor = "system"
+id = "ReplayActiveRoute"
+context = "ctx.source"
+role = "state"
+valueType = "text"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "landingPage"
+target = "page_root"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "landingPage"
+target = "page_root"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "landingPage"
+name = "landingPage"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "landingProgram"
+name = "landingProgram"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replayFlow"
+name = "replayFlow"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "activeRoute"
+name = "activeRoute"
+`);
+
+  const okRoute = requestBootstrapRouteDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "landing_route",
+      context: "ctx.target",
+      path: "/landing",
+      method: "GET",
+      handler: "page.home",
+      servesRef: "landingProgram",
+      frontendProgramRef: "landingProgram",
+      defaultRootWidgetRef: "landingPage",
+      routeState: {
+        processRef: "replayFlow",
+        stateRef: "activeRoute"
+      }
+    },
+    allowedHandlers: ["page.home"],
+    handlerMetadataById: {
+      "page.home": {
+        routeKind: "page",
+        methods: ["GET"]
+      }
+    }
+  });
+  assert.equal(okRoute.ok, true);
+  assert.equal(okRoute.route.serves, "landing_program");
+  assert.equal(okRoute.route.params.rootWidget, "page_root");
+  assert.equal(okRoute.route.params.frontendProgram, "landing_program");
+  assert.deepEqual(okRoute.route.params.routeState, {
+    process: "ReplayFlow",
+    state: "ReplayActiveRoute"
+  });
+
+  const hiddenCanonical = requestBootstrapRouteDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "hidden_landing_route",
+      context: "ctx.target",
+      path: "/hidden-landing",
+      method: "GET",
+      handler: "page.home",
+      servesRef: "landingProgram",
+      defaultRootWidget: "secret_page"
+    },
+    allowedHandlers: ["page.home"],
+    handlerMetadataById: {
+      "page.home": {
+        routeKind: "page",
+        methods: ["GET"]
+      }
+    }
+  });
+  assert.equal(hiddenCanonical.ok, false);
+  assert.equal(hiddenCanonical.status, 400);
+  assert.match(hiddenCanonical.error, /route default root widget id targets secret_page.*not visible in authoring context ctx\.target/);
 });

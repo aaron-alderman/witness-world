@@ -1,0 +1,226 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/eden"
+path = "plugins/eden"
+label = "eden"
+summary = "Auto-generated folder metadata for plugins/eden."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-academy.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-action-runtime.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-capability-install-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-capability-install-request.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-capability-install.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-chapter-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-client-runtime.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-edit-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-embedded-bridge.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-embedded-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-embedded-runtime.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-organization-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-organization.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-page-document.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-page-script.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-page-styles.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-page-theme.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-page.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-personal-box.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-personal-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-process-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-projection-runtime.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-projection.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-refresh-runtime.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-stage-runtime.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-surface-adapters.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-surface-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-surface-runtime.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-theory-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-theory.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-versions-client.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-versions.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden-view-runtime.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/eden.test.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/handlers.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "json:plugins/eden/plugin.json"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "file:plugins/eden/runtime.js"
+
+[[relation]]
+from = "folder:plugins/eden"
+rel = "contains"
+to = "wtoml:plugins/eden/this.folder.wtoml"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/eden"
+# rel = "describedBy"
+# to = "doc:..."

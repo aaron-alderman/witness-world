@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  renderSurfaceInspectorChildCreateView,
   renderSurfaceInspectorEditorView,
   renderSurfaceInspectorMenuView,
   renderSurfaceInspectorPanelView,
@@ -33,7 +34,43 @@ test("surface inspector editor view renders editable and proposal branches throu
   assert.equal(proposalHtml.includes("Propose Save-Back"), true);
 });
 
+test("surface inspector child create view renders direct and proposal branches through shared helpers", () => {
+  const directHtml = renderSurfaceInspectorChildCreateView({
+    widgetId: "todo_form",
+    authoredWidget: { id: "todo_form", kind: "Form", context: "frontend" },
+    widgetsLoaded: true,
+    authority: { ok: true },
+    currentActorPresent: true,
+    kindOptions: [{ value: "Text", label: "Text" }],
+    escapeHtml: value => String(value)
+  });
+  assert.equal(directHtml.includes('data-surface-inspector-child-create-form'), true);
+  assert.equal(directHtml.includes("Add Child Widget"), true);
+
+  const proposalHtml = renderSurfaceInspectorChildCreateView({
+    widgetId: "todo_form",
+    authoredWidget: { id: "todo_form", kind: "Form", context: "frontend" },
+    widgetsLoaded: true,
+    authority: { ok: false, reason: "steward required" },
+    currentActorPresent: true,
+    kindOptions: [{ value: "Text", label: "Text" }],
+    escapeHtml: value => String(value)
+  });
+  assert.equal(proposalHtml.includes('data-surface-inspector-child-create-form'), true);
+  assert.equal(proposalHtml.includes("Request Child Widget"), true);
+  assert.equal(proposalHtml.includes("widget.define"), true);
+});
+
 test("surface inspector panel and menu views render inspector chrome, versions, and handoff actions", () => {
+  const childCreateHtml = renderSurfaceInspectorChildCreateView({
+    widgetId: "todo_form",
+    authoredWidget: { id: "todo_form", kind: "Form", context: "frontend" },
+    widgetsLoaded: true,
+    authority: { ok: false, reason: "Read-only: this widget lives in context frontend and the current actor lacks authority for that context." },
+    currentActorPresent: true,
+    kindOptions: [{ value: "Text", label: "Text" }],
+    escapeHtml: value => String(value)
+  });
   const panelHtml = renderSurfaceInspectorPanelView({
     liveSurfaceInspectable: true,
     surfaceInspectorOpen: true,
@@ -65,6 +102,43 @@ test("surface inspector panel and menu views render inspector chrome, versions, 
       { class: "backend-program", backendProgramSoul: "todo.todos.create", handlerId: "backendProgram.run", note: "Authored backend program todo.todos.create is selected by mounted route params." },
       { class: "generic-host", bundleId: "bundle-core-runtime", handlerId: "backendProgram.run", note: "Runtime behavior is owned by shared host/runtime code." }
     ],
+    scopeSummary: "This widget currently lowers inside context frontend. The active live surface exposes 2 mounted capabilities for local behavior inspection.",
+    scopeRows: [
+      ["Context", "frontend"],
+      ["Active Surface", "surface:home"],
+      ["Mounted Capabilities", "dom.render, http.fetch"]
+    ],
+    scopeContextId: "frontend",
+    scopeCapabilities: [
+      { id: "dom.render", label: "dom.render" },
+      { id: "http.fetch", label: "http.fetch" }
+    ],
+    capabilitySummary: "These rows are explicit authored capability installs for context frontend. Submit uses the shared capability runtime instead of a client-only shortcut.",
+    capabilityRows: [
+      ["Context", "frontend"],
+      ["Installed", "dom.render"],
+      ["Available", "notes.sidebar"]
+    ],
+    capabilityTargetId: "frontend",
+    capabilityTargetKind: "context",
+    capabilityAuthority: { mode: "proposal", reason: "Read-only: this context is stewarded elsewhere." },
+    installedCapabilities: [
+      { id: "dom.render", label: "dom.render", summary: "placements: context / source catalog-only" }
+    ],
+    availableCapabilities: [
+      { id: "notes.sidebar", label: "notes.sidebar [v1]", summary: "placements: context / source both" }
+    ],
+    compositionSummary: "The full runtime is using authored runner server_runner while plugin activation still comes from profile-or-operator-defaults.",
+    compositionRows: [
+      ["Story", "authored-runner-driven"],
+      ["Startup Mode", "profile"],
+      ["Active Runner", "server_runner (authored-server-runner)"],
+      ["Runner Source", "authored-server-runner"],
+      ["Plugin Source", "profile-or-operator-defaults"],
+      ["Uses Authored Runner", "yes"],
+      ["Uses Authored Plugin Installs", "no"],
+      ["Notes", "Authored runtimePluginInstall rows participate in the active runtime plugin composition."]
+    ],
     runtimeCorrelationSummary: "Authored event submit:todo_form in todo_frontend_program is active in the shared runtime probe for this surface.",
     runtimeCorrelationRows: [
       ["Frontend Program", "todo_frontend_program"],
@@ -79,6 +153,8 @@ test("surface inspector panel and menu views render inspector chrome, versions, 
     versionState: { rollbackAvailable: true, soul: "todo_form", rollbackVersion: "v1" },
     versionRows: [{ soul: "todo_form", version: "v2", isActive: false }],
     versionAuthority: { ok: true },
+    currentActorPresent: true,
+    childCreateHtml,
     editorHtml: "<section>Editor</section>",
     escapeHtml: value => String(value)
   });
@@ -95,6 +171,20 @@ test("surface inspector panel and menu views render inspector chrome, versions, 
   assert.equal(panelHtml.includes("proposal-fallback"), true);
   assert.equal(panelHtml.includes("widget-target-authority"), true);
   assert.equal(panelHtml.includes("Shared Authority Path"), true);
+  assert.equal(panelHtml.includes("Surface Scope"), true);
+  assert.equal(panelHtml.includes("Show Context"), true);
+  assert.equal(panelHtml.includes("Show Capability dom.render"), true);
+  assert.equal(panelHtml.includes("frontend"), true);
+  assert.equal(panelHtml.includes("Authored Capabilities"), true);
+  assert.equal(panelHtml.includes("Request Install"), true);
+  assert.equal(panelHtml.includes("Request Remove"), true);
+  assert.equal(panelHtml.includes("explicit authored capability installs"), true);
+  assert.equal(panelHtml.includes("Child Widget"), true);
+  assert.equal(panelHtml.includes("Request Child Widget"), true);
+  assert.equal(panelHtml.includes("Runtime Composition"), true);
+  assert.equal(panelHtml.includes("authored-runner-driven"), true);
+  assert.equal(panelHtml.includes("server_runner (authored-server-runner)"), true);
+  assert.equal(panelHtml.includes("profile-or-operator-defaults"), true);
   assert.equal(panelHtml.includes("Runtime Correlation"), true);
   assert.equal(panelHtml.includes("submit:todo_form"), true);
   assert.equal(panelHtml.includes("POST /api/todos"), true);
@@ -126,8 +216,12 @@ test("surface inspector panel and menu views render inspector chrome, versions, 
 test("surface inspector panel view factory exposes the shared browser helpers", () => {
   const factory = renderSurfaceInspectorPanelViewFactory();
   assert.equal(factory.includes("const renderSurfaceInspectorEditorView ="), true);
+  assert.equal(factory.includes("const renderSurfaceInspectorChildCreateView ="), true);
   assert.equal(factory.includes("const renderSurfaceInspectorVersionsView ="), true);
   assert.equal(factory.includes("const renderSurfaceInspectorOwnershipView ="), true);
+  assert.equal(factory.includes("const renderSurfaceInspectorScopeView ="), true);
+  assert.equal(factory.includes("const renderSurfaceInspectorCapabilitiesView ="), true);
+  assert.equal(factory.includes("const renderSurfaceInspectorCompositionView ="), true);
   assert.equal(factory.includes("const renderSurfaceInspectorRuntimeCorrelationView ="), true);
   assert.equal(factory.includes("const renderSurfaceInspectorPanelView ="), true);
   assert.equal(factory.includes("const renderSurfaceInspectorMenuView ="), true);

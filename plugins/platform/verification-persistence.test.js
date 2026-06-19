@@ -47,6 +47,36 @@ test("verification persistence synthesizes sqlite and disk backends and survives
       onChangeSet: true,
       producedAt: "2026-06-19T00:00:00.000Z"
     }]);
+    await persistence.recordFreshnessRows([{
+      id: "verificationFreshness:runner.main:full:gate:demo",
+      gateId: "gate:demo",
+      serverRunnerId: "runner.main",
+      runtimeProfile: "full",
+      status: "stale",
+      latestRunId: "testRun:durable",
+      latestPassedRunId: "testRun:durable",
+      latestUsableCacheKey: "cache:durable:1",
+      reasonKinds: ["source_changed"],
+      reasonSummary: "source changed in src/demo.js.",
+      changedPaths: ["src/demo.js"],
+      targetIds: ["runtime.core"],
+      blocking: false,
+      staleSince: "2026-06-19T00:00:02.000Z",
+      producedAt: "2026-06-19T00:00:02.000Z"
+    }]);
+    await persistence.recordInvalidationRows([{
+      id: "verificationInvalidation:runner.main:full:gate:demo:source_changed:1",
+      gateId: "gate:demo",
+      serverRunnerId: "runner.main",
+      runtimeProfile: "full",
+      reasonKind: "source_changed",
+      reasonSummary: "source changed in src/demo.js.",
+      changedPaths: ["src/demo.js"],
+      targetIds: ["runtime.core"],
+      previousRunId: "testRun:durable",
+      previousCacheKey: "cache:durable:1",
+      producedAt: "2026-06-19T00:00:02.000Z"
+    }]);
     await persistence.recordQueueRow({
       id: "verificationQueue:runner.main:1",
       serverRunnerId: "runner.main",
@@ -74,7 +104,10 @@ test("verification persistence synthesizes sqlite and disk backends and survives
         gateId: "gate:demo",
         environment: "platform-candidate-snapshot",
         status: "passed",
-        startedAt: "2026-06-19T00:00:00.000Z"
+        startedAt: "2026-06-19T00:00:00.000Z",
+        finishedAt: "2026-06-19T00:00:01.000Z",
+        serverRunnerId: "runner.main",
+        runtimeProfile: "full"
       },
       testResults: [{
         id: "testResult:testRun:durable:1",
@@ -127,6 +160,8 @@ test("verification persistence synthesizes sqlite and disk backends and survives
     assert.equal(rows.testRuns.some(row => row.id === "testRun:durable"), true);
     assert.equal(rows.testReports.some(row => row.id === "testReport:testRun:durable:summary"), true);
     assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:runner.main:full:defaults"), true);
+    assert.equal(rows.verificationFreshness.some(row => row.id === "verificationFreshness:runner.main:full:gate:demo"), true);
+    assert.equal(rows.verificationInvalidations.some(row => row.id === "verificationInvalidation:runner.main:full:gate:demo:source_changed:1"), true);
     assert.equal(rows.verificationQueue.some(row => row.id === "verificationQueue:runner.main:1"), true);
     assert.equal(rows.verificationExecutions.some(row => row.id === "verificationExecution:verificationQueue:runner.main:1"), true);
     const artifact = rows.testArtifacts.find(row => row.id === "testArtifact:testRun:durable:stdout");
@@ -157,7 +192,10 @@ test("platform verification reads durable rows and serves persisted artifact con
         id: "testRun:verification",
         gateId: "gate:verification",
         status: "passed",
-        startedAt: "2026-06-19T00:00:00.000Z"
+        startedAt: "2026-06-19T00:00:00.000Z",
+        finishedAt: "2026-06-19T00:00:01.000Z",
+        serverRunnerId: "runner.main",
+        runtimeProfile: "full"
       },
       testResults: [{
         id: "testResult:testRun:verification:1",
@@ -196,6 +234,36 @@ test("platform verification reads durable rows and serves persisted artifact con
       enabled: true,
       producedAt: "2026-06-19T00:00:00.000Z"
     }]);
+    await persistence.recordFreshnessRows([{
+      id: "verificationFreshness:runner.main:full:gate:verification",
+      gateId: "gate:verification",
+      serverRunnerId: "runner.main",
+      runtimeProfile: "full",
+      status: "stale",
+      latestRunId: "testRun:verification",
+      latestPassedRunId: "testRun:verification",
+      latestUsableCacheKey: "cache:verification:1",
+      reasonKinds: ["verification_policy_changed"],
+      reasonSummary: "verification policy changed.",
+      changedPaths: ["app.wtoml"],
+      targetIds: ["plugin.platform"],
+      blocking: false,
+      staleSince: "2026-06-19T00:00:02.000Z",
+      producedAt: "2026-06-19T00:00:02.000Z"
+    }]);
+    await persistence.recordInvalidationRows([{
+      id: "verificationInvalidation:runner.main:full:gate:verification:verification_policy_changed:1",
+      gateId: "gate:verification",
+      serverRunnerId: "runner.main",
+      runtimeProfile: "full",
+      reasonKind: "verification_policy_changed",
+      reasonSummary: "verification policy changed.",
+      changedPaths: ["app.wtoml"],
+      targetIds: ["plugin.platform"],
+      previousRunId: "testRun:verification",
+      previousCacheKey: "cache:verification:1",
+      producedAt: "2026-06-19T00:00:02.000Z"
+    }]);
     await persistence.recordQueueRow({
       id: "verificationQueue:runner.main:2",
       serverRunnerId: "runner.main",
@@ -223,6 +291,8 @@ test("platform verification reads durable rows and serves persisted artifact con
     assert.equal(run.testReports[0].id, "testReport:testRun:verification:summary");
     assert.equal(typeof run.testArtifacts[0].contentUrl, "string");
     assert.equal("content" in run.testArtifacts[0], false);
+    assert.equal(run.freshnessAtRead?.status, "stale");
+    assert.equal(run.invalidationReasons[0]?.reasonKind, "verification_policy_changed");
 
     const sent = [];
     const handlers = createHandlers({
@@ -278,6 +348,8 @@ test("platform verification reads durable rows and serves persisted artifact con
     const verification = filterPlatformModel(model, "verification");
     assert.equal(verification.testRuns.some(row => row.id === "testRun:verification"), true);
     assert.equal(verification.verificationPolicies.some(row => row.id === "verificationPolicy:runner.main:full:defaults"), true);
+    assert.equal(verification.verificationFreshness.some(row => row.id === "verificationFreshness:runner.main:full:gate:verification"), true);
+    assert.equal(verification.verificationInvalidations.some(row => row.id === "verificationInvalidation:runner.main:full:gate:verification:verification_policy_changed:1"), true);
     assert.equal(verification.verificationQueue.some(row => row.id === "verificationQueue:runner.main:2"), true);
     assert.equal(verification.verificationExecutions.some(row => row.id === "verificationExecution:verificationQueue:runner.main:2"), true);
     assert.equal(verification.verificationPersistence.source, "synthesized");

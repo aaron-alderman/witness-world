@@ -1,0 +1,46 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:examples/demo-todo-app"
+path = "examples/demo-todo-app"
+label = "demo-todo-app"
+summary = "Auto-generated folder metadata for examples/demo-todo-app."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:examples/demo-todo-app"
+rel = "contains"
+to = "wtoml:examples/demo-todo-app/app.wtoml"
+
+[[relation]]
+from = "folder:examples/demo-todo-app"
+rel = "contains"
+to = "wtoml:examples/demo-todo-app/this.folder.wtoml"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:examples/demo-todo-app"
+# rel = "describedBy"
+# to = "doc:..."

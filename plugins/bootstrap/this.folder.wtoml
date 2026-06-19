@@ -1,0 +1,926 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/bootstrap"
+path = "plugins/bootstrap"
+label = "bootstrap"
+summary = "Auto-generated folder metadata for plugins/bootstrap."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-app-authoring-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-app-authoring-submit-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-app-authoring-submit-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-app-authoring-submit.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-app-authoring-submit.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-authored-request-plan.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-authored-request-plan.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-authoring-controls-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-authoring-controls-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-backend-authoring-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-authoring-submit-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-backend-authoring-submit-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-authoring-submit.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-authoring-submit.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-version-controls-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-version-controls-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-backend-version-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-version-submit-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-backend-version-submit-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-version-submit.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-backend-version-submit.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-capability-controls-sync.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-capability-controls-sync.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-capability-controls-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-capability-controls-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-capability-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-capability-submit-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-capability-submit-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-capability-submit.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-capability-submit.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-http.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-http.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime-binders.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime-binders.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime-guidance.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime-guidance.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime-orchestration.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime-orchestration.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime-support.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime-support.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-client-runtime.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-contribution-state.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-contribution-state.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-controls-runtime.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-controls-runtime.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-controls-sync.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-controls-sync.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-desktop-controls-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-desktop-controls-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-dom-helpers.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-dom-helpers.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-form-access-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-form-access-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-guidance-runtime-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-guidance-runtime.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-handlers.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-host-action-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-host-action-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-host-actions.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-host-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-host-navigation.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-host-navigation.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-host-refresh-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-host-refresh-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-host-refresh.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-host-refresh.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-identity-view-state.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-live-state.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-live-state.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-document.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-document.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-helpers.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-helpers.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-main-replacement-content.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-main-seed-state.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-main-slots.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-main-slots.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-page-main-slots.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-main.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-main.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-page-main.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-script.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-script.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-shell.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-shell.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-page-shell.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-slot-manifest.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-page-slot-manifest.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-adjacent-controls-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-adjacent-controls-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-proposal-adjacent-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-adjacent-submit-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-proposal-adjacent-submit-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-adjacent-submit.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-adjacent-submit.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-adjacent-sync.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-adjacent-sync.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-adjacent.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-adjacent.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-controls-sync.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-controls-sync.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-controls-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-controls-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-proposal-create-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-proposal-review-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-submit-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-proposal-submit-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-submit.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-proposal-submit.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-read-models.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-read-models.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-refresh-runtime.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-refresh-runtime.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-remove-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-route-authoring-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-route-authoring-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-route-authoring-sync.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-route-authoring-sync.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-controls-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-controls-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-runtime-integration-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-direct-controls-sync.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-direct-controls-sync.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-direct-submit-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-runtime-integration-direct-submit-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-direct-submit.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-direct-submit.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-options-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-options-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-state.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-integration-state.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-plugin-review-sync.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-plugin-review-sync.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-plugin-review-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-runtime-plugin-review-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-scoped-controls-sync.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-scoped-controls-sync.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-scoped-controls-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-scoped-controls-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-scoped-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-scoped-submit-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-scoped-submit-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-scoped-submit.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-scoped-submit.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-shell-head.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-shell-head.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-shell-render-runtime.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-shell-render-runtime.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-shell-render-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-shell-render-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-shell-view-state.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-shell-view-state.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-shell.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-starter-controls-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-starter-controls-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-starter-controls.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-starter-plan-hosts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-starter-plan-hosts.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-starter-plan.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-starter-plan.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-state-list-render.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-state-list-render.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-top-cards-submit-contracts.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-top-cards-submit-contracts.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-top-cards-submit.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-top-cards-submit.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/bootstrap-top-cards.wtoml"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-tutorial-runtime-view.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-tutorial-runtime-view.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-tutorial-runtime.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-tutorial-runtime.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-version-guidance.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap-version-guidance.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/bootstrap.test.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "json:plugins/bootstrap/plugin.json"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "file:plugins/bootstrap/runtime.js"
+
+[[relation]]
+from = "folder:plugins/bootstrap"
+rel = "contains"
+to = "wtoml:plugins/bootstrap/this.folder.wtoml"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/bootstrap"
+# rel = "describedBy"
+# to = "doc:..."

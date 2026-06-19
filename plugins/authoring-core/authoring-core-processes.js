@@ -156,6 +156,20 @@ function resolveCoveredBodyRef(world, body, {
   });
 }
 
+function resolveCoveredNestedRef(world, values, {
+  context = null,
+  idField,
+  refField,
+  label
+} = {}) {
+  return resolveCoveredContextualRef(world.allWitnesses(), {
+    context,
+    id: values?.[idField] ?? null,
+    ref: values?.[refField] ?? null,
+    label
+  });
+}
+
 export function resolveCoveredAuthoringRefInput(world, body, {
   contextField = "context",
   idField,
@@ -1498,10 +1512,9 @@ export function requestPackageDefine(world, {
     };
   }
 
-  const { context, ...packageBody } = input;
   const witness = definePackage(world, {
     actor,
-    ...packageBody
+    ...input
   });
   return {
     ok: true,
@@ -2137,32 +2150,69 @@ export function requestBootstrapRouteDefine(world, {
     return { ok: false, status: 400, error: rootSurfaceResolved.error, witness };
   }
   if (typeof rootSurfaceResolved.target === "string" && rootSurfaceResolved.target.trim()) params.rootSurface = rootSurfaceResolved.target.trim();
-  if (typeof body.frontendProgram === "string" && body.frontendProgram.trim()) params.frontendProgram = body.frontendProgram.trim();
+  const frontendProgramResolved = resolveCoveredBodyRef(world, body, {
+    contextField: "context",
+    idField: "frontendProgram",
+    refField: "frontendProgramRef",
+    label: "route frontend program"
+  });
+  if (!frontendProgramResolved.ok) {
+    const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: frontendProgramResolved.error } });
+    return { ok: false, status: 400, error: frontendProgramResolved.error, witness };
+  }
+  if (typeof frontendProgramResolved.target === "string" && frontendProgramResolved.target.trim()) params.frontendProgram = frontendProgramResolved.target.trim();
   if (typeof body.page === "string" && body.page.trim()) params.page = body.page.trim();
   if (typeof body.defaultScreen === "string" && body.defaultScreen.trim()) params.defaultScreen = body.defaultScreen.trim();
   if (body.routeState && typeof body.routeState === "object" && !Array.isArray(body.routeState)) {
-    const process = trimOptionalString(body.routeState.process) ?? trimOptionalString(body.routeState.processRef);
-    const state = trimOptionalString(body.routeState.state) ?? trimOptionalString(body.routeState.stateRef);
-    if (state) {
+    const routeStateProcessResolved = resolveCoveredNestedRef(world, body.routeState, {
+      context: body?.context ?? null,
+      idField: "process",
+      refField: "processRef",
+      label: "route state process"
+    });
+    if (!routeStateProcessResolved.ok) {
+      const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: routeStateProcessResolved.error } });
+      return { ok: false, status: 400, error: routeStateProcessResolved.error, witness };
+    }
+    const routeStateStateResolved = resolveCoveredNestedRef(world, body.routeState, {
+      context: body?.context ?? null,
+      idField: "state",
+      refField: "stateRef",
+      label: "route state state"
+    });
+    if (!routeStateStateResolved.ok) {
+      const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: routeStateStateResolved.error } });
+      return { ok: false, status: 400, error: routeStateStateResolved.error, witness };
+    }
+    if (routeStateStateResolved.target) {
       params.routeState = {
-        ...(process ? { process } : {}),
-        state
+        ...(routeStateProcessResolved.target ? { process: routeStateProcessResolved.target } : {}),
+        state: routeStateStateResolved.target
       };
     }
   }
   if (body.liveProjection === true) params.liveProjection = true;
   if (Array.isArray(body.excludeWidgetRoles) && body.excludeWidgetRoles.length) params.excludeWidgetRoles = [...body.excludeWidgetRoles];
-  if (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim()) params.rootWidget = body.defaultRootWidget.trim();
+  const defaultRootWidgetResolved = resolveCoveredBodyRef(world, body, {
+    contextField: "context",
+    idField: "defaultRootWidget",
+    refField: "defaultRootWidgetRef",
+    label: "route default root widget"
+  });
+  if (!defaultRootWidgetResolved.ok) {
+    const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: defaultRootWidgetResolved.error } });
+    return { ok: false, status: 400, error: defaultRootWidgetResolved.error, witness };
+  }
+  if (typeof defaultRootWidgetResolved.target === "string" && defaultRootWidgetResolved.target.trim()) params.rootWidget = defaultRootWidgetResolved.target.trim();
   const hasPageParams = Boolean(
     params.rootWidget
     || params.rootSurface
-    || body.frontendProgram
+    || params.frontendProgram
     || body.page
     || params.defaultScreen
     || params.routeState
     || body.liveProjection === true
     || (Array.isArray(body.excludeWidgetRoles) && body.excludeWidgetRoles.length)
-    || (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim())
   );
   const resolvedServes = servesResolved.target ?? input.serves ?? null;
   if (!resolvedServes) {

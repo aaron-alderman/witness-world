@@ -31,6 +31,96 @@ export function createBootstrapLiveStateReaders({
     contextRows() {
       return state.bootstrapState?.contexts || [];
     },
+    packageRows() {
+      return state.bootstrapState?.packages || [];
+    },
+    packageRevisionRows(packageId = null) {
+      const rows = state.bootstrapState?.packageRevisions || [];
+      const id = typeof packageId === "string" ? packageId.trim() : "";
+      return id ? rows.filter(row => row.package === id || row.id === id) : rows;
+    },
+    packagePatchRows(revisionId = null) {
+      const rows = state.bootstrapState?.packagePatches || [];
+      const id = typeof revisionId === "string" ? revisionId.trim() : "";
+      return id ? rows.filter(row => row.revision === id || row.id === id || row.package === id) : rows;
+    },
+    packageNamespaceRows(id = null) {
+      const rows = state.bootstrapState?.packageNamespaces || [];
+      const target = typeof id === "string" ? id.trim() : "";
+      return target ? rows.filter(row =>
+        row.id === target
+        || row.package === target
+        || row.revision === target
+        || row.context === target
+        || row.name === target
+        || `${row.context}:${row.name}` === target
+      ) : rows;
+    },
+    packageDependencyRows(id = null) {
+      const rows = state.bootstrapState?.packageDependencies || [];
+      const target = typeof id === "string" ? id.trim() : "";
+      return target ? rows.filter(row =>
+        row.id === target
+        || row.sourcePackage === target
+        || row.sourceRevision === target
+        || row.targetId === target
+      ) : rows;
+    },
+    packageTransformerRows(id = null) {
+      const rows = state.bootstrapState?.packageTransformers || [];
+      const target = typeof id === "string" ? id.trim() : "";
+      return target ? rows.filter(row =>
+        row.id === target
+        || row.package === target
+        || row.sourceRevision === target
+        || row.targetRevision === target
+        || row.sourceNamespace === target
+        || row.targetNamespace === target
+      ) : rows;
+    },
+    packageCoexistenceRows(id = null) {
+      const rows = state.bootstrapState?.packageCoexistence || [];
+      const target = typeof id === "string" ? id.trim() : "";
+      return target ? rows.filter(row =>
+        row.id === target
+        || row.packageId === target
+        || (row.revisionIds || []).includes(target)
+        || (row.selectedRevisionIds || []).includes(target)
+        || (row.namespaceSelections || []).some(namespace =>
+          namespace.id === target
+          || namespace.context === target
+          || namespace.name === target
+          || `${namespace.context}:${namespace.name}` === target
+          || namespace.revision === target
+        )
+      ) : rows;
+    },
+    packageConvergenceRows(id = null) {
+      const rows = state.bootstrapState?.packageConvergence || [];
+      const target = typeof id === "string" ? id.trim() : "";
+      return target ? rows.filter(row =>
+        row.id === target
+        || row.packageId === target
+        || row.coexistenceId === target
+        || (row.transformerIds || []).includes(target)
+        || (row.convergencePatchIds || []).includes(target)
+      ) : rows;
+    },
+    packageApplyPreviewRows(id = null) {
+      const rows = state.bootstrapState?.packageApplyPreviews || [];
+      const target = typeof id === "string" ? id.trim() : "";
+      return target ? rows.filter(row =>
+        row.id === target
+        || row.packageId === target
+        || row.revisionId === target
+        || row.coexistenceId === target
+        || row.convergenceId === target
+        || (row.selectedNamespaceIds || []).includes(target)
+        || (row.manifestConflictIds || []).includes(target)
+        || (row.relatedTransformerIds || []).includes(target)
+        || (row.relatedConvergencePatchIds || []).includes(target)
+      ) : rows;
+    },
     compatibilityBridgeRows() {
       return state.bootstrapState?.compatibilityBridges || [];
     },
@@ -43,6 +133,11 @@ export function createBootstrapLiveStateReaders({
     },
     legacyCapabilityMigrationRows() {
       return state.bootstrapState?.legacyCapabilityMigration?.pending || [];
+    },
+    capabilityRevisionHistoryRows(capabilityId = null) {
+      const rows = state.bootstrapState?.capabilityRevisionHistory || [];
+      const id = typeof capabilityId === "string" ? capabilityId.trim() : "";
+      return id ? rows.filter(row => row.capabilityId === id || row.witnessId === id) : rows;
     },
     governanceRouteRows() {
       return state.bootstrapState?.governanceRoutes || [];

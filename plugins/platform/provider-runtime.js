@@ -233,6 +233,7 @@ export function createPlatformTestMonitorRuntime({
 
   const emitResolvedPolicies = () => {
     const { policy, gatePolicies, appContext } = resolvedState();
+    const gateLookup = gatesById();
     const persistence = appContext?.verificationPersistence ?? null;
     const producedAt = nowIso();
     const defaultsRow = {
@@ -253,7 +254,7 @@ export function createPlatformTestMonitorRuntime({
         policySource: policy.source,
         policyKind: "gate",
         status: row.diagnostics?.length ? "invalid" : "resolved",
-        gateTitle: gatesById().get(row.gateId)?.title ?? row.gateId,
+        gateTitle: gateLookup.get(row.gateId)?.title ?? row.gateId,
         producedAt
       }))
     ];
@@ -272,6 +273,235 @@ export function createPlatformTestMonitorRuntime({
       gateRegistry.set(gateId, gate);
     }
     return new Map(gateRegistry);
+  };
+
+  const durableRows = () => resolvedState().appContext?.verificationPersistence?.readModelRows?.() ?? {};
+
+  const mergedVerificationRows = () => {
+    const persisted = durableRows();
+    return {
+      testRuns: mergeRowsById(persisted.testRuns ?? [], project(moduleProjectors.testRuns) ?? []),
+      verificationFreshness: mergeRowsById(persisted.verificationFreshness ?? [], project(moduleProjectors.verificationFreshness) ?? []),
+      coverageEdges: project(moduleProjectors.coverageEdges) ?? []
+    };
+  };
+
+  const priorFreshnessForGate = (gateId, runtimeProfile = null) =>
+    mergedVerificationRows().verificationFreshness.find(row =>
+      String(row?.gateId || "") === String(gateId || "")
+      && String(row?.serverRunnerId || "") === String(serverRunnerId || "")
+      && String(row?.runtimeProfile || "") === String(runtimeProfile || "")
+    ) ?? null;
+
+  const buildFreshnessRowForGate = async (gate, gatePolicy, meta = {}, { running = false } = {}) => {
+    const state = resolvedState();
+    const producedAt = nowIso();
+    const runtimeProfile = state.policy.runtimeProfile ?? state.appContext?.runtimeProfile ?? null;
+    const candidateSnapshotId = gatePolicy.executionClass === "candidate_snapshot"
+      ? (meta.candidateSnapshotId ?? null)
+      : null;
+    const environment = resolvePlatformTestEnvironment(gate, {
+      candidateSnapshotId,
+      executionClass: gatePolicy.executionClass,
+      requiresCleanWorkspace: gatePolicy.requiresCleanWorkspace === true
+    });
+    const snapshot = candidateSnapshotId
+      ? (project(moduleProjectors.candidateSnapshotIndex)?.byId?.[candidateSnapshotId] ?? null)
+      : null;
+    const workspaceMode = environment === "isolated-temp-workspace" || environment === "platform-candidate-snapshot"
+      ? "isolated-temp-workspace"
+      : "live-workspace";
+    const workspaceSource = environment === "platform-candidate-snapshot" ? "candidateSnapshot" : "workspace";
+    const environmentInputs = buildPlatformTestEnvironmentInputs({
+      command: gate.command,
+      cwd: repoRoot,
+      timeoutMs: gatePolicy.timeoutMs,
+      env: {},
+      runner: gate.runner,
+      environment,
+      executionClass: gatePolicy.executionClass,
+      runtimeProfile,
+      workspaceMode,
+      workspaceSource,
+      overlayFileCount: Array.isArray(snapshot?.files) ? snapshot.files.length : 0
+    });
+    const sourceRevision = await capturePlatformTestSourceRevision(world, {
+      gate,
+      branchId: meta.branchId ?? null,
+      changeSetId: meta.changeSetId ?? null,
+      candidateSnapshotId
+    });
+    const testRunnerVersion = await resolvePlatformTestRunnerVersion(String(gate.runner || "node-test"));
+    const runtimeCompositionFingerprint = buildPlatformRuntimeCompositionFingerprint({
+      appContext: state.appContext,
+      serverRunnerId,
+      runtimeProfile
+    });
+    const verificationPolicyFingerprint = buildPlatformVerificationPolicyFingerprint({
+      appContext: state.appContext,
+      gate,
+      gatePolicy,
+      verification: {
+        executionClass: gatePolicy.executionClass,
+        exclusive: gatePolicy.exclusive === true,
+        requiresCleanWorkspace: gatePolicy.requiresCleanWorkspace === true,
+        timeoutMs: gatePolicy.timeoutMs,
+        regressionMinDeltaMs: gatePolicy.regressionMinDeltaMs,
+        regressionMinDeltaPct: gatePolicy.regressionMinDeltaPct,
+        baselineScope: gatePolicy.baselineScope
+      },
+      serverRunnerId,
+      runtimeProfile
+    });
+    const currentCacheIdentity = buildPlatformTestCacheIdentity({
+      gate,
+      environmentInputs,
+      sourceRevision,
+      testRunnerVersion,
+      serverRunnerId,
+      runtimeCompositionFingerprint,
+      verificationPolicyFingerprint
+    });
+    const currentRows = mergedVerificationRows();
+    const gateRuns = currentRows.testRuns.filter(row =>
+      String(row?.gateId || "") === String(gate.id || "")
+      && String(row?.serverRunnerId || "") === String(serverRunnerId || "")
+      && String(row?.runtimeProfile || "") === String(runtimeProfile || "")
+    );
+    const latestRun = latestCompletedRunFor(gateRuns);
+    const latestPassedRun = latestPassedRunFor(gateRuns);
+    const reasonKinds = [];
+    const forcedReasonKinds = unique(meta.forcedReasonKinds);
+    let changedPaths = [];
+    if (!latestRun) {
+      reasonKinds.push("missing_evidence");
+      changedPaths = unique(meta.sourcePaths);
+    } else {
+      if (
+        forcedReasonKinds.includes("source_changed")
+        || String(latestRun?.cacheIdentity?.sourceHashSetHash || "") !== String(currentCacheIdentity.sourceHashSetHash || "")
+      ) {
+        reasonKinds.push("source_changed");
+        changedPaths = changedPathsForSourceDelta(latestRun?.sourceRevision ?? null, sourceRevision, meta.sourcePaths ?? []);
+      }
+      if (
+        forcedReasonKinds.includes("dependency_graph_changed")
+        || String(latestRun?.cacheIdentity?.dependencyGraphVersion || "") !== String(currentCacheIdentity.dependencyGraphVersion || "")
+      ) {
+        reasonKinds.push("dependency_graph_changed");
+      }
+      if (
+        forcedReasonKinds.includes("runtime_composition_changed")
+        || String(latestRun?.cacheIdentity?.runtimeCompositionFingerprint || "") !== String(currentCacheIdentity.runtimeCompositionFingerprint || "")
+      ) {
+        reasonKinds.push("runtime_composition_changed");
+      }
+      if (
+        forcedReasonKinds.includes("verification_policy_changed")
+        || String(latestRun?.cacheIdentity?.verificationPolicyFingerprint || "") !== String(currentCacheIdentity.verificationPolicyFingerprint || "")
+      ) {
+        reasonKinds.push("verification_policy_changed");
+      }
+      if (
+        forcedReasonKinds.includes("environment_changed")
+        || String(latestRun?.cacheIdentity?.environmentIdentityHash || "") !== String(currentCacheIdentity.environmentIdentityHash || "")
+      ) {
+        reasonKinds.push("environment_changed");
+      }
+    }
+    const priorRow = priorFreshnessForGate(gate.id, runtimeProfile);
+    const staleSince = reasonKinds.length
+      ? (priorRow?.staleSince ?? latestRun?.finishedAt ?? producedAt)
+      : null;
+    const targetIds = unique([
+      ...(Array.isArray(gate?.protectedObjects) ? gate.protectedObjects.map(String) : []),
+      ...coverageTargetIdsByGate(currentRows.coverageEdges, gate.id)
+    ]);
+    const baseStatus = !latestRun
+      ? "missing"
+      : (reasonKinds.length ? "stale" : "fresh");
+    return {
+      id: verificationFreshnessId(serverRunnerId, runtimeProfile, gate.id),
+      gateId: String(gate.id || ""),
+      serverRunnerId,
+      runtimeProfile,
+      status: running ? "running" : baseStatus,
+      latestRunId: latestRun?.id ?? null,
+      latestPassedRunId: latestPassedRun?.id ?? null,
+      latestUsableCacheKey: latestRun?.cacheIdentity?.cacheKey ?? null,
+      reasonKinds,
+      reasonSummary: summarizeFreshnessReasons(reasonKinds, changedPaths),
+      changedPaths,
+      targetIds,
+      blocking: !latestRun || String(latestRun?.status || "") !== "passed",
+      staleSince,
+      producedAt
+    };
+  };
+
+  const recomputeFreshnessForGates = async (gates = [], meta = {}, options = {}) => {
+    const state = resolvedState();
+    const persistence = state.appContext?.verificationPersistence ?? null;
+    const rows = [];
+    const invalidations = [];
+    for (const gate of gates) {
+      const gatePolicy = state.gatePolicyById[gate.id] ?? resolveVerificationGatePolicy(state.policy, gate);
+      if (!gatePolicy?.enabled) continue;
+      const priorRow = priorFreshnessForGate(gate.id, state.policy.runtimeProfile ?? null);
+      const nextRow = await buildFreshnessRowForGate(gate, gatePolicy, meta, options);
+      rows.push(nextRow);
+      emitVerificationEvent(world, "platform.verification.freshness.computed", serverRunnerId, nextRow);
+      if ((nextRow.status === "stale" || nextRow.status === "missing") && !sameFreshnessMeaning(priorRow, nextRow)) {
+        for (const reasonKind of unique(nextRow.reasonKinds.length ? nextRow.reasonKinds : ["missing_evidence"])) {
+          const invalidationRow = {
+            id: invalidationId(serverRunnerId, nextRow.runtimeProfile, gate.id, reasonKind),
+            gateId: gate.id,
+            serverRunnerId,
+            runtimeProfile: nextRow.runtimeProfile,
+            reasonKind,
+            reasonSummary: summarizeFreshnessReasons([reasonKind], nextRow.changedPaths),
+            changedPaths: [...nextRow.changedPaths],
+            targetIds: [...nextRow.targetIds],
+            previousRunId: nextRow.latestRunId ?? null,
+            previousCacheKey: nextRow.latestUsableCacheKey ?? null,
+            producedAt: nextRow.producedAt
+          };
+          invalidations.push(invalidationRow);
+          emitVerificationEvent(world, "platform.verification.invalidated", serverRunnerId, invalidationRow);
+        }
+      }
+    }
+    await persistence?.recordFreshnessRows?.(rows);
+    await persistence?.recordInvalidationRows?.(invalidations);
+    return { rows, invalidations };
+  };
+
+  const recomputeFreshnessForStartup = async () => {
+    const state = resolvedState();
+    if (!state.policy.enabled) return;
+    const gateMap = gatesById();
+    await recomputeFreshnessForGates(
+      state.gatePolicies
+        .filter(row => row.enabled && row.startup)
+        .map(row => gateMap.get(row.gateId))
+        .filter(Boolean),
+      { triggerKind: "startup" }
+    );
+  };
+
+  const recomputeFreshnessForSourcePaths = async (sourcePaths = [], meta = {}) => {
+    const state = resolvedState();
+    if (!state.policy.enabled) return;
+    const gates = affectedGatesForSourcePaths([...gatesById().values()], sourcePaths);
+    const forcedReasonKinds = [
+      ...(sourcePaths.includes("app.wtoml") ? ["verification_policy_changed"] : []),
+      ...(sourcePaths.includes("package.json") ? ["runtime_composition_changed"] : [])
+    ];
+    await recomputeFreshnessForGates(gates, {
+      ...meta,
+      sourcePaths,
+      forcedReasonKinds
+    });
   };
 
   const createQueueEntry = (gate, gatePolicy, meta = {}) => ({
@@ -324,11 +554,13 @@ export function createPlatformTestMonitorRuntime({
     const state = resolvedState();
     if (!state.policy.enabled) return;
     const gateMap = gatesById();
-    const selected = selectContinuousTestGates(
-      [...gateMap.values()],
-      sourcePaths,
-      { maxGateCount: state.policy.compatibility?.maxAutoRunsPerCycle ?? 6 }
-    );
+    const selected = sourcePaths.includes("app.wtoml") || sourcePaths.includes("package.json")
+      ? [...gateMap.values()]
+      : selectContinuousTestGates(
+          [...gateMap.values()],
+          sourcePaths,
+          { maxGateCount: state.policy.compatibility?.maxAutoRunsPerCycle ?? 6 }
+        );
     const entries = selected
       .map(gate => ({ gate, gatePolicy: state.gatePolicyById[gate.id] ?? null }))
       .filter(row => row.gatePolicy?.enabled && row.gatePolicy.watch)
@@ -374,6 +606,19 @@ export function createPlatformTestMonitorRuntime({
         });
       })
       .filter(Boolean);
+    await recomputeFreshnessForGates(
+      entries
+        .map(entry => gateMap.get(entry.gateId) ?? null)
+        .filter(Boolean),
+      {
+        triggerKind: "changeSet",
+        trigger: "platform.changeSet.validate",
+        branchId: queued.branchId ?? null,
+        changeSetId: queued.changeSetId ?? null,
+        candidateSnapshotId: queued.candidateSnapshotId ?? null,
+        forcedReasonKinds: ["environment_changed"]
+      }
+    );
     enqueueEntries(entries);
   };
 
@@ -430,6 +675,12 @@ export function createPlatformTestMonitorRuntime({
       startedAt: activeExecution.startedAt
     });
     await state.appContext?.verificationPersistence?.recordExecutionRow?.({ ...activeExecution });
+    await recomputeFreshnessForGates([gate], {
+      triggerKind: entry.triggerKind,
+      branchId: entry.branchId ?? null,
+      changeSetId: entry.changeSetId ?? null,
+      candidateSnapshotId: isolationCandidateSnapshotId(entry)
+    }, { running: true });
     const result = await runPlatformTestGateImpl(world, {
       actor: serverRunnerId,
       gate,
@@ -442,6 +693,7 @@ export function createPlatformTestMonitorRuntime({
       executionClass: entry.executionClass,
       requiresCleanWorkspace: shouldUseIsolatedWorkspace(entry),
       serverRunnerId,
+      appContext: state.appContext ?? null,
       verificationPersistence: state.appContext?.verificationPersistence ?? null,
       verification: {
         triggerKind: entry.triggerKind,
@@ -484,6 +736,13 @@ export function createPlatformTestMonitorRuntime({
     });
     await state.appContext?.verificationPersistence?.recordExecutionRow?.(executionRow);
     activeExecution = null;
+    await recomputeFreshnessForGates([gate], {
+      triggerKind: entry.triggerKind,
+      branchId: entry.branchId ?? null,
+      changeSetId: entry.changeSetId ?? null,
+      candidateSnapshotId: isolationCandidateSnapshotId(entry),
+      sourcePaths: entry.sourcePaths ?? []
+    });
   };
 
   const drain = async () => {
@@ -514,7 +773,10 @@ export function createPlatformTestMonitorRuntime({
           debounceTimer = null;
           const sourcePaths = [...pendingSources];
           pendingSources.clear();
-          enqueueSourceEntries(sourcePaths, { trigger: "workspace-watch" });
+          void (async () => {
+            await recomputeFreshnessForSourcePaths(sourcePaths, { trigger: "workspace-watch" });
+            enqueueSourceEntries(sourcePaths, { trigger: "workspace-watch" });
+          })();
         }, debounceMs);
         debounceTimer.unref?.();
       });
@@ -537,12 +799,22 @@ export function createPlatformTestMonitorRuntime({
       if (initialized || closed) return;
       initialized = true;
       emitResolvedPolicies();
+      await recomputeFreshnessForStartup();
       startWatchers();
       enqueueStartupGates();
     },
     scheduleSourceChanges(paths = [], meta = {}) {
-      if (!unique(paths).length) return;
-      enqueueSourceEntries(unique(paths), meta);
+      const normalizedPaths = unique(paths);
+      if (!normalizedPaths.length) return;
+      for (const sourcePath of normalizedPaths) pendingSources.add(sourcePath);
+      void (async () => {
+        try {
+          await recomputeFreshnessForSourcePaths(normalizedPaths, meta);
+          enqueueSourceEntries(normalizedPaths, meta);
+        } finally {
+          for (const sourcePath of normalizedPaths) pendingSources.delete(sourcePath);
+        }
+      })();
     },
     scheduleChangeSetValidation(queued) {
       const current = {
@@ -562,8 +834,30 @@ export function createPlatformTestMonitorRuntime({
         }
       })();
     },
+    scheduleRuntimeRevisionChange(meta = {}) {
+      void (async () => {
+        const state = resolvedState();
+        if (!state.policy.enabled) return;
+        await recomputeFreshnessForGates(
+          state.gatePolicies
+            .filter(row => row.enabled)
+            .map(row => gatesById().get(row.gateId))
+            .filter(Boolean),
+          {
+            ...meta,
+            triggerKind: meta.triggerKind ?? "runtimeRevision",
+            trigger: meta.trigger ?? "runtime-revision",
+            forcedReasonKinds: ["runtime_composition_changed"]
+          }
+        );
+      })();
+    },
     inspect() {
       const state = resolvedState();
+      const freshnessRows = mergedVerificationRows().verificationFreshness.filter(row =>
+        String(row?.serverRunnerId || "") === String(serverRunnerId || "")
+        && String(row?.runtimeProfile || "") === String(state.policy.runtimeProfile || "")
+      );
       const status = !state.policy.enabled
         ? "disabled"
         : (processing
@@ -586,6 +880,12 @@ export function createPlatformTestMonitorRuntime({
         pendingChangeSetCount: pendingChangeSets.length,
         queue: queue.map(row => ({ ...row })),
         queueCount: queue.length,
+        freshness: freshnessRows.map(row => ({ ...row })),
+        freshnessCounts: freshnessRows.reduce((counts, row) => {
+          const key = String(row?.status || "missing");
+          counts[key] = (counts[key] ?? 0) + 1;
+          return counts;
+        }, Object.create(null)),
         activeExecution: activeExecution ? { ...activeExecution } : null,
         recentExecutions: completedExecutions.map(row => ({ ...row }))
       };

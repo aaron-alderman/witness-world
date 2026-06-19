@@ -1,0 +1,91 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/demo"
+path = "plugins/demo"
+label = "demo"
+summary = "Auto-generated folder metadata for plugins/demo."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "file:plugins/demo/backend-mutations.js"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "file:plugins/demo/demo-proposal-targets.js"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "file:plugins/demo/demo.test.js"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "file:plugins/demo/handler-set.js"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "json:plugins/demo/plugin.json"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "file:plugins/demo/private-notes-runtime.js"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "file:plugins/demo/projections.js"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "file:plugins/demo/runtime-builtins.js"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "file:plugins/demo/runtime.js"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "wtoml:plugins/demo/this.folder.wtoml"
+
+[[relation]]
+from = "folder:plugins/demo"
+rel = "contains"
+to = "file:plugins/demo/todo-runtime.js"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/demo"
+# rel = "describedBy"
+# to = "doc:..."

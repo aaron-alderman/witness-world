@@ -4,6 +4,9 @@ import {
   bindSurfaceInspectorFormActions,
   readSurfaceInspectorWidgetPatch,
   renderSurfaceInspectorFormActionsFactory,
+  submitSurfaceInspectorChildCreateForm,
+  submitSurfaceInspectorCapabilityInstallForm,
+  submitSurfaceInspectorCapabilityRemoveForm,
   submitSurfaceInspectorEditForm,
   submitSurfaceInspectorProposalForm,
   submitSurfaceInspectorVersionProposalForm,
@@ -235,6 +238,152 @@ test("surface inspector proposal helpers route widget and version proposals thro
   ]);
 });
 
+test("surface inspector child create helper routes direct and proposed child creation through the shared seam", async () => {
+  const directCalls = [];
+  const directForm = createForm({ "data-widget-id": "todo_form" }, {
+    id: "todo_inline_note",
+    kind: "Text",
+    text: "Inline note",
+    title: "",
+    class: ""
+  });
+
+  const created = await submitSurfaceInspectorChildCreateForm({
+    form: directForm,
+    selectedSurfaceWidgetAuthored: () => ({ id: "todo_form", kind: "Form", context: "frontend" }),
+    selectedSurfaceWidgetEditAuthority: () => ({ ok: true, reason: "" }),
+    setSurfaceInspectorStatus: (message, level) => directCalls.push(["status", message, level]),
+    updateSurfaceInspectorUi: () => directCalls.push("update"),
+    createSurfaceWidget: async body => {
+      directCalls.push(["create", body]);
+      return { ok: true, status: 201, body: { widget: { id: "todo_inline_note" } } };
+    },
+    invalidateSurfaceInspectorGraph: () => directCalls.push("invalidate-graph"),
+    invalidateSurfaceInspectorWidgets: () => directCalls.push("invalidate-widgets"),
+    refreshProjection: async () => directCalls.push("refresh"),
+    selectSurfaceInspectorWidget: async (id, options) => directCalls.push(["select", id, options.statusMessage]),
+    createFormData: createFormDataFactory()
+  });
+  assert.equal(created, true);
+
+  const proposalCalls = [];
+  const proposalForm = createForm({ "data-widget-id": "todo_form" }, {
+    id: "todo_proposed_note",
+    kind: "Text",
+    text: "Proposed note",
+    title: "",
+    class: "",
+    reason: "Need shared note"
+  });
+  const proposed = await submitSurfaceInspectorChildCreateForm({
+    form: proposalForm,
+    selectedSurfaceWidgetAuthored: () => ({ id: "todo_form", kind: "Form", context: "frontend" }),
+    selectedSurfaceWidgetEditAuthority: () => ({ ok: false, reason: "Need proposal" }),
+    currentActor: () => "callan",
+    setSurfaceInspectorStatus: (message, level) => proposalCalls.push(["status", message, level]),
+    updateSurfaceInspectorUi: () => proposalCalls.push("update"),
+    createSurfaceWidget: async body => {
+      proposalCalls.push(["create", body]);
+      return { ok: true, status: 202, body: { proposal: { id: "proposal-child-1" } } };
+    },
+    createFormData: createFormDataFactory()
+  });
+  assert.equal(proposed, true);
+
+  assert.deepEqual(directCalls, [
+    ["status", "Creating child widget under todo_form...", "ok"],
+    "update",
+    ["create", { kind: "Text", parent: "todo_form", id: "todo_inline_note", text: "Inline note", context: "frontend" }],
+    "invalidate-graph",
+    "invalidate-widgets",
+    "refresh",
+    ["select", "todo_form", "Created todo_inline_note under todo_form."]
+  ]);
+  assert.deepEqual(proposalCalls, [
+    ["status", "Requesting child widget under todo_form...", "ok"],
+    "update",
+    ["create", { kind: "Text", parent: "todo_form", id: "todo_proposed_note", text: "Proposed note", context: "frontend", reason: "Need shared note" }],
+    ["status", "Proposed child widget under todo_form as proposal-child-1.", "ok"],
+    "update"
+  ]);
+});
+
+test("surface inspector capability helpers route install and removal through the shared seam", async () => {
+  const installCalls = [];
+  const installForm = createForm({
+    "data-surface-inspector-capability-target": "frontend",
+    "data-surface-inspector-capability-target-kind": "context"
+  }, { capability: "notes.sidebar" });
+
+  const installDenied = await submitSurfaceInspectorCapabilityInstallForm({
+    form: installForm,
+    currentActor: () => "",
+    setSurfaceInspectorStatus: (message, level) => installCalls.push(["status", message, level]),
+    updateSurfaceInspectorUi: () => installCalls.push("update"),
+    createFormData: createFormDataFactory()
+  });
+  assert.equal(installDenied, false);
+
+  const installProposed = await submitSurfaceInspectorCapabilityInstallForm({
+    form: installForm,
+    currentActor: () => "callan",
+    selectedSurfaceWidgetId: () => "todo_add_button",
+    setSurfaceInspectorStatus: (message, level) => installCalls.push(["status", message, level]),
+    updateSurfaceInspectorUi: () => installCalls.push("update"),
+    installSurfaceCapability: async payload => {
+      installCalls.push(["install", payload]);
+      return { ok: true, status: 202, body: { proposal: { id: "proposal-capability-install" } } };
+    },
+    createFormData: createFormDataFactory()
+  });
+  assert.equal(installProposed, true);
+
+  const removeCalls = [];
+  const removeForm = createForm({
+    "data-surface-inspector-capability": "dom.render",
+    "data-surface-inspector-capability-target": "frontend",
+    "data-surface-inspector-capability-target-kind": "context"
+  });
+
+  const removed = await submitSurfaceInspectorCapabilityRemoveForm({
+    form: removeForm,
+    currentActor: () => "aaron",
+    selectedSurfaceWidgetId: () => "todo_add_button",
+    setSurfaceInspectorStatus: (message, level) => removeCalls.push(["status", message, level]),
+    updateSurfaceInspectorUi: () => removeCalls.push("update"),
+    removeSurfaceCapability: async payload => {
+      removeCalls.push(["remove", payload]);
+      return { ok: true, status: 200, body: {} };
+    },
+    invalidateSurfaceInspectorGraph: () => removeCalls.push("invalidate-graph"),
+    invalidateSurfaceInspectorWidgets: () => removeCalls.push("invalidate-widgets"),
+    invalidateSurfaceInspectorRuntimeDiagnostics: () => removeCalls.push("invalidate-runtime"),
+    refreshProjection: async () => removeCalls.push("refresh"),
+    selectSurfaceInspectorWidget: async (id, options) => removeCalls.push(["select", id, options.statusMessage])
+  });
+  assert.equal(removed, true);
+
+  assert.deepEqual(installCalls, [
+    ["status", "Sign in to install authored capabilities for this context.", "error"],
+    "update",
+    ["status", "Installing notes.sidebar on frontend...", "ok"],
+    "update",
+    ["install", { capability: "notes.sidebar", target: "frontend", targetKind: "context" }],
+    ["status", "Proposed install of notes.sidebar on frontend as proposal-capability-install.", "ok"],
+    "update"
+  ]);
+  assert.deepEqual(removeCalls, [
+    ["status", "Removing dom.render from frontend...", "ok"],
+    "update",
+    ["remove", { capability: "dom.render", target: "frontend", targetKind: "context" }],
+    "invalidate-graph",
+    "invalidate-widgets",
+    "invalidate-runtime",
+    "refresh",
+    ["select", "todo_add_button", "Removed dom.render from frontend."]
+  ]);
+});
+
 test("surface inspector form binder wires edit, proposal, and version proposal submits through the shared seam", async () => {
   const editForm = createForm({ "data-widget-id": "todo_form" }, { text: "Updated", title: "Card", class: "panel" }, true);
   const proposalForm = createForm({ "data-widget-id": "todo_form" }, { text: "Updated", title: "Card", class: "panel", reason: "Need it" }, true);
@@ -243,12 +392,32 @@ test("surface inspector form binder wires edit, proposal, and version proposal s
     "data-surface-inspector-proposal-soul": "todo_form",
     "data-surface-inspector-proposal-version": "v1"
   }, { reason: "Revert" });
+  const childCreateForm = createForm({ "data-widget-id": "todo_form" }, {
+    id: "todo_inline_note",
+    kind: "Text",
+    text: "Inline note",
+    title: "",
+    class: "",
+    reason: "Need it"
+  });
+  const capabilityInstallForm = createForm({
+    "data-surface-inspector-capability-target": "frontend",
+    "data-surface-inspector-capability-target-kind": "context"
+  }, { capability: "notes.sidebar" });
+  const capabilityRemoveForm = createForm({
+    "data-surface-inspector-capability": "dom.render",
+    "data-surface-inspector-capability-target": "frontend",
+    "data-surface-inspector-capability-target-kind": "context"
+  });
   const overlay = {
     querySelectorAll(selector) {
       switch (selector) {
         case "[data-surface-inspector-edit-form]": return [editForm];
         case "[data-surface-inspector-proposal-form]": return [proposalForm];
         case "[data-surface-inspector-version-proposal-form]": return [versionForm];
+        case "[data-surface-inspector-child-create-form]": return [childCreateForm];
+        case "[data-surface-inspector-capability-install-form]": return [capabilityInstallForm];
+        case "[data-surface-inspector-capability-remove-form]": return [capabilityRemoveForm];
         default: return [];
       }
     }
@@ -274,6 +443,18 @@ test("surface inspector form binder wires edit, proposal, and version proposal s
       calls.push("propose-version");
       return { ok: true, proposalId: "proposal-2" };
     },
+    createSurfaceWidget: async () => {
+      calls.push("create-child");
+      return { ok: true, status: 202, body: { proposal: { id: "proposal-child" } } };
+    },
+    installSurfaceCapability: async () => {
+      calls.push("install-capability");
+      return { ok: true, status: 202, body: { proposal: { id: "proposal-3" } } };
+    },
+    removeSurfaceCapability: async () => {
+      calls.push("remove-capability");
+      return { ok: true, status: 202, body: { proposal: { id: "proposal-4" } } };
+    },
     readWidgetPatch: options => readSurfaceInspectorWidgetPatch({
       ...options,
       createFormData: createFormDataFactory(),
@@ -296,6 +477,18 @@ test("surface inspector form binder wires edit, proposal, and version proposal s
   await versionForm.listener("submit")(versionEvent);
   assert.equal(versionEvent.prevented, true);
 
+  const childCreateEvent = submitEvent();
+  await childCreateForm.listener("submit")(childCreateEvent);
+  assert.equal(childCreateEvent.prevented, true);
+
+  const capabilityInstallEvent = submitEvent();
+  await capabilityInstallForm.listener("submit")(capabilityInstallEvent);
+  assert.equal(capabilityInstallEvent.prevented, true);
+
+  const capabilityRemoveEvent = submitEvent();
+  await capabilityRemoveForm.listener("submit")(capabilityRemoveEvent);
+  assert.equal(capabilityRemoveEvent.prevented, true);
+
   assert.deepEqual(calls, [
     ["status", "Need proposal", "error"],
     "update",
@@ -308,6 +501,21 @@ test("surface inspector form binder wires edit, proposal, and version proposal s
     "update",
     "propose-version",
     ["status", "Proposed rollback todo_form as proposal-2.", "ok"],
+    "update",
+    ["status", "Requesting child widget under todo_form...", "ok"],
+    "update",
+    "create-child",
+    ["status", "Proposed child widget under todo_form as proposal-child.", "ok"],
+    "update",
+    ["status", "Installing notes.sidebar on frontend...", "ok"],
+    "update",
+    "install-capability",
+    ["status", "Proposed install of notes.sidebar on frontend as proposal-3.", "ok"],
+    "update",
+    ["status", "Removing dom.render from frontend...", "ok"],
+    "update",
+    "remove-capability",
+    ["status", "Proposed removal of dom.render from frontend as proposal-4.", "ok"],
     "update"
   ]);
 });
@@ -318,4 +526,7 @@ test("surface inspector form actions factory exposes the shared browser helpers"
   assert.equal(factory.includes("const submitSurfaceInspectorEditForm ="), true);
   assert.equal(factory.includes("const submitSurfaceInspectorProposalForm ="), true);
   assert.equal(factory.includes("const submitSurfaceInspectorVersionProposalForm ="), true);
+  assert.equal(factory.includes("const submitSurfaceInspectorChildCreateForm ="), true);
+  assert.equal(factory.includes("const submitSurfaceInspectorCapabilityInstallForm ="), true);
+  assert.equal(factory.includes("const submitSurfaceInspectorCapabilityRemoveForm ="), true);
 });

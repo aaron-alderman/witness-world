@@ -141,10 +141,21 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
         { method: "POST", matcher: "/api/platform-change-sets/demo/apply", handler: "platform.changeSet.apply" }
       ],
       surfaces: [{ id: "surface:platform", href: "/platform" }],
-      plugins: {
-        activePluginIds: ["plugin.platform"],
-        effectivePluginIds: ["plugin.platform"],
-        rejectedPlugins: []
+    plugins: {
+      activePluginIds: ["plugin.platform"],
+      effectivePluginIds: ["plugin.platform"],
+      rejectedPlugins: []
+    },
+      composition: {
+        storyId: "authored-runner-driven",
+        startupMode: "serve",
+        activeRunnerId: "server_runner",
+        activeRunnerSource: "authored-server-runner",
+        activePluginSource: "authored-runtime-plugin-installs",
+        usesAuthoredServerRunner: true,
+        usesAuthoredRuntimePluginInstalls: true,
+        explanation: "Runtime is running in serve mode from authored runner server_runner; plugin activation source is authored-runtime-plugin-installs.",
+        notes: ["Authored runtimePluginInstall rows participate in the active runtime plugin composition."]
       },
       testMonitor: {
         enabled: true,
@@ -212,6 +223,13 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.testMonitorDiagnostics?.status, "queued");
   assert.equal(model.testMonitorDiagnostics?.pendingSourceCount, 1);
   assert.equal(model.testMonitorDiagnostics?.pendingChangeSetCount, 1);
+  assert.equal(model.runtimeComposition?.storyId, "authored-runner-driven");
+  assert.equal(model.runtimeComposition?.activeRunnerSource, "authored-server-runner");
+  assert.equal(model.runtimeComposition?.activePluginSource, "authored-runtime-plugin-installs");
+  const activeProfile = model.profiles.find(row => row.id === "full");
+  assert.equal(activeProfile?.status, "active");
+  assert.equal(activeProfile?.runnerSummary, "server_runner (authored-server-runner)");
+  assert.match(activeProfile?.compositionSummary ?? "", /authored runner server_runner/);
   assert.equal(model.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.importedVisibleTarget" && row.status === "policy"), true);
   assert.equal(model.governanceRoutes.some(row => row.handler === "platform.changeSet.apply" && row.governanceMode === "operator-only"), true);
   assert.equal(model.proposalTargetGovernance.some(row => row.targetProcess === "runtimePlugin.install" && row.governanceMode === "proposal-fallback"), true);
@@ -656,8 +674,16 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationRunsPage",
     "PlatformVerificationRuntimePage",
     "PlatformKnowledgePage",
+    "PlatformKnowledgeDocsPage",
+    "PlatformKnowledgeFoldersPage",
+    "PlatformKnowledgeRoadmapPage",
     "PlatformSignalsPage",
+    "PlatformSignalsGapsPage",
+    "PlatformSignalsCatalogPage",
     "PlatformModelPage",
+    "PlatformModelObjectsPage",
+    "PlatformModelProfilesPage",
+    "PlatformModelCoveragePage",
     "PlatformBridgesPage",
     "PlatformGovernancePage",
     "PlatformSemanticsPage",
@@ -674,8 +700,18 @@ test("platform console layout compiles authored top-level surface metadata from 
   const verificationStatusPage = layout.children.find(surface => surface.name === "PlatformVerificationStatusPage");
   const verificationRunsPage = layout.children.find(surface => surface.name === "PlatformVerificationRunsPage");
   const verificationRuntimePage = layout.children.find(surface => surface.name === "PlatformVerificationRuntimePage");
+  const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
+  const knowledgeDocsPage = layout.children.find(surface => surface.name === "PlatformKnowledgeDocsPage");
+  const knowledgeFoldersPage = layout.children.find(surface => surface.name === "PlatformKnowledgeFoldersPage");
+  const knowledgeRoadmapPage = layout.children.find(surface => surface.name === "PlatformKnowledgeRoadmapPage");
   const signalsPage = layout.children.find(surface => surface.name === "PlatformSignalsPage");
+  const signalsGapsPage = layout.children.find(surface => surface.name === "PlatformSignalsGapsPage");
+  const signalsCatalogPage = layout.children.find(surface => surface.name === "PlatformSignalsCatalogPage");
   const bridgesPage = layout.children.find(surface => surface.name === "PlatformBridgesPage");
+  const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
+  const modelObjectsPage = layout.children.find(surface => surface.name === "PlatformModelObjectsPage");
+  const modelProfilesPage = layout.children.find(surface => surface.name === "PlatformModelProfilesPage");
+  const modelCoveragePage = layout.children.find(surface => surface.name === "PlatformModelCoveragePage");
   const governancePage = layout.children.find(surface => surface.name === "PlatformGovernancePage");
   const semanticsPage = layout.children.find(surface => surface.name === "PlatformSemanticsPage");
   const packageCoexistencePage = layout.children.find(surface => surface.name === "PlatformPackageCoexistencePage");
@@ -1117,42 +1153,61 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationRuntimeListSurface.props.listSource, "verificationItems");
   assert.ok(signalsPage);
   assert.equal(signalsPage.pageId, "signals");
-  assert.equal(signalsPage.props.modelView, "signals");
+  assert.equal(signalsPage.props.modelView, "signalsOverview");
   assert.match(signalsPage.props.summaryCards, /Telemetry Metrics=nodes@countKind:telemetryMetric/);
-  assert.deepEqual(signalsPage.children, [
+  assert.deepEqual(signalsPage.children, []);
+  assert.ok(signalsGapsPage);
+  assert.equal(signalsGapsPage.pageId, "signalsGaps");
+  assert.equal(signalsGapsPage.props.modelView, "signalsGaps");
+  assert.deepEqual(signalsGapsPage.children, [
     "PlatformGapList",
-    "PlatformSignalList",
-    "PlatformSignalDetail"
+    "PlatformGapDetail"
   ]);
-  const signalDetailSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformSignalDetail");
-  assert.ok(signalDetailSurface);
-  assert.equal(signalDetailSurface.props.detailSource, "signals");
-  assert.equal(signalDetailSurface.props.detailSelectionSources, "gaps|telemetryMetric|defectCluster|boundary");
-  assert.equal(signalDetailSurface.props.gapIdPrefixes, "gap.");
-  assert.equal(signalDetailSurface.props.signalNodeKinds, "telemetryMetric|defectCluster|boundary");
-  assert.equal(signalDetailSurface.props.emptyTitle, "Detail");
-  assert.equal(signalDetailSurface.props.emptyState, "No signal rows are projected yet.");
-  assert.deepEqual(signalDetailSurface.children, [
+  assert.ok(signalsCatalogPage);
+  assert.equal(signalsCatalogPage.pageId, "signalsCatalog");
+  assert.equal(signalsCatalogPage.props.modelView, "signalsCatalog");
+  assert.deepEqual(signalsCatalogPage.children, [
+    "PlatformSignalList",
+    "PlatformSignalCatalogDetail"
+  ]);
+  const gapDetailSurface = signalsGapsPage.childSurfaces.find(surface => surface.name === "PlatformGapDetail");
+  assert.ok(gapDetailSurface);
+  assert.equal(gapDetailSurface.props.detailSource, "signals");
+  assert.equal(gapDetailSurface.props.detailSelectionSources, "gaps");
+  assert.equal(gapDetailSurface.props.gapIdPrefixes, "gap.");
+  assert.equal(gapDetailSurface.props.emptyTitle, "Detail");
+  assert.equal(gapDetailSurface.props.emptyState, "No gaps are projected yet.");
+  assert.deepEqual(gapDetailSurface.children, [
     "PlatformSignalPrimaryPanel",
     "PlatformSignalRelatedPanel",
     "PlatformSignalRelationships"
   ]);
-  assert.deepEqual(signalDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
+  assert.deepEqual(gapDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
     "primary",
     "related",
     "relationships"
   ]);
-  assert.deepEqual(signalDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
+  assert.deepEqual(gapDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
     "gap|signal",
     "gap",
     "gap|signal"
   ]);
-  assert.equal(signalDetailSurface.childSurfaces.some(surface => surface.name === "PlatformSignalRelationships" && surface.summary === "Linked graph relationships for the selected signal when available."), true);
-  const signalRelationshipsSurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalRelationships");
+  const signalCatalogDetailSurface = signalsCatalogPage.childSurfaces.find(surface => surface.name === "PlatformSignalCatalogDetail");
+  assert.ok(signalCatalogDetailSurface);
+  assert.equal(signalCatalogDetailSurface.props.detailSource, "signals");
+  assert.equal(signalCatalogDetailSurface.props.detailSelectionSources, "telemetryMetric|defectCluster|boundary");
+  assert.equal(signalCatalogDetailSurface.props.signalNodeKinds, "telemetryMetric|defectCluster|boundary");
+  assert.equal(signalCatalogDetailSurface.props.emptyState, "No signal nodes are projected yet.");
+  assert.deepEqual(signalCatalogDetailSurface.children, [
+    "PlatformSignalPrimaryPanel",
+    "PlatformSignalRelationships"
+  ]);
+  assert.equal(gapDetailSurface.childSurfaces.some(surface => surface.name === "PlatformSignalRelationships" && surface.summary === "Linked graph relationships for the selected signal when available."), true);
+  const signalRelationshipsSurface = gapDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalRelationships");
   assert.ok(signalRelationshipsSurface);
   assert.equal(signalRelationshipsSurface.props.rowFields, "From=from@concept|Relation=rel|To=to@concept");
-  assert.equal(signalsPage.childSurfaces.some(surface => surface.name === "PlatformGapList" && surface.projectionRoutes.includes("/api/platform-gaps")), true);
-  const gapListSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformGapList");
+  assert.equal(signalsGapsPage.childSurfaces.some(surface => surface.name === "PlatformGapList" && surface.projectionRoutes.includes("/api/platform-gaps")), true);
+  const gapListSurface = signalsGapsPage.childSurfaces.find(surface => surface.name === "PlatformGapList");
   assert.ok(gapListSurface);
   assert.equal(gapListSurface.props.listSource, "gapRows");
   assert.equal(gapListSurface.props.columns, "Severity|Kind|Target|Reason");
@@ -1161,55 +1216,96 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(gapListSurface.props.defaultSort, "severity:asc");
   assert.equal(gapListSurface.props.emptyState, "No gaps.");
   assert.equal(gapListSurface.props.pageSize, "12");
-  const signalListSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformSignalList");
+  const signalListSurface = signalsCatalogPage.childSurfaces.find(surface => surface.name === "PlatformSignalList");
   assert.ok(signalListSurface);
   assert.equal(signalListSurface.props.listSource, "signalItems");
-  const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
   assert.ok(knowledgePage);
-  assert.equal(knowledgePage.props.modelView, "knowledge");
+  assert.equal(knowledgePage.props.modelView, "knowledgeOverview");
   assert.match(knowledgePage.props.summaryCards, /Governed Docs=docs@count/);
-  const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
-  assert.ok(knowledgeDetailSurface);
-  assert.equal(knowledgeDetailSurface.props.detailSource, "knowledge");
-  assert.equal(knowledgeDetailSurface.props.detailSelectionSources, "docs|roadmapTasks|epics|features");
-  assert.equal(knowledgeDetailSurface.props.documentPathField, "path");
-  assert.equal(knowledgeDetailSurface.props.roadmapTaskIdPrefixes, "roadmapTask:");
-  assert.equal(knowledgeDetailSurface.props.roadmapTaskFallbackField, "doc");
-  assert.equal(knowledgeDetailSurface.props.epicIdPrefixes, "epic:");
-  assert.equal(knowledgeDetailSurface.props.featureIdPrefixes, "feature:");
-  assert.equal(knowledgeDetailSurface.props.emptyTitle, "Detail");
-  assert.equal(knowledgeDetailSurface.props.emptyState, "No knowledge rows are projected yet.");
-  assert.deepEqual(knowledgeDetailSurface.children, [
+  assert.deepEqual(knowledgePage.children, []);
+  assert.ok(knowledgeDocsPage);
+  assert.equal(knowledgeDocsPage.props.modelView, "knowledgeDocs");
+  assert.deepEqual(knowledgeDocsPage.children, [
+    "PlatformKnowledgeDocsList",
+    "PlatformKnowledgeDocsDetail"
+  ]);
+  assert.ok(knowledgeFoldersPage);
+  assert.equal(knowledgeFoldersPage.props.modelView, "knowledgeFolders");
+  assert.deepEqual(knowledgeFoldersPage.children, [
+    "PlatformKnowledgeFoldersList",
+    "PlatformKnowledgeFoldersDetail"
+  ]);
+  assert.ok(knowledgeRoadmapPage);
+  assert.equal(knowledgeRoadmapPage.props.modelView, "knowledgeRoadmap");
+  assert.deepEqual(knowledgeRoadmapPage.children, [
+    "PlatformKnowledgeRoadmapList",
+    "PlatformKnowledgeRoadmapDetail"
+  ]);
+  const knowledgeDocsDetailSurface = knowledgeDocsPage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDocsDetail");
+  assert.ok(knowledgeDocsDetailSurface);
+  assert.equal(knowledgeDocsDetailSurface.props.detailSource, "knowledge");
+  assert.equal(knowledgeDocsDetailSurface.props.detailSelectionSources, "docs");
+  assert.equal(knowledgeDocsDetailSurface.props.documentPathField, "path");
+  assert.equal(knowledgeDocsDetailSurface.props.emptyTitle, "Detail");
+  assert.equal(knowledgeDocsDetailSurface.props.emptyState, "No governed docs are projected yet.");
+  assert.deepEqual(knowledgeDocsDetailSurface.children, [
     "PlatformKnowledgePrimaryPanel",
     "PlatformKnowledgeRelatedPanel",
     "PlatformKnowledgeSections",
     "PlatformKnowledgeTasks"
   ]);
-  assert.deepEqual(knowledgeDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
+  assert.deepEqual(knowledgeDocsDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
     "primary",
     "related",
     "sections",
     "tasks"
   ]);
-  assert.deepEqual(knowledgeDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
-    "document|roadmapTask|epic|feature",
-    "document|roadmapTask|epic|feature",
+  assert.deepEqual(knowledgeDocsDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
+    "document|roadmapTask|epic|feature|folder",
+    "document|roadmapTask|epic|feature|folder",
     "document",
     "document"
   ]);
-  assert.equal(knowledgeDetailSurface.childSurfaces.some(surface => surface.name === "PlatformKnowledgeTasks" && surface.summary === "Document or roadmap tasks for the selected knowledge object when available."), true);
-  const knowledgeTaskSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeTasks");
+  assert.equal(knowledgeDocsDetailSurface.childSurfaces.some(surface => surface.name === "PlatformKnowledgeTasks" && surface.summary === "Document tasks for the selected governed document when available."), true);
+  const knowledgeTaskSurface = knowledgeDocsDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeTasks");
   assert.ok(knowledgeTaskSurface);
   assert.equal(knowledgeTaskSurface.props.columns, "Status|Task|Line|Section");
   assert.equal(knowledgeTaskSurface.props.rowFields, "Status=status|Task=id@concept|Line=line|Section=section");
   assert.equal(knowledgeTaskSurface.props.rowLimit, "20");
-  const knowledgeSectionsSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeSections");
+  const knowledgeSectionsSurface = knowledgeDocsDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeSections");
   assert.ok(knowledgeSectionsSurface);
   assert.equal(knowledgeSectionsSurface.props.rowFields, "Title=title|Line=line|Depth=depth");
-  const knowledgeListSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeList");
-  assert.ok(knowledgeListSurface);
-  assert.equal(knowledgeListSurface.props.listSource, "knowledgeItems");
-  const knowledgePrimarySurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgePrimaryPanel");
+  const knowledgeDocsListSurface = knowledgeDocsPage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDocsList");
+  assert.ok(knowledgeDocsListSurface);
+  assert.equal(knowledgeDocsListSurface.props.listSource, "knowledgeItems");
+  assert.equal(knowledgeDocsListSurface.props.columns, "Freshness|Document|Role|Summary");
+  assert.equal(knowledgeDocsListSurface.props.pageSize, "12");
+  const knowledgeFoldersListSurface = knowledgeFoldersPage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeFoldersList");
+  assert.ok(knowledgeFoldersListSurface);
+  assert.equal(knowledgeFoldersListSurface.props.listSource, "knowledgeItems");
+  assert.equal(knowledgeFoldersListSurface.props.columns, "Kind|Folder|Path|Summary");
+  assert.equal(knowledgeFoldersListSurface.props.rowFields, "Kind=pageKind|Folder=folderLink@concept|Path=scope@value|Summary=summary");
+  assert.equal(knowledgeFoldersListSurface.props.emptyState, "No folder metas.");
+  const knowledgeFoldersDetailSurface = knowledgeFoldersPage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeFoldersDetail");
+  assert.ok(knowledgeFoldersDetailSurface);
+  assert.equal(knowledgeFoldersDetailSurface.props.detailSource, "knowledge");
+  assert.equal(knowledgeFoldersDetailSurface.props.detailSelectionSources, "folders");
+  assert.equal(knowledgeFoldersDetailSurface.props.folderIdPrefixes, "folder:");
+  assert.equal(knowledgeFoldersDetailSurface.props.emptyState, "No folder metadata is projected yet.");
+  const knowledgeRoadmapListSurface = knowledgeRoadmapPage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRoadmapList");
+  assert.ok(knowledgeRoadmapListSurface);
+  assert.equal(knowledgeRoadmapListSurface.props.listSource, "knowledgeItems");
+  assert.equal(knowledgeRoadmapListSurface.props.emptyState, "No roadmap work.");
+  const knowledgeRoadmapDetailSurface = knowledgeRoadmapPage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRoadmapDetail");
+  assert.ok(knowledgeRoadmapDetailSurface);
+  assert.equal(knowledgeRoadmapDetailSurface.props.detailSource, "knowledge");
+  assert.equal(knowledgeRoadmapDetailSurface.props.detailSelectionSources, "roadmapTasks|epics|features");
+  assert.equal(knowledgeRoadmapDetailSurface.props.roadmapTaskIdPrefixes, "roadmapTask:");
+  assert.equal(knowledgeRoadmapDetailSurface.props.roadmapTaskFallbackField, "doc");
+  assert.equal(knowledgeRoadmapDetailSurface.props.epicIdPrefixes, "epic:");
+  assert.equal(knowledgeRoadmapDetailSurface.props.featureIdPrefixes, "feature:");
+  assert.equal(knowledgeRoadmapDetailSurface.props.emptyState, "No roadmap work is projected yet.");
+  const knowledgePrimarySurface = knowledgeDocsDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgePrimaryPanel");
   assert.ok(knowledgePrimarySurface);
   assert.equal(knowledgePrimarySurface.props.longTailCardTitle, "Properties");
   assert.equal(knowledgePrimarySurface.props.longTailValueKinds, "string|number|boolean|scalarList");
@@ -1222,14 +1318,17 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.match(knowledgePrimarySurface.props.roadmapTaskFields, /Evidence=derivedSummary\|\|evidence\.summary/);
   assert.match(knowledgePrimarySurface.props.epicFields, /Roadmap=roadmapId@concept/);
   assert.match(knowledgePrimarySurface.props.featureFields, /Epic=epicId@concept/);
-  const knowledgeRelatedSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRelatedPanel");
+  assert.equal(knowledgePrimarySurface.props.folderLongTailExcludedFields, "linkedConcepts");
+  assert.match(knowledgePrimarySurface.props.folderFields, /Folder=id@concept/);
+  const knowledgeRelatedSurface = knowledgeDocsDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRelatedPanel");
   assert.ok(knowledgeRelatedSurface);
   assert.equal(knowledgeRelatedSurface.props.cardItemLimit, "12");
   assert.deepEqual(knowledgeRelatedSurface.children, [
     "PlatformKnowledgeDocumentLinks",
     "PlatformKnowledgeRoadmapTaskLinks",
     "PlatformKnowledgeEpicLinks",
-    "PlatformKnowledgeFeatureLinks"
+    "PlatformKnowledgeFeatureLinks",
+    "PlatformKnowledgeFolderLinks"
   ]);
   const knowledgeDocumentLinksSurface = knowledgeRelatedSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDocumentLinks");
   assert.ok(knowledgeDocumentLinksSurface);
@@ -1251,7 +1350,12 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(knowledgeFeatureLinksSurface.props.detailKinds, "feature");
   assert.equal(knowledgeFeatureLinksSurface.props.linkCards, "Branches=branchIds|Verification Gates=gateIds|Docs=docIds");
   assert.equal(knowledgeFeatureLinksSurface.props.linkCardEmptyStates, "Branches=No branches linked to this feature.|Verification Gates=No verification gates linked to this feature.|Docs=No docs linked to this feature.");
-  const signalPrimarySurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalPrimaryPanel");
+  const knowledgeFolderLinksSurface = knowledgeRelatedSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeFolderLinks");
+  assert.ok(knowledgeFolderLinksSurface);
+  assert.equal(knowledgeFolderLinksSurface.props.detailKinds, "folder");
+  assert.equal(knowledgeFolderLinksSurface.props.linkCards, "Linked Concepts=linkedConcepts");
+  assert.equal(knowledgeFolderLinksSurface.props.linkCardEmptyStates, "Linked Concepts=No linked concepts were projected for this folder.");
+  const signalPrimarySurface = gapDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalPrimaryPanel");
   assert.ok(signalPrimarySurface);
   assert.equal(signalPrimarySurface.props.longTailCardTitle, "Properties");
   assert.equal(signalPrimarySurface.props.longTailValueKinds, "string|number|boolean|scalarList");
@@ -1259,18 +1363,30 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(signalPrimarySurface.props.gapCardTitle, "Gap Detail");
   assert.match(signalPrimarySurface.props.gapFields, /Target=target@concept/);
   assert.match(signalPrimarySurface.props.signalFields, /Node=id@concept/);
-  const signalRelatedSurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalRelatedPanel");
+  const signalRelatedSurface = gapDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalRelatedPanel");
   assert.ok(signalRelatedSurface);
   assert.equal(signalRelatedSurface.props.cardItemLimit, "12");
   assert.equal(signalRelatedSurface.props.gapLinkCards, "Recommended Proposal=recommendedProposal");
   assert.equal(signalRelatedSurface.props.gapLinkCardEmptyStates, "Recommended Proposal=No recommended proposal is attached to this gap.");
   assert.equal(signalRelatedSurface.props.gapTextCards, "Missing In Generated=missingInGenerated|Extra In Generated=extraInGenerated");
   assert.equal(signalRelatedSurface.props.gapTextCardEmptyStates, "Missing In Generated=No missing selectors detected.|Extra In Generated=No extra selectors detected.");
-  const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
   assert.ok(modelPage);
   assert.equal(modelPage.pageId, "model");
-  assert.equal(modelPage.props.modelView, "model");
+  assert.equal(modelPage.props.modelView, "modelOverview");
   assert.match(modelPage.props.summaryCards, /Coverage Edges=coverageEdges@count/);
+  assert.deepEqual(modelPage.children, []);
+  assert.ok(modelObjectsPage);
+  assert.equal(modelObjectsPage.pageId, "modelObjects");
+  assert.equal(modelObjectsPage.props.modelView, "modelObjects");
+  assert.deepEqual(modelObjectsPage.children, ["PlatformModelList", "PlatformModelDetail"]);
+  assert.ok(modelProfilesPage);
+  assert.equal(modelProfilesPage.pageId, "modelProfiles");
+  assert.equal(modelProfilesPage.props.modelView, "modelProfiles");
+  assert.deepEqual(modelProfilesPage.children, ["PlatformProfileComparison"]);
+  assert.ok(modelCoveragePage);
+  assert.equal(modelCoveragePage.pageId, "modelCoverage");
+  assert.equal(modelCoveragePage.props.modelView, "modelCoverage");
+  assert.deepEqual(modelCoveragePage.children, ["PlatformCoverageMatrix"]);
   assert.ok(bridgesPage);
   assert.equal(bridgesPage.pageId, "bridges");
   assert.equal(bridgesPage.props.modelView, "bridges");
@@ -1361,28 +1477,28 @@ test("platform console layout compiles authored top-level surface metadata from 
   const consoleSummarySurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformConsoleSummary");
   assert.ok(consoleSummarySurface);
   assert.equal(consoleSummarySurface.props.summaryPageId, "overview");
-  const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
+  const profileSurface = modelProfilesPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
   assert.ok(profileSurface);
   assert.equal(profileSurface.props.listSource, "profileComparisonRows");
-  assert.equal(profileSurface.props.columns, "Profile|Status|Plugins|Capabilities");
-  assert.equal(profileSurface.props.rowFields, "Profile=id|Status=status|Plugins=pluginCount|Capabilities=capabilityCount");
-  assert.equal(profileSurface.props.sortOptions, "profile=id|status=status|plugins=pluginCount|capabilities=capabilityCount");
+  assert.equal(profileSurface.props.columns, "Profile|Status|Runner|Composition|Plugins|Capabilities");
+  assert.equal(profileSurface.props.rowFields, "Profile=id|Status=status|Runner=runnerSummary|Composition=compositionSummary|Plugins=pluginCount|Capabilities=capabilityCount");
+  assert.equal(profileSurface.props.sortOptions, "profile=id|status=status|runner=runnerSummary|composition=compositionSummary|plugins=pluginCount|capabilities=capabilityCount");
   assert.equal(profileSurface.props.defaultSort, "profile:asc");
   assert.equal(profileSurface.props.pageSize, "12");
-  const modelListSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelList");
+  const modelListSurface = modelObjectsPage.childSurfaces.find(surface => surface.name === "PlatformModelList");
   assert.ok(modelListSurface);
   assert.equal(modelListSurface.props.listSource, "modelItems");
   assert.equal(modelListSurface.props.rowFields, "Kind=pageKind|Status=status|Resource=id@concept|Source=scope|Owner=summary");
   assert.equal(modelListSurface.props.sortOptions, "kind=pageKind|status=status|resource=title|source=scope|owner=summary");
   assert.equal(modelListSurface.props.defaultSort, "kind:asc");
-  const coverageSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformCoverageMatrix");
+  const coverageSurface = modelCoveragePage.childSurfaces.find(surface => surface.name === "PlatformCoverageMatrix");
   assert.ok(coverageSurface);
   assert.equal(coverageSurface.props.listSource, "coverageRows");
   assert.equal(coverageSurface.props.rowFields, "Gate=gateId@concept|Target=targetId||targetLabel@concept|Kind=coverageKind");
   assert.equal(coverageSurface.props.sortOptions, "gate=gateId|target=targetId|kind=coverageKind");
   assert.equal(coverageSurface.props.defaultSort, "gate:asc");
   assert.equal(coverageSurface.props.pageSize, "12");
-  const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
+  const modelDetailSurface = modelObjectsPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
   assert.equal(modelDetailSurface.props.detailSource, "model");
   assert.equal(modelDetailSurface.props.detailSelectionSources, "nodes");
@@ -1426,9 +1542,11 @@ test("platform page views filter the model to page-scoped slices", () => {
     ],
     edges: [
       { from: "telemetryMetric:platform.self", rel: "observes", to: "plugin.platform" },
-      { from: "boundary:testRunner.platform", rel: "guards", to: "plugin.platform" }
+      { from: "boundary:testRunner.platform", rel: "guards", to: "plugin.platform" },
+      { from: "folder:docs", rel: "contains", to: "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }
     ],
     docs: [{ path: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }],
+    folders: [{ id: "folder:docs", title: "Docs", path: "docs", facet: "knowledge", source: "docs/this.folder.wtoml" }],
     gaps: [{ id: "gap.platform", kind: "missing-coverage" }],
     profiles: [{ id: "full", status: "active" }],
     changeSets: [{ id: "changeSet:platform", status: "draft" }],
@@ -1467,25 +1585,49 @@ test("platform page views filter the model to page-scoped slices", () => {
   const workflow = filterPlatformModel(model, "workflow");
   const verification = filterPlatformModel(model, "verification");
   const knowledge = filterPlatformModel(model, "knowledge");
+  const knowledgeDocs = filterPlatformModel(model, "knowledgeDocs");
+  const knowledgeFolders = filterPlatformModel(model, "knowledgeFolders");
+  const knowledgeRoadmap = filterPlatformModel(model, "knowledgeRoadmap");
   const signals = filterPlatformModel(model, "signals");
+  const signalsGaps = filterPlatformModel(model, "signalsGaps");
+  const signalsCatalog = filterPlatformModel(model, "signalsCatalog");
   const modelPage = filterPlatformModel(model, "model");
+  const modelObjects = filterPlatformModel(model, "modelObjects");
+  const modelProfiles = filterPlatformModel(model, "modelProfiles");
+  const modelCoverage = filterPlatformModel(model, "modelCoverage");
   const bridges = filterPlatformModel(model, "bridges");
   const governance = filterPlatformModel(model, "governance");
   const semantics = filterPlatformModel(model, "semantics");
 
   assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleBoard", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
   assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "summaries"]);
-  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites", "verificationExecutions", "verificationPersistence", "verificationPolicies", "verificationQueue"]);
-  assert.deepEqual(Object.keys(knowledge).sort(), ["docSections", "docTasks", "docs", "epics", "features", "roadmapTasks", "summaries"]);
+  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites", "verificationExecutions", "verificationFreshness", "verificationInvalidations", "verificationPersistence", "verificationPolicies", "verificationQueue"]);
+  assert.deepEqual(Object.keys(knowledge).sort(), ["docTasks", "docs", "epics", "features", "folders", "roadmapTasks", "summaries"]);
+  assert.deepEqual(Object.keys(knowledgeDocs).sort(), ["docSections", "docTasks", "docs", "summaries"]);
+  assert.deepEqual(Object.keys(knowledgeFolders).sort(), ["edges", "folders", "summaries"]);
+  assert.deepEqual(Object.keys(knowledgeRoadmap).sort(), ["epics", "features", "roadmapTasks", "summaries"]);
+  assert.deepEqual(Object.keys(signals).sort(), ["gaps", "nodes", "summaries"]);
+  assert.deepEqual(Object.keys(signalsGaps).sort(), ["gaps", "summaries"]);
+  assert.deepEqual(Object.keys(signalsCatalog).sort(), ["edges", "nodes", "summaries"]);
   assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
+  assert.deepEqual(Object.keys(modelObjects).sort(), ["edges", "nodes", "summaries"]);
+  assert.deepEqual(Object.keys(modelProfiles).sort(), ["profiles", "summaries"]);
+  assert.deepEqual(Object.keys(modelCoverage).sort(), ["coverageEdges", "summaries"]);
   assert.deepEqual(Object.keys(bridges).sort(), ["compatibilityBridges", "summaries"]);
   assert.deepEqual(Object.keys(governance).sort(), ["governanceRoutes", "proposalTargetGovernance", "summaries"]);
   assert.deepEqual(Object.keys(semantics).sort(), ["mutableSurfaceSemantics", "summaries"]);
   assert.equal("nodes" in workflow, false);
   assert.equal("docs" in verification, false);
   assert.equal(signals.nodes.length, 3);
-  assert.equal(signals.edges.length, 2);
+  assert.equal(knowledgeFolders.folders.length, 1);
+  assert.equal(knowledgeFolders.edges.length, 3);
+  assert.equal("edges" in signals, false);
+  assert.equal(signalsGaps.gaps.length, 1);
+  assert.equal(signalsCatalog.edges.length, 2);
   assert.equal(signals.nodes.some(node => node.id === "plugin.platform"), false);
+  assert.equal(modelObjects.nodes.length, model.nodes.length);
+  assert.equal(modelProfiles.profiles.length, 1);
+  assert.equal(modelCoverage.coverageEdges.length, 1);
   assert.equal(bridges.compatibilityBridges.length, 1);
   assert.equal(governance.governanceRoutes.length, 1);
   assert.equal(governance.proposalTargetGovernance.length, 1);
@@ -6260,6 +6402,13 @@ test("platform page renders required operating views", async () => {
     }],
     docSections: [{ doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", title: "Phase 12", line: 1, depth: 1 }],
     docTasks: [{ id: "docTask:roadmap:1", doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", status: "open", title: "Split console into platform pages", line: 2, section: "Phase 12" }],
+    folders: [{
+      id: "folder:docs",
+      title: "Docs",
+      path: "docs",
+      facet: "knowledge",
+      source: "docs/this.folder.wtoml"
+    }],
     roadmapTasks: [{
       id: "roadmapTask:1",
       doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
@@ -6299,6 +6448,7 @@ test("platform page renders required operating views", async () => {
     ],
     edges: [
       ...baseModel.edges,
+      { from: "folder:docs", rel: "contains", to: "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" },
       { from: "telemetryMetric:requests", rel: "verifies", to: "route:GET /platform" },
       { from: "defectCluster:demo", rel: "targets", to: "branch:demo-0" },
       { from: "boundary:git", rel: "supports", to: "plugin.platform" }
@@ -6317,9 +6467,18 @@ test("platform page renders required operating views", async () => {
   const verificationExecutionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=verificationExecution:demo") });
   const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuntime&id=runtimeRevision:demo") });
   const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:demo") });
-  const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
-  const signalsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.demo") });
-  const modelHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
+  const knowledgeLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge") });
+  const knowledgeDocsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledgeDocs&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
+  const knowledgeFoldersHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledgeFolders&id=folder:docs") });
+  const knowledgeRoadmapHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledgeRoadmap&id=roadmapTask:1") });
+  const signalsLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals") });
+  const signalsGapHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signalsGaps&id=gap.demo") });
+  const signalsCatalogHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signalsCatalog&id=telemetryMetric:requests") });
+  const modelLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model") });
+  const modelCompatHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
+  const modelObjectsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=modelObjects&id=route:GET%20/platform") });
+  const modelProfilesHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=modelProfiles&sort=profile&dir=desc") });
+  const modelCoverageHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=modelCoverage&sort=gate&dir=desc") });
 
   assert.match(overviewHtml, /Platform Console - Overview/);
   assert.match(overviewHtml, /Generated from plugins\/platform\/platform-console\.wcss/);
@@ -6448,51 +6607,97 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationRunHtml, /new EventSource\(platformPageState\.testRunEventsHref\)/);
   assert.match(verificationRunHtml, /new EventSource\(platformPageState\.backendRevisionEventsHref\)/);
 
-  assert.match(knowledgeHtml, /Platform Console - Knowledge/);
-  assert.match(knowledgeHtml, /Knowledge Items/);
-  assert.match(knowledgeHtml, /Properties and linked resources for the selected knowledge object\./);
-  assert.match(knowledgeHtml, /Primary Detail/);
-  assert.match(knowledgeHtml, /Selected knowledge object properties and long-tail fields\./);
-  assert.match(knowledgeHtml, /Related Resources/);
-  assert.match(knowledgeHtml, /Linked platform resources and supporting context for the selected knowledge object\./);
-  assert.match(knowledgeHtml, /Referenced Routes/);
-  assert.match(knowledgeHtml, /Authored Doc Links/);
-  assert.match(knowledgeHtml, /Authored Code Links/);
-  assert.match(knowledgeHtml, /Sections/);
-  assert.match(knowledgeHtml, /Document sections for the selected governed document when available\./);
-  assert.match(knowledgeHtml, /Tasks/);
-  assert.match(knowledgeHtml, /Document or roadmap tasks for the selected knowledge object when available\./);
-  assert.match(knowledgeHtml, /Document Detail/);
-  assert.match(knowledgeHtml, /Roadmap/);
-  assert.doesNotMatch(knowledgeHtml, /<pre/);
+  assert.match(knowledgeLandingHtml, /Platform Console - Knowledge/);
+  assert.match(knowledgeLandingHtml, /Governed Docs/);
+  assert.match(knowledgeLandingHtml, /Folders/);
+  assert.doesNotMatch(knowledgeLandingHtml, /Knowledge Doc Detail/);
+  assert.doesNotMatch(knowledgeLandingHtml, /Roadmap Work/);
+  assert.doesNotMatch(knowledgeLandingHtml, /<pre/);
+  assert.match(knowledgeDocsHtml, /Platform Console - Knowledge Docs/);
+  assert.match(knowledgeDocsHtml, /Governed Docs/);
+  assert.match(knowledgeDocsHtml, /Properties and linked resources for the selected governed document\./);
+  assert.match(knowledgeDocsHtml, /Primary Detail/);
+  assert.match(knowledgeDocsHtml, /Related Resources/);
+  assert.match(knowledgeDocsHtml, /Referenced Routes/);
+  assert.match(knowledgeDocsHtml, /Authored Doc Links/);
+  assert.match(knowledgeDocsHtml, /Authored Code Links/);
+  assert.match(knowledgeDocsHtml, /Sections/);
+  assert.match(knowledgeDocsHtml, /Document sections for the selected governed document when available\./);
+  assert.match(knowledgeDocsHtml, /Tasks/);
+  assert.match(knowledgeDocsHtml, /Document tasks for the selected governed document when available\./);
+  assert.match(knowledgeDocsHtml, /Document Detail/);
+  assert.doesNotMatch(knowledgeDocsHtml, /<pre/);
+  assert.match(knowledgeFoldersHtml, /Platform Console - Knowledge Folders/);
+  assert.match(knowledgeFoldersHtml, /Folders/);
+  assert.match(knowledgeFoldersHtml, /Properties and linked resources for the selected folder when available\./);
+  assert.match(knowledgeFoldersHtml, /Folder Detail/);
+  assert.match(knowledgeFoldersHtml, /Linked Concepts/);
+  assert.match(knowledgeFoldersHtml, /Showing first \d+ of \d+ entries\./);
+  assert.doesNotMatch(knowledgeFoldersHtml, /Sections/);
+  assert.doesNotMatch(knowledgeFoldersHtml, /Tasks/);
+  assert.doesNotMatch(knowledgeFoldersHtml, /<pre/);
+  assert.match(knowledgeRoadmapHtml, /Platform Console - Knowledge Roadmap/);
+  assert.match(knowledgeRoadmapHtml, /Roadmap Work/);
+  assert.match(knowledgeRoadmapHtml, /Properties and linked resources for the selected roadmap object\./);
+  assert.match(knowledgeRoadmapHtml, /Roadmap Task Detail/);
+  assert.match(knowledgeRoadmapHtml, /Linked Targets/);
+  assert.doesNotMatch(knowledgeRoadmapHtml, /Sections/);
+  assert.doesNotMatch(knowledgeRoadmapHtml, /<pre/);
 
-  assert.match(signalsHtml, /Platform Console - Signals/);
-  assert.match(signalsHtml, /Properties and linked relationships for the selected signal\./);
-  assert.match(signalsHtml, /Primary Detail/);
-  assert.match(signalsHtml, /Selected signal properties and long-tail fields\./);
-  assert.match(signalsHtml, /Related Resources/);
-  assert.match(signalsHtml, /Linked proposals, selector drift, and supporting signal context\./);
-  assert.match(signalsHtml, /Recommended Proposal/);
-  assert.match(signalsHtml, /Related Relationships/);
-  assert.match(signalsHtml, /Linked graph relationships for the selected signal when available\./);
-  assert.match(signalsHtml, /Gap Detail/);
-  assert.match(signalsHtml, /API resource/);
-  assert.match(signalsHtml, /sort=severity&amp;dir=desc/);
-  assert.doesNotMatch(signalsHtml, /<pre/);
+  assert.match(signalsLandingHtml, /Platform Console - Signals/);
+  assert.doesNotMatch(signalsLandingHtml, /Primary Detail/);
+  assert.doesNotMatch(signalsLandingHtml, /<pre/);
+  assert.match(signalsGapHtml, /Platform Console - Signals Gaps/);
+  assert.match(signalsGapHtml, /Properties and linked relationships for the selected gap\./);
+  assert.match(signalsGapHtml, /Primary Detail/);
+  assert.match(signalsGapHtml, /Selected signal properties and long-tail fields\./);
+  assert.match(signalsGapHtml, /Related Resources/);
+  assert.match(signalsGapHtml, /Linked proposals, selector drift, and supporting signal context\./);
+  assert.match(signalsGapHtml, /Recommended Proposal/);
+  assert.match(signalsGapHtml, /Related Relationships/);
+  assert.match(signalsGapHtml, /Linked graph relationships for the selected signal when available\./);
+  assert.match(signalsGapHtml, /Gap Detail/);
+  assert.match(signalsGapHtml, /API resource/);
+  assert.match(signalsGapHtml, /sort=severity&amp;dir=desc/);
+  assert.doesNotMatch(signalsGapHtml, /<pre/);
+  assert.match(signalsCatalogHtml, /Platform Console - Signals Catalog/);
+  assert.match(signalsCatalogHtml, /Properties and linked relationships for the selected signal node\./);
+  assert.match(signalsCatalogHtml, /Signals/);
+  assert.match(signalsCatalogHtml, /Related Relationships/);
+  assert.doesNotMatch(signalsCatalogHtml, /Related Resources/);
+  assert.doesNotMatch(signalsCatalogHtml, /Recommended Proposal/);
+  assert.doesNotMatch(signalsCatalogHtml, /<pre/);
 
-  assert.match(modelHtml, /Platform Console - Model/);
-  assert.match(modelHtml, /Platform Map/);
-  assert.match(modelHtml, /Runtime Profiles/);
-  assert.match(modelHtml, /Properties and linked relationships for the selected platform object\./);
-  assert.match(modelHtml, /Primary Detail/);
-  assert.match(modelHtml, /Selected platform object properties and long-tail fields\./);
-  assert.match(modelHtml, /Relationships/);
-  assert.match(modelHtml, /Linked graph relationships for the selected platform object when available\./);
-  assert.match(modelHtml, /Platform Object Detail/);
-  assert.match(modelHtml, /Coverage Edges/);
-  assert.match(modelHtml, /sort=profile&amp;dir=desc/);
-  assert.match(modelHtml, /sort=gate&amp;dir=desc/);
-  assert.doesNotMatch(modelHtml, /<pre/);
+  assert.match(modelLandingHtml, /Platform Console - Model/);
+  assert.doesNotMatch(modelLandingHtml, /Platform Map/);
+  assert.doesNotMatch(modelLandingHtml, /Runtime Profiles/);
+  assert.doesNotMatch(modelLandingHtml, /sort=gate&amp;dir=desc/);
+  assert.doesNotMatch(modelLandingHtml, /<pre/);
+  assert.match(modelCompatHtml, /Platform Console - Model Objects/);
+  assert.match(modelCompatHtml, /Platform Object Detail/);
+  assert.match(modelObjectsHtml, /Platform Console - Model Objects/);
+  assert.match(modelObjectsHtml, /Platform Map/);
+  assert.match(modelObjectsHtml, /Properties and linked relationships for the selected platform object\./);
+  assert.match(modelObjectsHtml, /Primary Detail/);
+  assert.match(modelObjectsHtml, /Selected platform object properties and long-tail fields\./);
+  assert.match(modelObjectsHtml, /Relationships/);
+  assert.match(modelObjectsHtml, /Linked graph relationships for the selected platform object when available\./);
+  assert.match(modelObjectsHtml, /Platform Object Detail/);
+  assert.doesNotMatch(modelObjectsHtml, /Runtime Profiles/);
+  assert.doesNotMatch(modelObjectsHtml, /Coverage Edges/);
+  assert.doesNotMatch(modelObjectsHtml, /<pre/);
+  assert.match(modelProfilesHtml, /Platform Console - Model Profiles/);
+  assert.match(modelProfilesHtml, /Runtime Profiles/);
+  assert.match(modelProfilesHtml, /sort=profile&amp;dir=asc/);
+  assert.doesNotMatch(modelProfilesHtml, /Platform Map/);
+  assert.doesNotMatch(modelProfilesHtml, /Coverage Edges/);
+  assert.doesNotMatch(modelProfilesHtml, /<pre/);
+  assert.match(modelCoverageHtml, /Platform Console - Model Coverage/);
+  assert.match(modelCoverageHtml, /Coverage Edges/);
+  assert.match(modelCoverageHtml, /sort=gate&amp;dir=asc/);
+  assert.doesNotMatch(modelCoverageHtml, /Runtime Profiles/);
+  assert.doesNotMatch(modelCoverageHtml, /Platform Map/);
+  assert.doesNotMatch(modelCoverageHtml, /<pre/);
 });
 
 test("platform knowledge page renders authored knowledge relation links as linkable cards", () => {
@@ -6521,15 +6726,15 @@ test("platform knowledge page renders authored knowledge relation links as linka
     features: [],
     summaries: {}
   }, {
-    requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/intent/README.md")
+    requestUrl: new URL("http://platform.local/platform?view=knowledgeDocs&id=docs/intent/README.md")
   });
 
   assert.match(html, /Authored Doc Links/);
   assert.match(html, /Authored Code Links/);
   assert.match(html, />explains: doc:docs\/intent\/knowledge-relations\.wtoml</);
-  assert.match(html, /href="\/platform\?view=knowledge&amp;id=docs%2Fintent%2Fknowledge-relations\.wtoml"/);
+  assert.match(html, /href="\/platform\?view=knowledgeDocs&amp;id=docs%2Fintent%2Fknowledge-relations\.wtoml"/);
   assert.match(html, />isRealizedBy: code:plugins\/platform\/platform-model\.js</);
-  assert.match(html, /href="\/platform\?view=model&amp;id=code%3Aplugins%2Fplatform%2Fplatform-model\.js"/);
+  assert.match(html, /href="\/platform\?view=modelObjects&amp;id=code%3Aplugins%2Fplatform%2Fplatform-model\.js"/);
 });
 
 test("platform page renders authored supplemental pages from the RVM page tree", () => {
@@ -6784,9 +6989,9 @@ test("platform detail sections render authored child-surface metadata", () => {
   const consoleLayout = readPlatformConsoleLayout();
   const workflowPage = consoleLayout.children.find(surface => surface.props?.pageId === "workflowBranches");
   const verificationPage = consoleLayout.children.find(surface => surface.props?.pageId === "verificationStatus");
-  const knowledgePage = consoleLayout.children.find(surface => surface.props?.pageId === "knowledge");
-  const signalsPage = consoleLayout.children.find(surface => surface.props?.pageId === "signals");
-  const modelPage = consoleLayout.children.find(surface => surface.props?.pageId === "model");
+  const knowledgeDocsPage = consoleLayout.children.find(surface => surface.props?.pageId === "knowledgeDocs");
+  const signalsGapsPage = consoleLayout.children.find(surface => surface.props?.pageId === "signalsGaps");
+  const modelPage = consoleLayout.children.find(surface => surface.props?.pageId === "modelObjects");
   const appliesToDetailKind = (surface, detailKind) => {
     const raw = surface?.props?.detailKinds;
     if (!raw) return true;
@@ -6794,8 +6999,8 @@ test("platform detail sections render authored child-surface metadata", () => {
   };
   const workflowDetailSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowDetail");
   const verificationDetailSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
-  const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
-  const signalDetailSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformSignalDetail");
+  const knowledgeDetailSurface = knowledgeDocsPage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDocsDetail");
+  const signalDetailSurface = signalsGapsPage.childSurfaces.find(surface => surface.name === "PlatformGapDetail");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   const model = {
     lifecycleVocabulary: [],
@@ -6978,9 +7183,9 @@ test("platform detail sections render authored child-surface metadata", () => {
   const verificationGateHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=gate:demo") });
   const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuntime&id=runtimeRevision:demo") });
   const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:demo") });
-  const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
-  const signalHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.demo") });
-  const modelHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
+  const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledgeDocs&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
+  const signalHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signalsGaps&id=gap.demo") });
+  const modelHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=modelObjects&id=route:GET%20/platform") });
 
   for (const child of workflowDetailSurface.childSurfaces.filter(surface => appliesToDetailKind(surface, "changeSet"))) {
     if (child.title) assert.match(workflowHtml, new RegExp(escapeRegExp(child.title)));
@@ -7036,7 +7241,7 @@ test("platform detail sections filter child surfaces by authored detailKinds", (
     summaries: {}
   };
 
-  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=telemetryMetric:platform.self") });
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signalsCatalog&id=telemetryMetric:platform.self") });
 
   assert.match(html, /Primary Detail/);
   assert.match(html, /Related Relationships/);
@@ -7117,6 +7322,7 @@ test("platform page uses authored empty-detail states", () => {
     latestTestResultsByGate: {},
     docSections: [],
     docTasks: [],
+    folders: [],
     roadmapTasks: [],
     epics: [],
     features: [],
@@ -7126,14 +7332,16 @@ test("platform page uses authored empty-detail states", () => {
 
   const workflowHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=workflowBranches&id=branch:missing") });
   const verificationHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=gate:missing") });
-  const knowledgeHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=doc:missing") });
-  const signalsHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.missing") });
-  const modelHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:missing") });
+  const knowledgeHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=knowledgeDocs&id=doc:missing") });
+  const knowledgeFoldersHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=knowledgeFolders&id=folder:missing") });
+  const signalsHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=signalsGaps&id=gap.missing") });
+  const modelHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=modelObjects&id=route:missing") });
 
   assert.match(workflowHtml, /No workflow rows are projected yet\./);
   assert.match(verificationHtml, /No verification rows are projected yet\./);
-  assert.match(knowledgeHtml, /No knowledge rows are projected yet\./);
-  assert.match(signalsHtml, /No signal rows are projected yet\./);
+  assert.match(knowledgeHtml, /No governed docs are projected yet\./);
+  assert.match(knowledgeFoldersHtml, /No folder metadata is projected yet\./);
+  assert.match(signalsHtml, /No gaps are projected yet\./);
   assert.match(modelHtml, /No platform objects are projected yet\./);
 });
 
@@ -7196,7 +7404,7 @@ test("platform page applies authored list sort semantics and preserves them thro
     runtimeRevisions: []
   };
   const html = renderPlatformPage(model, {
-    requestUrl: new URL("http://platform.local/platform?view=model&id=route:selected&sort=resource&dir=desc&limit=5")
+    requestUrl: new URL("http://platform.local/platform?view=modelObjects&id=route:selected&sort=resource&dir=desc&limit=5")
   });
 
   assert.match(html, /offset=5&amp;limit=5&amp;sort=resource&amp;dir=desc/);

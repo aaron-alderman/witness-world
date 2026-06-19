@@ -69,6 +69,22 @@ function applyBootstrapAppAuthoringSubmitFieldRule({
     body[name] = data?.[source] === true;
     return body;
   }
+  if (strategy === "routeStateDescriptor") {
+    const process = firstNonBlank([data?.[rule.processSource || "routeStateProcess"]]);
+    const processRef = firstNonBlank([data?.[rule.processRefSource || "routeStateProcessRef"]]);
+    const state = firstNonBlank([data?.[rule.stateSource || "routeStateState"]]);
+    const stateRef = firstNonBlank([data?.[rule.stateRefSource || "routeStateStateRef"]]);
+    if (process === undefined && processRef === undefined && state === undefined && stateRef === undefined) {
+      return body;
+    }
+    body[name] = {
+      ...(process !== undefined ? { process } : {}),
+      ...(processRef !== undefined ? { processRef } : {}),
+      ...(state !== undefined ? { state } : {}),
+      ...(stateRef !== undefined ? { stateRef } : {})
+    };
+    return body;
+  }
   body[name] = data?.[source];
   return body;
 }

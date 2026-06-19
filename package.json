@@ -46,7 +46,9 @@
     "test:plugin:secret": "node scripts/run-plugin-tests.mjs secret",
     "test:plugin:sql": "node scripts/run-plugin-tests.mjs sql",
     "test:plugin:sqlite": "node scripts/run-plugin-tests.mjs sqlite",
-    "test:plugin:pipeline-runtime": "node scripts/run-plugin-tests.mjs pipeline-runtime"
+    "test:plugin:pipeline-runtime": "node scripts/run-plugin-tests.mjs pipeline-runtime",
+    "generate:folder-metas": "node scripts/generate-this-folder-wtoml.mjs",
+    "check:folder-metas": "node scripts/generate-this-folder-wtoml.mjs --check"
   },
   "dependencies": {
     "mysql2": "^3.15.3",

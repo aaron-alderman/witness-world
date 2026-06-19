@@ -68,7 +68,7 @@ function legacyRuntimeConfigInputs(runtimeConfig = {}) {
     return {
       hasLegacyKeys: false,
       enabled: true,
-      watchFs: true,
+      watchFs: false,
       watchDebounceMs: 150,
       maxAutoRunsPerCycle: 6
     };
@@ -118,7 +118,7 @@ export function resolveRunnerVerificationPolicy({
     enabled = legacy.enabled;
     defaults = {
       ...normalizeDefaults(),
-      startup: true,
+      startup: false,
       watch: true,
       onChangeSet: true,
       maxConcurrency: 1,

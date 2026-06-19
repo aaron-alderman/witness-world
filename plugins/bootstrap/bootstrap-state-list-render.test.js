@@ -95,6 +95,8 @@ test("bootstrap state inventory render fans authored and operator rows into the 
   const document = createDocument();
   const roots = new Map([
     ["state-contexts", createRoot()],
+    ["state-packages", createRoot()],
+    ["state-package-apply-previews", createRoot()],
     ["state-runtime-plugin-availability", createRoot()],
     ["mcp-server-inventory", createRoot()],
     ["state-operator-backups", createRoot()]
@@ -103,12 +105,14 @@ test("bootstrap state inventory render fans authored and operator rows into the 
   renderBootstrapStateInventory({
     authored: {
       contexts: [{ id: "ctx.root" }],
+      packages: [{ id: "package.plugin.inspect", context: "ctx.root", packageKind: "plugin" }],
+      packageApplyPreviews: [{ packageId: "package.plugin.inspect", revisionId: "packageRevision.plugin.inspect.v1", status: "ready" }],
       runtimePluginAvailability: [{ serverRunner: "demo_server", plugin: "plugin.inspect", installed: true }],
       mcp: { servers: [{ id: "mcp.demo", serverRunner: "demo_server", transports: ["stdio"], attachedToActiveRuntime: true }] }
     },
     operator: {
       inventory: {
-        backups: [{ id: "backup-1", witnessCount: 3, observationCount: 4 }]
+        backups: [{ id: "backup-1", witnessCount: 3, observationCount: 4, createdAt: "2026-06-19T00:00:00Z", compatibility: { platformVersion: "v1" } }]
       }
     },
     byId: id => roots.get(id) || null,
@@ -119,9 +123,11 @@ test("bootstrap state inventory render fans authored and operator rows into the 
 
   assert.equal(roots.get("state-contexts").children[0].className, "surface-state-item");
   assert.equal(roots.get("state-contexts").children[0].children[0].textContent, "ctx.root");
+  assert.equal(roots.get("state-packages").children[0].children[0].textContent, "package.plugin.inspect @ctx.root [plugin]");
+  assert.equal(roots.get("state-package-apply-previews").children[0].children[0].textContent, "package.plugin.inspect :: packageRevision.plugin.inspect.v1 [ready]");
   assert.equal(roots.get("state-runtime-plugin-availability").children[0].children[0].textContent, "demo_server :: plugin.inspect [installed]");
   assert.equal(roots.get("mcp-server-inventory").children[0].children[0].textContent, "mcp.demo @demo_server [stdio] [active runtime]");
-  assert.equal(roots.get("state-operator-backups").children[0].children[0].textContent, "backup-1 / witnesses 3 / observations 4");
+  assert.equal(roots.get("state-operator-backups").children[0].children[0].textContent, "backup-1 [v:v1] / 2026-06-19 / 3w 4o");
 });
 
 test("bootstrap state list helpers expose inventory labels and browser factory source", () => {

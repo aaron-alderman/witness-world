@@ -1,0 +1,166 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/platform"
+path = "plugins/platform"
+label = "platform"
+summary = "Auto-generated folder metadata for plugins/platform."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/app-context-diagnostics.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/branch-insights.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/change-sets.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/handler-catalog.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/handlers.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/platform-console-layout.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "rvm:plugins/platform/platform-console.rvm"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "wcss:plugins/platform/platform-console.wcss"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/platform-model.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/platform-package-nouns.test.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/platform-page.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/platform-proposal-targets.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/platform-proposals.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/platform-semantics.test.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/platform-style.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/platform.test.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "json:plugins/platform/plugin.json"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/projections.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/provider-runtime.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/runtime.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/test-gate-catalog.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/test-monitor.test.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/test-runs.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "wtoml:plugins/platform/this.folder.wtoml"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/verification-persistence.test.js"
+
+[[relation]]
+from = "folder:plugins/platform"
+rel = "contains"
+to = "file:plugins/platform/wcss-source.js"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/platform"
+# rel = "describedBy"
+# to = "doc:..."

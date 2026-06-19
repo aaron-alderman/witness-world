@@ -56,13 +56,32 @@ This file uses [[entity]] for `docNode`s and code locations, plus [[relation]] u
 
 The platform model (plugins/platform/platform-model.js) now parses this WTOML at build time, adds nodes/edges, and augments doc.references with authoredDocLinks / authoredCodeLinks. The knowledge view surfaces them via the related cards.
 
+## Folder Metadata with this.folder.wtoml
+This directory also carries explicit folder-level metadata in `this.folder.wtoml`.
+
+This follows the project's tolerant, append-only, repairable approach to knowledge:
+
+- The file declares the folder as a first-class node (`folder:docs/intent`).
+- It records `contains` relations to children (auto-generatable base layer).
+- High-value knowledge (links to the intent tree, the `knowledge-relations.wtoml`, related code folders) is hand-maintained.
+- Staleness is acceptable: if a child file disappears, the `contains` relation becomes visible debt rather than a hard failure.
+- Append-only friendly: new observations, server touches, or additional relations can be added over time.
+- Reapers / ContextHub / tests can later clean up or flag long-unreferenced meta.
+- Multiple sources cooperate: humans, generators, tests, and the running server can all contribute.
+
+See the comments inside `this.folder.wtoml` for the full lifecycle notes.
+
+This directly feeds ContextHub with folder-scoped, link-rich nodes that are stable and queryable alongside `doc:*` and `intent:*`.
+
 ## First-Class MCP Experience
-Documentation (governed + these intent docs + modeled relations) is exposed as first-class MCP tools:
+Documentation (governed + these intent docs + modeled relations + folder meta) is exposed as first-class MCP tools:
 
 - `platform.docs` (enhanced with search/readFull/getRelations + includeRelations)
-- `platform.read` (view=docs)
-- Dedicated: `docs.list`, `docs.read`, `docs.search`, `docs.pack`
+- `platform.read` (view=docs or folders)
+- Dedicated: `docs.list`, `docs.read`, `docs.search`, `docs.pack`, `platform.folder`
 
-`docs.pack` builds a first-class context pack: doc + sections + explicit authored relations to other docs and code (from the knowledge-relations.wtoml model).
+`docs.pack` builds a first-class context pack: doc + sections + explicit authored relations to other docs and code (from the knowledge-relations.wtoml model). Folder meta (this.folder.wtoml) extends this to whole-directory context.
 
-These return structured docs + explicit knowledge relations for LLM agents (stable doc:* ids, linked code, intent context). See CONTEXTHUB-SPEC for the broader vision.
+`platform.folder` provides direct access to folder metadata and contains relations.
+
+These return structured docs + explicit knowledge relations for LLM agents (stable doc:* / folder:* / intent:* ids, linked code, intent context). See CONTEXTHUB-SPEC for the broader vision.

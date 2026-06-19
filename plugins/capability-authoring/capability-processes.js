@@ -472,6 +472,159 @@ export function requestBootstrapCapabilityRemove(world, {
   return { ok: true, status: 200, capabilityInstall: input, witness };
 }
 
+export function requestBootstrapCapabilityUpdate(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "capability.update", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "capability.update.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const currentCapability = knownCapability(world, validated.value.id);
+  if (!currentCapability) {
+    const witness = fail(world, {
+      process: "capability.update.failed",
+      actor: actor || backendHost,
+      body: { reason: "capability not found", id: validated.value.id }
+    });
+    return { ok: false, status: 404, error: "capability not found", witness };
+  }
+  const parsed = parseCapabilityDefinitionInput(world, body, currentCapability);
+  if (!parsed.ok) {
+    const witness = fail(world, {
+      process: "capability.update.failed",
+      actor: actor || backendHost,
+      body: { reason: parsed.error, ...(parsed.details ?? {}) }
+    });
+    return { ok: false, status: 400, error: parsed.error, witness };
+  }
+  const blockingInstalls = validateCapabilityInstallsForDefinition(world, parsed.capability);
+  if (blockingInstalls.length) {
+    const witness = fail(world, {
+      process: "capability.update.failed",
+      actor: actor || backendHost,
+      body: {
+        reason: "capability update would invalidate existing installs",
+        capability: parsed.capability.id,
+        blockingInstalls
+      }
+    });
+    return { ok: false, status: 400, error: "capability update would invalidate existing installs", witness };
+  }
+
+  updateCapability(world, {
+    actor: actor || backendHost,
+    ...parsed.capability,
+    previousDefinition: currentCapability,
+    previousVersion: currentCapability.version ?? null
+  });
+  const capability = knownCapability(world, parsed.capability.id) ?? parsed.capability;
+  const witness = world.emit({
+    process: "capability.update",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", parsed.capability.id)],
+    body: {
+      capability,
+      previousVersion: currentCapability.version ?? null
+    }
+  });
+  return { ok: true, status: 200, capability, witness };
+}
+
+export function requestBootstrapCapabilityRollback(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "capability.rollback", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "capability.rollback.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const currentCapability = knownCapability(world, validated.value.id);
+  if (!currentCapability) {
+    const witness = fail(world, {
+      process: "capability.rollback.failed",
+      actor: actor || backendHost,
+      body: { reason: "capability not found", id: validated.value.id }
+    });
+    return { ok: false, status: 404, error: "capability not found", witness };
+  }
+  const history = capabilityRevisionRows(world, validated.value.id);
+  if (history.length < 2) {
+    const witness = fail(world, {
+      process: "capability.rollback.failed",
+      actor: actor || backendHost,
+      body: { reason: "no prior capability revision available", id: validated.value.id }
+    });
+    return { ok: false, status: 409, error: "no prior capability revision available", witness };
+  }
+  const requestedVersion = typeof validated.value.version === "string" && validated.value.version.trim()
+    ? validated.value.version.trim()
+    : null;
+  const priorRows = history.slice(0, -1);
+  const rollbackTarget = requestedVersion
+    ? [...priorRows].reverse().find(row => row.version === requestedVersion) ?? null
+    : (priorRows.at(-1) ?? null);
+  if (!rollbackTarget) {
+    const witness = fail(world, {
+      process: "capability.rollback.failed",
+      actor: actor || backendHost,
+      body: {
+        reason: "rollback target version not found in capability history",
+        id: validated.value.id,
+        version: requestedVersion
+      }
+    });
+    return { ok: false, status: 404, error: "rollback target version not found in capability history", witness };
+  }
+  const blockingInstalls = validateCapabilityInstallsForDefinition(world, rollbackTarget.definition);
+  if (blockingInstalls.length) {
+    const witness = fail(world, {
+      process: "capability.rollback.failed",
+      actor: actor || backendHost,
+      body: {
+        reason: "capability rollback would invalidate existing installs",
+        capability: rollbackTarget.capabilityId,
+        rollbackToVersion: rollbackTarget.version ?? null,
+        rollbackFromVersion: currentCapability.version ?? null,
+        blockingInstalls
+      }
+    });
+    return { ok: false, status: 400, error: "capability rollback would invalidate existing installs", witness };
+  }
+
+  rollbackCapability(world, {
+    actor: actor || backendHost,
+    ...rollbackTarget.definition,
+    previousDefinition: currentCapability,
+    previousVersion: currentCapability.version ?? null,
+    rollbackFromVersion: currentCapability.version ?? null
+  });
+  const capability = knownCapability(world, rollbackTarget.capabilityId) ?? rollbackTarget.definition;
+  const witness = world.emit({
+    process: "capability.rollback",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", rollbackTarget.capabilityId)],
+    body: {
+      capability,
+      rollbackToVersion: rollbackTarget.version ?? null,
+      rollbackFromVersion: currentCapability.version ?? null
+    }
+  });
+  return { ok: true, status: 200, capability, witness };
+}
+
 export function requestBootstrapCapabilityMigrateLegacy(world, {
   actor,
   backendHost

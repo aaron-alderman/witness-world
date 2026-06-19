@@ -436,16 +436,11 @@ export function createRuntimeOperatorService({
       await renameReplace(logsRoot, oldLogsRoot);
     }
     await renameReplace(stageLogsRoot, logsRoot);
-    if (runtimeRoot) {
-      if (payload.manifest.includesDerived === true && (await exists(stageRuntimeRoot))) {
-        if (await exists(runtimeRoot)) {
-          await renameReplace(runtimeRoot, oldRuntimeRoot);
-        }
-        await renameReplace(stageRuntimeRoot, runtimeRoot);
-      } else {
-        await fs.rm(runtimeRoot, { recursive: true, force: true });
-        await ensureDirectory(runtimeRoot);
+    if (runtimeRoot && payload.manifest.includesDerived === true && (await exists(stageRuntimeRoot))) {
+      if (await exists(runtimeRoot)) {
+        await renameReplace(runtimeRoot, oldRuntimeRoot);
       }
+      await renameReplace(stageRuntimeRoot, runtimeRoot);
     }
     await fs.rm(stagingRoot, { recursive: true, force: true });
     await fs.rm(swapRoot, { recursive: true, force: true });

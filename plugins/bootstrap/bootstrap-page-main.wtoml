@@ -418,7 +418,7 @@ text = "The active guidance uses the same authored structures shown here. Nothin
 [[box]]
 id = "bootstrap_authored_state_stack"
 class = "surface-stack"
-children = ["bootstrap_state_contexts_section", "bootstrap_state_context_bindings_section", "bootstrap_state_context_exports_section", "bootstrap_state_context_imports_section", "bootstrap_state_context_scopes_section", "bootstrap_state_perspectives_section", "bootstrap_state_stewardships_section", "bootstrap_state_proposals_section", "bootstrap_state_authority_section", "bootstrap_state_identities_section", "bootstrap_state_widgets_section", "bootstrap_state_programs_section", "bootstrap_state_steps_section", "bootstrap_state_backend_programs_section", "bootstrap_state_backend_versions_section", "bootstrap_state_backend_steps_section", "bootstrap_state_routes_section", "bootstrap_state_serves_section", "bootstrap_state_runners_section", "bootstrap_state_capabilities_section", "bootstrap_state_capability_installs_section", "bootstrap_state_runtime_plugin_installs_section", "bootstrap_state_runtime_plugin_availability_section", "bootstrap_state_mcp_servers_section", "bootstrap_state_mcp_tool_installs_section"]
+children = ["bootstrap_state_contexts_section", "bootstrap_state_context_bindings_section", "bootstrap_state_context_exports_section", "bootstrap_state_context_imports_section", "bootstrap_state_context_scopes_section", "bootstrap_state_perspectives_section", "bootstrap_state_stewardships_section", "bootstrap_state_proposals_section", "bootstrap_state_packages_section", "bootstrap_state_package_revisions_section", "bootstrap_state_package_patches_section", "bootstrap_state_package_namespaces_section", "bootstrap_state_package_dependencies_section", "bootstrap_state_package_transformers_section", "bootstrap_state_package_coexistence_section", "bootstrap_state_package_convergence_section", "bootstrap_state_package_apply_previews_section", "bootstrap_state_authority_section", "bootstrap_state_identities_section", "bootstrap_state_widgets_section", "bootstrap_state_programs_section", "bootstrap_state_steps_section", "bootstrap_state_backend_programs_section", "bootstrap_state_backend_versions_section", "bootstrap_state_backend_steps_section", "bootstrap_state_routes_section", "bootstrap_state_serves_section", "bootstrap_state_runners_section", "bootstrap_state_capabilities_section", "bootstrap_state_capability_installs_section", "bootstrap_state_runtime_plugin_installs_section", "bootstrap_state_runtime_plugin_availability_section", "bootstrap_state_mcp_servers_section", "bootstrap_state_mcp_tool_installs_section"]
 
 [[section]]
 id = "bootstrap_state_contexts_section"
@@ -530,6 +530,132 @@ text = "Proposals"
 [[box]]
 id = "bootstrap_state_proposals_list"
 domId = "state-proposals"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_packages_section"
+children = ["bootstrap_state_packages_heading", "bootstrap_state_packages_list"]
+
+[[heading]]
+id = "bootstrap_state_packages_heading"
+level = 3
+text = "Packages"
+
+[[box]]
+id = "bootstrap_state_packages_list"
+domId = "state-packages"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_package_revisions_section"
+children = ["bootstrap_state_package_revisions_heading", "bootstrap_state_package_revisions_list"]
+
+[[heading]]
+id = "bootstrap_state_package_revisions_heading"
+level = 3
+text = "Package Revisions"
+
+[[box]]
+id = "bootstrap_state_package_revisions_list"
+domId = "state-package-revisions"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_package_patches_section"
+children = ["bootstrap_state_package_patches_heading", "bootstrap_state_package_patches_list"]
+
+[[heading]]
+id = "bootstrap_state_package_patches_heading"
+level = 3
+text = "Package Patches"
+
+[[box]]
+id = "bootstrap_state_package_patches_list"
+domId = "state-package-patches"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_package_namespaces_section"
+children = ["bootstrap_state_package_namespaces_heading", "bootstrap_state_package_namespaces_list"]
+
+[[heading]]
+id = "bootstrap_state_package_namespaces_heading"
+level = 3
+text = "Package Namespaces"
+
+[[box]]
+id = "bootstrap_state_package_namespaces_list"
+domId = "state-package-namespaces"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_package_dependencies_section"
+children = ["bootstrap_state_package_dependencies_heading", "bootstrap_state_package_dependencies_list"]
+
+[[heading]]
+id = "bootstrap_state_package_dependencies_heading"
+level = 3
+text = "Package Dependencies"
+
+[[box]]
+id = "bootstrap_state_package_dependencies_list"
+domId = "state-package-dependencies"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_package_transformers_section"
+children = ["bootstrap_state_package_transformers_heading", "bootstrap_state_package_transformers_list"]
+
+[[heading]]
+id = "bootstrap_state_package_transformers_heading"
+level = 3
+text = "Package Transformers"
+
+[[box]]
+id = "bootstrap_state_package_transformers_list"
+domId = "state-package-transformers"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_package_coexistence_section"
+children = ["bootstrap_state_package_coexistence_heading", "bootstrap_state_package_coexistence_list"]
+
+[[heading]]
+id = "bootstrap_state_package_coexistence_heading"
+level = 3
+text = "Package Coexistence"
+
+[[box]]
+id = "bootstrap_state_package_coexistence_list"
+domId = "state-package-coexistence"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_package_convergence_section"
+children = ["bootstrap_state_package_convergence_heading", "bootstrap_state_package_convergence_list"]
+
+[[heading]]
+id = "bootstrap_state_package_convergence_heading"
+level = 3
+text = "Package Convergence"
+
+[[box]]
+id = "bootstrap_state_package_convergence_list"
+domId = "state-package-convergence"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_package_apply_previews_section"
+children = ["bootstrap_state_package_apply_previews_heading", "bootstrap_state_package_apply_previews_list"]
+
+[[heading]]
+id = "bootstrap_state_package_apply_previews_heading"
+level = 3
+text = "Package Apply Previews"
+
+[[box]]
+id = "bootstrap_state_package_apply_previews_list"
+domId = "state-package-apply-previews"
 class = "surface-state-list"
 
 [[section]]

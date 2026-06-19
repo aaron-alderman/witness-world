@@ -1,11 +1,14 @@
 import {
   requestBootstrapCapabilityMigrateLegacy,
   resolveCapabilityTargetInput,
+  requestBootstrapCapabilityRollback,
   requestBootstrapCapabilityDefine,
   requestBootstrapCapabilityInstall,
-  requestBootstrapCapabilityRemove
+  requestBootstrapCapabilityRemove,
+  requestBootstrapCapabilityUpdate
 } from "./capability-processes.js";
 import { previewLegacyCapabilityMigration } from "../../src/capability-legacy-migration.js";
+import { moduleProjectors } from "../../src/modules.js";
 import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
 
 export function createCapabilityAuthoringBundleHandlers({
@@ -101,6 +104,56 @@ export function createCapabilityAuthoringBundleHandlers({
         return;
       }
       const result = requestBootstrapCapabilityDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { capability: result.capability, witness: result.witness });
+    },
+
+    "capability.update": async ({ req, res, requestActor, params }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = { ...(await readJson(req)), id: params?.id || "" };
+      const existing = world.project(moduleProjectors.capabilityIndex).byId[body.id] ?? null;
+      if (!existing) {
+        sendJson(res, 404, { error: "capability not found" });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, body.id);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestCapabilityProposalCreate({
+            actor: gate.actor,
+            targetProcess: "capability.update",
+            targetKind: "capability",
+            targetId: body.id,
+            body,
+            reason: "Update a capability through witnessed proposal"
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness
+          });
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapCapabilityUpdate(world, {
+        actor: gate.actor,
+        backendHost,
+        body
+      });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
@@ -210,6 +263,56 @@ export function createCapabilityAuthoringBundleHandlers({
         return;
       }
       sendJson(res, result.status, { capabilityInstall: result.capabilityInstall, witness: result.witness });
+    },
+
+    "capability.rollback": async ({ req, res, requestActor, params }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = { ...(await readJson(req)), id: params?.id || "" };
+      const existing = world.project(moduleProjectors.capabilityIndex).byId[body.id] ?? null;
+      if (!existing) {
+        sendJson(res, 404, { error: "capability not found" });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, body.id);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestCapabilityProposalCreate({
+            actor: gate.actor,
+            targetProcess: "capability.rollback",
+            targetKind: "capability",
+            targetId: body.id,
+            body,
+            reason: "Rollback a capability through witnessed proposal"
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness
+          });
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapCapabilityRollback(world, {
+        actor: gate.actor,
+        backendHost,
+        body
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { capability: result.capability, witness: result.witness });
     },
 
     "capability.migrateLegacy": async ({ req, res, requestActor }) => {

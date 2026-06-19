@@ -11,6 +11,7 @@ import {
 test("canonical package bundle serialization is deterministic across input ordering", () => {
   const sharedPackage = {
     id: "package.plugin.inspect",
+    context: "ctx.shared",
     kind: "plugin",
     version: "0.1.0",
     displayName: "Inspect",
@@ -79,6 +80,7 @@ test("canonical package bundle serialization is deterministic across input order
       displayName: "Inspect",
       version: "0.1.0",
       exports: [{ id: "surface.world" }, { id: "surface.process" }],
+      context: "ctx.shared",
       kind: "plugin",
       id: "package.plugin.inspect"
     },

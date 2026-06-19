@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld, createThing, relation } from "../../src/kernel.js";
 import { applyWitnessToml } from "../../src/dsl.js";
-import { bindContextName, moduleProjectors } from "../../src/modules.js";
+import { bindContextName, moduleProjectors, updateCapability } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { bundleId, handlerCatalog, providers, routes } from "./runtime.js";
 import { createMcpBundleSupportServices } from "./mcp-support-services.js";
@@ -141,6 +141,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(toolNames.includes("docs.read"), true);
   assert.equal(toolNames.includes("docs.search"), true);
   assert.equal(toolNames.includes("docs.pack"), true);
+  assert.equal(toolNames.includes("platform.folder"), true);
   assert.equal(toolNames.includes("platform.branch"), true);
   assert.equal(toolNames.includes("platform.proposal"), true);
   assert.equal(toolNames.includes("platform.changeSet"), true);
@@ -163,6 +164,10 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
     contextIds: [],
     targetIds: ["cap.search"]
   });
+  assert.deepEqual(resolveMcpToolScope("world.read", { view: "capabilityRevisionHistory", id: "cap.search" }), {
+    contextIds: [],
+    targetIds: ["cap.search"]
+  });
   const worldRead = listSupportedMcpTools().find(tool => tool.name === "world.read");
   const packageBundle = listSupportedMcpTools().find(tool => tool.name === "package.bundle");
   const authoringWrite = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
@@ -180,6 +185,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageConvergence"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageApplyPreview"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("capabilityLegacyMigration"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("capabilityRevisionHistory"), true);
   assert.deepEqual(packageBundle.inputSchema.properties.operation.enum, ["preview", "previewApply"]);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("docs"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("roadmap"), true);
@@ -197,9 +203,10 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("packageCoexistence"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("packageConvergence"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("packageApplyPreview"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("capabilityRevisionHistory"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("candidateSnapshots"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("runtimeRevisions"), true);
-  assert.deepEqual(platformDocs.inputSchema.properties.operation.enum, ["list", "read"]);
+  assert.deepEqual(platformDocs.inputSchema.properties.operation.enum, ["list", "read", "search", "readFull", "getRelations"]);
   assert.deepEqual(platformRoadmap.inputSchema.properties.operation.enum, ["list", "read"]);
   assert.deepEqual(platformTelemetry.inputSchema.properties.operation.enum, ["list", "read"]);
   assert.deepEqual(platformBranch.inputSchema.properties.operation.enum, ["list", "read", "create"]);
@@ -225,6 +232,8 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageNamespace.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageDependency.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageTransformer.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.update"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.rollback"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.migrateLegacy"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontendProgram.create"), false);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("widget.create"), false);
@@ -278,6 +287,41 @@ placement = ["context"]
     row.action === "definition.create"
     && row.capabilityId === "cap.legacyOnly"
   ), true);
+});
+
+test("mcp world.read exposes capability revision history as projected first-class state", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[capability]]
+actor = "system"
+id = "cap.search"
+label = "Search"
+version = "1.0.0"
+placement = ["context"]
+`);
+  updateCapability(world, {
+    actor: "system",
+    id: "cap.search",
+    label: "Search",
+    version: "2.0.0",
+    placement: ["context"],
+    previousDefinition: world.project(moduleProjectors.capabilityIndex).byId["cap.search"],
+    previousVersion: "1.0.0"
+  });
+
+  const result = await executeMcpTool("world.read", {
+    args: { view: "capabilityRevisionHistory", id: "cap.search" },
+    appContext: {
+      project: projector => world.project(projector)
+    },
+    callHandler: async () => {
+      throw new Error("capabilityRevisionHistory read should not call HTTP handlers");
+    }
+  });
+
+  assert.equal(result.isError, false);
+  assert.deepEqual(result.structuredContent.capabilityRevisionHistory.map(row => row.action), ["define", "update"]);
+  assert.equal(result.structuredContent.capabilityRevisionHistory[1].previousVersion, "1.0.0");
 });
 
 test("mcp package.bundle previews canonical revision bundle from projected authored package state", async () => {
@@ -957,6 +1001,20 @@ test("mcp authoring.write exposes authored package actions and package-aware sco
     contextIds: [],
     targetIds: []
   });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "capability.update",
+    body: { id: "notes.sidebar" }
+  }), {
+    contextIds: [],
+    targetIds: ["notes.sidebar"]
+  });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "capability.rollback",
+    body: { id: "notes.sidebar" }
+  }), {
+    contextIds: [],
+    targetIds: ["notes.sidebar"]
+  });
 });
 
 test("mcp authoring.write routes package authorship actions through shared package handlers", async () => {
@@ -969,6 +1027,7 @@ test("mcp authoring.write routes package authorship actions through shared packa
   const cases = [
     {
       action: "package.create",
+      method: "POST",
       path: "/api/packages",
       handler: "package.create",
       body: {
@@ -980,6 +1039,7 @@ test("mcp authoring.write routes package authorship actions through shared packa
     },
     {
       action: "packageRevision.create",
+      method: "POST",
       path: "/api/package-revisions",
       handler: "packageRevision.create",
       body: {
@@ -990,6 +1050,7 @@ test("mcp authoring.write routes package authorship actions through shared packa
     },
     {
       action: "packageRevision.publish",
+      method: "POST",
       path: "/api/package-revisions/packageRevision.plugin.inspect.v1/publish",
       handler: "packageRevision.publish",
       body: {
@@ -1000,6 +1061,7 @@ test("mcp authoring.write routes package authorship actions through shared packa
     },
     {
       action: "packagePatch.create",
+      method: "POST",
       path: "/api/package-patches",
       handler: "packagePatch.create",
       body: {
@@ -1013,6 +1075,7 @@ test("mcp authoring.write routes package authorship actions through shared packa
     },
     {
       action: "packageNamespace.create",
+      method: "POST",
       path: "/api/package-namespaces",
       handler: "packageNamespace.create",
       body: {
@@ -1024,6 +1087,7 @@ test("mcp authoring.write routes package authorship actions through shared packa
     },
     {
       action: "packageDependency.create",
+      method: "POST",
       path: "/api/package-dependencies",
       handler: "packageDependency.create",
       body: {
@@ -1035,6 +1099,7 @@ test("mcp authoring.write routes package authorship actions through shared packa
     },
     {
       action: "packageTransformer.create",
+      method: "POST",
       path: "/api/package-transformers",
       handler: "packageTransformer.create",
       body: {
@@ -1047,7 +1112,27 @@ test("mcp authoring.write routes package authorship actions through shared packa
       }
     },
     {
+      action: "capability.update",
+      method: "PATCH",
+      path: "/api/capabilities/notes.sidebar",
+      handler: "capability.update",
+      body: {
+        id: "notes.sidebar",
+        version: "2.0.0"
+      }
+    },
+    {
+      action: "capability.rollback",
+      method: "POST",
+      path: "/api/capabilities/notes.sidebar/rollback",
+      handler: "capability.rollback",
+      body: {
+        id: "notes.sidebar"
+      }
+    },
+    {
       action: "capability.migrateLegacy",
+      method: "POST",
       path: "/api/capability-migrations/legacy",
       handler: "capability.migrateLegacy",
       body: {}
@@ -1065,7 +1150,7 @@ test("mcp authoring.write routes package authorship actions through shared packa
     assert.equal(result.isError, false, `${testCase.action} should succeed`);
     const call = calls.at(-1);
     assert.equal(call.handler, testCase.handler);
-    assert.equal(call.method, "POST");
+    assert.equal(call.method, testCase.method);
     assert.equal(call.path, testCase.path);
     assert.deepEqual(call.body, testCase.body);
   }
@@ -1123,6 +1208,7 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   assert.equal(services.mcpToolAvailable("docs.read"), true);
   assert.equal(services.mcpToolAvailable("docs.search"), true);
   assert.equal(services.mcpToolAvailable("docs.pack"), true);
+  assert.equal(services.mcpToolAvailable("platform.folder"), true);
   assert.deepEqual(
     services.validateMcpOrigin({ headers: { origin: "http://localhost:3000", host: "127.0.0.1:8787" } }),
     { ok: true }
@@ -1416,6 +1502,16 @@ test("platform MCP read tool routes runtime revision view through platform model
   assert.equal(calls.at(-1).path, "/api/platform-model");
   assert.equal(calls.at(-1).query.view, "packageApplyPreview");
   assert.equal(calls.at(-1).query.id, "packageRevision.plugin.inspect.v2");
+
+  const capabilityRevisionHistoryResult = await executeMcpTool("platform.read", {
+    args: { view: "capabilityRevisionHistory", id: "notes.sidebar" },
+    callHandler
+  });
+  assert.equal(capabilityRevisionHistoryResult.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.model.read");
+  assert.equal(calls.at(-1).path, "/api/platform-model");
+  assert.equal(calls.at(-1).query.view, "capabilityRevisionHistory");
+  assert.equal(calls.at(-1).query.id, "notes.sidebar");
 });
 
 test("platform MCP read tool routes proposal, branch, change-set, candidate snapshot, telemetry, bridge, semantics, and governance views through platform model handlers", async () => {

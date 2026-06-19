@@ -12,9 +12,17 @@ const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
   Object.freeze({ id: "verificationStatus", title: "Verification Status", subtitle: "Policies, freshness, invalidations, queue state, and test-gate detail.", modelView: "verificationStatus" }),
   Object.freeze({ id: "verificationRuns", title: "Verification Runs", subtitle: "Test runs, authored reports, artifacts, suites, failures, and run execution commands.", modelView: "verificationRuns" }),
   Object.freeze({ id: "verificationRuntime", title: "Verification Runtime", subtitle: "Candidate snapshots, runtime revisions, snapshot builds, and runtime rebuild diagnostics.", modelView: "verificationRuntime" }),
-  Object.freeze({ id: "knowledge", title: "Knowledge", subtitle: "Governed docs, roadmap tasks, epics, features, and intent-linked knowledge.", modelView: "knowledge" }),
-  Object.freeze({ id: "signals", title: "Signals", subtitle: "Gaps, telemetry, defect clusters, and boundaries.", modelView: "signals" }),
-  Object.freeze({ id: "model", title: "Model", subtitle: "Platform objects, relationships, profiles, and dependency evidence.", modelView: "model" }),
+  Object.freeze({ id: "knowledge", title: "Knowledge", subtitle: "Knowledge landing page with links into narrower docs, folders (this.folder.wtoml), and roadmap views.", modelView: "knowledgeOverview" }),
+  Object.freeze({ id: "knowledgeDocs", title: "Knowledge Docs", subtitle: "Governed documents, authored references, and document detail.", modelView: "knowledgeDocs" }),
+  Object.freeze({ id: "knowledgeFolders", title: "Knowledge Folders", subtitle: "Folders with this.folder.wtoml metadata and their linked platform concepts.", modelView: "knowledgeFolders" }),
+  Object.freeze({ id: "knowledgeRoadmap", title: "Knowledge Roadmap", subtitle: "Roadmap tasks, epics, features, and linked platform work.", modelView: "knowledgeRoadmap" }),
+  Object.freeze({ id: "signals", title: "Signals", subtitle: "Signals landing page with links into narrower gap and signal-catalog views.", modelView: "signalsOverview" }),
+  Object.freeze({ id: "signalsGaps", title: "Signals Gaps", subtitle: "Gap inventory, selector drift, and gap detail.", modelView: "signalsGaps" }),
+  Object.freeze({ id: "signalsCatalog", title: "Signals Catalog", subtitle: "Telemetry metrics, defect clusters, boundaries, and linked signal-node detail.", modelView: "signalsCatalog" }),
+  Object.freeze({ id: "model", title: "Model", subtitle: "Model landing page with links into narrower objects, profiles, and coverage views.", modelView: "modelOverview" }),
+  Object.freeze({ id: "modelObjects", title: "Model Objects", subtitle: "Platform objects, their properties, and linked relationships.", modelView: "modelObjects" }),
+  Object.freeze({ id: "modelProfiles", title: "Model Profiles", subtitle: "Runtime profile exposure and composition evidence.", modelView: "modelProfiles" }),
+  Object.freeze({ id: "modelCoverage", title: "Model Coverage", subtitle: "Coverage edges between gates and protected platform targets.", modelView: "modelCoverage" }),
   Object.freeze({ id: "bridges", title: "Bridges", subtitle: "Compatibility bridge inventory for remaining convenience seams.", modelView: "bridges", supplementalPageSource: "bridges" }),
   Object.freeze({ id: "governance", title: "Governance", subtitle: "Route and proposal-target governance coverage for mutating platform seams.", modelView: "governance", supplementalPageSource: "governance" }),
   Object.freeze({ id: "semantics", title: "Semantics", subtitle: "Personal, shared, and mixed mutable-surface semantics contract rows.", modelView: "semantics", supplementalPageSource: "semantics" }),
@@ -244,12 +252,16 @@ function conceptDestination(value) {
     return { view: "verificationStatus", id: raw };
   }
   if (raw.startsWith("roadmap:") || raw.startsWith("epic:") || raw.startsWith("feature:") || raw.startsWith("roadmapTask:") || raw.startsWith("docTask:")) {
-    return { view: "knowledge", id: raw };
+    return { view: "knowledgeRoadmap", id: raw };
   }
-  if (raw.startsWith("doc:")) return { view: "knowledge", id: raw.slice(4) };
-  if (raw.endsWith(".md")) return { view: "knowledge", id: raw };
-  if (raw.startsWith("telemetryMetric:") || raw.startsWith("gap.") || raw.startsWith("defectCluster:") || raw.startsWith("boundary:")) {
-    return { view: "signals", id: raw };
+  if (raw.startsWith("folder:")) return { view: "knowledgeFolders", id: raw };
+  if (raw.startsWith("doc:")) return { view: "knowledgeDocs", id: raw.slice(4) };
+  if (raw.endsWith(".md")) return { view: "knowledgeDocs", id: raw };
+  if (raw.startsWith("gap.")) {
+    return { view: "signalsGaps", id: raw };
+  }
+  if (raw.startsWith("telemetryMetric:") || raw.startsWith("defectCluster:") || raw.startsWith("boundary:")) {
+    return { view: "signalsCatalog", id: raw };
   }
   if (raw.startsWith("compatibilityBridge:")) return { view: "bridges", id: raw };
   if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return { view: "governance", id: raw };
@@ -259,13 +271,13 @@ function conceptDestination(value) {
   if (raw.startsWith("packageApplyPreview:")) return { view: "packageApplyPreview", id: raw };
   if (raw.startsWith("packageTransformer:") || raw.startsWith("packageTransformer.")) return { view: "packageConvergence", id: raw };
   if (raw.startsWith("packagePatch:")) return { view: "packageConvergence", id: raw };
-  if (raw.startsWith("packageDependency:")) return { view: "model", id: raw };
-  if (raw.startsWith("code:")) return { view: "model", id: raw };
+  if (raw.startsWith("packageDependency:")) return { view: "modelObjects", id: raw };
+  if (raw.startsWith("code:")) return { view: "modelObjects", id: raw };
   if (raw.startsWith("package.") || raw.startsWith("packageRevision.") || raw.startsWith("packageNamespace:") || raw.startsWith("packageConflict:")) {
     return { view: "packageCoexistence", id: raw };
   }
   if (raw.startsWith("route:") || raw.startsWith("handler:") || raw.startsWith("surface:") || raw.startsWith("capability:") || raw.startsWith("plugin.") || raw.startsWith("bundle:") || raw.startsWith("rvm:") || raw.startsWith("wcss:") || raw.startsWith("wtoml:") || raw.startsWith("json:") || raw.startsWith("file:")) {
-    return { view: "model", id: raw };
+    return { view: "modelObjects", id: raw };
   }
   return null;
 }
@@ -286,6 +298,7 @@ function conceptApiHref(value) {
   if (raw.startsWith("roadmap:") || raw.startsWith("epic:") || raw.startsWith("feature:") || raw.startsWith("roadmapTask:") || raw.startsWith("docTask:")) {
     return `/api/platform-model?view=roadmap&id=${encodeURIComponent(raw)}`;
   }
+  if (raw.startsWith("folder:")) return `/api/platform-model?view=folders&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("doc:")) return `/api/platform-model?view=docs&id=${encodeURIComponent(raw.slice(4))}`;
   if (raw.endsWith(".md")) return `/api/platform-model?view=docs&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("telemetryMetric:")) return `/api/platform-model?view=telemetry&id=${encodeURIComponent(raw)}`;
@@ -1346,7 +1359,19 @@ function knowledgeItems(model) {
     scope: feature.epicId || "",
     summary: `${(feature.branchIds ?? []).length} branches, ${(feature.gateIds ?? []).length} gates`
   }));
-  return [...docs, ...tasks, ...epics, ...features].sort((left, right) =>
+  const folders = (model.folders ?? []).map(folder => ({
+    pageKind: "folder",
+    id: folder.id,
+    title: folder.title || folder.id,
+    folderLink: {
+      id: folder.id,
+      title: folder.title || folder.id
+    },
+    status: folder.source ? "authored" : "known",
+    scope: folder.path || "",
+    summary: `folder meta${folder.source ? ` from ${folder.source}` : ""}`
+  }));
+  return [...docs, ...tasks, ...epics, ...features, ...folders].sort((left, right) =>
     left.pageKind.localeCompare(right.pageKind)
     || left.id.localeCompare(right.id)
   );
@@ -1467,6 +1492,8 @@ function detailRecordsForSource(source, model) {
       return model.nodes ?? [];
     case "docs":
       return model.docs ?? [];
+    case "folders":
+      return model.folders ?? [];
     case "roadmapTasks":
       return model.roadmapTasks ?? [];
     case "epics":
@@ -2154,12 +2181,17 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
   const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related", "PlatformKnowledgeRelatedPanel");
   const sectionsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "sections", "PlatformKnowledgeSections");
   const tasksSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "tasks", "PlatformKnowledgeTasks");
-  const documentPathField = surfacePropText(surface, "documentPathField", "");
+  const documentPathField = surfacePropText(surface, "documentPathField", "path");
   const roadmapTaskIdPrefixes = surfaceIdPrefixes(surface, "roadmapTaskIdPrefixes");
   const roadmapTaskFallbackField = surfacePropText(surface, "roadmapTaskFallbackField", "");
   const epicIdPrefixes = surfaceIdPrefixes(surface, "epicIdPrefixes");
   const featureIdPrefixes = surfaceIdPrefixes(surface, "featureIdPrefixes");
-  if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No knowledge rows are projected yet." });
+  const folderIdPrefixes = surfaceIdPrefixes(surface, "folderIdPrefixes");
+  const emptyDetail = () => renderSurfaceEmptyCard(surface, {
+    title: surfacePropText(surface, "emptyTitle", "Detail"),
+    message: surfaceEmptyState(surface, "No knowledge rows are projected yet.")
+  });
+  if (!detail) return emptyDetail();
   if (resolveFieldPath(detail, documentPathField)) {
     const detailKind = "document";
     const doc = detail;
@@ -2197,7 +2229,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     `)));
     return renderAuthoredDetailLayout(surface, detailSections);
   }
-  if (recordMatchesIdPrefixes(detail, roadmapTaskIdPrefixes) || resolveFieldPath(detail, roadmapTaskFallbackField)) {
+  if (recordMatchesIdPrefixes(detail, roadmapTaskIdPrefixes) || (roadmapTaskFallbackField && resolveFieldPath(detail, roadmapTaskFallbackField))) {
     const detailKind = "roadmapTask";
     const task = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "roadmapTaskCardTitle", "roadmapTaskFields", ctx, task, "Roadmap Task Detail");
@@ -2237,10 +2269,40 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     `);
     return renderAuthoredDetailLayout(surface, detailSections);
   }
+  if (recordMatchesIdPrefixes(detail, folderIdPrefixes)) {
+    const detailKind = "folder";
+    const folder = {
+      ...detail,
+      linkedConcepts: [...new Set((model.edges ?? [])
+        .flatMap(edge => {
+          if (edge.from === detail.id) return [edge.to];
+          if (edge.to === detail.id) return [edge.from];
+          return [];
+        })
+        .filter(Boolean)
+        .sort((left, right) => String(left).localeCompare(String(right))))]
+    };
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "folderCardTitle", "folderFields", ctx, folder, "Folder Detail");
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "folderFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "folderFields")
+        : ["id", "title", "path", "facet", "source"]),
+      ...surfaceKeyList(primarySurface, "folderLongTailExcludedFields", ["linkedConcepts"])
+    ];
+    const detailSections = new Map();
+    setAuthoredDetailSection(detailSections, primarySurface, detailKind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, folder, usedKeys)}
+    `);
+    setAuthoredDetailSection(detailSections, relatedSurface, detailKind, `
+      ${renderAuthoredCardSpecChildren(relatedSurface, detailKind, ctx, folder)}
+    `);
+    return renderAuthoredDetailLayout(surface, detailSections);
+  }
   const detailKind = "feature";
   const feature = detail;
   if (!recordMatchesIdPrefixes(feature, featureIdPrefixes) && detail.id) {
-    return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No knowledge rows are projected yet." });
+    return emptyDetail();
   }
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "featureCardTitle", "featureFields", ctx, feature, "Feature Detail");
   const usedKeys = [
@@ -2266,7 +2328,11 @@ function renderSignalDetail(surface, detail, model, ctx) {
   const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships", "PlatformSignalRelationships");
   const gapIdPrefixes = surfaceIdPrefixes(surface, "gapIdPrefixes");
   const signalNodeKinds = surfaceValueList(surface, "signalNodeKinds");
-  if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
+  const emptyDetail = () => renderSurfaceEmptyCard(surface, {
+    title: surfacePropText(surface, "emptyTitle", "Detail"),
+    message: surfaceEmptyState(surface, "No signal rows are projected yet.")
+  });
+  if (!detail) return emptyDetail();
   if (recordMatchesIdPrefixes(detail, gapIdPrefixes)) {
     const detailKind = "gap";
     const gap = detail;
@@ -2292,7 +2358,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
   const detailKind = "signal";
   const node = detail;
   if (!recordMatchesKinds(node, signalNodeKinds) && detail.id) {
-    return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
+    return emptyDetail();
   }
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "signalCardTitle", "signalFields", ctx, node, "Signal Detail");
@@ -2911,10 +2977,28 @@ function platformSourceRows(source, model) {
 export function renderPlatformPage(model, { requestUrl = null } = {}) {
   const consoleLayout = readPlatformConsoleLayout();
   const rawCtx = parsePlatformPageRequest(requestUrl);
+  const knowledgeDestination = rawCtx.requestedView === "knowledge" && rawCtx.id
+    ? conceptDestination(rawCtx.id)
+    : null;
+  const signalsDestination = rawCtx.requestedView === "signals" && rawCtx.id
+    ? conceptDestination(rawCtx.id)
+    : null;
+  const modelDestination = rawCtx.requestedView === "model" && rawCtx.id
+    ? conceptDestination(rawCtx.id)
+    : null;
+  const requestedView = knowledgeDestination && ["knowledgeDocs", "knowledgeFolders", "knowledgeRoadmap"].includes(knowledgeDestination.view)
+    ? knowledgeDestination.view
+    : signalsDestination && ["signalsGaps", "signalsCatalog"].includes(signalsDestination.view)
+      ? signalsDestination.view
+    : modelDestination && ["modelObjects"].includes(modelDestination.view)
+      ? modelDestination.view
+    : rawCtx.requestedView;
+  const requestedId = knowledgeDestination?.id ?? signalsDestination?.id ?? modelDestination?.id ?? rawCtx.id;
   const pageViews = authoredPageViews(consoleLayout);
-  const currentView = pageDef(rawCtx.requestedView, pageViews);
+  const currentView = pageDef(requestedView, pageViews);
   const ctx = {
     ...rawCtx,
+    id: requestedId,
     view: currentView.id
   };
   const consolePage = consoleLayout.page ?? { title: "Platform Console", summary: "" };

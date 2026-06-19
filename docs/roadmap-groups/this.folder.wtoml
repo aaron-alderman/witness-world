@@ -1,0 +1,71 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:docs/roadmap-groups"
+path = "docs/roadmap-groups"
+label = "roadmap-groups"
+summary = "Auto-generated folder metadata for docs/roadmap-groups."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:docs/roadmap-groups"
+rel = "contains"
+to = "doc:docs/roadmap-groups/GROUP-A-COMPOSITION-CORE.md"
+
+[[relation]]
+from = "folder:docs/roadmap-groups"
+rel = "contains"
+to = "doc:docs/roadmap-groups/GROUP-B-RUNTIME-AND-EDITING.md"
+
+[[relation]]
+from = "folder:docs/roadmap-groups"
+rel = "contains"
+to = "doc:docs/roadmap-groups/GROUP-C-PRACTICAL-BACKEND.md"
+
+[[relation]]
+from = "folder:docs/roadmap-groups"
+rel = "contains"
+to = "doc:docs/roadmap-groups/GROUP-D-SHELLS-PERSISTENCE-AND-ECOSYSTEM.md"
+
+[[relation]]
+from = "folder:docs/roadmap-groups"
+rel = "contains"
+to = "doc:docs/roadmap-groups/GROUP-E-LEARNING-AND-INTERACTION.md"
+
+[[relation]]
+from = "folder:docs/roadmap-groups"
+rel = "contains"
+to = "doc:docs/roadmap-groups/README.md"
+
+[[relation]]
+from = "folder:docs/roadmap-groups"
+rel = "contains"
+to = "wtoml:docs/roadmap-groups/this.folder.wtoml"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:docs/roadmap-groups"
+# rel = "describedBy"
+# to = "doc:..."

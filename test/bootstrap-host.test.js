@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
+import { applyWitnessToml } from "../src/dsl.js";
 import { moduleProjectors } from "../src/modules.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { resolveRuntimeOperatorPaths } from "../src/runtime-operator-contract.js";
@@ -165,6 +166,177 @@ test("bootstrap state exposes operator contract and artifact inventory for world
   }
 });
 
+test("bootstrap state exposes authored package nouns and coexistence projections through HTTP", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+status = "review"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.alpha:inspectA"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.beta:inspectB"
+context = "ctx.beta"
+name = "inspectB"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1-to-v2"
+package = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+sourceNamespace = "packageNamespace:ctx.alpha:inspectA"
+targetRevision = "packageRevision.plugin.inspect.v2"
+targetNamespace = "packageNamespace:ctx.beta:inspectB"
+strategy = "follow-up-revision"
+status = "active"
+remainingGlue = ["rename remaining runtimePlugin installs"]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+transformer = "packageTransformer.inspect.v1-to-v2"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "migrated" }
+
+[[packageDependency]]
+actor = "system"
+sourcePackage = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v2"
+targetKind = "capability"
+targetId = "dom.render"
+`);
+  declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost", runtimeProfile: "authoring" });
+  const server = await startServer(world, {
+    actor: "system",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeStartupMode: "bootstrap"
+  });
+  assert.equal(server.ok, true);
+  try {
+    const state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(state.packages.length, 1);
+    assert.equal(state.packageRevisions.length, 2);
+    assert.equal(state.packagePatches.length, 1);
+    assert.equal(state.packageNamespaces.length, 2);
+    assert.equal(state.packageDependencies.length, 1);
+    assert.equal(state.packageTransformers.length, 1);
+    assert.equal(state.packageCoexistence.length, 1);
+    assert.equal(state.packageCoexistence[0].coexistenceMode, "coexisting");
+    assert.equal(state.packageConvergence.length, 1);
+    assert.equal(state.packageConvergence[0].status, "glue-required");
+    const preview = state.packageApplyPreviews.find(row => row.revisionId === "packageRevision.plugin.inspect.v2");
+    assert.ok(preview);
+    assert.equal(preview.status, "glue-required");
+    assert.deepEqual(preview.relatedTransformerIds, ["packageTransformer.inspect.v1-to-v2"]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap model exposes authored package nouns as bindable HTTP composition targets", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.packages"
+
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "inspect" }
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.packages:inspectLocal"
+context = "ctx.packages"
+name = "inspectLocal"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageDependency]]
+actor = "system"
+sourcePackage = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+targetKind = "capability"
+targetId = "dom.render"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1"
+package = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+targetRevision = "packageRevision.plugin.inspect.v1"
+`);
+  declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost", runtimeProfile: "authoring" });
+  const server = await startServer(world, {
+    actor: "system",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeStartupMode: "bootstrap"
+  });
+  assert.equal(server.ok, true);
+  try {
+    const model = await fetch(`${server.url}/api/bootstrap-model`).then(response => response.json());
+    assert.equal(model.contextBindableTargets.some(row => row.id === "package.plugin.inspect"), true);
+    assert.equal(model.contextBindableTargets.some(row => row.id === "packageRevision.plugin.inspect.v1"), true);
+    assert.equal(model.contextBindableTargets.some(row => String(row.id).startsWith("packagePatch:")), true);
+    assert.equal(model.contextBindableTargets.some(row => row.id === "packageNamespace:ctx.packages:inspectLocal" && row.context === "ctx.packages"), true);
+    assert.equal(model.contextBindableTargets.some(row => row.id === "packageDependency:packageRevision.plugin.inspect.v1:capability:dom.render"), true);
+    assert.equal(model.contextBindableTargets.some(row => row.id === "packageTransformer.inspect.v1"), true);
+  } finally {
+    await server.close();
+  }
+});
+
 test("bootstrap mcp-only mode rejects direct runtime app source writes with a blocked handoff", async () => {
   const { server } = await startBlankServer();
   try {
@@ -227,6 +399,9 @@ test("operator restore and import replace live bootstrap truth and create safety
   const worldHome = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-restore-"));
   const { world, server, operatorContract } = await startBlankServerWithWorldHome(worldHome);
   try {
+    const runtimeSentinel = path.join(operatorContract.directories.runtimeRoot, "operator-sentinel.txt");
+    await fs.mkdir(path.dirname(runtimeSentinel), { recursive: true });
+    await fs.writeFile(runtimeSentinel, "keep-live-runtime", "utf8");
     const post = (pathname, body) => fetch(`${server.url}${pathname}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -260,15 +435,16 @@ test("operator restore and import replace live bootstrap truth and create safety
     });
     assert.equal(restored.status, 200);
     const restoreBody = await restored.json();
-    assert.ok(restoreBody.safetyBackup?.id);
-    state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
-    assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
-    assert.equal(state.widgets.some(row => row.id === "beta_page"), false);
-    assert.equal(world.allWitnesses().some(row => row.body?.id === "beta_page"), false);
+      assert.ok(restoreBody.safetyBackup?.id);
+      state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+      assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
+      assert.equal(state.widgets.some(row => row.id === "beta_page"), false);
+      assert.equal(world.allWitnesses().some(row => row.body?.id === "beta_page"), false);
+      assert.equal(await fs.readFile(runtimeSentinel, "utf8"), "keep-live-runtime");
 
-    assert.equal((await post("/api/widgets", widgetInput({ id: "gamma_page", kind: "Page", title: "Gamma", attach: false }))).status, 201);
-    state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
-    assert.equal(state.widgets.some(row => row.id === "gamma_page"), true);
+      assert.equal((await post("/api/widgets", widgetInput({ id: "gamma_page", kind: "Page", title: "Gamma", attach: false }))).status, 201);
+      state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+      assert.equal(state.widgets.some(row => row.id === "gamma_page"), true);
 
     const imported = await post("/api/operator/imports", {
       artifactId: importedArtifactId,
@@ -279,13 +455,14 @@ test("operator restore and import replace live bootstrap truth and create safety
     assert.ok(importBody.safetyBackup?.id);
     assert.equal(importBody.restartRequired, false);
 
-    state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
-    assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
-    assert.equal(state.widgets.some(row => row.id === "gamma_page"), false);
+      state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+      assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
+      assert.equal(state.widgets.some(row => row.id === "gamma_page"), false);
+      assert.equal(await fs.readFile(runtimeSentinel, "utf8"), "keep-live-runtime");
 
-    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
-    assert.equal(diagnostics.operator.mutations.enabled, true);
-    assert.equal(diagnostics.operator.artifacts.backups >= 2, true);
+      const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
+      assert.equal(diagnostics.operator.mutations.enabled, true);
+      assert.equal(diagnostics.operator.artifacts.backups >= 2, true);
     assert.equal(diagnostics.operator.recentActivity.some(entry => entry.process === "operator.import"), true);
   } finally {
     await server.close();

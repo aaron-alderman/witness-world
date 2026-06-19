@@ -1,0 +1,266 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/inspect"
+path = "plugins/inspect"
+label = "inspect"
+summary = "Auto-generated folder metadata for plugins/inspect."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/inspect.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "json:plugins/inspect/plugin.json"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "wtoml:plugins/inspect/process-view-page.wtoml"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/process-view.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/runtime.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-command-actions.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-command-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-command-identity-actions.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-command-identity-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-command-view.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-command-view.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-actions.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-form-actions.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-form-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-overlay-view.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-overlay-view.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-panel-view.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-panel-view.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-version-actions.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-inspector-version-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/surface-kit-styles.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "wtoml:plugins/inspect/this.folder.wtoml"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/widget-page-head.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/widget-page-styles.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/widget-page.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/widget-versions.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-browser-view.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-browser-view.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-command-actions.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-command-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-graph-actions.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-graph-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-graph-view.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-graph-view.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-graph.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-post-render.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-post-render.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-shell-view.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-shell-view.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-surface-view.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-surface-view.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-tutorial-actions.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-tutorial-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-tutorial-companion.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
+to = "file:plugins/inspect/world-tutorial-companion.test.js"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/inspect"
+# rel = "describedBy"
+# to = "doc:..."

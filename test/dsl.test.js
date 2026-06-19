@@ -1423,6 +1423,57 @@ sourceContext = "ctx.source"
 exportName = "replaySurface"
 name = "replaySurface"
 
+[[process]]
+actor = "system"
+id = "ReplayFlow"
+context = "ctx.source"
+state = ["ReplayActiveRoute"]
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replayFlow"
+name = "replayFlow"
+
+[[type]]
+actor = "system"
+id = "ReplayActiveRoute"
+context = "ctx.source"
+role = "state"
+valueType = "text"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "activeRoute"
+name = "activeRoute"
+
 [[route]]
 actor = "system"
 id = "replay_surface_route"
@@ -1433,7 +1484,7 @@ handler = "page.surface"
 servesRef = "replaySurface"
 rootSurfaceRef = "replaySurface"
 defaultScreen = "login"
-routeState = { process = "ReplayFlow", state = "ReplayActiveRoute" }
+routeState = { processRef = "replayFlow", stateRef = "activeRoute" }
 excludeWidgetRoles = ["debug"]
 `);
 
@@ -1501,5 +1552,207 @@ servesRef = "replaySurface"
 rootSurface = "HiddenRoot"
 `);
   }, /root surface id targets HiddenRoot in context ctx\.source and is not visible in authoring context ctx\.target/);
+});
+
+test("context composition DSL lowers page-home frontend-program, default-root-widget, and route-state refs", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+
+[[widget]]
+actor = "system"
+id = "secret_page"
+kind = "Page"
+context = "ctx.source"
+
+[[frontendProgram]]
+actor = "system"
+id = "landing_program"
+context = "ctx.source"
+rootWidget = "page_root"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "landingPage"
+target = "page_root"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "landingPage"
+target = "page_root"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "landingPage"
+name = "landingPage"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "landingProgram"
+name = "landingProgram"
+
+[[process]]
+actor = "system"
+id = "ReplayFlow"
+context = "ctx.source"
+state = ["ReplayActiveRoute"]
+
+[[type]]
+actor = "system"
+id = "ReplayActiveRoute"
+context = "ctx.source"
+role = "state"
+valueType = "text"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replayFlow"
+name = "replayFlow"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "activeRoute"
+name = "activeRoute"
+
+[[route]]
+actor = "system"
+id = "landing_route"
+context = "ctx.target"
+path = "/landing"
+method = "GET"
+handler = "page.home"
+servesRef = "landingProgram"
+frontendProgramRef = "landingProgram"
+defaultRootWidgetRef = "landingPage"
+routeState = { processRef = "replayFlow", stateRef = "activeRoute" }
+`);
+
+  const route = world.project(moduleProjectors.routes).find(row => row.id === "landing_route");
+  assert.ok(route);
+  assert.equal(route.serves, "landing_program");
+  assert.equal(route.params?.rootWidget, "page_root");
+  assert.equal(route.params?.frontendProgram, "landing_program");
+  assert.deepEqual(route.params?.routeState, {
+    process: "ReplayFlow",
+    state: "ReplayActiveRoute"
+  });
+
+  const blockedWorld = createWorld();
+  assert.throws(() => {
+    applyWitnessToml(blockedWorld, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+
+[[widget]]
+actor = "system"
+id = "secret_page"
+kind = "Page"
+context = "ctx.source"
+
+[[frontendProgram]]
+actor = "system"
+id = "landing_program"
+context = "ctx.source"
+rootWidget = "page_root"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "landingProgram"
+name = "landingProgram"
+
+[[route]]
+actor = "system"
+id = "hidden_landing_route"
+context = "ctx.target"
+path = "/hidden-landing"
+method = "GET"
+handler = "page.home"
+servesRef = "landingProgram"
+defaultRootWidget = "secret_page"
+`);
+  }, /default root widget id targets secret_page in context ctx\.source and is not visible in authoring context ctx\.target/);
 });
 

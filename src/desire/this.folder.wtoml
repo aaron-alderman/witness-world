@@ -1,0 +1,121 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:src/desire"
+path = "src/desire"
+label = "desire"
+summary = "Auto-generated folder metadata for src/desire."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/apply.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/elaborate.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/host-op-migration.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/host-operation.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/ids.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/index.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/ir.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/normalize.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/plugins.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/process-eval.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/projection-eval.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/rvm-forms.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/rvm.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/serialize.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/spec-integrity.js"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "wtoml:src/desire/this.folder.wtoml"
+
+[[relation]]
+from = "folder:src/desire"
+rel = "contains"
+to = "file:src/desire/wtoml.js"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:src/desire"
+# rel = "describedBy"
+# to = "doc:..."
