@@ -134,8 +134,8 @@ export function createBootstrapLiveStateReaders({
     legacyCapabilityMigrationRows() {
       return state.bootstrapState?.legacyCapabilityMigration?.pending || [];
     },
-    legacyFrontendMigrationRows() {
-      return state.bootstrapState?.legacyFrontendMigration?.pending || [];
+    retiredLegacyFrontendRouteRows() {
+      return state.bootstrapState?.legacyFrontendUplift?.retiredRoutes || [];
     },
     capabilityRevisionHistoryRows(capabilityId = null) {
       const rows = state.bootstrapState?.capabilityRevisionHistory || [];

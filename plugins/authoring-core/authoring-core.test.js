@@ -42,7 +42,6 @@ const AUTHORING_CORE_HANDLER_IDS = [
   "packageNamespace.create",
   "packageDependency.create",
   "packageTransformer.create",
-  "frontend.migrateLegacy",
   "frontend.upliftLegacy",
   "widgets.create",
   "widgets.update",
@@ -82,7 +81,6 @@ const AUTHORING_CORE_PROCESS_EXPORTS = [
   "requestPackageTransformerDefine",
   "requestBootstrapRouteDefine",
   "requestBootstrapServeDefine",
-  "requestBootstrapFrontendMigrateLegacy",
   "requestBootstrapFrontendUpliftLegacy",
   "requestWidgetDefine",
   "requestWidgetUpdate",
@@ -359,7 +357,6 @@ test("authoring-core plugin owns generic authoring routes and handlers", async (
   assert.equal(bundle.routes.some(route => route.path === "/api/package-namespaces" && route.handler === "packageNamespace.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/package-dependencies" && route.handler === "packageDependency.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/package-transformers" && route.handler === "packageTransformer.create"), true);
-  assert.equal(bundle.routes.some(route => route.path === "/api/frontend-migrations/legacy" && route.handler === "frontend.migrateLegacy"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/frontend-uplifts/legacy" && route.handler === "frontend.upliftLegacy"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/widgets" && route.handler === "widgets.create"), true);
   assert.equal(bundle.routes.some(route => String(route.pattern) === String(/^\/api\/widgets\/([^/]+)\/replace$/) && route.handler === "widgets.replace"), true);
@@ -1527,163 +1524,6 @@ test("authoring-core route and serve handlers create proposals instead of dead-e
   );
 });
 
-test("authoring-core frontend legacy migration handler creates proposals instead of dead-end 403s", async () => {
-  const world = createWorld();
-  applyWitnessToml(world, `
-[[route]]
-actor = "system"
-id = "home_route"
-path = "/"
-serves = "home_route"
-method = "GET"
-handler = "page.home"
-params = { rootWidget = "login_page", frontendProgram = "login_program" }
-
-[[widget]]
-actor = "system"
-id = "login_page"
-kind = "Page"
-props = { title = "Login" }
-
-[[widget]]
-actor = "system"
-id = "login_form"
-kind = "Form"
-props = { }
-
-[[widget]]
-actor = "system"
-id = "email_input"
-kind = "Input"
-props = { name = "email" }
-
-[[widget]]
-actor = "system"
-id = "submit_button"
-kind = "Button"
-props = { text = "Sign in", type = "submit" }
-
-[[attachWidget]]
-actor = "system"
-parent = "login_page"
-child = "login_form"
-order = 0
-
-[[attachWidget]]
-actor = "system"
-parent = "login_form"
-child = "email_input"
-order = 0
-
-[[attachWidget]]
-actor = "system"
-parent = "login_form"
-child = "submit_button"
-order = 1
-
-[[frontendProgram]]
-actor = "system"
-id = "login_program"
-rootWidget = "login_page"
-
-[[frontendStep]]
-actor = "system"
-program = "login_program"
-event = "submit:login_form"
-order = 0
-op = "readForm"
-params = { widget = "login_form", into = "credentials" }
-`);
-
-  const seenTargets = [];
-  const sent = [];
-  const handlers = bundles["bundle-authoring-core"].createHandlers({
-    world,
-    backendHost: "backendHost",
-    readJson: async req => req.body ?? {},
-    authoringServices: {
-      requireBootstrapActor: actor => ({ ok: true, actor }),
-      ensureIdentityAuthority: () => ({ ok: true }),
-      ensureContextAuthority: () => ({ ok: true }),
-      ensureTargetAuthority: (_actor, target) => {
-        seenTargets.push(target);
-        return { ok: false, status: 403, reason: "forbidden target" };
-      }
-    },
-    sendGateFailure(_res, gate) {
-      sent.push({ kind: "gate", gate });
-    },
-    sendJson(_res, status, body) {
-      sent.push({ kind: "json", status, body });
-    },
-    syncSessionIdentity: () => null,
-    sessionResponseShape: session => session,
-    supportedHandlers: [],
-    supportedHandlerMetadata: {}
-  });
-
-  await handlers["frontend.migrateLegacy"]({
-    req: { body: { requestedBy: "callan" } },
-    res: {},
-    requestActor: "callan"
-  });
-
-  assert.equal(sent.some(entry => entry.kind === "gate"), false);
-  assert.deepEqual(seenTargets, ["home_route"]);
-  assert.equal(sent[0]?.status, 202);
-  assert.equal(sent[0]?.body.proposal.targetProcess, "frontend.migrateLegacy");
-  assert.equal(sent[0]?.body.proposal.targetKind, "route");
-  assert.equal(sent[0]?.body.proposal.targetId, "home_route");
-  assert.equal(sent[0]?.body.preview.pending.some(row => row.routeId === "home_route"), true);
-});
-
-test("authoring-core frontend legacy migration handler rewrites routes through the shared helper", async () => {
-  const world = createWorld();
-  applyWitnessToml(world, `
-[[route]]
-actor = "system"
-id = "home_route"
-path = "/"
-serves = "home_route"
-method = "GET"
-handler = "page.home"
-params = { rootWidget = "page_root", frontendProgram = "landing_program" }
-`);
-
-  const sent = [];
-  const handlers = bundles["bundle-authoring-core"].createHandlers({
-    world,
-    backendHost: "backendHost",
-    readJson: async req => req.body ?? {},
-    authoringServices: {
-      requireBootstrapActor: actor => ({ ok: true, actor }),
-      ensureIdentityAuthority: () => ({ ok: true }),
-      ensureContextAuthority: () => ({ ok: true }),
-      ensureTargetAuthority: () => ({ ok: true })
-    },
-    sendGateFailure(_res, gate) {
-      sent.push({ kind: "gate", gate });
-    },
-    sendJson(_res, status, body) {
-      sent.push({ kind: "json", status, body });
-    },
-    syncSessionIdentity: () => null,
-    sessionResponseShape: session => session,
-    supportedHandlers: [],
-    supportedHandlerMetadata: {}
-  });
-
-  await handlers["frontend.migrateLegacy"]({
-    req: { body: {} },
-    res: {},
-    requestActor: "callan"
-  });
-
-  assert.equal(sent[0]?.status, 200);
-  assert.equal(sent[0]?.body.previewAfter.pending.length, 0);
-  assert.equal(world.project(moduleProjectors.routes).find(row => row.id === "home_route")?.handler, "page.surface");
-});
-
 test("authoring-core frontend legacy uplift handler creates proposals instead of dead-end 403s", async () => {
   const world = createWorld();
   applyWitnessToml(world, `
@@ -1736,7 +1576,7 @@ params = { rootWidget = "page_root" }
   assert.equal(sent[0]?.body.proposal.targetProcess, "frontend.upliftLegacy");
   assert.equal(sent[0]?.body.proposal.targetKind, "route");
   assert.equal(sent[0]?.body.proposal.targetId, "home_route");
-  assert.equal(sent[0]?.body.preview.compatibilityMode, "bridge-active");
+  assert.equal(sent[0]?.body.preview.retirementStatus, "legacy-present");
   assert.equal(Array.isArray(sent[0]?.body.preview.pending), true);
 });
 
@@ -1944,42 +1784,6 @@ context = "ctx.shared"
     && witness.body?.serverRunner === "runner.shared"
     && witness.body?.route === "landing_route"
   ), true);
-});
-
-test("authoring-core proposal targets execute frontend legacy migration through the shared helper", async () => {
-  const world = createWorld();
-  applyWitnessToml(world, `
-[[route]]
-actor = "system"
-id = "home_route"
-path = "/"
-serves = "home_route"
-method = "GET"
-handler = "page.home"
-params = { rootWidget = "page_root" }
-`);
-
-  const seenTargets = [];
-  const result = await executeAuthoringCoreProposalTarget({
-    world,
-    actor: "aaron",
-    backendHost: "backendHost",
-    proposal: { targetProcess: "frontend.migrateLegacy", targetId: "home_route" },
-    body: {},
-    supportedHandlers: [],
-    supportedHandlerMetadata: {},
-    ensureIdentityAuthority: () => ({ ok: true }),
-    ensureContextAuthority: () => ({ ok: true }),
-    ensureTargetAuthority: (_actor, target) => {
-      seenTargets.push(target);
-      return { ok: true };
-    }
-  });
-
-  assert.deepEqual(seenTargets, ["home_route"]);
-  assert.equal(result?.ok, true);
-  assert.equal(result?.witnessIds.length, 1);
-  assert.equal(world.project(moduleProjectors.routes).find(row => row.id === "home_route")?.handler, "page.surface");
 });
 
 test("authoring-core proposal targets execute frontend legacy uplift through the shared helper", async () => {

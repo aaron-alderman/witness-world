@@ -1,6 +1,6 @@
 import path from "node:path";
 import { relation } from "../../src/kernel.js";
-import { diagnosticsFromPlatformAppContext } from "./app-context-diagnostics.js";
+import { moduleProjectors } from "../../src/modules.js";
 import {
   requestBootstrapProposalApprove,
   requestBootstrapProposalCreate,
@@ -22,9 +22,15 @@ import {
 } from "./change-sets.js";
 import { pushPlatformBranch } from "./git-push.js";
 import { ensureAutomaticShipRollbackProposals, shipPlatformBranch } from "./git-ship.js";
-import { buildPlatformSlice, filterPlatformModel, requirementsForPlatformRequest } from "./platform-model.js";
+import { buildPlatformSlice, filterPlatformModel, selectVerificationRequirementState } from "./platform-model.js";
+import { readDeclaredPlatformSliceView } from "./materialized-platform-views.js";
 import { renderPlatformPageFragment, renderPlatformShellPage, resolvePlatformLocation } from "./platform-page.js";
 import { buildPlatformProposalCreateBody } from "./platform-proposals.js";
+import {
+  denyPlatformDecisionPayload,
+  emitPlatformAuthorityDecision,
+  evaluatePlatformPolicy
+} from "./platform-security.js";
 import { readPlatformTestRun, runPlatformTestCommand, runPlatformTestGate } from "./test-runs.js";
 
 const PLATFORM_TEST_RUN_EVENT_PROCESSES = new Set(["platform.test.run.start", "platform.test.run.finish"]);
@@ -90,19 +96,58 @@ function requestPathValue(requestUrl, fallbackPath) {
   return `${pathname}${search}`;
 }
 
-function memoizeProject(project) {
-  if (typeof project !== "function") return () => [];
-  const cache = new Map();
-  return projector => {
-    if (cache.has(projector)) return cache.get(projector);
-    const value = project(projector);
-    cache.set(projector, value);
-    return value;
-  };
+function prefixedTargetId(prefix, value) {
+  const text = typeof value === "string" && value.trim() ? value.trim() : "";
+  if (!text) return null;
+  return text.startsWith(`${prefix}:`) ? text : `${prefix}:${text}`;
+}
+
+function renderPlatformAccessDeniedHtml(payload, {
+  title = "Platform Access Denied"
+} = {}) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${title}</title>
+  </head>
+  <body>
+    <main>
+      <h1>${title}</h1>
+      <p>${payload.reason || payload.error || "Platform access denied."}</p>
+      <ul>
+        <li>Policy: ${payload.policyId || "unknown"}</li>
+        <li>Decision: ${payload.decisionId || "unknown"}</li>
+        <li>Required authority: ${payload.requiredAuthority || "unknown"}</li>
+      </ul>
+    </main>
+  </body>
+</html>`;
 }
 
 function truthyFlag(value) {
   return value === true || String(value || "").trim().toLowerCase() === "true";
+}
+
+function platformSessionId(requestSession) {
+  return requestSession?.id ? String(requestSession.id) : null;
+}
+
+function platformRequestAuditContext({
+  access = null,
+  requestSession = null,
+  appContext = null
+} = {}) {
+  return {
+    sessionId: platformSessionId(requestSession),
+    authenticatedActor: access?.authority?.authenticatedActor ?? requestSession?.authenticatedActor ?? null,
+    effectiveActor: access?.authority?.effectiveActor ?? requestSession?.effectiveActor ?? requestSession?.actor ?? null,
+    authorityMode: access?.authority?.authorityMode ?? requestSession?.authorityMode ?? "direct",
+    assumptionGrantId: access?.authority?.assumptionGrantId ?? requestSession?.assumptionGrantId ?? null,
+    runtimeProfile: appContext?.runtimeProfile ?? null,
+    authorityDecisionId: access?.decisionId ?? null,
+    authorityPolicyId: access?.policyId ?? null
+  };
 }
 
 function isWithinRoot(filePath, rootPath) {
@@ -187,60 +232,27 @@ async function platformModelFor(
   } = {}
 ) {
   scheduleAutomaticShipRollbackProposals(world, appContext, ensureAutomaticShipRollbackProposalsImpl);
-  if (appContext?.materializedViews?.registerBuilder) {
-    appContext.__platformSliceMaterializedBuilder ??= async ({ buildArgs }) => {
-      const value = await buildPlatformSliceImpl(buildArgs);
-      return {
-        value,
-        inputSize: Number(world?.witnessCount?.() ?? 0) + Number(world?.observationCount?.() ?? 0)
-      };
-    };
-    appContext.materializedViews.registerBuilder("platformSlice", appContext.__platformSliceMaterializedBuilder);
-  }
-  const project = memoizeProject(appContext?.project ?? (projector => world.project(projector)));
-  const materializedView = appContext?.materializedViews?.findOne?.(row =>
-    row.kind === "platformSlice"
-    && row.sliceKey === sliceKey
-    && (
-      !row.modelView
-      || row.modelView === location?.section?.modelView
-      || row.modelView === location?.section?.id
-    )
-  ) ?? null;
-  const buildArgs = {
+  return readDeclaredPlatformSliceView(world, appContext, {
     sliceKey,
-    appContext,
-    diagnostics: diagnosticsFromPlatformAppContext(appContext),
-    project,
-    requirements: requirementsForPlatformRequest({
-      sliceKey,
-      sectionId: location?.section?.id ?? null,
-      modelView: location?.section?.modelView ?? null
-    })
-  };
-  if (materializedView) {
-    return await appContext.materializedViews.read(materializedView.id, {
-      appContext,
-      request: {
-        id: `${location?.ctx?.area || "platform"}:${location?.ctx?.section || sliceKey}`,
-        actor: "platform.cache",
-        path: location?.requestPath ?? "/api/platform-page",
-        view: location?.section?.modelView ?? null,
-        area: location?.ctx?.area ?? null,
-        section: location?.ctx?.section ?? null
-      },
-      buildArgs,
-      cacheKey: JSON.stringify({
-        sliceKey,
-        sectionId: location?.section?.id ?? null,
-        modelView: location?.section?.modelView ?? null,
-        requirements: buildArgs.requirements,
-        witnessCount: world?.witnessCount?.() ?? 0,
-        runtimeRevision: Number(appContext?.appSnapshotManager?.getActiveSnapshot?.()?.appRevision || 0)
-      })
-    });
-  }
-  return buildPlatformSliceImpl(buildArgs);
+    sectionId: location?.section?.id ?? null,
+    modelView: location?.section?.modelView ?? null,
+    request: {
+      id: `${location?.ctx?.area || "platform"}:${location?.ctx?.section || sliceKey}`,
+      actor: "platform.cache",
+      path: location?.requestPath ?? "/api/platform-page",
+      view: location?.section?.modelView ?? null,
+      area: location?.ctx?.area ?? null,
+      section: location?.ctx?.section ?? null
+    },
+    buildPlatformSliceImpl
+  });
+}
+
+function blockingVerificationRequirements(requirements = []) {
+  return (Array.isArray(requirements) ? requirements : []).filter(row =>
+    row?.blocking === true
+    && ["failed", "stale", "missing", "running"].includes(String(row?.status || ""))
+  );
 }
 
 export function createPlatformHandlers({
@@ -258,20 +270,73 @@ export function createPlatformHandlers({
 }) {
   const requireBootstrapActor = authoringServices?.requireBootstrapActor ?? (() => ({ ok: false, status: 503, reason: "bootstrap authoring services are not available" }));
   const executeBootstrapProposal = authoringServices?.executeBootstrapProposal ?? null;
-  const requirePlatformMutationActor = (res, requestActor) => {
-    const gate = requireBootstrapActor(requestActor);
-    if (!gate.ok) {
-      if (sendGateFailure) sendGateFailure(res, gate);
-      else sendJson(res, gate.status || 403, { error: gate.reason || "platform proposal mutation is not authorized" });
+  const policyFailureStatus = evaluation => {
+    if (!evaluation?.authority?.effectiveActor) return 401;
+    if (evaluation?.policy?.policyKey === "platform.execute.operator" && evaluation?.operatorGate && !evaluation.operatorGate.ok) {
+      return evaluation.operatorGate.status || 403;
+    }
+    return 403;
+  };
+  const authorizePlatformRequest = ({
+    res,
+    requestActor,
+    requestSession,
+    handlerId,
+    routeId,
+    requestPath,
+    modelView = null,
+    targetObjectId = null,
+    kind = "read",
+    html = false,
+    htmlTitle = "Platform Access Denied"
+  }) => {
+    const evaluation = evaluatePlatformPolicy(world, {
+      requireBootstrapActor,
+      requestActor,
+      requestSession,
+      handlerId,
+      routeId,
+      requestPath,
+      modelView,
+      targetObjectId,
+      kind,
+      action: handlerId
+    });
+    const { decisionId } = emitPlatformAuthorityDecision(world, evaluation);
+    if (!evaluation.ok) {
+      const payload = denyPlatformDecisionPayload(evaluation, decisionId);
+      const status = policyFailureStatus(evaluation);
+      if (html) {
+        send(res, status, "text/html; charset=utf-8", renderPlatformAccessDeniedHtml(payload, { title: htmlTitle }));
+      } else {
+        sendJson(res, status, payload);
+      }
       return null;
     }
-    return gate.actor;
+    return {
+      actor: evaluation.authority.effectiveActor || evaluation.authority.authenticatedActor || requestActor || null,
+      authority: evaluation.authority,
+      decisionId,
+      policyId: evaluation.policy?.id ?? null
+    };
   };
   return {
-    "platform.model.read": async ({ res, requestUrl, requestActor, appContext }) => {
+    "platform.model.read": async ({ res, requestUrl, requestActor, requestSession, appContext }) => {
       const startedAt = nowIso();
       const startedAtMs = Date.now();
       const location = resolvePlatformLocation(requestUrl);
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.model.read",
+        routeId: "route:GET /api/platform-model",
+        requestPath: requestPathValue(requestUrl, "/api/platform-model"),
+        modelView: location.ctx.requestedView || location.section.modelView,
+        targetObjectId: location.ctx.id,
+        kind: "read"
+      });
+      if (!access) return;
       const model = await platformModelFor(world, appContext, location.section.sliceKey, {
         location: { ...location, requestPath: requestPathValue(requestUrl, "/api/platform-model") },
         buildPlatformSliceImpl,
@@ -292,7 +357,8 @@ export function createPlatformHandlers({
           gaps: model.gaps.length,
           startedAt,
           finishedAt,
-          durationMs: Date.now() - startedAtMs
+          durationMs: Date.now() - startedAtMs,
+          ...platformRequestAuditContext({ access, requestSession, appContext })
         }
       });
       sendJson(res, 200, filterPlatformModel(model, location.section.modelView, location.ctx.id, {
@@ -302,9 +368,20 @@ export function createPlatformHandlers({
       }));
     },
 
-    "platform.gaps.read": async ({ res, requestActor, appContext }) => {
+    "platform.gaps.read": async ({ res, requestActor, requestSession, appContext }) => {
       const startedAt = nowIso();
       const startedAtMs = Date.now();
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.gaps.read",
+        routeId: "route:GET /api/platform-gaps",
+        requestPath: "/api/platform-gaps",
+        modelView: "signalsGaps",
+        kind: "read"
+      });
+      if (!access) return;
       const model = await platformModelFor(world, appContext, "overview", {
         location: { section: { id: "summary", modelView: "summary" }, ctx: { area: "overview", section: "summary" }, requestPath: "/api/platform-gaps" },
         buildPlatformSliceImpl,
@@ -321,16 +398,31 @@ export function createPlatformHandlers({
           gaps: model.gaps.length,
           startedAt,
           finishedAt,
-          durationMs: Date.now() - startedAtMs
+          durationMs: Date.now() - startedAtMs,
+          ...platformRequestAuditContext({ access, requestSession, appContext })
         }
       });
       sendJson(res, 200, { gaps: model.gaps, summaries: model.summaries });
     },
 
-    "platform.page.read": async ({ res, requestActor, requestUrl, appContext }) => {
+    "platform.page.read": async ({ res, requestActor, requestSession, requestUrl, appContext }) => {
       const startedAt = nowIso();
       const startedAtMs = Date.now();
       const location = resolvePlatformLocation(requestUrl);
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.page.read",
+        routeId: "route:GET /api/platform-page",
+        requestPath: requestPathValue(requestUrl, "/api/platform-page"),
+        modelView: location.ctx.requestedView || location.section.modelView,
+        targetObjectId: location.ctx.id,
+        kind: "read",
+        html: true,
+        htmlTitle: "Platform Fragment Access Denied"
+      });
+      if (!access) return;
       const model = await platformModelFor(world, appContext, location.section.sliceKey, {
         location: { ...location, requestPath: requestPathValue(requestUrl, "/api/platform-page") },
         buildPlatformSliceImpl,
@@ -351,17 +443,41 @@ export function createPlatformHandlers({
           gaps: model.gaps.length,
           startedAt,
           finishedAt,
-          durationMs: Date.now() - startedAtMs
+          durationMs: Date.now() - startedAtMs,
+          ...platformRequestAuditContext({ access, requestSession, appContext })
         }
       });
       send(res, 200, "text/html; charset=utf-8", renderPlatformPageFragment(model, { requestUrl }));
     },
 
-    "platform.branch.list": async ({ res }) => {
+    "platform.branch.list": async ({ res, requestActor, requestSession }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.branch.list",
+        routeId: "route:GET /api/platform-branches",
+        requestPath: "/api/platform-branches",
+        modelView: "workflowBranches",
+        kind: "read"
+      });
+      if (!access) return;
       sendJson(res, 200, { branches: listPlatformBranches(world) });
     },
 
-    "platform.branch.read": async ({ res, params }) => {
+    "platform.branch.read": async ({ res, params, requestActor, requestSession }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.branch.read",
+        routeId: "route:GET /api/platform-branches/:id",
+        requestPath: `/api/platform-branches/${encodeURIComponent(params.id || "")}`,
+        modelView: "workflowBranches",
+        targetObjectId: prefixedTargetId("branch", params.id),
+        kind: "read"
+      });
+      if (!access) return;
       const result = readPlatformBranch(world, params.id || "");
       if (!result.ok) {
         sendJson(res, result.status || 404, { error: result.error });
@@ -382,11 +498,20 @@ export function createPlatformHandlers({
     },
 
     "platform.branch.create": async ({ req, res, requestActor, requestSession, appContext }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
       const body = await readJson(req);
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.branch.create",
+        routeId: "route:POST /api/platform-branches",
+        requestPath: "/api/platform-branches",
+        targetObjectId: body?.id ? prefixedTargetId("branch", body.id) : null,
+        kind: "mutation"
+      });
+      if (!access) return;
       const result = createPlatformBranch(world, {
-        actor,
+        actor: access.actor,
         id: body?.id ?? null,
         title: body?.title ?? null,
         parentBranchId: body?.parentBranchId ?? null,
@@ -407,11 +532,20 @@ export function createPlatformHandlers({
     },
 
     "platform.branch.push": async ({ req, res, params, requestActor, requestSession, appContext }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.branch.push",
+        routeId: "route:POST /api/platform-branches/:id/push",
+        requestPath: `/api/platform-branches/${encodeURIComponent(params.id || "")}/push`,
+        targetObjectId: prefixedTargetId("branch", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
       const body = await readJson(req);
       const result = await pushPlatformBranch(world, {
-        actor,
+        actor: access.actor,
         branchId: params.id || "",
         remoteName: body?.remoteName ?? "origin",
         dryRun: truthyFlag(body?.dryRun),
@@ -443,11 +577,20 @@ export function createPlatformHandlers({
     },
 
     "platform.branch.ship": async ({ req, res, params, requestActor, requestSession, appContext }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.branch.ship",
+        routeId: "route:POST /api/platform-branches/:id/ship",
+        requestPath: `/api/platform-branches/${encodeURIComponent(params.id || "")}/ship`,
+        targetObjectId: prefixedTargetId("branch", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
       const body = await readJson(req);
       const result = await shipPlatformBranch(world, {
-        actor,
+        actor: access.actor,
         branchId: params.id || "",
         releaseChannelId: body?.releaseChannelId ?? "releaseChannel:local",
         proposalId: body?.proposalId ?? null,
@@ -480,32 +623,71 @@ export function createPlatformHandlers({
       });
     },
 
-    "platform.changeSet.list": async ({ res }) => {
+    "platform.changeSet.list": async ({ res, requestActor, requestSession }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.changeSet.list",
+        routeId: "route:GET /api/platform-change-sets",
+        requestPath: "/api/platform-change-sets",
+        modelView: "workflowChangeSets",
+        kind: "read"
+      });
+      if (!access) return;
       sendJson(res, 200, { changeSets: listPlatformChangeSets(world) });
     },
 
-    "platform.changeSet.read": async ({ res, params }) => {
+    "platform.changeSet.read": async ({ res, params, requestActor, requestSession, appContext }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.changeSet.read",
+        routeId: "route:GET /api/platform-change-sets/:id",
+        requestPath: `/api/platform-change-sets/${encodeURIComponent(params.id || "")}`,
+        modelView: "workflowChangeSets",
+        targetObjectId: prefixedTargetId("changeSet", params.id),
+        kind: "read"
+      });
+      if (!access) return;
       const result = readPlatformChangeSet(world, params.id || "");
       if (!result.ok) {
         sendJson(res, result.status || 404, { error: result.error });
         return;
       }
+      const model = await platformModelFor(world, appContext, "workflowChangeSets");
+      const verificationState = selectVerificationRequirementState(model, {
+        changeSetId: result.changeSet?.id ?? null,
+        candidateSnapshotId: result.latestCandidateSnapshot?.id ?? result.activeCandidateSnapshot?.id ?? null
+      });
       sendJson(res, result.status, {
         changeSet: result.changeSet,
         branch: result.branch,
         edits: result.edits,
         candidateSnapshots: result.candidateSnapshots,
         latestCandidateSnapshot: result.latestCandidateSnapshot,
-        activeCandidateSnapshot: result.activeCandidateSnapshot
+        activeCandidateSnapshot: result.activeCandidateSnapshot,
+        verificationRequirements: verificationState.verificationRequirements,
+        verificationRequirementSummary: verificationState.verificationRequirementSummary
       });
     },
 
     "platform.changeSet.create": async ({ req, res, requestActor, requestSession, appContext }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
       const body = await readJson(req);
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.changeSet.create",
+        routeId: "route:POST /api/platform-change-sets",
+        requestPath: "/api/platform-change-sets",
+        targetObjectId: body?.id ? prefixedTargetId("changeSet", body.id) : null,
+        kind: "mutation"
+      });
+      if (!access) return;
       const result = createPlatformChangeSet(world, {
-        actor,
+        actor: access.actor,
         id: body?.id ?? null,
         branchId: body?.branchId ?? null,
         title: body?.title ?? null,
@@ -525,14 +707,23 @@ export function createPlatformHandlers({
     },
 
     "platform.changeSet.edit": async ({ req, res, params, requestActor, requestSession }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.changeSet.edit",
+        routeId: "route:POST /api/platform-change-sets/:id/edits",
+        requestPath: `/api/platform-change-sets/${encodeURIComponent(params.id || "")}/edits`,
+        targetObjectId: prefixedTargetId("changeSet", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
       const body = await readJson(req);
       const edits = Array.isArray(body?.edits)
         ? body.edits
         : (body?.path || body?.content ? [{ path: body.path, content: body.content, previousHash: body.previousHash ?? null }] : []);
       const result = await stagePlatformChangeSetEdits(world, {
-        actor,
+        actor: access.actor,
         changeSetId: params.id || "",
         edits,
         session: requestSession ?? null
@@ -549,10 +740,19 @@ export function createPlatformHandlers({
     },
 
     "platform.changeSet.removeEdit": async ({ res, params, requestActor, requestSession }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.changeSet.removeEdit",
+        routeId: "route:DELETE /api/platform-change-sets/:id/edits/:pathHash",
+        requestPath: `/api/platform-change-sets/${encodeURIComponent(params.id || "")}/edits/${encodeURIComponent(params.pathHash || "")}`,
+        targetObjectId: prefixedTargetId("changeSet", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
       const result = removePlatformChangeSetEdit(world, {
-        actor,
+        actor: access.actor,
         changeSetId: params.id || "",
         pathHash: params.pathHash || "",
         session: requestSession ?? null
@@ -569,10 +769,19 @@ export function createPlatformHandlers({
     },
 
     "platform.changeSet.validate": async ({ res, params, requestActor, requestSession, appContext }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.changeSet.validate",
+        routeId: "route:POST /api/platform-change-sets/:id/validate",
+        requestPath: `/api/platform-change-sets/${encodeURIComponent(params.id || "")}/validate`,
+        targetObjectId: prefixedTargetId("changeSet", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
       const result = await validatePlatformChangeSet(world, {
-        actor,
+        actor: access.actor,
         changeSetId: params.id || "",
         session: requestSession ?? null
       });
@@ -580,32 +789,114 @@ export function createPlatformHandlers({
         sendJson(res, result.status || 400, { error: result.error });
         return;
       }
-      sendJson(res, result.status, {
-        changeSet: result.changeSet,
-        candidateSnapshot: result.candidateSnapshot,
-        activeCandidateSnapshotId: result.activeCandidateSnapshotId,
-        witness: result.witness,
-        revisionEvent: result.revisionEvent
-      });
       appContext?.providerRuntimes?.["platform.testMonitor"]?.scheduleChangeSetValidation?.({
         branchId: result.changeSet?.branchId ?? null,
         changeSetId: result.changeSet?.id ?? null,
         candidateSnapshotId: result.candidateSnapshot?.id ?? null,
         status: result.candidateSnapshot?.status ?? null
       });
+      const model = await platformModelFor(world, appContext, "workflowChangeSets");
+      const verificationState = selectVerificationRequirementState(model, {
+        changeSetId: result.changeSet?.id ?? null,
+        candidateSnapshotId: result.candidateSnapshot?.id ?? null
+      });
+      sendJson(res, result.status, {
+        changeSet: result.changeSet,
+        candidateSnapshot: result.candidateSnapshot,
+        activeCandidateSnapshotId: result.activeCandidateSnapshotId,
+        witness: result.witness,
+        revisionEvent: result.revisionEvent,
+        verificationRequirements: verificationState.verificationRequirements,
+        verificationRequirementSummary: verificationState.verificationRequirementSummary
+      });
     },
 
     "platform.changeSet.apply": async ({ res, params, requestActor, requestSession, appContext }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.changeSet.apply",
+        routeId: "route:POST /api/platform-change-sets/:id/apply",
+        requestPath: `/api/platform-change-sets/${encodeURIComponent(params.id || "")}/apply`,
+        targetObjectId: prefixedTargetId("changeSet", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
+      let changeSet = world.project(moduleProjectors.changeSetIndex).byId?.[params.id || ""] ?? null;
+      let candidateSnapshotId = changeSet?.latestCandidateSnapshotId ?? null;
+      if (changeSet && (String(changeSet.status || "") !== "validated" || !candidateSnapshotId)) {
+        const validation = await validatePlatformChangeSet(world, {
+          actor: access.actor,
+          changeSetId: params.id || "",
+          session: requestSession ?? null
+        });
+        if (!validation.ok) {
+          sendJson(res, validation.status || 400, { error: validation.error });
+          return;
+        }
+        changeSet = validation.changeSet ?? changeSet;
+        candidateSnapshotId = validation.candidateSnapshot?.id ?? candidateSnapshotId;
+        appContext?.providerRuntimes?.["platform.testMonitor"]?.scheduleChangeSetValidation?.({
+          branchId: validation.changeSet?.branchId ?? null,
+          changeSetId: validation.changeSet?.id ?? null,
+          candidateSnapshotId: validation.candidateSnapshot?.id ?? null,
+          status: validation.candidateSnapshot?.status ?? null
+        });
+      }
+      const verificationModel = await platformModelFor(world, appContext, "workflowChangeSets");
+      const verificationState = selectVerificationRequirementState(verificationModel, {
+        changeSetId: params.id || "",
+        candidateSnapshotId
+      });
+      const verificationGatingEnabled = Boolean(
+        appContext?.verificationPolicy
+        || (verificationModel.verificationPolicies ?? []).some(row => row?.gateId)
+      );
+      const gatingRequirements = verificationState.verificationRequirementSummary
+        ? verificationState.verificationRequirements.filter(row =>
+            String(row?.targetKind || "") === String(verificationState.verificationRequirementSummary?.targetKind || "")
+            && String(row?.targetId || "") === String(verificationState.verificationRequirementSummary?.targetId || "")
+          )
+        : verificationState.verificationRequirements;
+      const blockingRequirements = blockingVerificationRequirements(gatingRequirements);
+      if (verificationGatingEnabled && blockingRequirements.length) {
+        const message = `Change set ${params.id || ""} cannot be applied until blocking verification requirements are satisfied.`;
+        const witness = world.emit({
+          process: "platform.changeSet.apply.blocked",
+          actor: access.actor,
+          claims: [],
+          body: {
+            changeSetId: params.id || "",
+            candidateSnapshotId,
+            verificationRequirementSummary: verificationState.verificationRequirementSummary,
+            verificationRequirements: blockingRequirements,
+            message,
+            blockedAt: new Date().toISOString()
+          }
+        });
+        sendJson(res, 409, {
+          error: "verification requirements block apply",
+          message,
+          changeSetId: params.id || "",
+          candidateSnapshotId,
+          verificationRequirementSummary: verificationState.verificationRequirementSummary,
+          verificationRequirements: blockingRequirements,
+          witness
+        });
+        return;
+      }
       const result = await applyPlatformChangeSet(world, {
-        actor,
+        actor: access.actor,
         changeSetId: params.id || "",
         session: requestSession ?? null
       });
       if (!result.ok) {
         sendJson(res, result.status || 400, {
           error: result.error,
+          ...(result.message ? { message: result.message } : {}),
+          ...(result.verificationRequirementSummary ? { verificationRequirementSummary: result.verificationRequirementSummary } : {}),
+          ...(result.verificationRequirements ? { verificationRequirements: result.verificationRequirements } : {}),
           ...(Array.isArray(result.details) ? { details: result.details } : {})
         });
         return;
@@ -621,6 +912,7 @@ export function createPlatformHandlers({
       sendJson(res, result.status, {
         changeSet: result.changeSet,
         candidateSnapshotId: result.candidateSnapshotId,
+        verificationRequirementSummary: verificationState.verificationRequirementSummary,
         witness: result.witness,
         runtimeSnapshotRefresh: snapshotRefresh.touchedRuntime
           ? {
@@ -634,11 +926,20 @@ export function createPlatformHandlers({
     },
 
     "platform.changeSet.reject": async ({ req, res, params, requestActor, requestSession }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.changeSet.reject",
+        routeId: "route:POST /api/platform-change-sets/:id/reject",
+        requestPath: `/api/platform-change-sets/${encodeURIComponent(params.id || "")}/reject`,
+        targetObjectId: prefixedTargetId("changeSet", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
       const body = req ? await readJson(req) : {};
       const result = rejectPlatformChangeSet(world, {
-        actor,
+        actor: access.actor,
         changeSetId: params.id || "",
         session: requestSession ?? null,
         reason: typeof body?.reason === "string" ? body.reason : null
@@ -654,11 +955,20 @@ export function createPlatformHandlers({
     },
 
     "platform.changeSet.abandon": async ({ req, res, params, requestActor, requestSession }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.changeSet.abandon",
+        routeId: "route:POST /api/platform-change-sets/:id/abandon",
+        requestPath: `/api/platform-change-sets/${encodeURIComponent(params.id || "")}/abandon`,
+        targetObjectId: prefixedTargetId("changeSet", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
       const body = req ? await readJson(req) : {};
       const result = abandonPlatformChangeSet(world, {
-        actor,
+        actor: access.actor,
         changeSetId: params.id || "",
         session: requestSession ?? null,
         reason: typeof body?.reason === "string" ? body.reason : null
@@ -674,8 +984,16 @@ export function createPlatformHandlers({
     },
 
     "platform.testRun.create": async ({ req, res, requestActor, requestSession, appContext }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.testRun.create",
+        routeId: "route:POST /api/platform-test-runs",
+        requestPath: "/api/platform-test-runs",
+        kind: "mutation"
+      });
+      if (!access) return;
       const body = await readJson(req);
       const model = await platformModelFor(world, appContext);
       const gateId = body?.gateId ? String(body.gateId) : "";
@@ -689,8 +1007,25 @@ export function createPlatformHandlers({
           sendJson(res, 404, { error: "test gate not found" });
           return;
         }
+        const queuedInvoke = appContext?.providerRuntimes?.["platform.testMonitor"]?.scheduleInvoke?.({
+          gateId,
+          branchId: body?.branchId ?? null,
+          changeSetId: body?.changeSetId ?? null,
+          candidateSnapshotId: body?.candidateSnapshotId ?? null
+        }) ?? null;
+        if (queuedInvoke?.ok) {
+          sendJson(res, queuedInvoke.status || 202, {
+            triggerKind: "invoke",
+            gateId,
+            branchId: body?.branchId ?? null,
+            changeSetId: body?.changeSetId ?? null,
+            candidateSnapshotId: body?.candidateSnapshotId ?? null,
+            queueEntries: queuedInvoke.queueEntries ?? []
+          });
+          return;
+        }
         const result = await runPlatformTestGate(world, {
-          actor,
+          actor: access.actor,
           gate,
           id: body?.id ?? null,
           branchId: body?.branchId ?? null,
@@ -758,6 +1093,27 @@ export function createPlatformHandlers({
       }
       const gateById = Object.fromEntries((model.testGates ?? []).map(row => [String(row.id || ""), row]));
       const requestedCandidateSnapshotId = body?.candidateSnapshotId ? String(body.candidateSnapshotId) : null;
+      const queuedSelected = appContext?.providerRuntimes?.["platform.testMonitor"]?.scheduleInvoke?.({
+        gateIds: selectedGateIds,
+        branchId: resolvedBranchId,
+        changeSetId: requestedChangeSetId || null,
+        candidateSnapshotId: requestedCandidateSnapshotId,
+        trigger: "platform.testRun.create.selected"
+      }) ?? null;
+      if (queuedSelected?.ok) {
+        sendJson(res, queuedSelected.status || 202, {
+          selectionScope: {
+            scopeType,
+            branchId: resolvedBranchId,
+            changeSetId: requestedChangeSetId || null,
+            requestedCandidateSnapshotId,
+            selectedGateIds
+          },
+          triggerKind: "invoke",
+          queueEntries: queuedSelected.queueEntries ?? []
+        });
+        return;
+      }
       const results = [];
       for (const selectedGateId of selectedGateIds) {
         const gate = gateById[selectedGateId] ?? null;
@@ -766,7 +1122,7 @@ export function createPlatformHandlers({
           ? requestedCandidateSnapshotId
           : null;
         const result = await runPlatformTestGate(world, {
-          actor,
+          actor: access.actor,
           gate,
           id: null,
           branchId: resolvedBranchId,
@@ -815,7 +1171,18 @@ export function createPlatformHandlers({
       });
     },
 
-    "platform.testRun.events": async ({ req, res, appContext }) => {
+    "platform.testRun.events": async ({ req, res, requestActor, requestSession, appContext }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.testRun.events",
+        routeId: "route:GET /api/platform-test-runs/events",
+        requestPath: "/api/platform-test-runs/events",
+        modelView: "verificationRuns",
+        kind: "read"
+      });
+      if (!access) return;
       res.writeHead(200, {
         "content-type": "text/event-stream",
         "cache-control": "no-cache",
@@ -841,7 +1208,19 @@ export function createPlatformHandlers({
       });
     },
 
-    "platform.testRun.read": async ({ res, params, appContext }) => {
+    "platform.testRun.read": async ({ res, params, requestActor, requestSession, appContext }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.testRun.read",
+        routeId: "route:GET /api/platform-test-runs/:id",
+        requestPath: `/api/platform-test-runs/${encodeURIComponent(params.id || "")}`,
+        modelView: "verificationRuns",
+        targetObjectId: prefixedTargetId("testRun", params.id),
+        kind: "read"
+      });
+      if (!access) return;
       const result = await readPlatformTestRun(world, params.id || "", {
         verificationPersistence: appContext?.verificationPersistence ?? null
       });
@@ -863,9 +1242,48 @@ export function createPlatformHandlers({
       });
     },
 
-    "platform.testArtifact.content": async ({ res, params, appContext }) => {
+    "platform.artifact.content": async ({ res, params, requestActor, requestSession, appContext }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.artifact.content",
+        routeId: "route:GET /api/platform-artifacts/:id/content",
+        requestPath: `/api/platform-artifacts/${encodeURIComponent(params.id || "")}/content`,
+        modelView: "artifacts",
+        targetObjectId: prefixedTargetId("artifact", params.id),
+        kind: "read"
+      });
+      if (!access) return;
       const artifactId = params.id || "";
       const persisted = await appContext?.verificationPersistence?.readArtifactContent?.(artifactId);
+      if (persisted?.ok) {
+        send(res, 200, persisted.contentType || "text/plain; charset=utf-8", persisted.content);
+        return;
+      }
+      const artifact = world.project(moduleProjectors.artifacts)?.find?.(row => String(row?.id || "") === String(artifactId)) ?? null;
+      if (!artifact?.content) {
+        sendJson(res, 404, { error: "artifact content not found" });
+        return;
+      }
+      send(res, 200, artifact.contentType || "text/plain; charset=utf-8", artifact.content);
+    },
+
+    "platform.testArtifact.content": async ({ res, params, requestActor, requestSession, appContext }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.testArtifact.content",
+        routeId: "route:GET /api/platform-test-artifacts/:id/content",
+        requestPath: `/api/platform-test-artifacts/${encodeURIComponent(params.id || "")}/content`,
+        modelView: "verificationRuns",
+        targetObjectId: prefixedTargetId("testArtifact", params.id),
+        kind: "read"
+      });
+      if (!access) return;
+      const artifactId = params.id || "";
+      const persisted = await appContext?.verificationPersistence?.readArtifactContent?.(artifactId, { compatibility: "testArtifact" });
       if (persisted?.ok) {
         send(res, 200, persisted.contentType || "text/plain; charset=utf-8", persisted.content);
         return;
@@ -878,17 +1296,26 @@ export function createPlatformHandlers({
       send(res, 200, artifact.contentType || "text/plain; charset=utf-8", artifact.content);
     },
 
-    "platform.proposal.create": async ({ req, res, requestActor }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+    "platform.proposal.create": async ({ req, res, requestActor, requestSession }) => {
       const body = await readJson(req);
       const proposalBody = buildPlatformProposalCreateBody(body);
       if (!proposalBody.ok) {
         sendJson(res, proposalBody.status || 400, { error: proposalBody.error });
         return;
       }
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.proposal.create",
+        routeId: "route:POST /api/platform-proposals",
+        requestPath: "/api/platform-proposals",
+        targetObjectId: proposalBody.value?.targetId ? String(proposalBody.value.targetId) : null,
+        kind: "mutation"
+      });
+      if (!access) return;
       const result = requestBootstrapProposalCreate(world, {
-        actor,
+        actor: access.actor,
         backendHost,
         body: proposalBody.value
       });
@@ -899,18 +1326,27 @@ export function createPlatformHandlers({
       sendJson(res, result.status, { proposal: result.proposal, witness: result.witness, platformProposal: proposalBody.value });
     },
 
-    "platform.proposal.approve": async ({ res, params, requestActor, appContext }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+    "platform.proposal.approve": async ({ res, params, requestActor, requestSession, appContext }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.proposal.approve",
+        routeId: "route:POST /api/platform-proposals/:id/approve",
+        requestPath: `/api/platform-proposals/${encodeURIComponent(params.id || "")}/approve`,
+        targetObjectId: prefixedTargetId("proposal", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
       if (!executeBootstrapProposal) {
         sendJson(res, 503, { error: "proposal executor is not available" });
         return;
       }
       const result = await requestBootstrapProposalApprove(world, {
-        actor,
+        actor: access.actor,
         backendHost,
         proposalId: params.id || "",
-        executeTarget: proposal => executeBootstrapProposal(actor)(proposal, { appContext })
+        executeTarget: proposal => executeBootstrapProposal(access.actor)(proposal, { appContext })
       });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -919,12 +1355,21 @@ export function createPlatformHandlers({
       sendJson(res, result.status, { proposal: result.proposal, witness: result.witness });
     },
 
-    "platform.proposal.reject": async ({ req, res, params, requestActor }) => {
-      const actor = requirePlatformMutationActor(res, requestActor);
-      if (!actor) return;
+    "platform.proposal.reject": async ({ req, res, params, requestActor, requestSession }) => {
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "platform.proposal.reject",
+        routeId: "route:POST /api/platform-proposals/:id/reject",
+        requestPath: `/api/platform-proposals/${encodeURIComponent(params.id || "")}/reject`,
+        targetObjectId: prefixedTargetId("proposal", params.id),
+        kind: "mutation"
+      });
+      if (!access) return;
       const body = req ? await readJson(req) : {};
       const result = requestBootstrapProposalReject(world, {
-        actor,
+        actor: access.actor,
         backendHost,
         proposalId: params.id || "",
         reason: typeof body.reason === "string" ? body.reason : null
@@ -936,13 +1381,34 @@ export function createPlatformHandlers({
       sendJson(res, result.status, { proposal: result.proposal, witness: result.witness });
     },
 
-    "page.platform": async ({ res, requestActor, requestUrl, appContext }) => {
+    "page.platform": async ({ res, requestActor, requestSession, requestUrl, appContext }) => {
       const location = resolvePlatformLocation(requestUrl);
+      const access = authorizePlatformRequest({
+        res,
+        requestActor,
+        requestSession,
+        handlerId: "page.platform",
+        routeId: "route:GET /platform",
+        requestPath: requestPathValue(requestUrl, "/platform"),
+        modelView: location.ctx.requestedView || location.section.modelView,
+        targetObjectId: location.ctx.id,
+        kind: "read",
+        html: true,
+        htmlTitle: "Platform Access Denied"
+      });
+      if (!access) return;
       world.observe({
         process: "frontend.renderPlatformShellPage",
         actor: requestActor || frontendHost,
         claims: [relation(frontendHost, "rendered", "platformConsoleShell")],
-        body: { area: location.ctx.area, section: location.ctx.section }
+        body: {
+          area: location.ctx.area,
+          section: location.ctx.section,
+          routeId: "route:GET /platform",
+          handlerId: "page.platform",
+          view: location.ctx.requestedView || location.section.modelView,
+          ...platformRequestAuditContext({ access, requestSession, appContext })
+        }
       });
       send(res, 200, "text/html; charset=utf-8", renderPlatformShellPage({ requestUrl }));
     }

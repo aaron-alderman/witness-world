@@ -1161,6 +1161,366 @@ test("runtime server dispatches mounted routes and owns lifecycle outside host.j
   assert.equal(closedServer, true);
 });
 
+test("runtime server returns 410 for retired page.home routes", async () => {
+  const routes = [{
+    id: "legacy_home",
+    serverRunner: "runner-1",
+    method: "GET",
+    path: "/",
+    handler: "page.home",
+    params: { rootWidget: "home.page" }
+  }];
+  const world = createWitnessWorld({ routes });
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let requestHandler = null;
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} },
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: () => new Set(["http.serve", "dom.render"]),
+    readJson: async () => ({}),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: (res, status, body) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    },
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: [] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map([["runner-1", { handlers: {}, close() {} }]]),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    httpModule: {
+      createServer(handler) {
+        requestHandler = handler;
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  const req = {
+    method: "GET",
+    url: "/",
+    headers: { accept: "application/json" },
+    on() {}
+  };
+  const res = createResponse();
+  await requestHandler(req, res);
+
+  assert.equal(res.statusCode, 410);
+  assert.match(res.body, /legacy frontend route retired/i);
+  assert.match(res.body, /frontend\.upliftLegacy/);
+
+  await server.close();
+});
+
+test("runtime server returns 410 for retired compatibility page.surface routes", async () => {
+  const routes = [{
+    id: "legacy_surface",
+    serverRunner: "runner-1",
+    method: "GET",
+    path: "/legacy",
+    handler: "page.surface",
+    params: { rootSurface: "legacySurface.legacy_surface" }
+  }];
+  const world = createWitnessWorld({ routes });
+  world.emit({
+    process: "desire.defineSurface",
+    actor: "system",
+    claims: [],
+    body: {
+      id: "legacySurface.legacy_surface",
+      surfaceKind: "legacy-widget-program-bridge",
+      props: { legacyRootWidget: "legacy_root" }
+    }
+  });
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let requestHandler = null;
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} },
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: () => new Set(["http.serve", "dom.render"]),
+    readJson: async () => ({}),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: (res, status, body) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    },
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: ["page.surface"] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => ["page.surface"],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map([["runner-1", { handlers: {}, close() {} }]]),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    httpModule: {
+      createServer(handler) {
+        requestHandler = handler;
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  const req = {
+    method: "GET",
+    url: "/legacy",
+    headers: { accept: "application/json" },
+    on() {}
+  };
+  const res = createResponse();
+  await requestHandler(req, res);
+
+  assert.equal(res.statusCode, 410);
+  assert.match(res.body, /legacy frontend route retired/i);
+  assert.match(res.body, /frontend\.upliftLegacy/);
+
+  await server.close();
+});
+
+test("runtime server returns 410 for retired frontend program authoring endpoints", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let requestHandler = null;
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} },
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: () => new Set(["http.serve", "dom.render"]),
+    readJson: async () => ({}),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: (res, status, body) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    },
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: [] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map([["runner-1", { handlers: {}, close() {} }]]),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    httpModule: {
+      createServer(handler) {
+        requestHandler = handler;
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  const req = {
+    method: "POST",
+    url: "/api/frontend-programs",
+    headers: { accept: "application/json" },
+    on() {}
+  };
+  const res = createResponse();
+  await requestHandler(req, res);
+
+  assert.equal(res.statusCode, 410);
+  assert.match(res.body, /legacy frontend authoring retired/i);
+  assert.match(res.body, /page\.surface/);
+  assert.match(res.body, /frontend\.upliftLegacy/);
+
+  await server.close();
+});
+
+test("runtime server returns 410 for retired frontend step authoring endpoints", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let requestHandler = null;
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} },
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: () => new Set(["http.serve", "dom.render"]),
+    readJson: async () => ({}),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: (res, status, body) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    },
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: [] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map([["runner-1", { handlers: {}, close() {} }]]),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    httpModule: {
+      createServer(handler) {
+        requestHandler = handler;
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  const req = {
+    method: "POST",
+    url: "/api/frontend-steps",
+    headers: { accept: "application/json" },
+    on() {}
+  };
+  const res = createResponse();
+  await requestHandler(req, res);
+
+  assert.equal(res.statusCode, 410);
+  assert.match(res.body, /legacy frontend authoring retired/i);
+  assert.match(res.body, /page\.surface/);
+  assert.match(res.body, /frontend\.upliftLegacy/);
+
+  await server.close();
+});
+
 test("runtime server pins an in-flight request to its starting app snapshot revision", async () => {
   const routes = [{
     id: "pin_route",

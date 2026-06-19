@@ -24,11 +24,10 @@ export function buildBootstrapStarterPlan({
   const authored = bootstrapState || {};
   const plan = blueprint && typeof blueprint === "object" ? blueprint : null;
   if (!plan) return { requests: [] };
-  return {
-    requests: buildBootstrapAuthoredRequestPlanRequests({
-      plan,
-      authoredState: authored,
-      dynamicValues: resolveBootstrapStarterPlanDynamicValues({ bootstrapModel: model })
-    }).map(request => normalizeStarterRequestForRuntimeModel(request, model))
-  };
+  const requests = buildBootstrapAuthoredRequestPlanRequests({
+    plan,
+    authoredState: authored,
+    dynamicValues: resolveBootstrapStarterPlanDynamicValues({ bootstrapModel: model })
+  }).map(request => normalizeStarterRequestForRuntimeModel(request, model));
+  return { requests };
 }

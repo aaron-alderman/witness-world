@@ -12,6 +12,10 @@ import {
   widgetVersionMigrationStatus
 } from "./widget-evolution.js";
 import {
+  requestBackendProgramVersionActivation,
+  rollbackBackendProgramVersion
+} from "./backend-programs.js";
+import {
   applyWitnessDocsWithRuntimePlugins,
   parseWitnessToml
 } from "./dsl.js";
@@ -1536,6 +1540,39 @@ function runPreviewCandidate(world, candidate, actor) {
       migrationStatus: widgetVersionMigrationStatus(result.status),
       status: result.status,
       reason: result.ok ? null : (result.witness?.body?.reason || "widget version transition blocked"),
+      previewWitnessIds: previewWitnessIdsSince(world, beforeCount)
+    };
+  }
+
+  if (candidateKind === "backendProgram.version.activate") {
+    const beforeCount = world.witnessCount();
+    const result = requestBackendProgramVersionActivation(world, {
+      actor,
+      soul: typeof input?.soul === "string" ? input.soul.trim() : "",
+      version: typeof input?.version === "string" ? input.version.trim() : ""
+    });
+    return {
+      candidateKind,
+      ok: result.ok,
+      migrationStatus: result.migrationStatus ?? "blocked",
+      status: result.status,
+      reason: result.ok ? null : (result.witness?.body?.reason || "backend version transition blocked"),
+      previewWitnessIds: previewWitnessIdsSince(world, beforeCount)
+    };
+  }
+
+  if (candidateKind === "backendProgram.version.rollback") {
+    const beforeCount = world.witnessCount();
+    const result = rollbackBackendProgramVersion(world, {
+      actor,
+      soul: typeof input?.soul === "string" ? input.soul.trim() : ""
+    });
+    return {
+      candidateKind,
+      ok: result.ok,
+      migrationStatus: result.migrationStatus ?? "blocked",
+      status: result.ok ? result.status : "blocked",
+      reason: result.ok ? null : (result.witness?.body?.reason || "backend version rollback unavailable"),
       previewWitnessIds: previewWitnessIdsSince(world, beforeCount)
     };
   }

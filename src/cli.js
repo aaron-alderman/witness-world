@@ -715,7 +715,8 @@ function reportStartup({
   }
   if (runtimePluginCatalog) {
     console.log(`Authored runtime plugins: ${(runtimePluginCatalog.authoredPluginIds ?? []).join(", ") || "(none)"}`);
-    console.log(`Operator runtime plugins: ${(runtimePluginCatalog.operatorPluginIds ?? []).join(", ") || "(none)"}`);
+    console.log(`Startup default runtime plugins: ${(runtimePluginCatalog.startupPluginIds ?? []).join(", ") || "(none)"}`);
+    console.log(`Configured runtime plugins: ${(runtimePluginCatalog.operatorPluginIds ?? []).join(", ") || "(none)"}`);
     console.log(`Activated runtime plugins: ${(runtimePluginCatalog.activePluginIds ?? []).join(", ") || "(none)"}`);
     const pluginToBundleMap = runtimePluginCatalog.selection?.pluginToBundleMap ?? {};
     const addedEntries = Object.entries(pluginToBundleMap);

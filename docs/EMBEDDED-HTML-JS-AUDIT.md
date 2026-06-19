@@ -20,6 +20,11 @@ migration records, not current design guidance. The live bootstrap/browser path
 no longer depends on named page-local `witness:*` DOM-event seams to stay
 coherent.
 
+Legacy public app authoring through `frontendProgram` and `frontendStep` is
+also retired. `/api/frontend-programs` and `/api/frontend-steps` now return
+explicit `410` retirement guidance, and maintained starter/bootstrap app
+creation authors native `page.surface` nouns directly.
+
 ## Scope
 
 Audit target: HTML, CSS, and browser behavior authored inline inside JavaScript modules, where the content should instead be represented as composable authored surfaces such as `DESIRE`, `RVM`, or `WTOML`.
@@ -88,7 +93,10 @@ This file is intended to be strong enough to drive unattended execution. Keep th
 ## Targeting Rules
 
 - Default forms, cards, lists, status blocks, repeated collections, and page-shell composition to `WTOML` plus authored semantic actions unless a stronger existing authored form is already present.
-- Use shared `frontendProgram` and semantic action/event contracts for product-significant submits, clicks, URL mutations, and host-bridge triggers.
+- Use authored `surface + process + collection + boundary + policy` contracts
+  for product-significant submits, clicks, URL mutations, and host/runtime
+  effects.
+- Do not route new app-serving work through retired `page.home` or `compat.legacy-widget-program` seams; legacy routes must uplift onto native `page.surface` before they can serve again.
 - Use seeded projection state plus authored templates/collections instead of page-local `innerHTML` rebuilds for repeated content.
 - Choose `RVM` when the surface is primarily a long-lived stateful tree with nested panels, richer composition, or explicit surface-state transitions that would be awkward as page-local `WTOML` plus adapters.
 - Choose `DESIRE` only when it creates a clearer ownership boundary than `WTOML` or `RVM`.
@@ -133,6 +141,7 @@ Current position as of 2026-06-14:
 Remaining frontier for this tranche:
 
 - [x] remove shell-local ownership of the inline create forms that still live directly in `plugins/bootstrap/bootstrap-shell.js`: `context-form`, `perspective-form`, `widget-form`, `program-form`, `step-form`, `route-form`, `serve-form`, and `runner-form`
+  `program-form` and `step-form` were later retired entirely when public legacy frontend authoring was removed; this line remains as extraction provenance only.
 - [x] remove shell-local submit routing through `bindCreate(...)`, including its local request-body shaping and unconditional `form.reset()` plus `refresh()` follow-up
 - [x] reduce or extract the shell-local `refresh()` owner only after the submit/bridge contracts that depend on it are explicit enough to preserve current reread semantics
 - [x] reduce or extract the shell-local starter/desktop/form-access wrapper state owners without pushing their projection logic back into anonymous `render()` branches
@@ -238,7 +247,9 @@ Use the following ownership split consistently. This is the target architecture,
 ### 1. Authored surface ownership
 
 - [ ] page composition, copy, repeated structures, forms, panels, summaries, empty states, and user-visible affordances belong in `DESIRE`, `RVM`, `WTOML`, widget definitions, or authored templates
-- [ ] product-significant interaction intent belongs in authored actions, semantic events, `frontendProgram` flows, or equivalent declared contracts
+- [ ] product-significant interaction intent belongs in authored actions,
+  semantic events, native process/message flows, or equivalent declared
+  contracts
 - [ ] if the page needs a new reusable shell pattern, define it as part of the surface kit rather than as page-local markup
 
 ### 2. Shared surface-kit ownership
@@ -885,13 +896,14 @@ The next migrations should assume these shared seams are the correct place to ad
 Observed shape:
 
 - `plugins/bootstrap/bootstrap-shell.js` now renders the extracted bootstrap authoring controls through authored `WTOML` helper renderers rather than keeping the create-form markup inline; the previously residual `context-form`, `perspective-form`, `widget-form`, `program-form`, `step-form`, `route-form`, `serve-form`, and `runner-form` are no longer hard-coded in the returned document string
+  The legacy `program-form` and `step-form` controls were subsequently removed after hard retirement of public `frontendProgram` and `frontendStep` authoring.
 - `plugins/bootstrap/bootstrap-shell.js` no longer owns `bindCreate(...)`; create-form request shaping and submit/reset/refresh follow-up now live in `plugins/bootstrap/bootstrap-app-authoring-submit.js`
 - the page-level reread choreography for `/api/bootstrap-model`, `/api/bootstrap-state`, `/api/session`, desktop shell state, runtime-plugin review reload, tutorial progress reload, and the `render(); await requestMaybeAdvanceTutorial(); render();` sequence now lives in `plugins/bootstrap/bootstrap-refresh-runtime.js`
 - the starter/desktop/form-access wrapper sync/apply projection is no longer shell-local; those view owners now live in the extracted helper seams already named in this audit
 - the direct `witness:bootstrap-proposal-adjacent-submit` listener is no longer shell-local; submit registration now lives in `plugins/bootstrap/bootstrap-proposal-adjacent-submit.js` through `bindBootstrapProposalAdjacentSubmit(...)`
 - the thin tutorial state/controller/host adapter assembly is no longer shell-local; that bootstrap-specific assembly now lives in `plugins/bootstrap/bootstrap-tutorial-runtime.js`
 - the final render/runtime sequencing that used to stay inline in `render()` is no longer shell-local; that bootstrap-specific render pipeline now lives in `plugins/bootstrap/bootstrap-shell-render-runtime.js`
-- route-authoring change ownership now comes from authored `dispatchDomEvent` triggers in `plugins/bootstrap/bootstrap-app-authoring-controls.wtoml`, while runtime-plugin review change ownership now comes from the authored `bootstrap_page_main_program` in `plugins/bootstrap/bootstrap-page-main.wtoml`; the receiving host adapters remain `plugins/bootstrap/bootstrap-route-authoring-sync.js` and `plugins/bootstrap/bootstrap-runtime-plugin-review-sync.js`
+- route-authoring change ownership now comes from direct authored field change and input handling on the bootstrap route form, while runtime-plugin review change ownership now comes from the authored `bootstrap_page_main_program` in `plugins/bootstrap/bootstrap-page-main.wtoml`; the receiving adapters remain `plugins/bootstrap/bootstrap-route-authoring-sync.js` and `plugins/bootstrap/bootstrap-runtime-plugin-review-sync.js` without routing through `dispatchDomEvent`
 
 Audit conclusion:
 
@@ -1105,6 +1117,7 @@ This section exists so a later unattended pass does not have to reverse-engineer
 - [x] starter button enable/disable projection now lives in `plugins/bootstrap/bootstrap-starter-controls-view.js` and reaches the browser runtime through `renderBootstrapStarterControlsViewFactory()` in `plugins/bootstrap/bootstrap-shell.js`
 - [x] desktop/form/starter derived-view sync/apply ownership now also lives in `plugins/bootstrap/bootstrap-shell-view-state.js` through `syncBootstrapShellViewState(...)` and `applyBootstrapShellViewState(...)`, and `plugins/bootstrap/bootstrap-shell.js` now consumes that seam instead of keeping wrapper sync/apply functions inline
 - [x] authored bootstrap app-authoring create forms now live in `plugins/bootstrap/bootstrap-app-authoring-controls.wtoml`; `plugins/bootstrap/bootstrap-shell.js` renders those authored roots for `context-form`, `perspective-form`, `widget-form`, `program-form`, `step-form`, `route-form`, `serve-form`, and `runner-form` instead of keeping their markup inline
+  Current truth: only the canonical forms remain live in bootstrap; the legacy `program-form` and `step-form` authored roots were removed when public legacy frontend authoring was retired.
 - [x] bootstrap app-authoring create-form submit routing now lives in `plugins/bootstrap/bootstrap-app-authoring-submit.js` through `buildBootstrapAppAuthoringSubmitRequest(...)`, `runBootstrapAppAuthoringSubmit(...)`, and `bindBootstrapAppAuthoringSubmit(...)`, while `plugins/bootstrap/bootstrap-shell.js` now binds that seam instead of owning `bindCreate(...)`
 - [x] route-authoring guidance recompute now lives in `plugins/bootstrap/bootstrap-route-authoring-sync.js` through `buildBootstrapRouteAuthoringView(...)`, `applyBootstrapRouteAuthoringView(...)`, `runBootstrapRouteAuthoringSync(...)`, `bindBootstrapRouteAuthoringSync(...)`, `buildBootstrapRouteAuthoringSyncDeps(...)`, and `createBootstrapRouteAuthoringSyncDepsBuilder(...)`; `plugins/bootstrap/bootstrap-app-authoring-controls.wtoml` now dispatches `witness:bootstrap-route-authoring-sync`, and `plugins/bootstrap/bootstrap-shell.js` now consumes that seam instead of keeping `updateRouteAuthoringFields()` plus the route-field listener loop inline
 - [x] runtime-plugin review change/recompute ownership now lives in `plugins/bootstrap/bootstrap-runtime-plugin-review-sync.js` through `resolveBootstrapRuntimePluginReviewSelection(...)`, `loadBootstrapRuntimePluginReview(...)`, `selectBootstrapRuntimePluginReviewPlugin(...)`, `createBootstrapRuntimePluginReviewSyncHandler(...)`, and `bindBootstrapRuntimePluginReviewSync(...)`; `plugins/bootstrap/bootstrap-page-main.wtoml` now declares the runner/plugin review `change` intent through `bootstrap_page_main_program` plus `witness:bootstrap-runtime-plugin-review-sync`, and the bootstrap browser runtime consumes that seam instead of binding raw review-field listeners inline

@@ -36,7 +36,6 @@ import {
   moduleProjectors
 } from "../../src/modules.js";
 import { createCanonicalPackagePatch } from "../../src/package-authorship.js";
-import { applyLegacyFrontendMigration } from "../../src/frontend-legacy-migration.js";
 import { applyLegacyFrontendUplift } from "../../src/frontend-legacy-uplift.js";
 import { defineFrontendProgram, defineFrontendStep, defineWidget, updateWidget, attachWidget, widgetDefinitions, widgetVersions } from "../../src/widgets.js";
 import {
@@ -2769,7 +2768,15 @@ export function requestBootstrapRouteDefine(world, {
     }
     params.backendProgramSoul = backendProgramSoul;
   }
-  if ((input.handler === "page.home" || input.handler === "page.world") && !params.rootWidget) {
+  if (input.handler === "page.home") {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "page.home is retired; use page.surface and frontend.upliftLegacy", handler: input.handler }
+    });
+    return { ok: false, status: 400, error: "page.home is retired; use page.surface and frontend.upliftLegacy", witness };
+  }
+  if (input.handler === "page.world" && !params.rootWidget) {
     const witness = fail(world, {
       process: "route.define.failed",
       actor: actor || backendHost,
@@ -2879,24 +2886,6 @@ export function requestBootstrapServeDefine(world, {
     body: { serverRunner: resolvedServerRunner, route: resolvedRoute, context: input.context ?? null }
   });
   return { ok: true, status: 201, serve: { serverRunner: resolvedServerRunner, route: resolvedRoute, context: input.context ?? null }, witness };
-}
-
-export function requestBootstrapFrontendMigrateLegacy(world, {
-  actor,
-  backendHost
-}) {
-  const migrated = applyLegacyFrontendMigration(world, {
-    actor: actor || backendHost
-  });
-  if (!migrated.ok) return migrated;
-  return {
-    ok: true,
-    status: 200,
-    actions: migrated.actions,
-    previewBefore: migrated.previewBefore,
-    previewAfter: migrated.previewAfter,
-    witness: migrated.witness
-  };
 }
 
 export function requestBootstrapFrontendUpliftLegacy(world, {

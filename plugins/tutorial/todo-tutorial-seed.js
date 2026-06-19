@@ -5,3 +5,7 @@ const todoTutorialSeedDocument = JSON.parse(Buffer.from(TODO_TUTORIAL_SEED_BASE6
 export function todoTutorialSeed() {
   return JSON.parse(JSON.stringify(todoTutorialSeedDocument));
 }
+// Historical legacy tutorial/demo substrate retained for inspect and uplift
+// fixtures. The maintained tutorial now teaches native page.surface authoring
+// through the starter blueprint instead of seeding widget/frontendProgram app
+// routes from this document.

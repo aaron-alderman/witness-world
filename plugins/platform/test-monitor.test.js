@@ -269,6 +269,96 @@ test("platform test monitor initialization computes freshness before startup que
   }
 });
 
+test("platform test monitor honors startup settle before queueing startup gates", async () => {
+  const world = createWorld();
+  const events = [];
+  const fakePersistence = {
+    readModelRows() {
+      return {
+        verificationFreshness: [],
+        verificationInvalidations: [],
+        verificationQueue: [],
+        verificationExecutions: [],
+        verificationPolicies: [],
+        testRuns: [],
+        testResults: [],
+        testArtifacts: [],
+        testSuites: [],
+        testCases: [],
+        testReports: []
+      };
+    },
+    async recordFreshnessRows(rows = []) {
+      if (rows.length) events.push({ kind: "freshness", at: Date.now() });
+    },
+    async recordQueueRow(row = null) {
+      if (row?.status === "queued") events.push({ kind: "queue", at: Date.now() });
+    },
+    async recordExecutionRow() {}
+  };
+  const gates = [{
+    id: "gate:startup-settle",
+    sourcePath: "plugins/platform/platform.test.js",
+    command: "node --test plugins/platform/platform.test.js",
+    sourceDependencies: ["plugins/platform/platform-page.js"],
+    protectedObjects: ["plugin.platform"],
+    costEstimate: "low"
+  }];
+  const runtime = createPlatformTestMonitorRuntime({
+    world,
+    runtimeConfig: {},
+    serverRunnerId: "serverRunner.test",
+    getAppContext: () => ({
+      runtimeProfile: "full",
+      verificationPolicy: resolveRunnerVerificationPolicy({
+        serverRunner: {
+          id: "serverRunner.test",
+          values: {
+            verification: {
+              defaults: {
+                startup: true,
+                watch: false,
+                onChangeSet: false,
+                startupSettleMs: 40
+              }
+            }
+          }
+        },
+        runtimeProfile: "full",
+        runtimeConfig: {}
+      }),
+      verificationPersistence: fakePersistence,
+      project(projector) {
+        if (projector === moduleProjectors.testGates) return gates;
+        return [];
+      }
+    })
+  }, {
+    runPlatformTestGateImpl: async (_world, { gate }) => ({
+      ok: true,
+      testRun: { id: `testRun:${gate.id}` },
+      latestResult: { status: "passed" }
+    })
+  });
+
+  try {
+    const startedAt = Date.now();
+    const initializePromise = runtime.initialize();
+    await delay(10);
+    assert.equal(events.some(event => event.kind === "queue"), false);
+    await initializePromise;
+    await waitForIdle(runtime);
+    const freshnessEvent = events.find(event => event.kind === "freshness");
+    const queueEvent = events.find(event => event.kind === "queue");
+    assert.ok(freshnessEvent);
+    assert.ok(queueEvent);
+    assert.ok(queueEvent.at - startedAt >= 30);
+    assert.ok(freshnessEvent.at <= queueEvent.at);
+  } finally {
+    runtime.close();
+  }
+});
+
 test("platform test monitor synthesized policy does not invent startup verification work", async () => {
   const world = createWorld();
   const persistenceEvents = [];
@@ -407,6 +497,105 @@ test("platform test monitor carries candidate snapshots only to gates that requi
         changeSetId: "changeSet:test"
       }
     ]);
+  } finally {
+    runtime.close();
+  }
+});
+
+test("platform test monitor schedules invoke-trigger verification through the queue", async () => {
+  const world = createWorld();
+  const queueRows = [];
+  const calls = [];
+  const gates = [{
+    id: "gate:invoke",
+    sourcePath: "plugins/platform/test-verifier-fixture.js",
+    sourceDependencies: ["plugins/platform/test-verifier-fixture.js"],
+    protectedObjects: ["plugin.platform"],
+    costEstimate: "low",
+    providerId: "verification.javascriptModule",
+    safetyClass: "safe",
+    executionClass: "in_process",
+    invoke: true,
+    verificationInput: {
+      module: "plugins/platform/test-verifier-fixture.js"
+    }
+  }];
+  const runtime = createPlatformTestMonitorRuntime({
+    world,
+    runtimeConfig: {},
+    serverRunnerId: "serverRunner.test",
+    getAppContext: () => ({
+      runtimeProfile: "full",
+      verificationPolicy: resolveRunnerVerificationPolicy({
+        serverRunner: {
+          id: "serverRunner.test",
+          values: {
+            verification: {
+              defaults: {
+                startup: false,
+                watch: false,
+                onChangeSet: false
+              }
+            }
+          }
+        },
+        runtimeProfile: "full",
+        runtimeConfig: {}
+      }),
+      verificationPersistence: {
+        readModelRows() {
+          return {
+            verificationFreshness: [],
+            verificationInvalidations: [],
+            verificationQueue: [],
+            verificationExecutions: [],
+            verificationPolicies: [],
+            testRuns: [],
+            testResults: [],
+            testArtifacts: [],
+            testSuites: [],
+            testCases: [],
+            testReports: []
+          };
+        },
+        async recordQueueRow(row = null) {
+          if (row) queueRows.push({ ...row });
+        },
+        async recordExecutionRow() {},
+        async recordFreshnessRows() {},
+        async recordInvalidationRows() {}
+      },
+      project(projector) {
+        if (projector === moduleProjectors.testGates) return gates;
+        return [];
+      }
+    })
+  }, {
+    runPlatformTestGateImpl: async (_world, request) => {
+      calls.push({
+        gateId: request.gate.id,
+        triggerKind: request.verification?.triggerKind ?? null,
+        executionClass: request.executionClass ?? null
+      });
+      return {
+        ok: true,
+        testRun: { id: `testRun:${request.gate.id}` },
+        latestResult: { status: "passed" }
+      };
+    }
+  });
+
+  try {
+    const response = runtime.scheduleInvoke({ gateId: "gate:invoke" });
+    assert.equal(response.ok, true);
+    assert.equal(response.status, 202);
+    await waitForIdle(runtime);
+    assert.deepEqual(calls, [{
+      gateId: "gate:invoke",
+      triggerKind: "invoke",
+      executionClass: "in_process"
+    }]);
+    assert.equal(queueRows.some(row => row.triggerKind === "invoke" && row.status === "queued"), true);
   } finally {
     runtime.close();
   }

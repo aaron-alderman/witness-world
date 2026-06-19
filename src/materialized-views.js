@@ -23,6 +23,12 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function signatureText(value) {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  return trimmed || null;
+}
+
 function normalizeMaterializedViewDefinition(row = {}) {
   return {
     id: String(row.id || ""),
@@ -44,19 +50,6 @@ function normalizeMaterializedViewDefinition(row = {}) {
       ? structuredClone(row.values)
       : null
   };
-}
-
-function defaultCacheKey(world, appContext, definition) {
-  const snapshot = appContext?.appSnapshotManager?.getActiveSnapshot?.() ?? null;
-  return JSON.stringify({
-    id: definition.id,
-    kind: definition.kind,
-    sliceKey: definition.sliceKey,
-    modelView: definition.modelView,
-    witnessCount: world?.witnessCount?.() ?? world?.allWitnesses?.().length ?? 0,
-    runtimeRevision: Number(snapshot?.appRevision || appContext?.appSnapshotManager?.appRevision || 0),
-    serverRunnerId: appContext?.serverRunnerId || null
-  });
 }
 
 export function createMaterializedViewRegistry({
@@ -111,6 +104,7 @@ export function createMaterializedViewRegistry({
         resourceBudgetClass: definition.resourceBudgetClass,
         blocking: definition.blocking !== false,
         ttlMs: definition.ttlMs,
+        cacheStrategy: state.cacheStrategy ?? "ttl",
         cacheStatus,
         buildCount: Number(state.buildCount || 0),
         hitCount: Number(state.hitCount || 0),
@@ -125,6 +119,7 @@ export function createMaterializedViewRegistry({
         invalidationCause: invalidationCause ?? null,
         outputSizeEstimate: Number(state.outputSizeEstimate || 0),
         inputSize: Number(state.inputSize || 0),
+        signature: state.signature ?? null,
         observedAt: nowIso()
       }
     });
@@ -134,7 +129,10 @@ export function createMaterializedViewRegistry({
     request = null,
     appContext = null,
     cacheKey = null,
-    buildArgs = null
+    buildArgs = null,
+    signature = null,
+    signatureComponents = null,
+    deriveInvalidationCause = null
   } = {}) => {
     const definition = typeof target === "string"
       ? definitionById(target)
@@ -151,17 +149,37 @@ export function createMaterializedViewRegistry({
       lastBuiltAtMs: 0,
       outputSizeEstimate: 0,
       inputSize: 0,
+      signature: null,
+      signatureComponents: null,
+      cacheStrategy: "ttl",
       invalidationCause: "cold",
       pending: null,
-      pendingCacheKey: null,
+      pendingSignature: null,
       value: null
     };
-    const effectiveCacheKey = cacheKey ?? defaultCacheKey(world, appContext, definition);
+    const effectiveSignature = signatureText(signature)
+      ?? signatureText(cacheKey)
+      ?? null;
+    const fallbackCacheKey = effectiveSignature == null
+      ? signatureText(cacheKey)
+      : null;
     const ttlMs = Math.max(0, Number(definition.ttlMs || 0));
     const ageMs = Math.max(0, Number(now()) - Number(state.lastBuiltAtMs || 0));
-    const cacheKeyChanged = state.cacheKey != null && state.cacheKey !== effectiveCacheKey;
+    const signatureChanged = effectiveSignature != null
+      && state.signature != null
+      && state.signature !== effectiveSignature;
+    const fallbackCacheKeyChanged = effectiveSignature == null
+      && fallbackCacheKey != null
+      && state.cacheKey != null
+      && state.cacheKey !== fallbackCacheKey;
     const ttlExpired = ttlMs > 0 && state.lastBuiltAtMs > 0 && ageMs > ttlMs;
-    if (state.value != null && !cacheKeyChanged && !ttlExpired) {
+    const ttlApplies = effectiveSignature == null || state.cacheStrategy === "ttl+signature";
+    if (
+      state.value != null
+      && !signatureChanged
+      && !fallbackCacheKeyChanged
+      && !(ttlApplies && ttlExpired)
+    ) {
       state.hitCount += 1;
       states.set(definition.id, state);
       recordRead({
@@ -174,11 +192,23 @@ export function createMaterializedViewRegistry({
       });
       return state.value;
     }
-    if (state.pending && state.pendingCacheKey === effectiveCacheKey) {
+    if (
+      state.pending
+      && (
+        (effectiveSignature != null && state.pendingSignature === effectiveSignature)
+        || (effectiveSignature == null && state.pendingSignature == null)
+      )
+    ) {
       return state.pending;
     }
     state.missCount += 1;
-    state.invalidationCause = cacheKeyChanged ? "input-changed" : (ttlExpired ? "ttl-expired" : "cold");
+    state.invalidationCause = signatureChanged
+      ? (typeof deriveInvalidationCause === "function"
+          ? deriveInvalidationCause(state.signatureComponents ?? null, signatureComponents ?? null) || "signature-changed"
+          : "signature-changed")
+      : (fallbackCacheKeyChanged
+        ? "input-changed"
+        : (ttlExpired ? "ttl-expired" : "cold"));
     const probe = probeCollector?.beginOperation({
       id: `${definition.id}:${request?.id || state.buildCount + 1}:${Number(now())}`,
       kind: "materializedView",
@@ -208,13 +238,14 @@ export function createMaterializedViewRegistry({
       }
     });
     const startedAtMs = Number(now());
-    state.pendingCacheKey = effectiveCacheKey;
+    state.pendingSignature = effectiveSignature;
     state.pending = Promise.resolve(builder({
       definition,
       appContext,
       world,
       request,
-      cacheKey: effectiveCacheKey,
+      cacheKey: fallbackCacheKey,
+      signature: effectiveSignature,
       buildArgs
     }))
       .then(result => {
@@ -224,8 +255,16 @@ export function createMaterializedViewRegistry({
         const detail = result && typeof result === "object" && Object.prototype.hasOwnProperty.call(result, "value")
           ? result
           : {};
+        const builtSignature = signatureText(detail.signature) ?? effectiveSignature ?? null;
         state.value = value;
-        state.cacheKey = effectiveCacheKey;
+        state.cacheKey = fallbackCacheKey;
+        state.signature = builtSignature;
+        state.signatureComponents = signatureComponents && typeof signatureComponents === "object"
+          ? structuredClone(signatureComponents)
+          : null;
+        state.cacheStrategy = builtSignature
+          ? (detail.ttlAppliesWithSignature === true ? "ttl+signature" : "signature")
+          : "ttl";
         state.buildCount += 1;
         state.lastBuiltAtMs = Number(now());
         state.lastBuiltAt = nowIso();
@@ -243,6 +282,7 @@ export function createMaterializedViewRegistry({
         });
         probe?.complete?.({
           cacheStatus: "miss",
+          cacheStrategy: state.cacheStrategy,
           inputSize: state.inputSize,
           outputSizeEstimate: state.outputSizeEstimate,
           invalidationCause: state.invalidationCause
@@ -257,7 +297,7 @@ export function createMaterializedViewRegistry({
       })
       .finally(() => {
         state.pending = null;
-        state.pendingCacheKey = null;
+        state.pendingSignature = null;
       });
     states.set(definition.id, state);
     return state.pending;
@@ -274,6 +314,8 @@ export function createMaterializedViewRegistry({
       lastBuiltAt: state?.lastBuiltAt ?? null,
       outputSizeEstimate: Number(state?.outputSizeEstimate || 0),
       inputSize: Number(state?.inputSize || 0),
+      signature: state?.signature ?? null,
+      cacheStrategy: state?.cacheStrategy ?? "ttl",
       invalidationCause: state?.invalidationCause ?? "cold"
     };
   });

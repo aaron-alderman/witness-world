@@ -18,7 +18,7 @@ test("runtime route handlers compose bundle factory deps and invoke extracted ha
     runtimeBundleSummary: {
       bundles: [],
       authorableHandlers: ["demo.echo"],
-      pageHandlers: ["page.home"],
+      pageHandlers: ["page.surface"],
       dispatchHandlers: ["demo.echo"]
     },
     runtimeSurfaceEntries: [],

@@ -14,7 +14,8 @@ export function executeMcpAuthoringProposalTarget({
   body,
   mcpToolNames,
   ensureContextAuthority,
-  ensureTargetAuthority
+  ensureTargetAuthority,
+  appContext = null
 }) {
   switch (proposal.targetProcess) {
     case "mcpServer.define": {
@@ -27,7 +28,7 @@ export function executeMcpAuthoringProposalTarget({
       if (!resolvedServerRunner.ok) return { ok: false, status: 400, error: resolvedServerRunner.error };
       const gate = ensureTargetAuthority(actor, resolvedServerRunner.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-      const result = requestBootstrapMcpServerDefine(world, { actor, backendHost, body });
+      const result = requestBootstrapMcpServerDefine(world, { actor, backendHost, body, appContext });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "mcpTool.install": {
@@ -41,7 +42,8 @@ export function executeMcpAuthoringProposalTarget({
         actor,
         backendHost,
         body: { ...body, server: resolvedServer.target, serverRef: null },
-        allowedTools: mcpToolNames()
+        allowedTools: mcpToolNames(),
+        appContext
       });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
@@ -55,7 +57,8 @@ export function executeMcpAuthoringProposalTarget({
       const result = requestBootstrapMcpToolRemove(world, {
         actor,
         backendHost,
-        body: { ...body, server: resolvedServer.target, serverRef: null }
+        body: { ...body, server: resolvedServer.target, serverRef: null },
+        appContext
       });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }

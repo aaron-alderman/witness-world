@@ -263,7 +263,6 @@ export function createAuthoringProposalExecutor({
       case "widget.update":
       case "widget.replace":
       case "widget.replace.rollback":
-      case "frontend.migrateLegacy":
       case "frontend.upliftLegacy":
         if (proposal.targetProcess === "bootstrap.appBoundary.establish") {
           return executeBootstrapProposalTarget({
@@ -364,8 +363,10 @@ export function createAuthoringProposalExecutor({
           ensureTargetAuthority
         });
       case "serverRunner.define":
+      case "serverRunner.runtimeProfile.set":
       case "runtimePlugin.install":
       case "runtimePlugin.remove":
+      case "runtimePlugin.reconcile":
         return executeServerRunnerAuthoringProposalTarget({
           world,
           actor,
@@ -387,7 +388,8 @@ export function createAuthoringProposalExecutor({
           body,
           mcpToolNames,
           ensureContextAuthority,
-          ensureTargetAuthority
+          ensureTargetAuthority,
+          appContext: executionContext?.appContext ?? null
         });
       }
       case "capability.define":
@@ -414,7 +416,8 @@ export function createAuthoringProposalExecutor({
           body,
           mcpToolNames,
           ensureContextAuthority,
-          ensureTargetAuthority
+          ensureTargetAuthority,
+          appContext: executionContext?.appContext ?? null
         });
       }
       case "mcpTool.remove": {
@@ -426,7 +429,8 @@ export function createAuthoringProposalExecutor({
           body,
           mcpToolNames,
           ensureContextAuthority,
-          ensureTargetAuthority
+          ensureTargetAuthority,
+          appContext: executionContext?.appContext ?? null
         });
       }
       default:

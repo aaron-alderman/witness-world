@@ -187,7 +187,6 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageConvergence"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageApplyPreview"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("capabilityLegacyMigration"), true);
-  assert.equal(worldRead.inputSchema.properties.view.enum.includes("frontendLegacyMigration"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("frontendLegacyUplift"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("capabilityRevisionHistory"), true);
   assert.deepEqual(packageBundle.inputSchema.properties.operation.enum, ["preview", "previewApply"]);
@@ -195,6 +194,9 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("roadmap"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("telemetry"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("defects"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("security"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("artifacts"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("sessions"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("bridges"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("semantics"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("governance"), true);
@@ -250,7 +252,6 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.update"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.rollback"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("capability.migrateLegacy"), true);
-  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontend.migrateLegacy"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontend.upliftLegacy"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontendProgram.create"), false);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("widget.create"), false);
@@ -303,41 +304,6 @@ placement = ["context"]
   assert.equal(result.structuredContent.legacyCapabilityMigration.pending.some(row =>
     row.action === "definition.create"
     && row.capabilityId === "cap.legacyOnly"
-  ), true);
-});
-
-test("mcp world.read exposes legacy frontend migration as projected first-class state", async () => {
-  const world = createWorld();
-  applyWitnessToml(world, `
-[[route]]
-actor = "system"
-id = "home_route"
-path = "/"
-serves = "home_route"
-method = "GET"
-handler = "page.home"
-params = { rootWidget = "page_root", frontendProgram = "landing_program" }
-`);
-
-  const result = await executeMcpTool("world.read", {
-    args: { view: "frontendLegacyMigration" },
-    appContext: {
-      project: projector => world.project(projector)
-    },
-    callHandler: async () => {
-      throw new Error("frontendLegacyMigration read should not call HTTP handlers");
-    }
-  });
-
-  assert.equal(result.isError, false);
-  assert.equal(result.structuredContent.legacyFrontendMigration.compatibilityMode, "bridge-active");
-  assert.equal(result.structuredContent.legacyFrontendMigration.pending.some(row =>
-    row.action === "route.rewrite"
-    && row.routeId === "home_route"
-  ), true);
-  assert.equal(result.structuredContent.legacyFrontendMigration.pending.some(row =>
-    row.action === "surface.define"
-    && row.surfaceId === "legacySurface.home_route"
   ), true);
 });
 
@@ -420,7 +386,11 @@ params = { widget = "login_form", into = "credentials" }
   });
 
   assert.equal(result.isError, false);
-  assert.equal(result.structuredContent.legacyFrontendUplift.compatibilityMode, "bridge-active");
+  assert.equal(result.structuredContent.legacyFrontendUplift.retirementStatus, "legacy-present");
+  assert.equal(result.structuredContent.legacyFrontendUplift.retiredRoutes.some(row =>
+    row.routeId === "home_route"
+    && row.retirementKind === "page.home"
+  ), true);
   assert.equal(result.structuredContent.legacyFrontendUplift.pending.some(row =>
     row.action === "route.rewrite"
     && row.routeId === "home_route"
@@ -1143,13 +1113,6 @@ test("mcp authoring.write exposes authored package actions and package-aware sco
     targetIds: []
   });
   assert.deepEqual(resolveMcpToolScope("authoring.write", {
-    action: "frontend.migrateLegacy",
-    body: {}
-  }), {
-    contextIds: [],
-    targetIds: []
-  });
-  assert.deepEqual(resolveMcpToolScope("authoring.write", {
     action: "frontend.upliftLegacy",
     body: {}
   }), {
@@ -1311,13 +1274,6 @@ test("mcp authoring.write routes package authorship actions through shared packa
       method: "POST",
       path: "/api/capability-migrations/legacy",
       handler: "capability.migrateLegacy",
-      body: {}
-    },
-    {
-      action: "frontend.migrateLegacy",
-      method: "POST",
-      path: "/api/frontend-migrations/legacy",
-      handler: "frontend.migrateLegacy",
       body: {}
     },
     {
@@ -1723,14 +1679,14 @@ test("platform MCP read tool routes runtime revision view through platform model
   assert.equal(calls.at(-1).query.id, "notes.sidebar");
 });
 
-test("platform MCP read tool routes proposal, branch, push, ship, change-set, candidate snapshot, telemetry, defects, bridge, semantics, and governance views through platform model handlers", async () => {
+test("platform MCP read tool routes proposal, branch, push, ship, change-set, candidate snapshot, telemetry, defects, artifacts, sessions, bridge, semantics, and governance views through platform model handlers", async () => {
   const calls = [];
   const callHandler = async request => {
     calls.push(request);
     return { status: 200, body: { ok: true, handler: request.handler, view: request.query?.view ?? null, id: request.query?.id ?? null } };
   };
 
-  for (const view of ["proposals", "branches", "pushes", "ships", "changeSets", "candidateSnapshots", "telemetry", "defects", "bridges", "semantics", "governance"]) {
+  for (const view of ["proposals", "branches", "pushes", "ships", "changeSets", "candidateSnapshots", "telemetry", "defects", "artifacts", "sessions", "bridges", "semantics", "governance"]) {
     const result = await executeMcpTool("platform.read", {
       args: { view, id: "branch.demo" },
       callHandler
@@ -2317,6 +2273,99 @@ test("implemented platform MCP tools stay in parity with direct platform handler
   });
   assert.equal(mcpPushView.isError, false);
   assert.deepEqual(normalizePlatformParity(mcpPushView.structuredContent), normalizePlatformParity(directPushView.body));
+
+  for (const harness of [direct, viaMcp]) {
+    harness.world.observe({
+      process: "platform.authority.decision",
+      actor: "aaron",
+      claims: [],
+      body: {
+        action: "platform.model.read",
+        kind: "read",
+        handlerId: "platform.model.read",
+        routeId: "route:GET /api/platform-model",
+        requestPath: "/api/platform-model?view=sessions",
+        view: "sessions",
+        targetObjectId: "plugin.platform",
+        sessionId: "session.parity",
+        policyId: "authorityPolicy:platform.read.sensitive",
+        requiredAuthority: "platform.read.sensitive",
+        decision: "allow",
+        authenticatedActor: "aaron",
+        effectiveActor: "aaron",
+        authorityMode: "direct",
+        evaluatedAt: "2026-06-18T00:00:00.000Z"
+      }
+    });
+    harness.world.observe({
+      process: "backend.readPlatformModel",
+      actor: "backendHost",
+      claims: [],
+      body: {
+        sessionId: "session.parity",
+        handlerId: "platform.model.read",
+        routeId: "route:GET /api/platform-model",
+        requestPath: "/api/platform-model?view=sessions",
+        view: "sessions",
+        authenticatedActor: "aaron",
+        effectiveActor: "aaron",
+        authorityMode: "direct",
+        authorityDecisionId: "authorityDecision:platform.authority.decision",
+        runtimeProfile: "full",
+        branchId: branchBody.id,
+        startedAt: "2026-06-18T00:00:01.000Z",
+        finishedAt: "2026-06-18T00:00:02.000Z",
+        durationMs: 9
+      }
+    });
+  }
+
+  const directSessionsView = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "sessions", id: "session.parity" }
+  });
+  const mcpSessionsView = await executeMcpTool("platform.read", {
+    args: { view: "sessions", id: "session.parity" },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpSessionsView.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpSessionsView.structuredContent), normalizePlatformParity(directSessionsView.body));
+
+  for (const harness of [direct, viaMcp]) {
+    harness.world.observe({
+      process: "platform.test.run.finish",
+      actor: "aaron",
+      claims: [],
+      body: {
+        id: "testRun:artifact.parity",
+        title: "Artifact parity run",
+        gateId: "gate:plugins/platform/platform.test.js",
+        branchId: branchBody.id,
+        changeSetId: "changeset.parity.demo",
+        candidateSnapshotId: "candidateSnapshot:artifact.parity:1",
+        session: "session.parity",
+        stdout: "artifact parity stdout",
+        startedAt: "2026-06-18T00:00:03.000Z",
+        finishedAt: "2026-06-18T00:00:04.000Z",
+        status: "passed"
+      }
+    });
+  }
+
+  const directArtifactsView = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "artifacts", id: "artifact:testRun:artifact.parity:stdout" }
+  });
+  const mcpArtifactsView = await executeMcpTool("platform.read", {
+    args: { view: "artifacts", id: "artifact:testRun:artifact.parity:stdout" },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpArtifactsView.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpArtifactsView.structuredContent), normalizePlatformParity(directArtifactsView.body));
 
   const changeSetBody = {
     id: "changeset.parity.demo",

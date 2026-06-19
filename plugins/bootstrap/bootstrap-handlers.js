@@ -5,6 +5,10 @@ import {
   requestBootstrapAppBoundaryEstablish,
   resolveBootstrapAppBoundaryAuthorityScope
 } from "./bootstrap-app-boundary.js";
+import {
+  previewAwareAppContext,
+  resolvePreviewSessionRequest
+} from "../../src/runtime-preview.js";
 
 function proposalPart(value, fallback) {
   const normalized = String(value || "").trim().replace(/[^A-Za-z0-9_.:-]+/g, "-");
@@ -16,6 +20,7 @@ export function createBootstrapBundleHandlers({
   backendHost,
   runtimeProfile,
   runtimeBundleSummary,
+  runtimeContributions = null,
   readJson,
   authoringServices,
   sendGateFailure,
@@ -42,6 +47,7 @@ export function createBootstrapBundleHandlers({
     world,
     runtimeProfile,
     runtimeBundleSummary,
+    runtimeContributions,
     supportedHandlers,
     supportedHandlerMetadata,
     supportedPageHandlers,
@@ -74,8 +80,19 @@ export function createBootstrapBundleHandlers({
       sendJson(res, 200, await getBootstrapModel(appContext));
     },
 
-    "bootstrap.state.read": async ({ res, requestActor, appContext }) => {
-      sendJson(res, 200, await getBootstrapState(requestActor, appContext));
+    "bootstrap.state.read": async ({ res, requestActor, requestUrl, appContext }) => {
+      const previewRequest = resolvePreviewSessionRequest({ appContext, requestUrl });
+      if (!previewRequest.ok && previewRequest.reason === "stale") {
+        sendJson(res, 409, {
+          error: previewRequest.session?.invalidReason || "preview no longer matches the active snapshot",
+          previewSession: previewRequest.session ?? null
+        });
+        return;
+      }
+      const requestAppContext = previewRequest.ok
+        ? previewAwareAppContext(appContext, previewRequest.world)
+        : appContext;
+      sendJson(res, 200, await getBootstrapState(requestActor, requestAppContext));
     },
 
     "bootstrap.appBoundary.establish": async ({ req, res, requestActor, appContext }) => {

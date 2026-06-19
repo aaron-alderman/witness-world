@@ -1,12 +1,10 @@
 import { projectors } from "./kernel.js";
 import { defineRoute, moduleProjectors } from "./modules.js";
 import { applyDesire, createDesireDocument, createDesireNode } from "./desire/index.js";
-import { applyLegacyFrontendMigration } from "./frontend-legacy-migration.js";
 import {
   legacyFrontendBridgeConfigFromRoute,
   legacyFrontendBridgeConfigFromSurface,
-  legacySurfaceIdForRoute,
-  isLegacyFrontendBridgeSurface
+  retiredLegacyFrontendRoutesFromProject
 } from "./legacy-frontend-bridge.js";
 import { frontendProgram, widgetTree } from "./widgets.js";
 
@@ -1489,8 +1487,10 @@ export function previewLegacyFrontendUpliftFromProject(project) {
   const analyses = currentRouteSources(project).map(source => analyzeRouteSource(pseudoWorld, source));
   const pending = sortRows(analyses.flatMap(analysis => previewRowsForAnalysis(project, analysis)));
   const blocked = sortRows(analyses.flatMap(analysis => analysis.blocked ?? []));
+  const retiredRoutes = retiredLegacyFrontendRoutesFromProject(project);
   return {
-    compatibilityMode: analyses.length ? "bridge-active" : "first-class-only",
+    retirementStatus: analyses.length ? "legacy-present" : "first-class-only",
+    retiredRoutes,
     pending,
     blocked
   };
@@ -1501,8 +1501,10 @@ export function previewLegacyFrontendUplift(world) {
   const analyses = currentRouteSources(project).map(source => analyzeRouteSource(world, source));
   const pending = sortRows(analyses.flatMap(analysis => previewRowsForAnalysis(project, analysis)));
   const blocked = sortRows(analyses.flatMap(analysis => analysis.blocked ?? []));
+  const retiredRoutes = retiredLegacyFrontendRoutesFromProject(project);
   return {
-    compatibilityMode: analyses.length ? "bridge-active" : "first-class-only",
+    retirementStatus: analyses.length ? "legacy-present" : "first-class-only",
+    retiredRoutes,
     pending,
     blocked
   };
@@ -1552,12 +1554,7 @@ export function applyLegacyFrontendUplift(world, {
     };
   }
 
-  const normalized = applyLegacyFrontendMigration(world, {
-    actor: actor || backendHost
-  });
-  if (!normalized.ok) return normalized;
-
-  const actions = [...(normalized.actions ?? []).map(entry => ({ ...entry, phase: "bridge-normalize" }))];
+  const actions = [];
   const analyses = currentRouteSources(projector => {
     return world.project(projector);
   }).map(source => analyzeRouteSource(world, source));
@@ -1583,7 +1580,7 @@ export function applyLegacyFrontendUplift(world, {
   }
 
   for (const analysis of analyses) {
-    actions.push(...applyPlan(world, analysis, actor || backendHost).map(entry => ({ ...entry, phase: "native-uplift" })));
+    actions.push(...applyPlan(world, analysis, actor || backendHost));
   }
 
   const previewAfter = previewLegacyFrontendUplift(world);

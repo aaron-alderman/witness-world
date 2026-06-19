@@ -238,6 +238,128 @@ function targetLabel(targetId) {
   return value;
 }
 
+function relativeRepoPath(fromRoot, relativeOrAbsolutePath) {
+  const raw = String(relativeOrAbsolutePath || "").trim();
+  if (!raw) return null;
+  const resolved = path.isAbsolute(raw) ? raw : path.resolve(fromRoot, raw);
+  const relative = slash(path.relative(repoRoot, resolved));
+  if (!relative || relative.startsWith("..")) return slash(raw);
+  return relative;
+}
+
+function authoredGateCostEstimate({ executionClass = null, safetyClass = null } = {}) {
+  if (String(executionClass || "") === "candidate_snapshot") return "high";
+  if (String(executionClass || "") === "browser_session") return "high";
+  if (String(executionClass || "") === "child_process") return "medium";
+  return String(safetyClass || "") === "safe" ? "low" : "medium";
+}
+
+function verificationCommandForEntry(entry = {}) {
+  const explicit = normalizeGateCommand(entry?.input?.command || "");
+  if (explicit) return explicit;
+  if (String(entry?.providerId || "") === "verification.javascriptModule") {
+    const modulePath = String(entry?.input?.module || "").trim();
+    return modulePath ? `verification.javascriptModule ${modulePath}` : "verification.javascriptModule";
+  }
+  return "";
+}
+
+export function buildAuthoredVerificationGates({
+  verificationPolicy = null,
+  appRoot = repoRoot,
+  latestResultsByGate = Object.create(null),
+  flakeScoresByGate = Object.create(null)
+} = {}) {
+  const rows = [];
+  for (const entry of verificationPolicy?.verifierEntries ?? []) {
+    const providerId = String(entry?.providerId || "");
+    const gateId = String(entry?.gateId || "");
+    if (!gateId || !providerId) continue;
+    const moduleDependency = providerId === "verification.javascriptModule" && entry?.input?.module
+      ? relativeRepoPath(appRoot, entry.input.module)
+      : null;
+    const sourceDependencies = unique([
+      "app.wtoml",
+      ...((entry?.sourceDependencies ?? []).map(dependency => relativeRepoPath(appRoot, dependency)).filter(Boolean)),
+      moduleDependency
+    ].filter(Boolean));
+    const command = verificationCommandForEntry(entry);
+    rows.push({
+      id: gateId,
+      title: String(entry?.title || gateId),
+      sourcePath: "app.wtoml",
+      command,
+      runner: providerId === "verification.command"
+        ? gateRunnerForPath(command)
+        : "verification-provider",
+      environment: String(entry?.executionClass || "") === "browser_session"
+        ? "local-browser"
+        : "local-node",
+      timeoutMs: typeof entry?.timeoutMs === "number" ? entry.timeoutMs : 120000,
+      protectedObjects: unique(entry?.targetIds ?? []),
+      protectedObjectLabels: unique(entry?.targetIds ?? []).map(targetLabel),
+      sourceDependencies,
+      lastResult: latestResultsByGate[gateId]
+        ? {
+            runId: latestResultsByGate[gateId].runId,
+            status: latestResultsByGate[gateId].status,
+            exitCode: latestResultsByGate[gateId].exitCode,
+            durationMs: latestResultsByGate[gateId].durationMs,
+            producedAt: latestResultsByGate[gateId].producedAt ?? null
+          }
+        : null,
+      flakeScore: typeof flakeScoresByGate[gateId] === "number" ? flakeScoresByGate[gateId] : null,
+      costEstimate: authoredGateCostEstimate(entry),
+      selectedByBranches: [],
+      selectedByChangeSets: [],
+      providerId,
+      safetyClass: entry?.safetyClass ? String(entry.safetyClass) : null,
+      executionClass: entry?.executionClass ? String(entry.executionClass) : null,
+      invoke: entry?.invoke !== false,
+      authored: true,
+      verificationInput: entry?.input && typeof entry.input === "object" ? structuredClone(entry.input) : {}
+    });
+  }
+  return sortRows(rows, ["id"]);
+}
+
+export function resolveEffectivePlatformTestGates({
+  projectedTestGates = [],
+  verificationPolicy = null,
+  appRoot = repoRoot,
+  latestResultsByGate = Object.create(null),
+  flakeScoresByGate = Object.create(null)
+} = {}) {
+  const authored = buildAuthoredVerificationGates({
+    verificationPolicy,
+    appRoot,
+    latestResultsByGate,
+    flakeScoresByGate
+  });
+  const rows = new Map();
+  for (const row of projectedTestGates ?? []) {
+    if (!row?.id) continue;
+    rows.set(String(row.id), {
+      ...row,
+      providerId: row.providerId ? String(row.providerId) : (row.command ? "verification.command" : null),
+      safetyClass: row.safetyClass ? String(row.safetyClass) : null,
+      executionClass: row.executionClass ? String(row.executionClass) : null,
+      invoke: row.invoke !== false,
+      authored: row.authored === true,
+      verificationInput: row.verificationInput && typeof row.verificationInput === "object"
+        ? structuredClone(row.verificationInput)
+        : {}
+    });
+  }
+  for (const row of authored) rows.set(String(row.id), row);
+  return sortRows([...rows.values()].map(row => ({
+    ...row,
+    protectedObjects: unique(row.protectedObjects ?? []),
+    protectedObjectLabels: unique(row.protectedObjectLabels ?? []),
+    sourceDependencies: unique(row.sourceDependencies ?? [])
+  })), ["id"]);
+}
+
 export function discoverProjectedTestGates(latestResultsByGate = Object.create(null), flakeScoresByGate = Object.create(null)) {
   const rows = new Map();
   const packageJson = readJsonSync("package.json", { scripts: {} });

@@ -16,6 +16,7 @@ import { cloneRuntimeOwnerChain, extractRuntimeOwnershipFields } from "./runtime
 export const DEFAULT_RUNTIME_PLUGIN_DIRECTORY = "plugins";
 export const DEFAULT_PLUGIN_EXECUTION_REASON = "metadata-only plugin package; provider loading is not enabled";
 export const BUNDLE_BRIDGE_PLUGIN_EXECUTION_REASON = "plugin package activates pre-registered internal runtime bundles";
+export const RUNTIME_PLUGIN_RECONCILE_TARGET_PROCESS = "runtimePlugin.reconcile";
 
 const TOP_LEVEL_FIELDS = new Set([
   "id",
@@ -519,6 +520,7 @@ function expandPluginRequest({
 
 function expandedRequestSourceMap({
   profilePluginIds = [],
+  startupPluginIds = [],
   authoredPluginIds = [],
   configuredPluginIds = [],
   packageById = new Map()
@@ -527,6 +529,9 @@ function expandedRequestSourceMap({
   const errors = [];
   for (const pluginId of uniqueStrings(profilePluginIds)) {
     expandPluginRequest({ pluginId, source: "profile", packageById, requestedSourcesById: byId, errors });
+  }
+  for (const pluginId of uniqueStrings(startupPluginIds)) {
+    expandPluginRequest({ pluginId, source: "startup", packageById, requestedSourcesById: byId, errors });
   }
   for (const pluginId of uniqueStrings(authoredPluginIds)) {
     expandPluginRequest({ pluginId, source: "authored", packageById, requestedSourcesById: byId, errors });
@@ -1020,6 +1025,15 @@ function activationFailureReasons(pluginPackage, {
   return uniqueStrings(reasons);
 }
 
+function runtimePluginBaseEligibility(pluginPackage) {
+  if (pluginPackage?.activation?.eligible != null) return pluginPackage.activation.eligible === true;
+  return Boolean(
+    (pluginPackage?.validation?.ok ?? true)
+    && (pluginPackage?.execution?.executable ?? false)
+    && (pluginPackage?.compatibility?.compatible ?? true)
+  );
+}
+
 function missingPluginPackage(pluginId) {
   return {
     id: pluginId,
@@ -1044,15 +1058,18 @@ function missingPluginPackage(pluginId) {
 export function resolveRuntimePluginSelection({
   profileName = DEFAULT_RUNTIME_PROFILE,
   configuredPluginIds = [],
+  startupPluginIds = [],
   authoredPluginIds = [],
   discoveredPlugins = []
 } = {}) {
   const operatorPluginIds = uniqueStrings(configuredPluginIds);
+  const startup = uniqueStrings(startupPluginIds);
   const authored = uniqueStrings(authoredPluginIds);
   const profilePluginIds = runtimeProfilePluginIds(profileName);
   const packageById = new Map(discoveredPlugins.map(pluginPackage => [pluginPackage.id, pluginPackage]));
   const expandedRequests = expandedRequestSourceMap({
     profilePluginIds,
+    startupPluginIds: startup,
     authoredPluginIds: authored,
     configuredPluginIds: operatorPluginIds,
     packageById
@@ -1082,7 +1099,9 @@ export function resolveRuntimePluginSelection({
       ? (pluginPackage.manifest?.dependsOnPlugins ?? []).filter(pluginId => !effectiveSet.has(pluginId))
       : [];
     const dependencyExpansionReasons = expansionErrorsById.get(pluginPackage.id) ?? [];
-    const eligible = pluginPackage.activation.eligible && missingRequestedDependencies.length === 0 && dependencyExpansionReasons.length === 0;
+    const eligible = runtimePluginBaseEligibility(pluginPackage)
+      && missingRequestedDependencies.length === 0
+      && dependencyExpansionReasons.length === 0;
     const active = requested && eligible;
     const reasons = requested && !active
       ? uniqueStrings([
@@ -1118,6 +1137,7 @@ export function resolveRuntimePluginSelection({
     profileName,
     profilePluginIds,
     configuredPluginIds: operatorPluginIds,
+    startupPluginIds: startup,
     authoredPluginIds: authored,
     operatorPluginIds,
     effectivePluginIds,
@@ -1262,6 +1282,7 @@ export async function readRuntimePluginCatalog({
   pluginRoot,
   runtimeProfile = DEFAULT_RUNTIME_PROFILE,
   configuredPluginIds = [],
+  startupPluginIds = [],
   authoredPluginIds = [],
   availableProfileIds = availableRuntimeProfiles(),
   fsModule = fs
@@ -1275,14 +1296,19 @@ export async function readRuntimePluginCatalog({
   const selection = resolveRuntimePluginSelection({
     profileName: runtimeProfile,
     configuredPluginIds,
+    startupPluginIds,
     authoredPluginIds,
     discoveredPlugins: discovered.packages
   });
   const packages = selection.packages;
   const trustStateCounts = Object.create(null);
+  const requestedSourceCounts = Object.create(null);
   for (const row of packages) {
     const state = row.trust?.state ?? "unknown";
     trustStateCounts[state] = (trustStateCounts[state] ?? 0) + 1;
+    for (const source of row.activation?.requestedSources ?? []) {
+      requestedSourceCounts[source] = (requestedSourceCounts[source] ?? 0) + 1;
+    }
   }
   return {
     ...discovered,
@@ -1291,6 +1317,7 @@ export async function readRuntimePluginCatalog({
     invalidPackages: packages.filter(row => !row.validation.ok),
     profilePluginIds: selection.profilePluginIds,
     configuredPluginIds: selection.configuredPluginIds,
+    startupPluginIds: selection.startupPluginIds,
     authoredPluginIds: selection.authoredPluginIds,
     operatorPluginIds: selection.operatorPluginIds,
     effectivePluginIds: selection.effectivePluginIds,
@@ -1304,6 +1331,7 @@ export async function readRuntimePluginCatalog({
       eligibleCount: packages.filter(row => row.activation.eligible).length,
       activeCount: packages.filter(row => row.activation.active).length,
       rejectedCount: selection.rejectedPlugins.length,
+      requestedSourceCounts,
       trustStateCounts
     }
   };
@@ -1367,6 +1395,13 @@ function reviewStatusBadges(row) {
   const preview = row.installed ? row.removePreview : row.installPreview;
   if (preview?.available && preview.delta?.effectiveNoOp) badges.push("no-op");
   return badges;
+}
+
+function runtimePluginReconcileActionId(kind, targetPluginId = null) {
+  if (kind === "install" && targetPluginId) return `install-missing-dependency:${targetPluginId}`;
+  if (kind === "remove" && targetPluginId) return "cleanup-missing-intent";
+  if (kind === "remove") return "remove-broken-install";
+  return `${kind}:${targetPluginId || "plugin"}`;
 }
 
 function buildRuntimePluginReviewRows({
@@ -1498,29 +1533,87 @@ function buildRuntimePluginReviewRows({
               : []
           })
         : null;
+      const cleanupPreview = !installed && requested
+        ? composePreview({
+            pluginPackage,
+            action: "remove",
+            nextAuthoredPluginIds: requestedAuthoredIds.filter(id => id !== pluginId)
+          })
+        : null;
       const reconcileActions = [];
       const uniqueBlockingReasons = uniqueStrings(blockingReasons);
-      if (installed && uniqueBlockingReasons.length > 0) {
+      if (requested && pluginPackage.missingPackage) {
         reconcileActions.push({
-          kind: "remove",
-          label: "Remove broken install",
-          severity: "high",
-          description: `This authored plugin install is broken: ${uniqueBlockingReasons.join("; ")}.`
-        });
-      } else if (!installed && requested && pluginPackage.missingPackage) {
-        reconcileActions.push({
+          id: runtimePluginReconcileActionId("remove", pluginId),
           kind: "remove",
           label: "Cleanup missing plugin intent",
           severity: "medium",
-          description: "This plugin is requested in the world model but is missing from the local plugin directory."
+          description: "This plugin is requested in the world model but is missing from the local plugin directory.",
+          targetProcess: RUNTIME_PLUGIN_RECONCILE_TARGET_PROCESS,
+          targetPluginId: pluginId,
+          available: true,
+          blockedReasons: [],
+          preview: cleanupPreview ?? removePreview
+        });
+      } else if (installed && uniqueBlockingReasons.length > 0) {
+        reconcileActions.push({
+          id: runtimePluginReconcileActionId("remove"),
+          kind: "remove",
+          label: "Remove broken install",
+          severity: "high",
+          description: `This authored plugin install is broken: ${uniqueBlockingReasons.join("; ")}.`,
+          targetProcess: RUNTIME_PLUGIN_RECONCILE_TARGET_PROCESS,
+          targetPluginId: pluginId,
+          available: true,
+          blockedReasons: [],
+          preview: removePreview
         });
       }
       for (const dependencyId of missingDependencies) {
+        const dependencyPackage = packageById.get(dependencyId) ?? syntheticMissingPluginPackage({
+          pluginId: dependencyId,
+          activeProfile: runtimeProfile,
+          requestedSources: []
+        });
+        const dependencyBlockingReasons = [];
+        if (!dependencyPackage.validation?.ok) dependencyBlockingReasons.push(...(dependencyPackage.validation?.errors ?? []));
+        if (!dependencyPackage.execution?.executable) dependencyBlockingReasons.push("plugin package is metadata-only");
+        if (!dependencyPackage.compatibility?.compatible) {
+          dependencyBlockingReasons.push(...((dependencyPackage.compatibility?.reasons ?? []).map(reason =>
+            reason === "runtime-profile-incompatible"
+              ? "runtime profile incompatible"
+              : reason
+          )));
+        }
+        const dependencyPreview = dependencyBlockingReasons.length
+          ? {
+              action: "install",
+              available: false,
+              blockedReasons: uniqueStrings(dependencyBlockingReasons),
+              warnings: [],
+              nextAuthoredPluginIds: uniqueStrings([...requestedAuthoredIds, dependencyId]),
+              nextActivePluginIds: [],
+              nextRejectedPlugins: [],
+              nextComposition: currentComposition,
+              delta: compositionDelta(currentComposition, currentComposition),
+              note: "install preview unavailable"
+            }
+          : composePreview({
+              pluginPackage: dependencyPackage,
+              action: "install",
+              nextAuthoredPluginIds: [...requestedAuthoredIds, dependencyId]
+            });
         reconcileActions.push({
+          id: runtimePluginReconcileActionId("install", dependencyId),
           kind: "install",
           label: `Install missing dependency: ${dependencyId}`,
           severity: "medium",
-          targetPluginId: dependencyId
+          description: `Install the missing authored dependency ${dependencyId} for ${pluginId}.`,
+          targetProcess: RUNTIME_PLUGIN_RECONCILE_TARGET_PROCESS,
+          targetPluginId: dependencyId,
+          available: dependencyPreview.available === true,
+          blockedReasons: [...(dependencyPreview.blockedReasons ?? [])],
+          preview: dependencyPreview
         });
       }
 
@@ -1652,17 +1745,34 @@ export async function readRuntimePluginReviews({
     availableProfileIds,
     fsModule
   });
-  const rows = buildRuntimePluginReviewRows({
+  return buildRuntimePluginReview({
     runtimeProfile,
+    serverRunnerId,
     authoredPluginIds,
-    pluginCatalog: catalog,
+    pluginId,
+    pluginCatalog: catalog
+  });
+}
+
+export function buildRuntimePluginReview({
+  runtimeProfile = DEFAULT_RUNTIME_PROFILE,
+  serverRunnerId = null,
+  authoredPluginIds = [],
+  pluginId = null,
+  pluginCatalog = null
+} = {}) {
+  const activeProfile = pluginCatalog?.activeProfile ?? runtimeProfile;
+  const rows = buildRuntimePluginReviewRows({
+    runtimeProfile: activeProfile,
+    authoredPluginIds,
+    pluginCatalog,
     selectedPluginId: pluginId
   });
   return {
     serverRunner: serverRunnerId ?? null,
-    activeProfile: runtimeProfile,
+    activeProfile,
     authoredPluginIds: uniqueStrings(authoredPluginIds),
-    currentComposition: rows[0]?.currentComposition ?? compositionSnapshot(runtimeProfile, []),
+    currentComposition: rows[0]?.currentComposition ?? compositionSnapshot(activeProfile, []),
     packages: rows,
     note: "Bootstrap/runtime plugin review shows authored runner intent only. CLI and environment plugin overlays are excluded from this view."
   };

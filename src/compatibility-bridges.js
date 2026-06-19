@@ -126,36 +126,6 @@ const COMPATIBILITY_BRIDGE_CATALOG = Object.freeze([
       "src/desire/apply.js"
     ])
   }),
-  Object.freeze({
-    id: "compatibilityBridge:legacyFrontend.pageHomeShim",
-    title: "Legacy page.home Compatibility Shim",
-    bridgeClass: "legacy-frontend-host",
-    owner: "frontend.migrateLegacy",
-    activationMode: "observed",
-    policyStatus: "migration-required",
-    migrationTarget: "Migrate legacy page.home routes onto page.surface plus compat.legacy-widget-program surfaces.",
-    notes: "page.home remains available only as a compatibility shim over the explicit legacy widget-program bridge.",
-    surfaces: Object.freeze([
-      "src/runtime-core-handlers.js",
-      "src/frontend-legacy-migration.js"
-    ])
-  }),
-  Object.freeze({
-    id: "compatibilityBridge:legacyFrontend.pageSurfaceCompatibility",
-    title: "Legacy Widget-Program page.surface Compatibility Bridge",
-    bridgeClass: "legacy-frontend-host",
-    owner: "frontend.migrateLegacy",
-    activationMode: "observed",
-    policyStatus: "migration-required",
-    migrationTarget: "Replace compat.legacy-widget-program surfaces with first-class surface/process/projection semantics.",
-    notes: "Migrated legacy widget-program pages still run through an explicit page.surface compatibility bridge.",
-    surfaces: Object.freeze([
-      "src/runtime-core-handlers.js",
-      "src/frontend-legacy-migration.js",
-      "src/legacy-frontend-bridge.js",
-      "plugins/authoring-core/runtime.js"
-    ])
-  })
 ]);
 
 const BRIDGE_BY_ID = new Map(COMPATIBILITY_BRIDGE_CATALOG.map(bridge => [bridge.id, bridge]));

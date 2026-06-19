@@ -125,6 +125,8 @@ export function bindBootstrapClientRuntimeAdapters({
     target: resolvedTarget,
     byId,
     request,
+    postJson,
+    refresh,
     requestState: runtimePluginReviewRequestState,
     getReview,
     setReview,

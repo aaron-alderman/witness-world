@@ -613,13 +613,13 @@ test("bootstrap shell implementation is plugin-owned without a src compatibility
   assert.equal(pageScriptHelperSource.includes('${renderBootstrapShellViewStateFactory()}'), true);
   assert.equal(pageMainSlotsManifestSource.includes('rootWidget = "bootstrap_context_authoring_controls_root"'), true);
   assert.equal(pageMainSlotsManifestSource.includes('rootWidget = "bootstrap_widget_authoring_controls_root"'), true);
-  assert.equal(pageMainSlotsManifestSource.includes('rootWidget = "bootstrap_frontend_program_authoring_controls_root"'), true);
+  assert.equal(pageMainSlotsManifestSource.includes('rootWidget = "bootstrap_frontend_program_authoring_controls_root"'), false);
   assert.equal(pageMainSlotsManifestSource.includes('rootWidget = "bootstrap_route_mount_authoring_controls_root"'), true);
   assert.equal(pageMainSlotsManifestSource.includes('rootWidget = "bootstrap_runner_authoring_controls_root"'), true);
   assert.equal(appAuthoringControlsSource.includes('domId = "context-form"'), true);
   assert.equal(appAuthoringControlsSource.includes('domId = "widget-form"'), true);
-  assert.equal(appAuthoringControlsSource.includes('domId = "program-form"'), true);
-  assert.equal(appAuthoringControlsSource.includes('domId = "step-form"'), true);
+  assert.equal(appAuthoringControlsSource.includes('domId = "program-form"'), false);
+  assert.equal(appAuthoringControlsSource.includes('domId = "step-form"'), false);
   assert.equal(appAuthoringControlsSource.includes('domId = "route-form"'), true);
   assert.equal(appAuthoringControlsSource.includes('domId = "serve-form"'), true);
   assert.equal(appAuthoringControlsSource.includes('domId = "runner-form"'), true);
@@ -1443,8 +1443,9 @@ test("bootstrap shell implementation is plugin-owned without a src compatibility
   assert.equal(starterControlsSource.includes('class = "surface-badge"'), true);
   assert.equal(starterControlsSource.includes('class = "surface-note surface-note-callout"'), true);
   assert.equal(starterControlsSource.includes('action = "createBootstrapTodoStarter"'), true);
-  assert.equal(starterControlsSource.includes('repeat = { forEach = { from = "bootstrapStarterPlan.requests", as = "item", serial = true } }'), true);
-  assert.equal(starterControlsSource.includes('from = "item.body"'), true);
+  assert.equal(starterControlsSource.includes('repeat = { forEach = { from = "bootstrapStarterPlan.requests", as = "item", serial = true } }'), false);
+  assert.equal(starterControlsSource.includes('from = "item.body"'), false);
+  assert.equal(starterControlsSource.includes('url = "/api/bootstrap-starters/todo"'), true);
   assert.equal(starterControlsSource.includes('eventName = "witness:host-refresh"'), false);
   assert.equal(hostRefreshHelperSource.includes("bootstrapHostRefreshAllowedSources"), true);
   assert.equal(hostRefreshContractsSource.includes('source = "bootstrap-capability-controls"'), true);

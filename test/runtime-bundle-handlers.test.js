@@ -172,16 +172,8 @@ test("authoring composition exposes program-authoring routes and proposal govern
     pluginAddedBundleIds: authoringOptions.additionalBundleIds
   });
 
-  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/frontend-programs", authoringOptions), {
-    handler: "frontendProgram.create",
-    params: {},
-    bundleId: "bundle-program-authoring"
-  });
-  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/frontend-steps", authoringOptions), {
-    handler: "frontendStep.create",
-    params: {},
-    bundleId: "bundle-program-authoring"
-  });
+  assert.equal(matchRuntimeBundleRoute("authoring", "POST", "/api/frontend-programs", authoringOptions), null);
+  assert.equal(matchRuntimeBundleRoute("authoring", "POST", "/api/frontend-steps", authoringOptions), null);
   assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/backend-programs", authoringOptions), {
     handler: "backendProgram.create",
     params: {},
@@ -218,16 +210,6 @@ test("authoring composition exposes program-authoring routes and proposal govern
     bundleId: "bundle-authoring-core"
   });
 
-  assert.equal(diagnostics.proposalTargetGovernance.some(row =>
-    row.targetProcess === "frontendProgram.define"
-      && row.governanceMode === "proposal-fallback"
-      && row.authorityMechanism === "bootstrap-target-authority"
-  ), true);
-  assert.equal(diagnostics.proposalTargetGovernance.some(row =>
-    row.targetProcess === "frontendStep.define"
-      && row.governanceMode === "proposal-fallback"
-      && row.authorityMechanism === "bootstrap-target-authority"
-  ), true);
   assert.equal(diagnostics.proposalTargetGovernance.some(row =>
     row.targetProcess === "backendProgram.define"
       && row.governanceMode === "proposal-fallback"
@@ -305,7 +287,7 @@ test("runtime diagnostics summarize seed profile and loaded composition separate
   assert.equal(diagnostics.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
   assert.equal(diagnostics.routes.find(route => route.handler === "events.stream")?.ownerClass, "runtime-plugin");
   assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "runtimePlugin.install" && row.governanceMode === "proposal-fallback"), true);
-  assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "changeSet.apply" && row.governanceMode === "operator-only"), true);
+  assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "changeSet.apply" && row.governanceMode === "direct-authority"), true);
   assert.equal(diagnostics.shells.shells.find(shell => shell.id === "browser")?.ownerClass, "shell");
 });
 

@@ -2,6 +2,7 @@ import { moduleProjectors } from "../../src/modules.js";
 import { platformChangeSetInsights } from "./branch-insights.js";
 import { defaultGitBranchName } from "./git-push.js";
 import { PLATFORM_RELEASE_CHANNEL_ROWS } from "./git-ship.js";
+import { PLATFORM_AUTHORITY_POLICY_ROWS } from "./platform-security.js";
 import {
   buildFlakeScoreByGate,
   buildProjectedCoverageEdges,
@@ -126,6 +127,12 @@ function average(values = []) {
   return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
 }
 
+function normalizePreview(content = "", limit = 400) {
+  const text = String(content || "");
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}\n...`;
+}
+
 function latestPushByBranch(pushRows = []) {
   const byBranch = Object.create(null);
   for (const row of pushRows) {
@@ -146,6 +153,303 @@ function latestShipByBranch(shipRows = []) {
     if (!previous || compareActivityRows(previous, row) < 0) byBranch[branchId] = row;
   }
   return byBranch;
+}
+
+function sessionIdForRow(row) {
+  const body = row?.body ?? {};
+  const value = body.sessionId ?? body.session ?? row?.sessionId ?? row?.session ?? null;
+  return value ? String(value) : null;
+}
+
+function sessionTargetIdsFromRow(row) {
+  const body = row?.body ?? {};
+  return uniqueStrings([
+    body.targetObjectId,
+    body.branchId ? `branch:${body.branchId}` : null,
+    body.changeSetId ? `changeSet:${body.changeSetId}` : null,
+    body.candidateSnapshotId,
+    body.pushRecordId,
+    body.shipRecordId,
+    body.gateId,
+    body.proposalId ? `proposal:${body.proposalId}` : null,
+    body.id && String(row?.process || "") === "platform.branch.push" ? body.id : null,
+    body.id && String(row?.process || "") === "platform.branch.ship" ? body.id : null,
+    body.id && String(row?.process || "") === "platform.test.run.finish" ? body.id : null
+  ]);
+}
+
+const PLATFORM_SESSION_EXECUTION_PROCESSES = new Set([
+  "backend.readPlatformModel",
+  "backend.readPlatformGaps",
+  "frontend.renderPlatformPageFragment",
+  "frontend.renderPlatformShellPage",
+  "platform.branch.create",
+  "platform.branch.push",
+  "platform.branch.ship",
+  "platform.changeSet.create",
+  "platform.changeSet.edit.upsert",
+  "platform.changeSet.edit.remove",
+  "platform.changeSet.validate",
+  "platform.changeSet.apply",
+  "platform.changeSet.reject",
+  "platform.changeSet.abandon",
+  "platform.test.run.finish"
+]);
+
+function executionStatusForRow(row) {
+  const process = String(row?.process || "");
+  const body = row?.body ?? {};
+  if (body.status) return String(body.status);
+  if (process === "backend.readPlatformModel" || process === "backend.readPlatformGaps" || process === "frontend.renderPlatformPageFragment" || process === "frontend.renderPlatformShellPage") {
+    return "observed";
+  }
+  if (process === "platform.changeSet.edit.remove") return "removed";
+  if (process === "platform.changeSet.edit.upsert") return "staged";
+  return "completed";
+}
+
+function executionKindForRow(row) {
+  const process = String(row?.process || "");
+  if (process.startsWith("backend.readPlatform") || process.startsWith("frontend.renderPlatform")) return "read";
+  if (process.startsWith("platform.test.run")) return "verification";
+  if (process === "platform.branch.push" || process === "platform.branch.ship" || process === "platform.changeSet.apply") return "execute";
+  if (process.startsWith("platform.changeSet.validate")) return "validation";
+  return "mutation";
+}
+
+function executionTitleForRow(row) {
+  const process = String(row?.process || "");
+  const body = row?.body ?? {};
+  return String(
+    body.title
+    || body.view
+    || body.handlerId
+    || body.routeId
+    || body.id
+    || process
+  );
+}
+
+function executionRows(witnesses = []) {
+  const rows = [];
+  for (const row of witnesses) {
+    const process = String(row?.process || "");
+    if (!PLATFORM_SESSION_EXECUTION_PROCESSES.has(process)) continue;
+    const body = row?.body ?? {};
+    const sessionId = sessionIdForRow(row);
+    if (!sessionId) continue;
+    const executionId = row?.id ? `execution:${String(row.id)}` : `execution:${slugify(`${process}:${sessionId}:${rows.length}`)}`;
+    const pushRecordId = process === "platform.branch.push" && body.id ? String(body.id) : null;
+    const shipRecordId = process === "platform.branch.ship" && body.id ? String(body.id) : null;
+    const testRunId = process === "platform.test.run.finish" && body.id ? String(body.id) : null;
+    const candidateSnapshotId = body.candidateSnapshotId
+      ? String(body.candidateSnapshotId)
+      : (process === "platform.changeSet.validate" && body.candidateSnapshot?.id ? String(body.candidateSnapshot.id) : null);
+    rows.push({
+      id: executionId,
+      sessionId,
+      sourceId: row?.id ? String(row.id) : null,
+      sourceProcess: process,
+      title: executionTitleForRow(row),
+      executionKind: executionKindForRow(row),
+      status: executionStatusForRow(row),
+      actor: body.actor ? String(body.actor) : (row?.actor ? String(row.actor) : null),
+      authenticatedActor: body.authenticatedActor ? String(body.authenticatedActor) : null,
+      effectiveActor: body.effectiveActor ? String(body.effectiveActor) : null,
+      authorityMode: body.authorityMode ? String(body.authorityMode) : null,
+      assumptionGrantId: body.assumptionGrantId ? String(body.assumptionGrantId) : null,
+      authorityDecisionId: body.authorityDecisionId ? String(body.authorityDecisionId) : null,
+      authorityPolicyId: body.authorityPolicyId ? String(body.authorityPolicyId) : null,
+      routeId: body.routeId ? String(body.routeId) : null,
+      handlerId: body.handlerId ? String(body.handlerId) : null,
+      requestPath: body.requestPath ? String(body.requestPath) : null,
+      view: body.view ? String(body.view) : null,
+      branchId: body.branchId ? String(body.branchId) : null,
+      changeSetId: body.changeSetId ? String(body.changeSetId) : null,
+      candidateSnapshotId,
+      testRunId,
+      gateId: body.gateId ? String(body.gateId) : null,
+      pushRecordId,
+      shipRecordId,
+      targetObjectIds: sessionTargetIdsFromRow(row),
+      runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
+      startedAt: body.startedAt ?? row?.time ?? null,
+      finishedAt: body.finishedAt ?? body.validatedAt ?? body.appliedAt ?? body.updatedAt ?? body.createdAt ?? body.evaluatedAt ?? row?.time ?? null,
+      durationMs: numberOrNull(body.durationMs),
+      observedAt: body.finishedAt ?? body.validatedAt ?? body.appliedAt ?? body.updatedAt ?? body.createdAt ?? body.evaluatedAt ?? row?.time ?? null
+    });
+  }
+  return sortRows(rows, ["sessionId", "observedAt", "id"]);
+}
+
+function sessionRows(witnesses = []) {
+  const decisions = authorityDecisionRows(witnesses);
+  const executions = executionRows(witnesses);
+  const rows = new Map();
+  const ensure = sessionId => {
+    const existing = rows.get(sessionId);
+    if (existing) return existing;
+    const created = {
+      id: sessionId,
+      title: sessionId,
+      status: "active",
+      authenticatedActor: null,
+      effectiveActor: null,
+      authorityMode: null,
+      assumptionGrantId: null,
+      runtimeProfiles: [],
+      routeIds: [],
+      handlerIds: [],
+      views: [],
+      targetObjectIds: [],
+      branchIds: [],
+      changeSetIds: [],
+      candidateSnapshotIds: [],
+      pushRecordIds: [],
+      shipRecordIds: [],
+      testRunIds: [],
+      gateIds: [],
+      executionIds: [],
+      authorityDecisionIds: [],
+      startedAt: null,
+      lastActivityAt: null
+    };
+    rows.set(sessionId, created);
+    return created;
+  };
+  const mergeActivity = (session, at) => {
+    const value = String(at || "");
+    if (!value) return;
+    if (!session.startedAt || value < session.startedAt) session.startedAt = value;
+    if (!session.lastActivityAt || value > session.lastActivityAt) session.lastActivityAt = value;
+  };
+  for (const decision of decisions) {
+    const sessionId = decision.sessionId ? String(decision.sessionId) : null;
+    if (!sessionId) continue;
+    const session = ensure(sessionId);
+    session.authenticatedActor ||= decision.authenticatedActor ?? null;
+    session.effectiveActor ||= decision.effectiveActor ?? null;
+    session.authorityMode ||= decision.authorityMode ?? null;
+    session.assumptionGrantId ||= decision.assumptionGrantId ?? null;
+    if (decision.routeId) session.routeIds.push(String(decision.routeId));
+    if (decision.handlerId) session.handlerIds.push(String(decision.handlerId));
+    if (decision.view) session.views.push(String(decision.view));
+    if (decision.targetObjectId) session.targetObjectIds.push(String(decision.targetObjectId));
+    session.authorityDecisionIds.push(String(decision.id));
+    mergeActivity(session, decision.evaluatedAt);
+  }
+  for (const execution of executions) {
+    const session = ensure(String(execution.sessionId));
+    session.authenticatedActor ||= execution.authenticatedActor ?? null;
+    session.effectiveActor ||= execution.effectiveActor ?? execution.actor ?? null;
+    session.authorityMode ||= execution.authorityMode ?? null;
+    session.assumptionGrantId ||= execution.assumptionGrantId ?? null;
+    if (execution.runtimeProfile) session.runtimeProfiles.push(String(execution.runtimeProfile));
+    if (execution.routeId) session.routeIds.push(String(execution.routeId));
+    if (execution.handlerId) session.handlerIds.push(String(execution.handlerId));
+    if (execution.view) session.views.push(String(execution.view));
+    if (execution.branchId) session.branchIds.push(String(execution.branchId));
+    if (execution.changeSetId) session.changeSetIds.push(String(execution.changeSetId));
+    if (execution.candidateSnapshotId) session.candidateSnapshotIds.push(String(execution.candidateSnapshotId));
+    if (execution.pushRecordId) session.pushRecordIds.push(String(execution.pushRecordId));
+    if (execution.shipRecordId) session.shipRecordIds.push(String(execution.shipRecordId));
+    if (execution.testRunId) session.testRunIds.push(String(execution.testRunId));
+    if (execution.gateId) session.gateIds.push(String(execution.gateId));
+    session.executionIds.push(String(execution.id));
+    for (const targetId of execution.targetObjectIds ?? []) session.targetObjectIds.push(String(targetId));
+    mergeActivity(session, execution.startedAt);
+    mergeActivity(session, execution.finishedAt);
+  }
+  return sortRows([...rows.values()].map(row => ({
+    ...row,
+    runtimeProfiles: uniqueStrings(row.runtimeProfiles),
+    routeIds: uniqueStrings(row.routeIds),
+    handlerIds: uniqueStrings(row.handlerIds),
+    views: uniqueStrings(row.views),
+    targetObjectIds: uniqueStrings(row.targetObjectIds),
+    branchIds: uniqueStrings(row.branchIds),
+    changeSetIds: uniqueStrings(row.changeSetIds),
+    candidateSnapshotIds: uniqueStrings(row.candidateSnapshotIds),
+    pushRecordIds: uniqueStrings(row.pushRecordIds),
+    shipRecordIds: uniqueStrings(row.shipRecordIds),
+    testRunIds: uniqueStrings(row.testRunIds),
+    gateIds: uniqueStrings(row.gateIds),
+    executionIds: uniqueStrings(row.executionIds),
+    authorityDecisionIds: uniqueStrings(row.authorityDecisionIds),
+    executionCount: uniqueStrings(row.executionIds).length,
+    authorityDecisionCount: uniqueStrings(row.authorityDecisionIds).length
+  })), ["lastActivityAt", "id"]);
+}
+
+function sessionTagRows(witnesses = []) {
+  const sessions = sessionRows(witnesses);
+  const executions = executionRows(witnesses);
+  const executionIdsBySession = Object.create(null);
+  for (const execution of executions) pushByKey(executionIdsBySession, execution.sessionId, execution.id);
+  const rows = new Map();
+  const pushTag = (sessionId, tagKind, value) => {
+    const normalizedValue = String(value || "");
+    if (!sessionId || !tagKind || !normalizedValue) return;
+    const id = `sessionTag:${slugify(sessionId)}:${slugify(tagKind)}:${slugify(normalizedValue)}`;
+    const existing = rows.get(id);
+    if (existing) return;
+    rows.set(id, {
+      id,
+      sessionId,
+      tagKind,
+      value: normalizedValue,
+      title: normalizedValue,
+      executionIds: uniqueStrings(executionIdsBySession[sessionId] ?? [])
+    });
+  };
+  for (const session of sessions) {
+    pushTag(session.id, "actor", session.effectiveActor || session.authenticatedActor);
+    pushTag(session.id, "authorityMode", session.authorityMode);
+    for (const value of session.runtimeProfiles ?? []) pushTag(session.id, "runtimeProfile", value);
+    for (const value of session.views ?? []) pushTag(session.id, "view", value);
+    for (const value of session.routeIds ?? []) pushTag(session.id, "route", value);
+    for (const value of session.branchIds ?? []) pushTag(session.id, "branch", value);
+    for (const value of session.changeSetIds ?? []) pushTag(session.id, "changeSet", value);
+    for (const value of session.gateIds ?? []) pushTag(session.id, "gate", value);
+    for (const value of session.targetObjectIds ?? []) pushTag(session.id, "target", value);
+  }
+  return sortRows([...rows.values()], ["sessionId", "tagKind", "value"]);
+}
+
+function executionArtifactRows(witnesses = []) {
+  const executions = executionRows(witnesses);
+  const artifactsByRun = Object.create(null);
+  for (const artifact of artifactRows(witnesses)) {
+    const runId = String(artifact?.testRunId || artifact?.producerId || "");
+    if (!runId) continue;
+    pushByKey(artifactsByRun, runId, artifact);
+  }
+  const rows = [];
+  const pushArtifact = (execution, artifactKind, artifactId, title = null) => {
+    if (!artifactId) return;
+    rows.push({
+      id: `executionArtifact:${slugify(execution.id)}:${slugify(artifactKind)}:${slugify(artifactId)}`,
+      executionId: execution.id,
+      sessionId: execution.sessionId,
+      artifactKind,
+      artifactId: String(artifactId),
+      title: String(title || artifactId),
+      status: execution.status,
+      producedAt: execution.finishedAt ?? execution.observedAt ?? execution.startedAt ?? null
+    });
+  };
+  for (const execution of executions) {
+    pushArtifact(execution, "authorityDecision", execution.authorityDecisionId, execution.authorityDecisionId);
+    pushArtifact(execution, "candidateSnapshot", execution.candidateSnapshotId, execution.candidateSnapshotId);
+    pushArtifact(execution, "pushRecord", execution.pushRecordId, execution.pushRecordId);
+    pushArtifact(execution, "shipRecord", execution.shipRecordId, execution.shipRecordId);
+    pushArtifact(execution, "testRun", execution.testRunId, execution.testRunId);
+    for (const artifact of artifactsByRun[String(execution.testRunId || "")] ?? []) {
+      pushArtifact(execution, "artifact", artifact.id, artifact.title || artifact.id);
+    }
+    for (const targetObjectId of execution.targetObjectIds ?? []) pushArtifact(execution, "targetObject", targetObjectId, targetObjectId);
+  }
+  return sortRows(rows, ["sessionId", "executionId", "artifactKind", "artifactId"]);
 }
 
 export const PLATFORM_TELEMETRY_THRESHOLD_ROWS = Object.freeze([
@@ -872,6 +1176,14 @@ function testRunRows(witnesses) {
         cacheHit: body.cacheHit && typeof body.cacheHit === "object"
           ? { ...body.cacheHit }
           : null,
+        providerId: body.providerId ? String(body.providerId) : (body.verification?.providerId ? String(body.verification.providerId) : null),
+        safetyClass: body.safetyClass ? String(body.safetyClass) : (body.verification?.safetyClass ? String(body.verification.safetyClass) : null),
+        executionClass: body.executionClass ? String(body.executionClass) : (body.verification?.executionClass ? String(body.verification.executionClass) : null),
+        cleanupStatus: body.cleanupStatus ? String(body.cleanupStatus) : (body.verification?.cleanupStatus ? String(body.verification.cleanupStatus) : null),
+        cleanupSummary: body.cleanupSummary ? String(body.cleanupSummary) : (body.verification?.cleanupSummary ? String(body.verification.cleanupSummary) : null),
+        timeoutKind: body.timeoutKind ? String(body.timeoutKind) : (body.verification?.timeoutKind ? String(body.verification.timeoutKind) : null),
+        triggerKind: body.triggerKind ? String(body.triggerKind) : (body.verification?.triggerKind ? String(body.verification.triggerKind) : null),
+        workspaceMode: body.workspaceMode ? String(body.workspaceMode) : (body.verification?.workspaceMode ? String(body.verification.workspaceMode) : null),
         serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
         verification: body.verification && typeof body.verification === "object"
           ? { ...body.verification }
@@ -930,6 +1242,14 @@ function testRunRows(witnesses) {
         cacheHit: body.cacheHit && typeof body.cacheHit === "object"
           ? { ...body.cacheHit }
           : null,
+        providerId: body.providerId ? String(body.providerId) : (body.verification?.providerId ? String(body.verification.providerId) : null),
+        safetyClass: body.safetyClass ? String(body.safetyClass) : (body.verification?.safetyClass ? String(body.verification.safetyClass) : null),
+        executionClass: body.executionClass ? String(body.executionClass) : (body.verification?.executionClass ? String(body.verification.executionClass) : null),
+        cleanupStatus: body.cleanupStatus ? String(body.cleanupStatus) : (body.verification?.cleanupStatus ? String(body.verification.cleanupStatus) : null),
+        cleanupSummary: body.cleanupSummary ? String(body.cleanupSummary) : (body.verification?.cleanupSummary ? String(body.verification.cleanupSummary) : null),
+        timeoutKind: body.timeoutKind ? String(body.timeoutKind) : (body.verification?.timeoutKind ? String(body.verification.timeoutKind) : null),
+        triggerKind: body.triggerKind ? String(body.triggerKind) : (body.verification?.triggerKind ? String(body.verification.triggerKind) : null),
+        workspaceMode: body.workspaceMode ? String(body.workspaceMode) : (body.verification?.workspaceMode ? String(body.verification.workspaceMode) : null),
         serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
         verification: body.verification && typeof body.verification === "object"
           ? { ...body.verification }
@@ -949,7 +1269,15 @@ function testRunRows(witnesses) {
         stdout: String(body.stdout || ""),
         stderr: String(body.stderr || ""),
         timedOut: body.timedOut === true,
-        error: body.error ? String(body.error) : null
+        error: body.error ? String(body.error) : null,
+        providerId: body.providerId ? String(body.providerId) : previous.providerId ?? null,
+        safetyClass: body.safetyClass ? String(body.safetyClass) : previous.safetyClass ?? null,
+        executionClass: body.executionClass ? String(body.executionClass) : (body.verification?.executionClass ? String(body.verification.executionClass) : previous.executionClass ?? null),
+        cleanupStatus: body.cleanupStatus ? String(body.cleanupStatus) : (body.verification?.cleanupStatus ? String(body.verification.cleanupStatus) : previous.cleanupStatus ?? null),
+        cleanupSummary: body.cleanupSummary ? String(body.cleanupSummary) : (body.verification?.cleanupSummary ? String(body.verification.cleanupSummary) : previous.cleanupSummary ?? null),
+        timeoutKind: body.timeoutKind ? String(body.timeoutKind) : (body.verification?.timeoutKind ? String(body.verification.timeoutKind) : previous.timeoutKind ?? null),
+        triggerKind: body.triggerKind ? String(body.triggerKind) : (body.verification?.triggerKind ? String(body.verification.triggerKind) : previous.triggerKind ?? null),
+        workspaceMode: body.workspaceMode ? String(body.workspaceMode) : (body.verification?.workspaceMode ? String(body.verification.workspaceMode) : previous.workspaceMode ?? null)
       });
     }
   }
@@ -1001,6 +1329,14 @@ function testResultRows(witnesses) {
         cacheHit: result.cacheHit && typeof result.cacheHit === "object"
           ? { ...result.cacheHit }
           : null,
+        providerId: result.providerId ? String(result.providerId) : (witness.body.providerId ? String(witness.body.providerId) : (result.verification?.providerId ? String(result.verification.providerId) : null)),
+        safetyClass: result.safetyClass ? String(result.safetyClass) : (witness.body.safetyClass ? String(witness.body.safetyClass) : (result.verification?.safetyClass ? String(result.verification.safetyClass) : null)),
+        executionClass: result.executionClass ? String(result.executionClass) : (witness.body.executionClass ? String(witness.body.executionClass) : (result.verification?.executionClass ? String(result.verification.executionClass) : (witness.body.verification?.executionClass ? String(witness.body.verification.executionClass) : null))),
+        cleanupStatus: result.cleanupStatus ? String(result.cleanupStatus) : (witness.body.cleanupStatus ? String(witness.body.cleanupStatus) : (result.verification?.cleanupStatus ? String(result.verification.cleanupStatus) : null)),
+        cleanupSummary: result.cleanupSummary ? String(result.cleanupSummary) : (witness.body.cleanupSummary ? String(witness.body.cleanupSummary) : (result.verification?.cleanupSummary ? String(result.verification.cleanupSummary) : null)),
+        timeoutKind: result.timeoutKind ? String(result.timeoutKind) : (witness.body.timeoutKind ? String(witness.body.timeoutKind) : (result.verification?.timeoutKind ? String(result.verification.timeoutKind) : null)),
+        triggerKind: result.triggerKind ? String(result.triggerKind) : (witness.body.triggerKind ? String(witness.body.triggerKind) : (result.verification?.triggerKind ? String(result.verification.triggerKind) : null)),
+        workspaceMode: result.workspaceMode ? String(result.workspaceMode) : (witness.body.workspaceMode ? String(witness.body.workspaceMode) : (result.verification?.workspaceMode ? String(result.verification.workspaceMode) : null)),
         serverRunnerId: result.serverRunnerId ? String(result.serverRunnerId) : (witness.body.serverRunnerId ? String(witness.body.serverRunnerId) : null),
         verification: result.verification && typeof result.verification === "object"
           ? { ...result.verification }
@@ -1026,12 +1362,16 @@ function verificationPolicyRows(witnesses) {
       startup: body.startup === true,
       watch: body.watch === true,
       onChangeSet: body.onChangeSet === true,
+      startupSettleMs: Number(body.startupSettleMs || 0),
       priority: Number(body.priority || 0),
       maxConcurrency: Number(body.maxConcurrency || 0),
       cpuBudget: Number(body.cpuBudget || 0),
       regressionMinDeltaMs: Number(body.regressionMinDeltaMs || 0),
       regressionMinDeltaPct: Number(body.regressionMinDeltaPct || 0),
       baselineScope: body.baselineScope ? String(body.baselineScope) : null,
+      providerId: body.providerId ? String(body.providerId) : null,
+      safetyClass: body.safetyClass ? String(body.safetyClass) : null,
+      invoke: body.invoke !== false,
       executionClass: body.executionClass ? String(body.executionClass) : null,
       exclusive: body.exclusive === true,
       requiresCleanWorkspace: body.requiresCleanWorkspace === true,
@@ -1104,6 +1444,8 @@ function verificationQueueRows(witnesses) {
       runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : previous.runtimeProfile ?? null,
       gateId: body.gateId ? String(body.gateId) : previous.gateId ?? null,
       gateTitle: body.gateTitle ? String(body.gateTitle) : previous.gateTitle ?? null,
+      providerId: body.providerId ? String(body.providerId) : previous.providerId ?? null,
+      safetyClass: body.safetyClass ? String(body.safetyClass) : previous.safetyClass ?? null,
       executionClass: body.executionClass ? String(body.executionClass) : previous.executionClass ?? null,
       exclusive: body.exclusive === true || previous.exclusive === true,
       requiresCleanWorkspace: body.requiresCleanWorkspace === true || previous.requiresCleanWorkspace === true,
@@ -1119,6 +1461,10 @@ function verificationQueueRows(witnesses) {
       runId: body.runId ? String(body.runId) : previous.runId ?? null,
       resultStatus: body.resultStatus ? String(body.resultStatus) : previous.resultStatus ?? null,
       error: body.error ? String(body.error) : previous.error ?? null,
+      cleanupStatus: body.cleanupStatus ? String(body.cleanupStatus) : previous.cleanupStatus ?? null,
+      cleanupSummary: body.cleanupSummary ? String(body.cleanupSummary) : previous.cleanupSummary ?? null,
+      timeoutKind: body.timeoutKind ? String(body.timeoutKind) : previous.timeoutKind ?? null,
+      workspaceMode: body.workspaceMode ? String(body.workspaceMode) : previous.workspaceMode ?? null,
       queuedAt: body.queuedAt ?? previous.queuedAt ?? null,
       startedAt: body.startedAt ?? previous.startedAt ?? null,
       finishedAt: body.finishedAt ?? previous.finishedAt ?? null
@@ -1138,6 +1484,8 @@ function verificationExecutionRows(witnesses) {
       runtimeProfile: queueRow.runtimeProfile,
       gateId: queueRow.gateId,
       gateTitle: queueRow.gateTitle,
+      providerId: queueRow.providerId ?? null,
+      safetyClass: queueRow.safetyClass ?? null,
       executionClass: queueRow.executionClass,
       exclusive: queueRow.exclusive === true,
       requiresCleanWorkspace: queueRow.requiresCleanWorkspace === true,
@@ -1148,6 +1496,10 @@ function verificationExecutionRows(witnesses) {
       runId: queueRow.runId ?? null,
       resultStatus: queueRow.resultStatus ?? null,
       status: queueRow.status,
+      cleanupStatus: queueRow.cleanupStatus ?? null,
+      cleanupSummary: queueRow.cleanupSummary ?? null,
+      timeoutKind: queueRow.timeoutKind ?? null,
+      workspaceMode: queueRow.workspaceMode ?? null,
       startedAt: queueRow.startedAt ?? null,
       finishedAt: queueRow.finishedAt ?? null,
       error: queueRow.error ?? null
@@ -1181,6 +1533,7 @@ function testArtifactRows(witnesses) {
     for (const artifact of artifacts) {
       rows.push({
         id: artifact.id,
+        artifactId: canonicalArtifactIdForTestArtifact(artifact.id),
         runId,
         resultId,
         gateId,
@@ -1210,8 +1563,94 @@ function testArtifactRows(witnesses) {
         producedAt: witness.body.finishedAt ?? null
       }));
     }
+    for (const [index, artifact] of (Array.isArray(witness.body.artifacts) ? witness.body.artifacts : []).entries()) {
+      const content = typeof artifact?.content === "string" ? artifact.content : "";
+      rows.push({
+        id: artifact?.id ? String(artifact.id) : `testArtifact:${runId}:provider:${index + 1}`,
+        artifactId: canonicalArtifactIdForTestArtifact(artifact?.artifactId ?? artifact?.id),
+        runId,
+        resultId,
+        gateId,
+        title: artifact?.title ? String(artifact.title) : `${title} provider artifact`,
+        artifactKind: artifact?.artifactKind ? String(artifact.artifactKind) : "artifact",
+        fileName: artifact?.fileName ? String(artifact.fileName) : null,
+        contentType: artifact?.contentType ? String(artifact.contentType) : "text/plain",
+        sizeBytes: typeof artifact?.sizeBytes === "number" ? artifact.sizeBytes : Buffer.byteLength(content, "utf8"),
+        content,
+        contentRef: artifact?.contentRef ? String(artifact.contentRef) : null,
+        contentUrl: artifact?.contentUrl ? String(artifact.contentUrl) : null,
+        preview: artifact?.preview ? String(artifact.preview) : null,
+        structuredFormat: artifact?.structuredFormat ? String(artifact.structuredFormat) : null,
+        summary: artifact?.summary && typeof artifact.summary === "object" ? { ...artifact.summary } : null,
+        branchId: witness.body.branchId ? String(witness.body.branchId) : null,
+        changeSetId: witness.body.changeSetId ? String(witness.body.changeSetId) : null,
+        candidateSnapshotId: witness.body.candidateSnapshotId ? String(witness.body.candidateSnapshotId) : null,
+        producedAt: witness.body.finishedAt ?? null
+      });
+    }
   }
   return sortRows(rows, ["runId", "artifactKind", "id"]);
+}
+
+function canonicalArtifactIdForTestArtifact(id) {
+  const raw = String(id || "");
+  if (!raw) return null;
+  if (raw.startsWith("artifact:")) return raw;
+  if (raw.startsWith("testArtifact:")) return `artifact:${raw.slice("testArtifact:".length)}`;
+  return `artifact:${raw}`;
+}
+
+function artifactRowFromTestArtifact(row, metadata = {}) {
+  const artifactId = canonicalArtifactIdForTestArtifact(row?.artifactId || row?.id);
+  if (!artifactId) return null;
+  const producerId = String(row?.runId || metadata.runId || "");
+  const executionSourceId = metadata.witnessId ? `execution:${String(metadata.witnessId)}` : null;
+  return {
+    id: artifactId,
+    title: row?.title ? String(row.title) : artifactId,
+    artifactKind: row?.artifactKind ? String(row.artifactKind) : "artifact",
+    producerKind: "testRun",
+    producerId: producerId || null,
+    contentType: row?.contentType ? String(row.contentType) : "text/plain",
+    sizeBytes: typeof row?.sizeBytes === "number" ? row.sizeBytes : null,
+    contentRef: row?.contentRef ? String(row.contentRef) : null,
+    contentUrl: row?.contentUrl
+      ? String(row.contentUrl)
+      : `/api/platform-artifacts/${encodeURIComponent(artifactId)}/content`,
+    preview: row?.preview ? String(row.preview) : normalizePreview(row?.content),
+    producedAt: row?.producedAt ?? null,
+    fileName: row?.fileName ? String(row.fileName) : null,
+    runId: producerId || null,
+    resultId: row?.resultId ? String(row.resultId) : null,
+    gateId: row?.gateId ? String(row.gateId) : null,
+    branchId: row?.branchId ? String(row.branchId) : null,
+    changeSetId: row?.changeSetId ? String(row.changeSetId) : null,
+    candidateSnapshotId: row?.candidateSnapshotId ? String(row.candidateSnapshotId) : null,
+    sessionId: metadata.sessionId ? String(metadata.sessionId) : null,
+    executionId: executionSourceId,
+    proposalId: metadata.proposalId ? String(metadata.proposalId) : null,
+    artifactSourceId: row?.id ? String(row.id) : null,
+    content: row?.content ?? undefined
+  };
+}
+
+function artifactRows(witnesses) {
+  const witnessByRun = Object.create(null);
+  for (const witness of witnesses) {
+    if (witness.process !== "platform.test.run.finish" || !witness.body?.id) continue;
+    witnessByRun[String(witness.body.id)] = witness;
+  }
+  const rows = [];
+  for (const artifact of testArtifactRows(witnesses)) {
+    const witness = witnessByRun[String(artifact.runId || "")] ?? null;
+    const row = artifactRowFromTestArtifact(artifact, {
+      witnessId: witness?.id ?? null,
+      sessionId: witness?.body?.session ?? null,
+      runId: artifact.runId
+    });
+    if (row) rows.push(row);
+  }
+  return sortRows(rows, ["producerKind", "producerId", "artifactKind", "id"]);
 }
 
 function parseTapSummary(content) {
@@ -1473,7 +1912,38 @@ function testSuiteRows(witnesses) {
       }
     }
   }
-  return sortRows(rows, ["runId", "artifactId", "id"]);
+  for (const witness of witnesses) {
+    if (witness.process !== "platform.test.run.finish" || !witness.body?.id) continue;
+    const runId = String(witness.body.id);
+    const resultId = `testResult:${runId}:1`;
+    const gateId = String(witness.body.gateId || "");
+    for (const [index, suite] of (Array.isArray(witness.body.suites) ? witness.body.suites : []).entries()) {
+      rows.push({
+        id: suite?.id ? String(suite.id) : `testSuite:${runId}:provider:${index + 1}`,
+        runId,
+        resultId,
+        gateId,
+        artifactId: suite?.artifactId ? String(suite.artifactId) : null,
+        format: suite?.format ? String(suite.format) : null,
+        name: suite?.name ? String(suite.name) : `Suite ${index + 1}`,
+        status: suite?.status ? String(suite.status) : "unknown",
+        total: Number(suite?.total || 0),
+        passed: Number(suite?.passed || 0),
+        failed: Number(suite?.failed || 0),
+        errors: Number(suite?.errors || 0),
+        skipped: Number(suite?.skipped || 0),
+        durationMs: numberOrNull(suite?.durationMs),
+        branchId: witness.body.branchId ? String(witness.body.branchId) : null,
+        changeSetId: witness.body.changeSetId ? String(witness.body.changeSetId) : null,
+        candidateSnapshotId: witness.body.candidateSnapshotId ? String(witness.body.candidateSnapshotId) : null,
+        producedAt: suite?.producedAt ?? witness.body.finishedAt ?? null
+      });
+    }
+  }
+  return sortRows(
+    [...new Map(rows.map(row => [String(row.id), row])).values()],
+    ["runId", "artifactId", "id"]
+  );
 }
 
 function testCaseRows(witnesses) {
@@ -1529,7 +1999,62 @@ function testCaseRows(witnesses) {
       }
     }
   }
-  return sortRows(rows, ["runId", "suiteId", "id"]);
+  for (const witness of witnesses) {
+    if (witness.process !== "platform.test.run.finish" || !witness.body?.id) continue;
+    const runId = String(witness.body.id);
+    const resultId = `testResult:${runId}:1`;
+    const gateId = String(witness.body.gateId || "");
+    for (const [index, testCase] of (Array.isArray(witness.body.cases) ? witness.body.cases : []).entries()) {
+      rows.push({
+        id: testCase?.id ? String(testCase.id) : `testCase:${runId}:provider:${index + 1}`,
+        suiteId: testCase?.suiteId ? String(testCase.suiteId) : null,
+        runId,
+        resultId,
+        gateId,
+        artifactId: testCase?.artifactId ? String(testCase.artifactId) : null,
+        format: testCase?.format ? String(testCase.format) : null,
+        name: testCase?.name ? String(testCase.name) : `Case ${index + 1}`,
+        status: testCase?.status ? String(testCase.status) : "unknown",
+        testNumber: typeof testCase?.testNumber === "number" ? testCase.testNumber : (index + 1),
+        classname: testCase?.classname ? String(testCase.classname) : null,
+        durationMs: numberOrNull(testCase?.durationMs),
+        branchId: witness.body.branchId ? String(witness.body.branchId) : null,
+        changeSetId: witness.body.changeSetId ? String(witness.body.changeSetId) : null,
+        candidateSnapshotId: witness.body.candidateSnapshotId ? String(witness.body.candidateSnapshotId) : null,
+        producedAt: testCase?.producedAt ?? witness.body.finishedAt ?? null
+      });
+    }
+  }
+  return sortRows(
+    [...new Map(rows.map(row => [String(row.id), row])).values()],
+    ["runId", "suiteId", "id"]
+  );
+}
+
+function cleanupReportState(run = {}) {
+  const cleanupStatus = String(run?.cleanupStatus || "");
+  if (!cleanupStatus || cleanupStatus === "not_required") {
+    return {
+      status: "passed",
+      summary: String(run?.cleanupSummary || "No cleanup work was required.")
+    };
+  }
+  if (cleanupStatus === "failed") {
+    return {
+      status: "failed",
+      summary: String(run?.cleanupSummary || "Cleanup failed.")
+    };
+  }
+  if (cleanupStatus === "not_run") {
+    return {
+      status: "unknown",
+      summary: String(run?.cleanupSummary || "Cleanup did not complete.")
+    };
+  }
+  return {
+    status: "passed",
+    summary: String(run?.cleanupSummary || "Cleanup completed.")
+  };
 }
 
 function testReportRows(witnesses) {
@@ -1587,6 +2112,15 @@ function testReportRows(witnesses) {
     const baseCaseIds = relevantCases.map(testCase => testCase.id);
     const producedAt = run.finishedAt ?? run.startedAt ?? null;
     const latestResult = runResults.at(-1) ?? null;
+    const executionSummaryParts = [
+      run.providerId ? `provider ${run.providerId}` : null,
+      run.executionClass ? `class ${run.executionClass}` : null,
+      run.safetyClass ? `safety ${run.safetyClass}` : null,
+      run.triggerKind ? `trigger ${run.triggerKind}` : null,
+      run.workspaceMode ? `workspace ${run.workspaceMode}` : null,
+      run.timeoutKind ? `timeout ${run.timeoutKind}` : null
+    ].filter(Boolean);
+    const cleanup = cleanupReportState(run);
     const regression = regressionsByRun[run.id] ?? {
       id: `regressionSummary:${run.id}`,
       runId: String(run.id),
@@ -1617,7 +2151,59 @@ function testReportRows(witnesses) {
       failedCount,
       errorCount,
       skippedCount,
-      cached: run.cacheStatus === "hit"
+      cached: run.cacheStatus === "hit",
+      providerId: run.providerId ?? null,
+      safetyClass: run.safetyClass ?? null,
+      executionClass: run.executionClass ?? null,
+      cleanupStatus: run.cleanupStatus ?? null,
+      cleanupSummary: run.cleanupSummary ?? null,
+      timeoutKind: run.timeoutKind ?? null,
+      triggerKind: run.triggerKind ?? null,
+      workspaceMode: run.workspaceMode ?? null
+    });
+    rows.push({
+      id: `testReport:${run.id}:execution`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "execution",
+      title: "Execution Summary",
+      status: String(run.status || latestResult?.status || "unknown"),
+      summary: executionSummaryParts.length
+        ? executionSummaryParts.join(", ")
+        : "No execution metadata was recorded for this run.",
+      artifactIds: baseArtifactIds,
+      suiteIds: baseSuiteIds,
+      caseIds: baseCaseIds,
+      producedAt,
+      providerId: run.providerId ?? null,
+      safetyClass: run.safetyClass ?? null,
+      executionClass: run.executionClass ?? null,
+      cleanupStatus: run.cleanupStatus ?? null,
+      cleanupSummary: run.cleanupSummary ?? null,
+      timeoutKind: run.timeoutKind ?? null,
+      triggerKind: run.triggerKind ?? null,
+      workspaceMode: run.workspaceMode ?? null
+    });
+    rows.push({
+      id: `testReport:${run.id}:cleanup`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "cleanup",
+      title: "Cleanup Summary",
+      status: cleanup.status,
+      summary: cleanup.summary,
+      artifactIds: baseArtifactIds,
+      suiteIds: [],
+      caseIds: [],
+      producedAt,
+      providerId: run.providerId ?? null,
+      safetyClass: run.safetyClass ?? null,
+      executionClass: run.executionClass ?? null,
+      cleanupStatus: run.cleanupStatus ?? null,
+      cleanupSummary: run.cleanupSummary ?? null,
+      timeoutKind: run.timeoutKind ?? null,
+      triggerKind: run.triggerKind ?? null,
+      workspaceMode: run.workspaceMode ?? null
     });
     rows.push({
       id: `testReport:${run.id}:suites`,
@@ -1671,7 +2257,15 @@ function testReportRows(witnesses) {
       suiteIds: [],
       caseIds: [],
       producedAt,
-      regressionSummary: regression
+      regressionSummary: regression,
+      providerId: run.providerId ?? null,
+      safetyClass: run.safetyClass ?? null,
+      executionClass: run.executionClass ?? null,
+      cleanupStatus: run.cleanupStatus ?? null,
+      cleanupSummary: run.cleanupSummary ?? null,
+      timeoutKind: run.timeoutKind ?? null,
+      triggerKind: run.triggerKind ?? null,
+      workspaceMode: run.workspaceMode ?? null
     });
   }
   return sortRows(rows, ["runId", "reportKind", "id"]);
@@ -1684,7 +2278,9 @@ function materializedViewStateRows(observations = []) {
     latest.set(String(observation.body.id), {
       id: String(observation.body.id),
       title: observation.body.title ? String(observation.body.title) : String(observation.body.id),
-      kind: observation.body.kind ? String(observation.body.kind) : "generic",
+      kind: "materializedViewState",
+      pageKind: "materializedViewState",
+      materializedViewKind: observation.body.kind ? String(observation.body.kind) : "generic",
       sliceKey: observation.body.sliceKey ? String(observation.body.sliceKey) : null,
       modelView: observation.body.modelView ? String(observation.body.modelView) : null,
       maintenance: observation.body.maintenance ? String(observation.body.maintenance) : "on-demand",
@@ -1692,6 +2288,7 @@ function materializedViewStateRows(observations = []) {
       resourceBudgetClass: observation.body.resourceBudgetClass ? String(observation.body.resourceBudgetClass) : null,
       blocking: observation.body.blocking !== false,
       ttlMs: Number(observation.body.ttlMs || 0),
+      cacheStrategy: observation.body.cacheStrategy ? String(observation.body.cacheStrategy) : "ttl",
       cacheStatus: observation.body.cacheStatus ? String(observation.body.cacheStatus) : "cold",
       buildCount: Number(observation.body.buildCount || 0),
       hitCount: Number(observation.body.hitCount || 0),
@@ -1706,6 +2303,7 @@ function materializedViewStateRows(observations = []) {
       invalidationCause: observation.body.invalidationCause ? String(observation.body.invalidationCause) : null,
       outputSizeEstimate: Number(observation.body.outputSizeEstimate || 0),
       inputSize: Number(observation.body.inputSize || 0),
+      signature: observation.body.signature ? String(observation.body.signature) : null,
       observedAt: observation.body.observedAt ?? observation.time ?? null
     });
   }
@@ -1718,7 +2316,9 @@ function resourceProbeOperationRows(observations = []) {
     if (observation?.process !== "runtime.resourceProbe.operation" || !observation.body?.id) continue;
     rows.push({
       id: String(observation.body.id),
-      kind: observation.body.kind ? String(observation.body.kind) : "operation",
+      kind: "resourceProbeOperation",
+      pageKind: "resourceProbeOperation",
+      operationKind: observation.body.kind ? String(observation.body.kind) : "operation",
       title: observation.body.title ? String(observation.body.title) : null,
       status: observation.body.status ? String(observation.body.status) : "completed",
       durationMs: Number(observation.body.durationMs || 0),
@@ -1743,7 +2343,156 @@ function resourceProbeOperationRows(observations = []) {
   return sortRows(rows, ["kind", "finishedAt", "id"]);
 }
 
+function authorityDecisionRows(witnesses = []) {
+  const rows = [];
+  for (const witness of witnesses) {
+    if (witness.process !== "platform.authority.decision" || !witness.body) continue;
+    const body = witness.body;
+    rows.push({
+      id: `authorityDecision:${String(witness.id || "")}`,
+      witnessId: witness.id ? String(witness.id) : null,
+      action: body.action ? String(body.action) : null,
+      kind: body.kind ? String(body.kind) : "read",
+      handlerId: body.handlerId ? String(body.handlerId) : null,
+      routeId: body.routeId ? String(body.routeId) : null,
+      requestPath: body.requestPath ? String(body.requestPath) : null,
+      view: body.view ? String(body.view) : null,
+      targetObjectId: body.targetObjectId ? String(body.targetObjectId) : null,
+      sessionId: body.sessionId ? String(body.sessionId) : null,
+      policyId: body.policyId ? String(body.policyId) : null,
+      requiredAuthority: body.requiredAuthority ? String(body.requiredAuthority) : null,
+      decision: body.decision ? String(body.decision) : "deny",
+      reason: body.reason ? String(body.reason) : null,
+      authenticatedIdentity: body.authenticatedIdentity ? String(body.authenticatedIdentity) : null,
+      authenticatedActor: body.authenticatedActor ? String(body.authenticatedActor) : null,
+      effectiveIdentity: body.effectiveIdentity ? String(body.effectiveIdentity) : null,
+      effectiveActor: body.effectiveActor ? String(body.effectiveActor) : null,
+      authorityMode: body.authorityMode ? String(body.authorityMode) : "direct",
+      assumptionGrantId: body.assumptionGrantId ? String(body.assumptionGrantId) : null,
+      evaluatedAt: body.evaluatedAt ?? null
+    });
+  }
+  return sortRows(rows, ["evaluatedAt", "id"]);
+}
+
 export const platformModuleProjectors = {
+  authorityPolicies() {
+    return PLATFORM_AUTHORITY_POLICY_ROWS.map(row => ({ ...row }));
+  },
+
+  authorityPolicyIndex() {
+    const rows = platformModuleProjectors.authorityPolicies();
+    const byId = Object.create(null);
+    const byPolicyKey = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      byPolicyKey[row.policyKey] = row;
+    }
+    return { rows, byId, byPolicyKey };
+  },
+
+  authorityDecisions(witnesses) {
+    return authorityDecisionRows(witnesses);
+  },
+
+  authorityDecisionIndex(witnesses) {
+    const rows = platformModuleProjectors.authorityDecisions(witnesses);
+    const byId = Object.create(null);
+    const byPolicy = Object.create(null);
+    const byTarget = Object.create(null);
+    const bySession = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(byPolicy, row.policyId, row);
+      pushByKey(byTarget, row.targetObjectId, row);
+      pushByKey(bySession, row.sessionId, row);
+    }
+    return { rows, byId, byPolicy, byTarget, bySession };
+  },
+
+  sessions(witnesses) {
+    return sessionRows(witnesses);
+  },
+
+  sessionIndex(witnesses) {
+    const rows = platformModuleProjectors.sessions(witnesses);
+    const byId = Object.create(null);
+    for (const row of rows) byId[row.id] = row;
+    return { rows, byId };
+  },
+
+  executions(witnesses) {
+    return executionRows(witnesses);
+  },
+
+  executionIndex(witnesses) {
+    const rows = platformModuleProjectors.executions(witnesses);
+    const byId = Object.create(null);
+    const bySession = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(bySession, row.sessionId, row);
+    }
+    return { rows, byId, bySession };
+  },
+
+  sessionTags(witnesses) {
+    return sessionTagRows(witnesses);
+  },
+
+  sessionTagIndex(witnesses) {
+    const rows = platformModuleProjectors.sessionTags(witnesses);
+    const byId = Object.create(null);
+    const bySession = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(bySession, row.sessionId, row);
+    }
+    return { rows, byId, bySession };
+  },
+
+  executionArtifacts(witnesses) {
+    return executionArtifactRows(witnesses);
+  },
+
+  executionArtifactIndex(witnesses) {
+    const rows = platformModuleProjectors.executionArtifacts(witnesses);
+    const byId = Object.create(null);
+    const byExecution = Object.create(null);
+    const bySession = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(byExecution, row.executionId, row);
+      pushByKey(bySession, row.sessionId, row);
+    }
+    return { rows, byId, byExecution, bySession };
+  },
+
+  artifacts(witnesses) {
+    return artifactRows(witnesses);
+  },
+
+  artifactIndex(witnesses) {
+    const rows = platformModuleProjectors.artifacts(witnesses);
+    const byId = Object.create(null);
+    const byProducer = Object.create(null);
+    const byRun = Object.create(null);
+    const byBranch = Object.create(null);
+    const byChangeSet = Object.create(null);
+    const bySession = Object.create(null);
+    const byExecution = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(byProducer, `${row.producerKind}:${row.producerId}`, row);
+      if (row.runId) pushByKey(byRun, row.runId, row);
+      if (row.branchId) pushByKey(byBranch, row.branchId, row);
+      if (row.changeSetId) pushByKey(byChangeSet, row.changeSetId, row);
+      if (row.sessionId) pushByKey(bySession, row.sessionId, row);
+      if (row.executionId) pushByKey(byExecution, row.executionId, row);
+    }
+    return { rows, byId, byProducer, byRun, byBranch, byChangeSet, bySession, byExecution };
+  },
+
   pushRecords(witnesses) {
     const rows = [];
     for (const witness of witnesses) {

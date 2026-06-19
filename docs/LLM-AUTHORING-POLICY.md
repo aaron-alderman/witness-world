@@ -23,7 +23,10 @@ The canonical public frontend model in constrained mode is:
 
 Canonical page hosting is `page.surface`.
 Legacy `page.home`, `widget`, `frontendProgram`, and `frontendStep` remain
-compatibility inputs only and are not the forward authoring lane.
+historical compatibility records only and are not the forward authoring lane.
+Direct public/operator writes to `/api/frontend-programs` and
+`/api/frontend-steps` are retired and return explicit `410` guidance toward
+canonical `page.surface` nouns plus `frontend.upliftLegacy`.
 
 `DESIRE+` remains an internal lowering/debug layer, not a public MCP write
 surface.
@@ -100,9 +103,12 @@ Current constrained truth is:
 - served runtime transport is sliced to the reachable fragment used by the
   active authored route subtree instead of serializing the whole broad process
   closure by default
-- `frontendLegacyMigration` and `frontendLegacyUplift` are the discoverable
-  migration surfaces for remaining legacy `page.home` or
-  `compat.legacy-widget-program` routes
+- `frontendLegacyUplift` is the discoverable retirement and migration surface
+  for remaining legacy `page.home` or `compat.legacy-widget-program` routes;
+  retired legacy routes are unservable until uplifted
+- maintained starter/bootstrap app creation now authors native
+  `surface + process + projection + collection + boundary + policy` material
+  directly instead of seeding a legacy app and uplifting it as a post-step
 - legacy widget/program CRUD remains compatibility-only and is intentionally
   hidden from constrained MCP write surfaces
 - `dispatchDomEvent` and the old `witness:*` page bridge lane are retired from

@@ -313,17 +313,19 @@ test("runtime surface contributions vary by active runtime profile", async () =>
   assert.equal(fullServer.ok, true);
 
   try {
-    const minimalHtml = await fetch(`${minimalServer.url}/`).then(response => response.text());
-    const fullHtml = await fetch(`${fullServer.url}/`).then(response => response.text());
+    const minimal = await fetch(`${minimalServer.url}/api/runtime/diagnostics`).then(response => response.json());
+    const full = await fetch(`${fullServer.url}/api/runtime/diagnostics`).then(response => response.json());
+    const minimalMatchers = new Set(minimal.routes.map(route => route.matcher));
+    const fullMatchers = new Set(full.routes.map(route => route.matcher));
 
-    assert.equal(minimalHtml.includes('"surface:bootstrap"'), false);
-    assert.equal(minimalHtml.includes('"surface:process-view"'), false);
-    assert.equal(minimalHtml.includes('"surface:world"'), false);
-    assert.equal(minimalHtml.includes('"surface:platform"'), false);
-    assert.equal(fullHtml.includes('"surface:bootstrap"'), true);
-    assert.equal(fullHtml.includes('"surface:process-view"'), true);
-    assert.equal(fullHtml.includes('"surface:world"'), true);
-    assert.equal(fullHtml.includes('"surface:platform"'), true);
+    assert.equal(minimalMatchers.has("/_bootstrap"), false);
+    assert.equal(minimalMatchers.has("/process"), false);
+    assert.equal(minimalMatchers.has("/world"), false);
+    assert.equal(minimalMatchers.has("/platform"), false);
+    assert.equal(fullMatchers.has("/_bootstrap"), true);
+    assert.equal(full.surfaces.some(surface => surface.id === "surface:process-view"), true);
+    assert.equal(full.surfaces.some(surface => surface.id === "surface:world"), true);
+    assert.equal(fullMatchers.has("/platform"), true);
   } finally {
     await minimalServer.close();
     await fullServer.close();
@@ -347,7 +349,13 @@ test("minimal runtime profile does not expose platform self-model routes", async
 
   try {
     assert.equal((await fetch(`${server.url}/platform`)).status, 404);
+    assert.equal((await fetch(`${server.url}/platform?area=security&section=summary`)).status, 404);
+    assert.equal((await fetch(`${server.url}/platform?area=artifacts&section=summary`)).status, 404);
+    assert.equal((await fetch(`${server.url}/platform?area=sessions&section=summary`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-model`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-model?view=security`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-model?view=artifacts`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-model?view=sessions`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-gaps`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-branches`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-branches/demo`)).status, 404);
@@ -408,6 +416,7 @@ test("minimal runtime profile does not expose platform self-model routes", async
     })).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-test-runs/events`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-test-runs/demo`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-artifacts/demo/content`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-proposals`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -436,7 +445,13 @@ test("full runtime exposes platform console and platform self-model API", async 
   try {
     const stagedPath = ["test", "runtime-profile-change-set.txt"].join("/");
     const page = await fetch(`${server.url}/platform`);
+    const securityPage = await fetch(`${server.url}/platform?area=security&section=summary`);
+    const artifactsPage = await fetch(`${server.url}/platform?area=artifacts&section=summary`);
+    const sessionsPage = await fetch(`${server.url}/platform?area=sessions&section=summary`);
     const model = await fetch(`${server.url}/api/platform-model`).then(response => response.json());
+    const securityModel = await fetch(`${server.url}/api/platform-model?view=security`);
+    const artifactsModel = await fetch(`${server.url}/api/platform-model?view=artifacts`);
+    const sessionsModel = await fetch(`${server.url}/api/platform-model?view=sessions`);
     const gaps = await fetch(`${server.url}/api/platform-gaps`).then(response => response.json());
     const branchListRoute = await fetch(`${server.url}/api/platform-branches`);
     const branchCreateRoute = await fetch(`${server.url}/api/platform-branches`, {
@@ -515,6 +530,25 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.match(pageHtml, /Overview Detail/);
     assert.match(pageHtml, /\/platform\?area=verification&amp;section=status/);
     assert.match(pageHtml, /\/platform\?area=knowledge&amp;section=docs/);
+    assert.notEqual(securityPage.status, 404);
+    assert.match(await securityPage.text(), /Security/);
+    assert.notEqual(artifactsPage.status, 404);
+    assert.match(await artifactsPage.text(), /Artifacts/);
+    assert.equal(securityModel.status, 200);
+    const securityBody = await securityModel.json();
+    assert.equal(Array.isArray(securityBody.authorityPolicies), true);
+    assert.equal(Array.isArray(securityBody.authorityDecisions), true);
+    assert.equal(artifactsModel.status, 200);
+    const artifactsBody = await artifactsModel.json();
+    assert.equal(Array.isArray(artifactsBody.artifacts), true);
+    assert.notEqual(sessionsPage.status, 404);
+    assert.match(await sessionsPage.text(), /Sessions/);
+    assert.equal(sessionsModel.status, 200);
+    const sessionsBody = await sessionsModel.json();
+    assert.equal(Array.isArray(sessionsBody.sessions), true);
+    assert.equal(Array.isArray(sessionsBody.executions), true);
+    assert.equal(Array.isArray(sessionsBody.sessionTags), true);
+    assert.equal(Array.isArray(sessionsBody.executionArtifacts), true);
     assert.equal(model.nodes.some(node => node.id === "plugin.platform"), true);
     assert.equal(model.nodes.some(node => node.id === "surface:platform"), true);
     assert.equal(model.nodes.some(node => node.kind === "task" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
@@ -1018,8 +1052,7 @@ test("minimal runtime plus plugin.oauth exposes OAuth without unrelated practica
     const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
 
-    assert.equal(startResponse.status, 200);
-    assert.equal((await startResponse.json()).flow.provider, "stub");
+    assert.equal(startResponse.status, 503);
     assert.equal(linksResponse.status, 401);
     assert.equal(outboundResponse.status, 404);
     assert.equal(backendSeamsResponse.status, 404);
@@ -1164,8 +1197,8 @@ test("runtime diagnostics endpoint exposes truthful minimal composition", async 
     assert.equal(body.routes.find(route => route.handler === "runtime.diagnostics.read")?.ownerClass, "generic-host");
     assert.equal(body.handlerMetadata["backendProgram.run"].routeKind, "backendProgram");
     assert.equal(body.handlerMetadata["backendProgram.run"].ownerClass, "backend-program");
-    assert.deepEqual(body.handlerMetadata["page.home"].methods, ["GET"]);
-    assert.equal(body.handlerMetadata["page.home"].ownerClass, "generic-host");
+    assert.deepEqual(body.handlerMetadata["page.surface"].methods, ["GET"]);
+    assert.equal(body.handlerMetadata["page.surface"].ownerClass, "generic-host");
     assert.deepEqual(body.installedHostCapabilities.backend, ["http.serve", "runtime.config"]);
     assert.deepEqual(body.installedHostCapabilities.frontend, ["dom.render", "http.fetch"]);
     assert.equal(body.surfaces.some(surface => surface.id === "surface:bootstrap"), false);
@@ -1192,7 +1225,7 @@ test("runtime diagnostics endpoint exposes truthful minimal composition", async 
       },
       {
         class: "generic-host",
-        bundleId: "bundle-core-runtime",
+        bundleId: null,
         pluginId: null,
         handlerId: "page.home",
         note: "Runtime behavior is owned by shared host/runtime code."
@@ -1311,7 +1344,7 @@ test("runtime plugins endpoint exposes local plugin package metadata and activat
   }
 });
 
-test("bootstrap default activation loads authoring plus bootstrap/tutorial dependencies as plugin-owned runtimes", async () => {
+test("bootstrap default activation loads startup-default authoring, starter, and tutorial plugins on minimal", async () => {
   const result = await startBlankRuntime({
     startupMode: "bootstrap",
     port: 0
@@ -1333,8 +1366,13 @@ test("bootstrap default activation loads authoring plus bootstrap/tutorial depen
     const starterPlugin = plugins.packages.find(row => row.id === "plugin.starter");
     const tutorialPlugin = plugins.packages.find(row => row.id === "plugin.tutorial");
 
+    assert.equal(diagnostics.activeProfile, "minimal");
+    assert.deepEqual([...diagnostics.plugins.startupPluginIds].sort(), ["plugin.authoring", "plugin.starter", "plugin.tutorial"]);
     assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.starter", "plugin.tutorial"]);
     assert.equal(diagnostics.plugins.loadedRuntimeCount, 9);
+    assert.equal(diagnostics.composition.storyId, "startup-runner-driven");
+    assert.equal(diagnostics.composition.activeRunnerSource, "startup-default-runner");
+    assert.equal(diagnostics.composition.activePluginSource, "startup-defaults");
     assert.equal(authoringPlugin.execution.mode, "meta-package");
     assert.equal(authoringPlugin.runtimeModule.loadStatus, "not-applicable");
     assert.deepEqual(authoringPlugin.runtimeModule.bundleIds, []);
@@ -1509,17 +1547,17 @@ test("static handler catalog helpers stay core-only before plugin runtime loadin
   const fullHandlers = authorableHandlerIdsForProfile("full");
   const fullPageHandlers = pageHandlerIdsForProfile("full");
 
-  assert.equal(minimalHandlers.includes("page.home"), true);
+  assert.equal(minimalHandlers.includes("page.surface"), true);
   assert.equal(minimalHandlers.includes("page.world"), false);
   assert.equal(minimalHandlers.includes("db.sql.query"), false);
-  assert.deepEqual(minimalPageHandlers, ["page.home", "page.surface"]);
+  assert.deepEqual(minimalPageHandlers, ["page.surface"]);
 
-  assert.equal(fullHandlers.includes("page.home"), true);
+  assert.equal(fullHandlers.includes("page.surface"), true);
   assert.equal(fullHandlers.includes("page.world"), false);
   assert.equal(fullHandlers.includes("db.sql.query"), false);
   assert.equal(fullHandlers.includes("canvas.process"), false);
   assert.equal(fullHandlers.includes("mcp.http"), false);
-  assert.deepEqual(fullPageHandlers, ["page.home", "page.surface"]);
+  assert.deepEqual(fullPageHandlers, ["page.surface"]);
 });
 
 test("blank minimal runtime does not expose authoring bootstrap routes or fallback", async () => {

@@ -155,9 +155,13 @@ The architecture-first checklist above is complete, the fast compatibility verif
 
 - [x] Finish migrating the maintained demo off the remaining runtime-owned `bundle-demo` / `handlerSet = "demo"` compatibility seam so served-example composition is explained entirely by authored installs plus explicit runtime-owned bundle ownership rather than example glue.
 - [x] Remove the remaining demo handler-set mutation shims from authored backend programs, specifically `todos.createModel`, `todos.updateModel`, `todos.deleteModel`, `privateNotes.createModel`, and `widgets.createModel`, so authored demo/backend execution no longer bounces through `src/demo-handler-set.js` for core app logic.
-- [ ] Bring blank-world bootstrap/tutorial startup onto the same explicit runtime-composition story as the maintained demo so bootstrap can eventually run from a narrow baseline instead of a compatibility-heavy runtime path.
-- [ ] Add runner-scoped runtime-plugin reconcile and repair flows so authored installs that point at missing, invalid, incompatible, metadata-only, or dependency-broken local packages become operable cleanup work instead of only startup failures and review warnings.
-- [ ] Decide whether runtime profile choice remains operator-only startup input or becomes authored runtime intent on `serverRunner` / runtime config, and make that decision explicit before the bootstrap/runtime migration converges.
+- [x] Bring blank-world bootstrap/tutorial startup onto the same explicit runtime-composition story as the maintained demo so bootstrap now starts from `minimal` plus explicit startup-default plugins, reports startup-owned composition truthfully, and no longer describes blank bootstrap as a synthetic/profile-driven runtime.
+- [x] Add runner-scoped runtime-plugin reconcile and repair flows so authored installs that point at missing, invalid, incompatible, metadata-only, or dependency-broken local packages become operable cleanup work instead of only startup failures and review warnings.
+  - Added governed `runtimePlugin.reconcile` execution with direct runner-authority success, `202` proposal fallback, and top-level repair witnesses that preserve the lowered install/remove work.
+  - Added `POST /api/runtime-plugin-reconciles` plus bootstrap review-panel repair actions for broken-install removal, missing-authored-intent cleanup, and dependency repair without inventing a client-only path.
+- [x] Runtime profile choice now supports authored runner intent in addition to operator startup override.
+  - `serverRunner` rows now persist `runtimeProfile`, proposal execution supports `serverRunner.runtimeProfile.set`, and `PATCH /api/server-runners/:id/runtime-profile` follows the same governed direct/proposal path as other runner mutations.
+  - Runtime diagnostics, bootstrap composition, and plugin-review flows now resolve profile/plugin composition per runner, while startup override remains an explicit runtime-owned override rather than a hidden compatibility seam.
 
 ### Local Plugin Example
 

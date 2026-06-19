@@ -233,54 +233,6 @@ placement = ["context"]
   ), true);
 });
 
-test("bootstrap read models expose legacy frontend migration state and compatibility bridge inventory", async () => {
-  const world = createWorld();
-  applyWitnessToml(world, `
-[[route]]
-actor = "system"
-id = "home_route"
-path = "/"
-serves = "home_route"
-method = "GET"
-handler = "page.home"
-params = { rootWidget = "page_root", frontendProgram = "landing_program" }
-`);
-
-  const { getBootstrapState } = createBootstrapReadModels({
-    world,
-    runtimeProfile: "minimal",
-    runtimeBundleSummary: null,
-    supportedHandlers: [],
-    supportedHandlerMetadata: {},
-    supportedPageHandlers: [],
-    supportedHandlerSets: [],
-    supportedFrontendOps: [],
-    supportedBackendOps: [],
-    backendHosts: [],
-    frontendHosts: [],
-    getRuntimePluginCatalog: async () => ({
-      packages: [],
-      addedBundleIds: [],
-      summary: null
-    }),
-    buildPluginCapabilitySourceIndex: ({ capabilityCatalog = [] } = {}) => ({
-      capabilityCatalog,
-      capabilityPackageSources: []
-    })
-  });
-
-  const state = await getBootstrapState("aaron", null);
-  assert.equal(state.legacyFrontendMigration.compatibilityMode, "bridge-active");
-  assert.equal(state.legacyFrontendMigration.pending.some(row =>
-    row.action === "route.rewrite"
-    && row.routeId === "home_route"
-  ), true);
-  assert.equal(state.compatibilityBridges.some(row =>
-    row.id === "compatibilityBridge:legacyFrontend.pageHomeShim"
-    && row.status === "active"
-  ), true);
-});
-
 test("bootstrap read models expose legacy frontend native uplift state as first-class authored nouns", async () => {
   const world = createWorld();
   applyWitnessToml(world, `
@@ -373,7 +325,11 @@ params = { widget = "login_form", into = "credentials" }
   });
 
   const state = await getBootstrapState("aaron", null);
-  assert.equal(state.legacyFrontendUplift.compatibilityMode, "bridge-active");
+  assert.equal(state.legacyFrontendUplift.retirementStatus, "legacy-present");
+  assert.equal(state.legacyFrontendUplift.retiredRoutes.some(row =>
+    row.routeId === "home_route"
+    && row.retirementKind === "page.home"
+  ), true);
   assert.equal(state.legacyFrontendUplift.pending.some(row =>
     row.action === "route.rewrite"
     && row.routeId === "home_route"
@@ -602,6 +558,51 @@ id = "ctx.collections"
   ), true);
 });
 
+test("bootstrap model keeps legacy frontend programs readable but out of generic context-bindable targets", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[frontendProgram]]
+actor = "system"
+id = "legacy.todo.program"
+rootWidget = "legacy.todo.page"
+
+[[widget]]
+actor = "system"
+id = "legacy.todo.page"
+kind = "Page"
+props = { title = "Legacy Todo" }
+`);
+
+  const { getBootstrapState, getBootstrapModel } = createBootstrapReadModels({
+    world,
+    runtimeProfile: "minimal",
+    runtimeBundleSummary: null,
+    supportedHandlers: [],
+    supportedHandlerMetadata: {},
+    supportedPageHandlers: [],
+    supportedHandlerSets: [],
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    backendHosts: [],
+    frontendHosts: [],
+    getRuntimePluginCatalog: async () => ({
+      packages: [],
+      addedBundleIds: [],
+      summary: null
+    }),
+    buildPluginCapabilitySourceIndex: ({ capabilityCatalog = [] } = {}) => ({
+      capabilityCatalog,
+      capabilityPackageSources: []
+    })
+  });
+
+  const state = await getBootstrapState("aaron", null);
+  assert.equal(state.frontendPrograms.some(row => row.id === "legacy.todo.program"), true);
+
+  const model = await getBootstrapModel(null);
+  assert.equal(model.contextBindableTargets.some(row => row.id === "legacy.todo.program"), false);
+});
+
 test("bootstrap model exposes authored package nouns as context-bindable composition targets", async () => {
   const world = createWorld();
   applyWitnessToml(world, `
@@ -684,4 +685,48 @@ targetRevision = "packageRevision.plugin.inspect.v1"
   assert.equal(model.contextBindableTargets.some(row => row.id === "packageNamespace:ctx.packages:inspectLocal" && row.context === "ctx.packages"), true);
   assert.equal(model.contextBindableTargets.some(row => row.id === "packageDependency:packageRevision.plugin.inspect.v1:capability:dom.render"), true);
   assert.equal(model.contextBindableTargets.some(row => row.id === "packageTransformer.inspect.v1"), true);
+});
+
+test("bootstrap read models preserve bootstrap guidance contributions when page context omits runtime contributions", async () => {
+  const world = createWorld();
+  const runtimeContributions = {
+    guidanceDefinitions: [{
+      id: "todo-from-scratch",
+      definition: { id: "todo-from-scratch", title: "Build The Todo App From Scratch", steps: [] },
+      defaultForBootstrap: true
+    }],
+    starterBlueprints: [{
+      id: "todo-starter",
+      blueprint: { id: "todo-starter" },
+      defaultForBootstrap: true
+    }]
+  };
+
+  const { getBootstrapState } = createBootstrapReadModels({
+    world,
+    runtimeProfile: "minimal",
+    runtimeBundleSummary: null,
+    runtimeContributions,
+    supportedHandlers: [],
+    supportedHandlerMetadata: {},
+    supportedPageHandlers: [],
+    supportedHandlerSets: [],
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    backendHosts: [],
+    frontendHosts: [],
+    getRuntimePluginCatalog: async () => ({
+      packages: [],
+      addedBundleIds: [],
+      summary: null
+    }),
+    buildPluginCapabilitySourceIndex: ({ capabilityCatalog = [] } = {}) => ({
+      capabilityCatalog,
+      capabilityPackageSources: []
+    })
+  });
+
+  const state = await getBootstrapState("aaron", { runtimeContributions: null });
+  assert.equal(state.activeBootstrapGuidance?.id, "todo-from-scratch");
+  assert.equal(state.activeStarterBlueprint?.id, "todo-starter");
 });

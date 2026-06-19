@@ -30,14 +30,12 @@ import {
   requireCoveredAuthoringRefInput,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
-  requestBootstrapFrontendMigrateLegacy,
   requestBootstrapFrontendUpliftLegacy,
   requestWidgetDefine,
   requestWidgetReplace,
   requestWidgetReplaceRollback,
   requestWidgetUpdate
 } from "./authoring-core-processes.js";
-import { frontendLegacyMigrationAuthorityTargets } from "../../src/frontend-legacy-migration.js";
 import { frontendLegacyUpliftAuthorityTargets } from "../../src/frontend-legacy-uplift.js";
 import { resolveAuthoringHandlerSupport } from "../../src/runtime-authoring-handler-support.js";
 
@@ -365,18 +363,6 @@ export async function executeAuthoringCoreProposalTarget({
         body,
         allowedHandlers: routeAuthoringSupport.supportedHandlers,
         handlerMetadataById: routeAuthoringSupport.supportedHandlerMetadata
-      });
-      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
-    }
-    case "frontend.migrateLegacy": {
-      const migration = frontendLegacyMigrationAuthorityTargets(world);
-      for (const entry of migration.targets) {
-        const gate = ensureTargetAuthority(actor, entry.target);
-        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-      }
-      const result = requestBootstrapFrontendMigrateLegacy(world, {
-        actor,
-        backendHost
       });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }

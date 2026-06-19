@@ -50,6 +50,25 @@ export function renderBootstrapStateItems({
       code.textContent = text;
       item.append(code);
     }
+    if (Array.isArray(spec.actions) && spec.actions.length) {
+      const actions = document.createElement("div");
+      actions.className = "surface-actions";
+      for (const actionSpec of spec.actions) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = actionSpec.className || "surface-button-secondary";
+        button.textContent = actionSpec.label || actionSpec.text || "Action";
+        if (actionSpec.disabled) button.disabled = true;
+        if (actionSpec.title) button.title = actionSpec.title;
+        if (!button.dataset) button.dataset = {};
+        for (const [key, value] of Object.entries(actionSpec.dataset || {})) {
+          if (value == null) continue;
+          button.dataset[key] = String(value);
+        }
+        actions.append(button);
+      }
+      item.append(actions);
+    }
     root.append(item);
   }
 }
@@ -163,15 +182,41 @@ export function renderBootstrapStateInventory({
     "contexts: " + (authored.authority.mutationContexts || []).join(", ")
   ] : [], row => row);
   renderList("state-identities", authored.identities || [], row => row.id + " -> " + row.actor);
+  renderList("state-collections", authored.collections || [], row => row.id + (row.context ? " @" + row.context : ""));
+  renderList("state-surfaces", authored.surfaces || [], row => row.id + (row.surfaceKind ? " [" + row.surfaceKind + "]" : ""));
+  renderList("state-processes", authored.processes || [], row =>
+    row.id
+    + ((row.handles || []).length ? " handles " + row.handles.length : "")
+    + ((row.emits || []).length ? " emits " + row.emits.length : "")
+  );
+  renderList("state-messages", authored.messages || [], row => row.id + (row.role ? " [" + row.role + "]" : ""));
+  renderList("state-projections", authored.projections || [], row =>
+    row.id + (row.projectionKind ? " [" + row.projectionKind + "]" : "") + (row.source ? " -> " + row.source : "")
+  );
+  renderList("state-boundaries", authored.boundaries || [], row =>
+    row.id + " -> " + ((row.operations || []).map(operation => operation.name || operation.command || "op").join(", ") || "no operations")
+  );
+  renderList("state-policies", authored.policies || [], row => row.id + (row.subject ? " -> " + row.subject : ""));
   renderList("state-widgets", authored.widgets || [], row => row.id + " (" + row.kind + ")");
-  renderList("state-programs", authored.frontendPrograms || [], row => row.id + " -> " + row.rootWidget);
-  renderList("state-steps", authored.frontendSteps || [], row => row.program + " / " + row.event + " / " + row.op + " / " + row.order);
+  renderList("state-legacy-frontend-retired", authored.legacyFrontendUplift?.retiredRoutes || [], row =>
+    row.routeId + " " + row.method + " " + row.path + " [" + row.retirementKind + "]"
+  );
+  renderList("state-legacy-frontend-pending", authored.legacyFrontendUplift?.pending || [], row =>
+    row.routeId + " :: " + row.kind + " / " + row.action + " / " + row.id
+  );
+  renderList("state-legacy-frontend-blocked", authored.legacyFrontendUplift?.blocked || [], row =>
+    row.routeId + " :: " + (row.missingPrimitive || row.goal || row.id)
+  );
   renderList("state-backend-programs", authored.backendPrograms || [], row => row.soul + (row.context ? " @" + row.context : ""));
   renderList("state-backend-program-versions", authored.backendProgramVersions || [], row => row.version + " -> " + row.soul + (row.active ? " [active]" : ""));
   renderList("state-backend-steps", authored.backendSteps || [], row => row.version + " / " + row.event + " / " + row.op + " / " + row.order);
   renderList("state-routes", authored.routes || [], row => row.id + " " + row.method + " " + row.path + (row.params?.backendProgramSoul ? " -> " + row.params.backendProgramSoul : ""));
   renderList("state-serves", authored.servedRoutes || [], row => row.serverRunner + " -> " + row.id);
-  renderList("state-runners", authored.serverRunners || [], row => row.id + (row.handlerSet ? " [" + row.handlerSet + "]" : ""));
+  renderList("state-runners", authored.serverRunners || [], row =>
+    row.id
+    + (row.runtimeProfile ? " <" + row.runtimeProfile + ">" : "")
+    + (row.handlerSet ? " [" + row.handlerSet + "]" : "")
+  );
   renderList("state-capabilities", authored.capabilityCatalog || [], row => row.id + (row.placement?.length ? " -> " + row.placement.join(", ") : ""));
   renderList("state-capability-installs", authored.capabilityInstalls || [], row => row.targetKind + " " + row.target + " -> " + row.capability);
   renderList("state-runtime-plugin-installs", authored.runtimePluginInstalls || [], row => row.serverRunner + " -> " + row.plugin);

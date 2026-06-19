@@ -2,6 +2,7 @@ import { createThing, relation } from "../../src/kernel.js";
 import { createProposal, moduleProjectors } from "../../src/modules.js";
 import { buildPlatformModel } from "./platform-model.js";
 import { diagnosticsFromPlatformAppContext } from "./app-context-diagnostics.js";
+import { readDeclaredPlatformShipView } from "./materialized-platform-views.js";
 
 export const PLATFORM_RELEASE_CHANNEL_ROWS = Object.freeze([
   Object.freeze({
@@ -213,10 +214,18 @@ export async function ensureAutomaticShipRollbackProposals(world, {
   appContext = null
 } = {}) {
   if (!world) return [];
-  const model = await buildPlatformModel({
-    appContext,
-    diagnostics: appContext ? diagnosticsFromPlatformAppContext(appContext) : null,
-    project: appContext?.project ?? (projector => world.project(projector))
+  const model = await readDeclaredPlatformShipView(world, appContext, {
+    request: {
+      id: "platform.auto.rollback-proposals",
+      actor,
+      path: "/internal/platform/ship/rollback-proposals",
+      view: "ships"
+    },
+    buildPlatformShipViewImpl: buildArgs => buildPlatformModel({
+      appContext: buildArgs.appContext,
+      diagnostics: buildArgs.appContext ? diagnosticsFromPlatformAppContext(buildArgs.appContext) : null,
+      project: buildArgs.project
+    })
   });
   const created = [];
   for (const shipRecord of model.shipRecords ?? []) {
@@ -286,10 +295,18 @@ export async function shipPlatformBranch(world, {
   const releaseChannel = releaseChannelIndex()[String(releaseChannelId || "")] ?? null;
   if (!releaseChannel) return { ok: false, status: 404, error: `release channel not found: ${releaseChannelId}` };
 
-  const model = await buildPlatformModel({
-    appContext,
-    diagnostics: appContext ? diagnosticsFromPlatformAppContext(appContext) : null,
-    project: appContext?.project ?? (projector => world.project(projector))
+  const model = await readDeclaredPlatformShipView(world, appContext, {
+    request: {
+      id: `platform.ship:${branchId}:${releaseChannelId}`,
+      actor,
+      path: `/api/platform-branches/${encodeURIComponent(String(branchId || ""))}/ship`,
+      view: "ships"
+    },
+    buildPlatformShipViewImpl: buildArgs => buildPlatformModel({
+      appContext: buildArgs.appContext,
+      diagnostics: buildArgs.appContext ? diagnosticsFromPlatformAppContext(buildArgs.appContext) : null,
+      project: buildArgs.project
+    })
   });
   const latestPush = latestPushedRecord(model.pushRecords, branchId);
   if (!latestPush) {

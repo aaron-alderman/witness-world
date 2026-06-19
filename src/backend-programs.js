@@ -1,4 +1,7 @@
 import { thing, relation } from "./kernel.js";
+import {
+  MIGRATION_STATUS
+} from "./migration-status.js";
 import { stepGraphFromLinearSteps } from "./process-graph.js";
 
 // Generic authored backend-program ABI: witnessed definitions, projections, and
@@ -189,20 +192,44 @@ export function requestBackendProgramVersionActivation(world, { actor, soul, ver
       claims: [],
       body: { soul, version, ok: false, reason: "unknown backend program version" }
     });
-    return { ok: false, status: "failed", soul, version, witness, witnesses: [witness] };
+    return {
+      ok: false,
+      status: "failed",
+      migrationStatus: MIGRATION_STATUS.blocked,
+      soul,
+      version,
+      witness,
+      witnesses: [witness]
+    };
   }
 
   const current = activeBackendProgramVersions(witnesses).get(soul) ?? null;
   if (!current || current === version) {
     const witness = activateBackendProgramVersion(world, { actor, soul, version });
-    return { ok: true, status: "activated", soul, version, witness, witnesses: [witness] };
+    return {
+      ok: true,
+      status: "activated",
+      migrationStatus: MIGRATION_STATUS.compatible,
+      soul,
+      version,
+      witness,
+      witnesses: [witness]
+    };
   }
 
   const transition = backendProgramVersionTransitionIndex(witnesses).get(`${soul}\u0000${current}\u0000${version}`) ?? null;
   const strategy = transition?.strategy ?? "block";
   if (strategy === "compatible") {
     const witness = activateBackendProgramVersion(world, { actor, soul, version });
-    return { ok: true, status: "activated", soul, version, witness, witnesses: [witness] };
+    return {
+      ok: true,
+      status: "activated",
+      migrationStatus: MIGRATION_STATUS.compatible,
+      soul,
+      version,
+      witness,
+      witnesses: [witness]
+    };
   }
   if (strategy === "migrate") {
     const migration = world.emit({
@@ -212,7 +239,15 @@ export function requestBackendProgramVersionActivation(world, { actor, soul, ver
       body: { soul, from: current, to: version, strategy }
     });
     const activation = activateBackendProgramVersion(world, { actor, soul, version });
-    return { ok: true, status: "migrated", soul, version, witness: activation, witnesses: [migration, activation] };
+    return {
+      ok: true,
+      status: "migrated",
+      migrationStatus: MIGRATION_STATUS.migrate,
+      soul,
+      version,
+      witness: activation,
+      witnesses: [migration, activation]
+    };
   }
   if (strategy === "fork") {
     const requested = world.emit({
@@ -227,7 +262,15 @@ export function requestBackendProgramVersionActivation(world, { actor, soul, ver
       claims: [],
       body: { soul, from: current, version, strategy, reason: "fork required" }
     });
-    return { ok: false, status: "forkRequired", soul, version, witness: blocked, witnesses: [requested, blocked] };
+    return {
+      ok: false,
+      status: "forkRequired",
+      migrationStatus: MIGRATION_STATUS.forkRequired,
+      soul,
+      version,
+      witness: blocked,
+      witnesses: [requested, blocked]
+    };
   }
   const blocked = world.emit({
     process: "activateBackendProgramVersion.blocked",
@@ -235,7 +278,15 @@ export function requestBackendProgramVersionActivation(world, { actor, soul, ver
     claims: [],
     body: { soul, from: current, version, strategy, reason: transition ? "transition blocked" : "no authored transition" }
   });
-  return { ok: false, status: "blocked", soul, version, witness: blocked, witnesses: [blocked] };
+  return {
+    ok: false,
+    status: "blocked",
+    migrationStatus: MIGRATION_STATUS.blocked,
+    soul,
+    version,
+    witness: blocked,
+    witnesses: [blocked]
+  };
 }
 
 export function rollbackBackendProgramVersion(world, { actor, soul }) {
@@ -247,7 +298,15 @@ export function rollbackBackendProgramVersion(world, { actor, soul }) {
       claims: [],
       body: { soul, reason: "no previous active version" }
     });
-    return { ok: false, status: "failed", soul, version: null, witness, witnesses: [witness] };
+    return {
+      ok: false,
+      status: "failed",
+      migrationStatus: MIGRATION_STATUS.blocked,
+      soul,
+      version: null,
+      witness,
+      witnesses: [witness]
+    };
   }
 
   const current = history[history.length - 1]?.version ?? null;
@@ -265,8 +324,21 @@ export function rollbackBackendProgramVersion(world, { actor, soul }) {
       claims: [],
       body: { soul, reason: "no previous distinct active version" }
     });
-    return { ok: false, status: "failed", soul, version: null, witness, witnesses: [witness] };
+    return {
+      ok: false,
+      status: "failed",
+      migrationStatus: MIGRATION_STATUS.blocked,
+      soul,
+      version: null,
+      witness,
+      witnesses: [witness]
+    };
   }
+
+  const rollbackTransition = backendProgramVersionTransitionIndex(world.allWitnesses()).get(`${soul}\u0000${current}\u0000${target}`) ?? null;
+  const rollbackMigrationStatus = rollbackTransition?.strategy === "migrate"
+    ? MIGRATION_STATUS.migrate
+    : MIGRATION_STATUS.compatible;
 
   const rollback = world.emit({
     process: "backendProgramVersion.rollback",
@@ -275,7 +347,15 @@ export function rollbackBackendProgramVersion(world, { actor, soul }) {
     body: { soul, from: current, to: target }
   });
   const activation = activateBackendProgramVersion(world, { actor, soul, version: target });
-  return { ok: true, status: "rolledBack", soul, version: target, witness: activation, witnesses: [rollback, activation] };
+  return {
+    ok: true,
+    status: "rolledBack",
+    migrationStatus: rollbackMigrationStatus,
+    soul,
+    version: target,
+    witness: activation,
+    witnesses: [rollback, activation]
+  };
 }
 
 export function backendProgramsProjection(witnesses) {

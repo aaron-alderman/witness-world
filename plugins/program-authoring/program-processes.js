@@ -470,6 +470,7 @@ export function requestBootstrapBackendProgramVersionActivate(world, {
         ok: true,
         status: 200,
         activationStatus: result.status,
+        migrationStatus: result.migrationStatus,
         witness: result.witness,
         witnesses: result.witnesses,
         backendProgramVersion: { soul: validated.value.soul, version: validated.value.version }
@@ -505,6 +506,7 @@ export function requestBootstrapBackendProgramVersionRollback(world, {
         ok: true,
         status: 200,
         rollbackStatus: result.status,
+        migrationStatus: result.migrationStatus,
         witness: result.witness,
         witnesses: result.witnesses,
         backendProgramVersion: { soul: validated.value.soul, version: result.version }

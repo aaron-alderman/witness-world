@@ -10,6 +10,8 @@ export const LEGACY_FRONTEND_ROUTE_PARAM_NAMES = Object.freeze([
   "liveProjection"
 ]);
 
+const LEGACY_FRONTEND_RETIREMENT_MESSAGE = "Legacy frontend routes are retired and no longer serve. Run frontend.upliftLegacy to migrate this route onto canonical page.surface authoring.";
+
 function trimString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
@@ -96,33 +98,62 @@ export function legacyFrontendBridgeConfigFromSurface(surface = null) {
   };
 }
 
-export function legacyFrontendCompatibilityBridgeObservationsFromProject(project) {
+export function retiredLegacyFrontendRouteState(route = null, resolveSurfaceById = null) {
+  const handler = trimString(route?.handler);
+  if (handler === "page.home") {
+    const bridge = legacyFrontendBridgeConfigFromRoute(route);
+    if (!bridge) return null;
+    return {
+      routeId: trimString(route?.id) || null,
+      handler,
+      retirementKind: "page.home",
+      rootWidget: bridge.rootWidget,
+      rootSurface: null,
+      message: LEGACY_FRONTEND_RETIREMENT_MESSAGE
+    };
+  }
+  if (handler !== "page.surface") return null;
+  const rootSurfaceId = trimString(route?.params?.rootSurface);
+  if (!rootSurfaceId || typeof resolveSurfaceById !== "function") return null;
+  const bridgeSurface = resolveSurfaceById(rootSurfaceId) ?? null;
+  const bridge = legacyFrontendBridgeConfigFromSurface(bridgeSurface);
+  if (!bridge) return null;
+  return {
+    routeId: trimString(route?.id) || null,
+    handler,
+    retirementKind: "page.surface.compatibility",
+    rootWidget: bridge.rootWidget,
+    rootSurface: rootSurfaceId,
+    message: LEGACY_FRONTEND_RETIREMENT_MESSAGE
+  };
+}
+
+function sortRetiredRows(rows = []) {
+  return [...rows].sort((left, right) =>
+    String(left.routeId || "").localeCompare(String(right.routeId || ""))
+    || String(left.retirementKind || "").localeCompare(String(right.retirementKind || ""))
+    || String(left.id || "").localeCompare(String(right.id || ""))
+  );
+}
+
+export function retiredLegacyFrontendRoutesFromProject(project) {
   if (typeof project !== "function") throw new Error("project must be a function");
   const routes = project(moduleProjectors.routes) ?? [];
   const surfaceRows = project(surfaceRowsFromWitnesses) ?? [];
   const surfacesById = new Map(surfaceRows.map(surface => [surface.id, surface]));
-  const pageHomeRoutes = routes.filter(route =>
-    trimString(route?.handler) === "page.home"
-    && legacyFrontendBridgeConfigFromRoute(route)
-  );
-  const pageSurfaceCompatibilityRoutes = routes.filter(route => {
-    if (trimString(route?.handler) !== "page.surface") return false;
-    const rootSurfaceId = trimString(route?.params?.rootSurface);
-    if (!rootSurfaceId) return false;
-    return isLegacyFrontendBridgeSurface(surfacesById.get(rootSurfaceId) ?? null);
-  });
-  return [
-    {
-      bridgeId: "compatibilityBridge:legacyFrontend.pageHomeShim",
-      count: pageHomeRoutes.length,
-      sampleTarget: pageHomeRoutes[0]?.id ?? null,
-      sampleSource: pageHomeRoutes[0] ? "route.handler:page.home" : null
-    },
-    {
-      bridgeId: "compatibilityBridge:legacyFrontend.pageSurfaceCompatibility",
-      count: pageSurfaceCompatibilityRoutes.length,
-      sampleTarget: pageSurfaceCompatibilityRoutes[0]?.id ?? null,
-      sampleSource: pageSurfaceCompatibilityRoutes[0] ? "route.handler:page.surface" : null
-    }
-  ].filter(row => row.count > 0);
+  return sortRetiredRows(routes.flatMap(route => {
+    const state = retiredLegacyFrontendRouteState(route, rootSurfaceId => surfacesById.get(rootSurfaceId) ?? null);
+    if (!state?.routeId) return [];
+    return [{
+      id: `retiredLegacyFrontend:${state.retirementKind}:${state.routeId}`,
+      routeId: state.routeId,
+      handler: state.handler,
+      retirementKind: state.retirementKind,
+      path: route?.path ?? null,
+      method: route?.method ?? null,
+      rootWidget: state.rootWidget,
+      rootSurface: state.rootSurface,
+      message: state.message
+    }];
+  }));
 }

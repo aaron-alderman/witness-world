@@ -49,20 +49,8 @@ async function completeStep(page, serverUrl) {
     case stepId === "runner:create":
       await page.locator("#tutorial-next").click();
       break;
-    case stepId.startsWith("widgets:"):
-      await page.locator("#tutorial-next").click();
-      break;
-    case stepId === "program:create":
-      await page.locator("#tutorial-next").click();
-      break;
-    case stepId.startsWith("program-step:"):
-      await page.locator("#tutorial-next").click();
-      break;
-    case stepId.startsWith("route:"):
-      await page.locator("#tutorial-next").click();
-      break;
-    case stepId.startsWith("serve:"):
-      await page.locator("#tutorial-next").click();
+    case stepId === "native:create-app":
+      await page.locator("#create-todo-starter").click();
       break;
     case stepId === "open-app":
       await page.locator("#open-app-link").click();
@@ -75,13 +63,7 @@ async function completeStep(page, serverUrl) {
     case stepId === "app:create-todo":
       await page.locator("#tutorial-next").click();
       break;
-    case stepId === "app:toggle-todo":
-      await page.locator('[data-tutorial-target="todo-toggle"]').click();
-      break;
-    case stepId === "app:delete-todo":
-      await page.locator('[data-tutorial-target="todo-delete"]').click();
-      break;
-    case stepId === "app:create-note":
+    case stepId === "app:review-collection":
       await page.locator("#tutorial-next").click();
       break;
     case stepId === "world:inspect":
@@ -144,7 +126,7 @@ test("guided tutorial persists, resumes, and completes on the live app", { timeo
   }
 });
 
-test("guided tutorial can auto-finish the widget chapter through the real builders", { timeout: 60000 }, async () => {
+test("guided tutorial can auto-finish the native app chapter through the real builders", { timeout: 60000 }, async () => {
   const silentLogger = { info() {}, error() {} };
   const { server, close: closeServer } = await startBlankUiServer({ logger: silentLogger });
   const { page, runtime, close: closeBrowser } = await launchBrowser();
@@ -160,11 +142,12 @@ test("guided tutorial can auto-finish the widget chapter through the real builde
     await completeStep(page, server.url);
     await waitForStep(page, "runner:create");
     await completeStep(page, server.url);
-    await waitForStep(page, "widgets:todo_app_widget");
+    await waitForStep(page, "native:create-app");
 
     await page.locator("#tutorial-finish-chapter").click();
-    await waitForStep(page, "program:create");
-    await page.waitForFunction(() => document.getElementById("state-widgets")?.textContent.includes("private_note_empty_template"));
+    await waitForStep(page, "open-app");
+    await page.waitForFunction(() => document.getElementById("state-surfaces")?.textContent.includes("native_todo_surface_root"));
+    await page.waitForFunction(() => document.getElementById("state-processes")?.textContent.includes("nativeTodoProcess"));
 
     await expectNoRuntimeErrors(runtime);
   } finally {
@@ -189,15 +172,10 @@ test("bootstrap tutorial can restart the current chapter from the first step", a
     await completeStep(page, server.url);
     await waitForStep(page, "runner:create");
     await completeStep(page, server.url);
-    await waitForStep(page, "widgets:todo_app_widget");
-
-    await completeStep(page, server.url);
-    await waitForStep(page, "widgets:todo_session");
-    await completeStep(page, server.url);
-    await waitForStep(page, "widgets:todo_session_title");
+    await waitForStep(page, "native:create-app");
 
     await page.locator("#tutorial-restart-chapter").click();
-    await waitForStep(page, "widgets:todo_app_widget");
+    await waitForStep(page, "native:create-app");
 
     await expectNoRuntimeErrors(runtime);
   } finally {
@@ -245,22 +223,19 @@ test("live app tutorial can restart the current chapter from the first app step"
       {
         bodyContext: "frontend",
         bodyRoute: "home_page_route",
-        bodyRootWidget: "todo_app_widget",
-        bodyProgram: "todo_frontend_program",
+        bodyRootWidget: null,
+        bodyProgram: null,
         tutorialContext: "frontend",
         tutorialRoute: "home_page_route",
-        tutorialRootWidget: "todo_app_widget",
-        tutorialProgram: "todo_frontend_program"
+        tutorialRootWidget: null,
+        tutorialProgram: null
       }
     );
 
     await completeStep(page, server.url);
     await waitForStep(page, "app:create-todo");
     await completeStep(page, server.url);
-    await page.waitForFunction(() => {
-      const stepId = window.__witnessTutorialApp?.currentStepId || null;
-      return typeof stepId === "string" && stepId.startsWith("app:") && !["app:intro", "app:create-todo"].includes(stepId);
-    });
+    await waitForStep(page, "app:review-collection");
 
     await page.locator("#tutorial-restart-chapter").click();
     await waitForStep(page, "app:intro");
@@ -288,23 +263,21 @@ test("bootstrap tutorial can restart from the current step without auto-advancin
     await completeStep(page, server.url);
     await waitForStep(page, "runner:create");
     await completeStep(page, server.url);
-    await waitForStep(page, "widgets:todo_app_widget");
+    await waitForStep(page, "native:create-app");
 
     await completeStep(page, server.url);
-    await waitForStep(page, "widgets:todo_session");
-    await completeStep(page, server.url);
-    await waitForStep(page, "widgets:todo_session_title");
+    await waitForStep(page, "open-app");
 
     await page.locator("#tutorial-back").click();
-    await waitForStep(page, "widgets:todo_session");
+    await waitForStep(page, "native:create-app");
     await page.locator("#tutorial-restart-from-here").click();
-    await page.waitForFunction(() => window.__witnessTutorial?.replayStepId === "widgets:todo_session");
+    await page.waitForFunction(() => window.__witnessTutorial?.replayStepId === "native:create-app");
 
     await page.reload();
-    await waitForStep(page, "widgets:todo_session");
-    await page.waitForFunction(() => window.__witnessTutorial?.replayStepId === "widgets:todo_session");
+    await waitForStep(page, "native:create-app");
+    await page.waitForFunction(() => window.__witnessTutorial?.replayStepId === "native:create-app");
     await page.waitForTimeout(1500);
-    assert.equal(await currentTutorialStep(page), "widgets:todo_session");
+    assert.equal(await currentTutorialStep(page), "native:create-app");
 
     await expectNoRuntimeErrors(runtime);
   } finally {
@@ -342,21 +315,19 @@ test("live app tutorial can restart from the current step without auto-advancing
     await completeStep(page, server.url);
     await waitForStep(page, "app:create-todo");
     await completeStep(page, server.url);
-    await waitForStep(page, "app:toggle-todo");
-    await completeStep(page, server.url);
-    await waitForStep(page, "app:delete-todo");
+    await waitForStep(page, "app:review-collection");
 
     await page.locator("#tutorial-back").click();
-    await waitForStep(page, "app:toggle-todo");
+    await waitForStep(page, "app:create-todo");
     await page.locator("#tutorial-restart-step").click();
-    await page.waitForFunction(() => window.__witnessTutorialApp?.replayStepId === "app:toggle-todo");
+    await page.waitForFunction(() => window.__witnessTutorialApp?.replayStepId === "app:create-todo");
 
     await page.reload();
     await waitForAppReady(page);
-    await waitForStep(page, "app:toggle-todo");
-    await page.waitForFunction(() => window.__witnessTutorialApp?.replayStepId === "app:toggle-todo");
+    await waitForStep(page, "app:create-todo");
+    await page.waitForFunction(() => window.__witnessTutorialApp?.replayStepId === "app:create-todo");
     await page.waitForTimeout(1500);
-    assert.equal(await currentTutorialStep(page), "app:toggle-todo");
+    assert.equal(await currentTutorialStep(page), "app:create-todo");
 
     await expectNoRuntimeErrors(runtime);
   } finally {
@@ -494,7 +465,7 @@ test("live app tutorial shows current and disabled scope controls truthfully", {
           draftInputs: {},
           completedAt: null,
           hidden: false,
-          disabledScopeKeys: ['section:app:todo_form'],
+          disabledScopeKeys: ['section:app:native_todo_form'],
           replayScopeKey: null
         })
       });
@@ -519,15 +490,15 @@ test("live app tutorial shows current and disabled scope controls truthfully", {
     await page.locator("#sourcery-companion-fab").click();
     await page.locator('button[data-companion-suggestion-action="show-disabled-scopes"]').click();
     await page.waitForFunction(() => window.__witnessTutorialApp?.disabledScopesOpen === true);
-    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-panel")?.textContent.includes("Todo form"));
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-panel")?.textContent.includes("Native Todo Form"));
     await page.evaluate(() => {
       document.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
     });
-    await clickScopedSelector(page, 'button[data-disabled-scope-focus="section:app:todo_form"]');
+    await clickScopedSelector(page, 'button[data-disabled-scope-focus="section:app:native_todo_form"]');
     await page.waitForFunction(() => document.querySelector('[data-tutorial-target="todo-form"]')?.closest('form,section,main')?.getAttribute('data-tutorial-focus-scope') === 'true');
     await page.waitForFunction(() => document.querySelector('[data-tutorial-target="todo-form"]')?.getAttribute('data-tutorial-current') !== 'true');
 
-    await clickScopedSelector(page, 'button[data-disabled-scope-enable="section:app:todo_form"]');
+    await clickScopedSelector(page, 'button[data-disabled-scope-enable="section:app:native_todo_form"]');
     await page.waitForFunction(() => (window.__witnessTutorialApp?.disabledScopeKeys || []).length === 0);
 
     await expectNoRuntimeErrors(runtime);
@@ -686,7 +657,7 @@ test("bootstrap tutorial shows disabled guidance surfaces and can recover them w
     await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "offpage");
     await page.waitForFunction(() => document.getElementById("tutorial-summary")?.textContent.includes("guidance is disabled there"));
     await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("App title"));
-    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("You are now using the real app"));
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("You are now using the native app"));
     await page.waitForFunction(() => document.getElementById("tutorial-suggestions")?.textContent.includes("Re-Enable Sourcery On App"));
     await page.waitForFunction(() => document.getElementById("tutorial-suggestions")?.textContent.includes("Show Disabled Sourcery Scopes"));
     await clickScopedSelector(page, 'button[data-suggestion-id="show-disabled-scopes"]');
@@ -794,7 +765,7 @@ test("bootstrap tutorial reveals authored concepts as relevant steps become curr
   }
 });
 
-test("live app tutorial reveals app and perspective concepts only when the tutorial reaches them", { timeout: 60000 }, async () => {
+test("live app tutorial reveals app and native collection concepts only when the tutorial reaches them", { timeout: 60000 }, async () => {
   const silentLogger = { info() {}, error() {} };
   const { server, close: closeServer } = await startBlankUiServer({ logger: silentLogger });
   const { page, runtime, close: closeBrowser } = await launchBrowser();
@@ -824,22 +795,22 @@ test("live app tutorial reveals app and perspective concepts only when the tutor
       const revealed = window.__witnessTutorialApp?.revealedConceptIds || [];
       return JSON.stringify(current) === JSON.stringify(["app-boundary"])
         && revealed.includes("app-boundary")
-        && !revealed.includes("perspective-data");
+        && !revealed.includes("native-collection");
     });
     await page.waitForFunction(() => document.getElementById("tutorial-overlay-concepts")?.textContent.includes("App Boundary"));
 
     for (let attempts = 0; attempts < 4; attempts += 1) {
-      if ((await currentTutorialStep(page)) === "app:create-note") break;
+      if ((await currentTutorialStep(page)) === "app:review-collection") break;
       await completeStep(page, server.url);
     }
-    await waitForStep(page, "app:create-note");
+    await waitForStep(page, "app:review-collection");
     await page.waitForFunction(() => {
       const current = window.__witnessTutorialApp?.currentConceptIds || [];
       const revealed = window.__witnessTutorialApp?.revealedConceptIds || [];
-      return JSON.stringify(current) === JSON.stringify(["perspective-data"])
+      return JSON.stringify(current) === JSON.stringify(["native-collection"])
         && revealed.includes("app-boundary")
-        && revealed.includes("witnessed-app-state")
-        && revealed.includes("perspective-data");
+        && revealed.includes("native-process-graph")
+        && revealed.includes("native-collection");
     });
 
     await expectNoRuntimeErrors(runtime);

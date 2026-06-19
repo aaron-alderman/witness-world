@@ -107,6 +107,9 @@ Current truth:
   + policy + capability` runtime support
 - it no longer treats `dispatchDomEvent` or `witness:*` host-event bridges as
   an acceptable public runtime lane
+- public/operator legacy frontend-program and frontend-step authoring endpoints
+  are retired; `/api/frontend-programs` and `/api/frontend-steps` now return
+  explicit `410` retirement truth instead of acting as a supported app lane
 
 The next honest work does not begin from the old shell host. It begins from the
 clean floor proved by the canonical authoring pathway probe.
@@ -140,6 +143,14 @@ clean floor proved by the canonical authoring pathway probe.
 - legacy routes whose remaining behavior still cannot be lowered into native
   `surface + process + projection + collection + boundary + policy +
   capability` semantics
+- retired legacy app-serving routes that have not yet been uplifted; they are
+  now inspectable but unservable until `frontend.upliftLegacy` succeeds
+- historical legacy frontend records still exist for inspect and uplift input,
+  but maintained starter/bootstrap app creation no longer seeds a live
+  `page.home` app and then uplifts it; the starter path is natively authored
+  on `page.surface`, and the maintained tutorial now teaches that same native
+  starter path instead of `widget` + `frontendProgram` + `frontendStep`
+  construction as the default app-building lane
 - arbitrary external network targets or host-only legacy behavior that still
   lacks a first-class native expression
 
@@ -183,8 +194,9 @@ For Engentus this is now the shell substrate for:
 
 Route and shell state are two representations of the same authored problem.
 The constrained pathway now proves them together on canonical seams, so the
-next honest gap is broader module behavior and the remaining blocked legacy
-semantics that still need first-class native expression.
+next honest gap is broader module behavior plus the remaining retired legacy
+semantics that still need first-class native expression before uplift can
+finish.
 
 ## Restart lane
 

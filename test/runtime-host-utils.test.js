@@ -5,6 +5,7 @@ import { createWorld, projectors } from "../src/kernel.js";
 import {
   declareBackendHost,
   declareFrontendHost,
+  buildBootstrapStartupRunner,
   hostCapabilities,
   resolveServerRunner,
   resolveRunnerForHost,
@@ -88,8 +89,20 @@ test("runtime host utils resolve server runners and bootstrap fallback", () => {
       actors: null,
       storage: null,
       allowActorHeader: false,
-      bootstrapOnly: true
+      bootstrapOnly: true,
+      startupOwned: false
     }
+  });
+  assert.deepEqual(buildBootstrapStartupRunner(noRunnersWorld), {
+    id: "__bootstrap__",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    handlerSet: null,
+    actors: null,
+    storage: null,
+    allowActorHeader: false,
+    bootstrapOnly: true,
+    startupOwned: true
   });
 
   const oneRunnerWorld = createHostWorld({

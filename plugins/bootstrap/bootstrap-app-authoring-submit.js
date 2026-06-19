@@ -183,8 +183,6 @@ export function bindBootstrapAppAuthoringSubmit({
     { source: "bootstrap-app-authoring-controls", family: "context", formId: "context-form", statusId: "context-status" },
     { source: "bootstrap-app-authoring-controls", family: "perspective", formId: "perspective-form", statusId: "perspective-status" },
     { source: "bootstrap-app-authoring-controls", family: "widget", formId: "widget-form", statusId: "widget-status" },
-    { source: "bootstrap-app-authoring-controls", family: "program", formId: "program-form", statusId: "program-status" },
-    { source: "bootstrap-app-authoring-controls", family: "step", formId: "step-form", statusId: "step-status" },
     { source: "bootstrap-app-authoring-controls", family: "route", formId: "route-form", statusId: "route-status" },
     { source: "bootstrap-app-authoring-controls", family: "serve", formId: "serve-form", statusId: "serve-status" },
     { source: "bootstrap-app-authoring-controls", family: "runner", formId: "runner-form", statusId: "runner-status" }

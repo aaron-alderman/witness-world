@@ -72,6 +72,15 @@ test("runtime plugin review view builds detail HTML and note text for the select
           resolvedBundles: [],
           resolvedRuntimeContributions: { capabilities: [], routes: [], surfaces: [], handlerSets: [] },
           currentComposition: { profile: "full" },
+          reconcileActions: [{
+            id: "remove-broken-install",
+            label: "Remove broken install",
+            severity: "high",
+            description: "This authored plugin install is broken.",
+            available: true,
+            targetPluginId: "plugin.inspect",
+            blockedReasons: []
+          }],
           removePreview: {
             available: true,
             delta: {
@@ -97,6 +106,7 @@ test("runtime plugin review view builds detail HTML and note text for the select
   assert.equal(Array.isArray(view.detailItems), true);
   assert.equal(view.detailItems.some(item => item.title === "Operator Summary"), true);
   assert.equal(view.detailItems.some(item => item.title === "Inspect Bundle Bridge"), true);
+  assert.equal(view.detailItems.some(item => item.title === "Reconcile And Repair" && item.actions?.[0]?.dataset?.runtimePluginReviewActionId === "remove-broken-install"), true);
   assert.equal(view.detailItems.some(item => item.title === "Remove Preview"), true);
   assert.equal(view.noteText.includes("Installed on profile"), true);
 });

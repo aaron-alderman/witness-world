@@ -180,39 +180,30 @@ test("platform page routes bridge, governance, semantics, and package nouns to d
     requestUrl: new URL(`http://platform.local/platform?view=packageConvergence&id=${encodeURIComponent(patchId)}`)
   });
 
-  assert.match(bridgeHtml, /Platform Console - Bridges/);
+  assert.match(bridgeHtml, /Platform Console - Advanced \/ Bridges/);
   assert.match(bridgeHtml, /canonical-id-sugar/);
-  assert.match(bridgeHtml, /\/platform\?view=bridges&amp;id=compatibilityBridge%3A/);
-  assert.match(bridgeHtml, /\/api\/platform-model\?view=bridges&amp;id=compatibilityBridge%3A/);
-  assert.match(governanceRouteHtml, /Platform Console - Governance/);
+  assert.match(bridgeHtml, /\/platform\?area=advanced&amp;section=bridges/);
+  assert.match(governanceRouteHtml, /Platform Console - Advanced \/ Governance/);
   assert.match(governanceRouteHtml, /platform\.changeSet\.apply/);
-  assert.match(governanceRouteHtml, /\/platform\?view=governance&amp;id=governanceRoute%3A/);
-  assert.match(governanceRouteHtml, /\/api\/platform-model\?view=governance&amp;id=governanceRoute%3A/);
+  assert.match(governanceRouteHtml, /\/platform\?area=advanced&amp;section=governance/);
   assert.match(governanceTargetHtml, /runtimePlugin\.install/);
-  assert.match(governanceTargetHtml, /\/platform\?view=governance&amp;id=governanceProposalTarget%3A/);
-  assert.match(governanceTargetHtml, /\/api\/platform-model\?view=governance&amp;id=governanceProposalTarget%3A/);
-  assert.match(semanticsHtml, /Platform Console - Semantics/);
+  assert.match(governanceTargetHtml, /\/platform\?area=advanced&amp;section=governance/);
+  assert.match(semanticsHtml, /Platform Console - Advanced \/ Semantics/);
   assert.match(semanticsHtml, /actor-private/);
-  assert.match(semanticsHtml, /\/platform\?view=semantics&amp;id=mutableSurface%3Ademo\.privateNotes/);
-  assert.match(semanticsHtml, /\/api\/platform-model\?view=semantics&amp;id=mutableSurface%3Ademo\.privateNotes/);
-  assert.match(packageHtml, /Platform Console - Package Coexistence/);
+  assert.match(semanticsHtml, /\/platform\?area=advanced&amp;section=semantics/);
+  assert.match(packageHtml, /Platform Console - Advanced \/ Packages/);
   assert.match(packageHtml, /packageRevision\.plugin\.inspect\.v1/);
-  assert.match(packageHtml, /\/platform\?view=packageCoexistence&amp;id=package\.plugin\.inspect/);
-  assert.match(packageHtml, /\/api\/platform-model\?view=packageCoexistence&amp;id=package\.plugin\.inspect/);
+  assert.match(packageHtml, /\/platform\?area=advanced&amp;section=packages/);
   assert.match(revisionHtml, /packageRevision\.plugin\.inspect\.v1/);
-  assert.match(revisionHtml, /\/platform\?view=packageCoexistence&amp;id=packageRevision\.plugin\.inspect\.v1/);
-  assert.match(revisionHtml, /\/api\/platform-model\?view=packageCoexistence&amp;id=packageRevision\.plugin\.inspect\.v1/);
-  assert.match(transformerHtml, /Platform Console - Package Convergence/);
+  assert.match(revisionHtml, /\/platform\?area=advanced&amp;section=packages/);
+  assert.match(transformerHtml, /Platform Console - Advanced \/ Packages/);
   assert.match(transformerHtml, /glue-required/);
-  assert.match(transformerHtml, /\/platform\?view=packageConvergence&amp;id=packageTransformer\.inspect\.v1-to-v2/);
-  assert.match(transformerHtml, /\/api\/platform-model\?view=packageConvergence&amp;id=packageTransformer\.inspect\.v1-to-v2/);
-  assert.match(applyPreviewHtml, /Platform Console - Package Apply Preview/);
+  assert.match(transformerHtml, /\/platform\?area=advanced&amp;section=packages/);
+  assert.match(applyPreviewHtml, /Platform Console - Advanced \/ Packages/);
   assert.match(applyPreviewHtml, /packageApplyPreview:packageRevision\.plugin\.inspect\.v2/);
-  assert.match(applyPreviewHtml, /\/platform\?view=packageApplyPreview&amp;id=packageApplyPreview%3ApackageRevision\.plugin\.inspect\.v2/);
-  assert.match(applyPreviewHtml, /\/api\/platform-model\?view=packageApplyPreview&amp;id=packageApplyPreview%3ApackageRevision\.plugin\.inspect\.v2/);
+  assert.match(applyPreviewHtml, /\/platform\?area=advanced&amp;section=packages/);
   assert.match(patchHtml, /packagePatch:[0-9a-f]{64}/);
-  assert.match(patchHtml, /\/platform\?view=packageConvergence&amp;id=packagePatch%3A[0-9a-f]{64}/);
-  assert.match(patchHtml, /\/api\/platform-model\?view=packageConvergence&amp;id=packagePatch%3A[0-9a-f]{64}/);
+  assert.match(patchHtml, /\/platform\?area=advanced&amp;section=packages/);
 });
 
 test("platform page renders package apply preview through its dedicated review surface", async () => {
@@ -237,7 +228,7 @@ test("platform page renders package apply preview through its dedicated review s
     requestUrl: new URL("http://platform.local/platform?view=packageApplyPreview&id=packageRevision.plugin.inspect.v2")
   });
 
-  assert.match(html, /Platform Console - Package Apply Preview/);
+  assert.match(html, /Platform Console - Advanced \/ Packages/);
   assert.match(html, /Package Apply Preview Rows/);
   assert.match(html, /Package Apply Preview Detail/);
   assert.match(html, /glue-required/);

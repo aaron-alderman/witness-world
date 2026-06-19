@@ -42,6 +42,66 @@ ttlMs = 2000
 sourceProjectors = ["telemetrySamples", "telemetryWindows", "performanceRegressions", "materializedViewStates", "resourceProbeOperations"]
 sourceWitnessProcesses = ["platform.changeSet.validate", "platform.test.run.finish"]
 
+[[materializedView]]
+actor = "aaron"
+id = "platform.view.verification.status"
+title = "Platform verification status view"
+kind = "platformSlice"
+sliceKey = "verification"
+modelView = "verificationStatus"
+maintenance = "on-demand"
+storageClass = "memory"
+resourceBudgetClass = "interactive"
+blocking = true
+ttlMs = 2000
+sourceProjectors = ["testGates", "verificationFreshness", "verificationInvalidations", "verificationQueue", "verificationExecutions", "runtimePluginInstalls"]
+sourceWitnessProcesses = ["platform.changeSet.validate", "platform.test.run.finish"]
+
+[[materializedView]]
+actor = "aaron"
+id = "platform.view.verification.queue"
+title = "Platform verification queue selection"
+kind = "platformVerification"
+sliceKey = "verification"
+modelView = "verificationStatus"
+maintenance = "on-demand"
+storageClass = "memory"
+resourceBudgetClass = "interactive"
+blocking = true
+ttlMs = 2000
+sourceProjectors = ["branches", "changeSets", "changeSetEdits", "proposals", "testGates", "defects", "defectObservations", "latestTestResultsByGate"]
+sourceWitnessProcesses = ["platform.changeSet.edit.upsert", "platform.changeSet.edit.remove", "platform.changeSet.apply", "platform.changeSet.validate", "platform.test.run.finish"]
+
+[[materializedView]]
+actor = "aaron"
+id = "platform.view.pushes"
+title = "Platform push workflow view"
+kind = "platformSlice"
+sliceKey = "pushes"
+modelView = "pushes"
+maintenance = "on-demand"
+storageClass = "memory"
+resourceBudgetClass = "interactive"
+blocking = true
+ttlMs = 2000
+sourceProjectors = ["branches", "changeSets", "pushRecords", "proposals", "defects"]
+sourceWitnessProcesses = ["platform.branch.push", "platform.changeSet.apply"]
+
+[[materializedView]]
+actor = "aaron"
+id = "platform.view.ship.gating"
+title = "Platform ship gating view"
+kind = "platformShip"
+sliceKey = "ships"
+modelView = "ships"
+maintenance = "on-demand"
+storageClass = "memory"
+resourceBudgetClass = "interactive"
+blocking = true
+ttlMs = 2000
+sourceProjectors = ["branches", "changeSets", "changeSetEdits", "proposals", "pushRecords", "shipRecords", "performanceRegressions", "defects", "defectObservations", "testGates", "latestTestResultsByGate"]
+sourceWitnessProcesses = ["platform.branch.push", "platform.branch.ship", "platform.changeSet.apply", "platform.changeSet.edit.upsert", "platform.changeSet.edit.remove", "platform.test.run.finish"]
+
 [[runtimePluginInstall]]
 actor = "aaron"
 serverRunner = "engentus_server"

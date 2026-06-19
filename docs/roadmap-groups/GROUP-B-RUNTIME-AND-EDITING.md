@@ -232,6 +232,14 @@ Acceptance:
 
 - the project can explain why bootstrap and demo differ, or they share one explicit composition story
 
+Current status:
+
+- blank bootstrap now starts from `minimal` plus explicit startup-default plugins instead of an implicit `authoring` profile story
+- runtime diagnostics and bootstrap state now distinguish `startup-runner-driven` composition from `authored-runner-driven` takeover, including truthful plugin-source attribution
+- `POST /api/bootstrap/app-boundary` now establishes `/` as a governed authored `page.surface` boundary without restart, while `/_bootstrap` remains the explicit operator and recovery lane
+- authored `serverRunner` rows now carry runtime-profile intent, and runtime/plugin composition is resolved per runner instead of as one process-wide compatibility profile
+- runtime-plugin review, reconcile, MCP authoring, and proposal approval flows now execute through the same shared runtime context so bootstrap previews and approvals do not drift from live runner composition
+
 ### Stage B4. Migration and Rollback Generalization
 
 Objective:

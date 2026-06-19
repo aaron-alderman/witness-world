@@ -518,6 +518,34 @@ function renderClientEngine(program) {
   const selectedSurfaceWidgetVersionState = () => selectedSurfaceWidgetNode()?.widgetVersionState || null;
   const selectedSurfaceWidgetVersions = () => selectedSurfaceWidgetNode()?.widgetVersions || [];
   const selectedSurfaceWidgetEvolution = () => selectedSurfaceWidgetNode()?.widgetEvolution || null;
+  const backendMigrationStatusFromStrategy = strategy => {
+    switch (String(strategy || '')) {
+      case 'compatible':
+        return 'compatible';
+      case 'migrate':
+        return 'migrate';
+      case 'fork':
+        return 'forkRequired';
+      default:
+        return 'blocked';
+    }
+  };
+  const previousDistinctVersionFromHistory = (rows, currentVersion) => {
+    const history = [];
+    for (const row of rows || []) {
+      const version = String(row?.version || '').trim();
+      if (!version || history[history.length - 1] === version) continue;
+      history.push(version);
+    }
+    if (!history.length) return '';
+    const current = String(currentVersion || '').trim();
+    if (!current) return history.length >= 2 ? history[history.length - 2] : '';
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      if (history[index] !== current) continue;
+      return index > 0 ? history[index - 1] : '';
+    }
+    return history.length >= 2 ? history[history.length - 2] : '';
+  };
   const currentPreviewSessionId = () => {
     try {
       return new URL(window.location.href).searchParams.get('previewSessionId')?.trim() || '';
@@ -741,6 +769,112 @@ function renderClientEngine(program) {
       unavailableReason: latestProbe || processInfo ? '' : 'Runtime probe data has not arrived yet.'
     };
   };
+  const selectedSurfaceBackendProgramSoul = () => {
+    const knownPrograms = state.surfaceBootstrapBackendProgramsBySoul && typeof state.surfaceBootstrapBackendProgramsBySoul === 'object'
+      ? state.surfaceBootstrapBackendProgramsBySoul
+      : {};
+    const souls = new Set();
+    const addSoul = soul => {
+      const normalized = String(soul || '').trim();
+      if (!normalized || !knownPrograms[normalized]) return;
+      souls.add(normalized);
+    };
+    const ownership = selectedSurfaceWidgetOwnership();
+    (ownership?.chain || []).forEach(entry => addSoul(entry?.backendProgramSoul));
+    const correlation = selectedSurfaceWidgetRuntimeCorrelation();
+    (correlation?.ops || []).forEach(op => addSoul(op?.selectTarget));
+    return souls.size === 1 ? [...souls][0] : '';
+  };
+  const selectedSurfaceBackendProgramAuthority = soul => {
+    if (!soul) return { ok: false, reason: 'This selection does not currently resolve to one authored backend program soul.' };
+    const actor = currentActor();
+    if (!actor) return { ok: false, reason: 'Sign in to evolve authored backend program versions.' };
+    const program = state.surfaceBootstrapBackendProgramsBySoul?.[soul] || null;
+    if (!program) return { ok: false, reason: 'Authored backend program state is unavailable for ' + soul + '.' };
+    if (program.context) {
+      const mutationContexts = Array.isArray(state.authority?.mutationContexts) ? state.authority.mutationContexts : [];
+      if (mutationContexts.includes(program.context)) return { ok: true, reason: '' };
+      return { ok: false, reason: 'Read-only: backend program ' + soul + ' lives in context ' + program.context + ' and the current actor lacks direct authority there.' };
+    }
+    if (program.owner && program.owner === actor) return { ok: true, reason: '' };
+    if (program.owner) return { ok: false, reason: 'Read-only: backend program ' + soul + ' is owned by ' + program.owner + '.' };
+    return { ok: false, reason: 'Read-only: backend program ' + soul + ' is not directly mutable by the current actor.' };
+  };
+  const selectedSurfaceBackendEvolution = () => {
+    const widgetId = selectedSurfaceWidgetId();
+    if (!widgetId) return null;
+    if (!state.surfaceInspectorWidgetsLoaded) {
+      return {
+        soul: '',
+        authority: { ok: false, reason: '' },
+        versionCandidates: [],
+        rollbackAvailable: false,
+        rollbackVersion: '',
+        unavailableReason: 'Loading authored backend program state...'
+      };
+    }
+    if (state.surfaceInspectorWidgetsError) {
+      return {
+        soul: '',
+        authority: { ok: false, reason: '' },
+        versionCandidates: [],
+        rollbackAvailable: false,
+        rollbackVersion: '',
+        unavailableReason: 'Authored backend program state is unavailable right now.'
+      };
+    }
+    const soul = selectedSurfaceBackendProgramSoul();
+    if (!soul) {
+      const correlation = selectedSurfaceWidgetRuntimeCorrelation();
+      const backendTargets = [...new Set((correlation?.ops || []).map(op => String(op?.selectTarget || '').trim()).filter(Boolean))];
+      return {
+        soul: '',
+        authority: { ok: false, reason: '' },
+        versionCandidates: [],
+        rollbackAvailable: false,
+        rollbackVersion: '',
+        unavailableReason: backendTargets.length > 1
+          ? 'This selection lowers through multiple authored backend programs, so backend evolution is not exposed as one direct action here yet.'
+          : 'This selection does not currently resolve to one authored backend program soul.'
+      };
+    }
+    const versions = (state.surfaceBootstrapBackendProgramVersions || [])
+      .filter(row => row?.soul === soul)
+      .slice()
+      .sort((left, right) =>
+        Number(left?.index ?? 0) - Number(right?.index ?? 0)
+        || String(left?.version || '').localeCompare(String(right?.version || ''))
+      );
+    const transitions = (state.surfaceBootstrapBackendProgramTransitions || []).filter(row => row?.soul === soul);
+    const history = (state.surfaceBootstrapBackendProgramActivationHistory || []).filter(row => row?.soul === soul);
+    const activeVersion = versions.find(row => row?.active === true)?.version || '';
+    const rollbackVersion = previousDistinctVersionFromHistory(history, activeVersion);
+    const versionCandidates = versions.map(row => {
+      const transition = activeVersion && row.version !== activeVersion
+        ? transitions.find(candidate => candidate?.from === activeVersion && candidate?.to === row.version) || null
+        : null;
+      return {
+        soul,
+        version: row.version,
+        isActive: row.active === true,
+        index: row.index ?? 0,
+        transitionStrategy: transition?.strategy || null,
+        migrationStatus: row.active === true
+          ? 'compatible'
+          : backendMigrationStatusFromStrategy(transition?.strategy || 'block')
+      };
+    });
+    return {
+      soul,
+      authority: selectedSurfaceBackendProgramAuthority(soul),
+      activeVersion,
+      rollbackVersion,
+      rollbackAvailable: Boolean(rollbackVersion),
+      versionCandidates,
+      history,
+      unavailableReason: ''
+    };
+  };
   const ensureSurfaceInspectorGraph = async ({ force = false } = {}) => {
     if (!liveSurfaceInspectable) return { ok: false, error: 'surface inspector unavailable' };
     if (force) invalidateSurfaceInspectorGraph();
@@ -750,7 +884,7 @@ function renderClientEngine(program) {
     if (state.surfaceInspectorGraphPromise) return state.surfaceInspectorGraphPromise;
     state.surfaceInspectorGraphPromise = (async () => {
       const url = '/api/world-graph';
-      const response = await fetch(url, requestOptions({}, { url }));
+      const response = await fetch(resolveRuntimeUrl(url), requestOptions({}, { url }));
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         state.surfaceInspectorGraphError = body?.error || 'world graph request failed';
@@ -780,7 +914,7 @@ function renderClientEngine(program) {
     if (state.surfaceInspectorWidgetsPromise) return state.surfaceInspectorWidgetsPromise;
     state.surfaceInspectorWidgetsPromise = (async () => {
       const url = '/api/bootstrap-state';
-      const response = await fetch(url, requestOptions({}, { url }));
+      const response = await fetch(resolveRuntimeUrl(url), requestOptions({}, { url }));
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         state.surfaceInspectorWidgetsError = body?.error || 'bootstrap widget state request failed';
@@ -797,6 +931,11 @@ function renderClientEngine(program) {
       state.surfaceBootstrapIdentities = identities;
       state.surfaceBootstrapIdentitiesById = Object.fromEntries(identities.map(identity => [identity.id, identity]));
       state.surfaceBootstrapContexts = contexts;
+      state.surfaceBootstrapBackendPrograms = Array.isArray(body?.backendPrograms) ? body.backendPrograms : [];
+      state.surfaceBootstrapBackendProgramsBySoul = Object.fromEntries(state.surfaceBootstrapBackendPrograms.map(program => [program.soul, program]));
+      state.surfaceBootstrapBackendProgramVersions = Array.isArray(body?.backendProgramVersions) ? body.backendProgramVersions : [];
+      state.surfaceBootstrapBackendProgramTransitions = Array.isArray(body?.backendProgramTransitions) ? body.backendProgramTransitions : [];
+      state.surfaceBootstrapBackendProgramActivationHistory = Array.isArray(body?.backendProgramActivationHistory) ? body.backendProgramActivationHistory : [];
       state.surfaceBootstrapCapabilityCatalog = capabilityCatalog;
       state.surfaceBootstrapCapabilityCatalogById = Object.fromEntries(capabilityCatalog.map(row => [row.id, row]));
       state.surfaceBootstrapCapabilityInstalls = capabilityInstalls;
@@ -1466,6 +1605,56 @@ function renderClientEngine(program) {
         : '')
       + '</section>';
   };
+  const renderSurfaceInspectorBackendEvolution = () => {
+    const widgetId = selectedSurfaceWidgetId();
+    const evolution = selectedSurfaceBackendEvolution();
+    if (!widgetId || !evolution?.soul) return '';
+    if (evolution.unavailableReason) {
+      return '<section><div class="surface-inspector-meta">Backend Evolution</div><div class="surface-inspector-summary">' + escapeHtml(evolution.unavailableReason) + '</div></section>';
+    }
+    const authority = evolution.authority || { ok: false, reason: '' };
+    const currentActorPresent = Boolean(currentActor());
+    const previewSessionId = currentPreviewSessionId();
+    const rows = Array.isArray(evolution.versionCandidates) ? evolution.versionCandidates.filter(row => !row.isActive) : [];
+    if (!rows.length) {
+      return '<section><div class="surface-inspector-meta">Backend Evolution</div><div class="surface-inspector-summary">No authored backend version targets are available for ' + escapeHtml(evolution.soul) + ' yet.</div></section>';
+    }
+    const draft = state.surfaceInspectorBackendEvolutionDraft?.soul === evolution.soul
+      ? state.surfaceInspectorBackendEvolutionDraft
+      : null;
+    const selectedVersion = typeof draft?.version === 'string' && draft.version
+      ? draft.version
+      : (rows[0]?.version || '');
+    const selected = rows.find(row => row.version === selectedVersion) || rows[0] || null;
+    const blocked = selected && (selected.migrationStatus === 'blocked' || selected.migrationStatus === 'forkRequired');
+    return '<section><div class="surface-inspector-meta">Backend Evolution</div>'
+      + (previewSessionId ? '<div class="surface-inspector-summary">Rendering from preview session ' + escapeHtml(previewSessionId) + '.</div>' : '')
+      + '<form class="surface-form" data-surface-inspector-backend-evolution-form data-widget-id="' + escapeHtml(widgetId) + '" data-backend-soul="' + escapeHtml(evolution.soul) + '">'
+      + '<label class="surface-field"><span>Backend Program</span><input value="' + escapeHtml(evolution.soul) + '" disabled /></label>'
+      + '<label class="surface-field"><span>Target Version</span><select name="version">' + rows.map(row =>
+          '<option value="' + escapeHtml(row.version || '') + '"' + (row.version === selectedVersion ? ' selected' : '') + '>' + escapeHtml((row.version || '') + (row.migrationStatus ? ' [' + row.migrationStatus + ']' : '')) + '</option>'
+        ).join('') + '</select></label>'
+      + '<div class="surface-inspector-summary">Current active version: ' + escapeHtml(evolution.activeVersion || 'none') + '.</div>'
+      + (selected?.transitionStrategy ? '<div class="surface-inspector-summary">Authored transition strategy: ' + escapeHtml(selected.transitionStrategy) + '.</div>' : '')
+      + (selected?.migrationStatus ? '<div class="surface-inspector-summary">Migration status: ' + escapeHtml(selected.migrationStatus) + '.</div>' : '')
+      + (currentActorPresent && !authority.ok ? '<label class="surface-field"><span>Reason</span><input name="reason" placeholder="Why should this backend version change?" /></label>' : '')
+      + '<div class="surface-inspector-summary">' + escapeHtml(blocked
+        ? 'This authored backend transition is deferred and cannot be applied directly from the live inspector.'
+        : 'Preview or apply the authored backend transition through shared backend-version rules.') + '</div>'
+      + '<div class="surface-actions-compact">'
+      + (!blocked ? '<button type="submit" data-surface-inspector-backend-evolution-preview>Preview Backend Upgrade</button>' : '')
+      + (!blocked ? '<button type="button" data-surface-inspector-backend-evolution-apply>' + escapeHtml(authority.ok ? 'Apply Backend Upgrade' : 'Propose Backend Upgrade') + '</button>' : '')
+      + (previewSessionId ? '<button type="button" data-surface-inspector-backend-evolution-discard>Discard Preview</button>' : '')
+      + '</div>'
+      + '</form>'
+      + (evolution.rollbackAvailable
+        ? '<div class="surface-actions-compact"><button type="button" data-surface-inspector-backend-evolution-rollback="' + escapeHtml(evolution.soul) + '">' + escapeHtml(authority.ok ? ('Rollback Backend To ' + (evolution.rollbackVersion || 'previous')) : ('Propose Rollback Backend To ' + (evolution.rollbackVersion || 'previous'))) + '</button></div>'
+        : '')
+      + (!authority.ok && currentActorPresent
+        ? '<div class="surface-inspector-summary">' + escapeHtml(authority.reason || 'Direct backend version changes are blocked here, but you can create a real proposal for later approval.') + '</div>'
+        : '')
+      + '</section>';
+  };
   const renderSurfaceInspectorEditor = () => renderSurfaceInspectorEditorView({
     widgetId: selectedSurfaceWidgetId(),
     authoredWidget: selectedSurfaceWidgetAuthored(),
@@ -1547,6 +1736,7 @@ function renderClientEngine(program) {
       runtimeCorrelationRows: runtimeCorrelation?.rows || [],
       runtimeCorrelationOps: runtimeCorrelation?.ops || [],
       runtimeCorrelationUnavailableReason: runtimeCorrelation?.unavailableReason || '',
+      backendEvolutionHtml: renderSurfaceInspectorBackendEvolution(),
       evolutionHtml: renderSurfaceInspectorEvolution(),
       childCreateHtml: renderSurfaceInspectorChildCreate(),
       editorHtml: renderSurfaceInspectorEditor(),
@@ -1557,6 +1747,7 @@ function renderClientEngine(program) {
     const previewSessionId = currentPreviewSessionId();
     if (previewSessionId) await deleteAppPreviewSession({ sessionId: previewSessionId });
     state.surfaceInspectorEvolutionDraft = null;
+    state.surfaceInspectorBackendEvolutionDraft = null;
     setQueryParam({ name: 'previewSessionId', value: '' });
     invalidateSurfaceInspectorGraph();
     invalidateSurfaceInspectorWidgets();
@@ -1590,6 +1781,16 @@ function renderClientEngine(program) {
       widgetId,
       mode,
       input
+    };
+  };
+  const storeSurfaceInspectorBackendEvolutionDraft = form => {
+    if (!form) return;
+    const soul = form.getAttribute('data-backend-soul') || '';
+    if (!soul) return;
+    state.surfaceInspectorBackendEvolutionDraft = {
+      widgetId: form.getAttribute('data-widget-id') || selectedSurfaceWidgetId(),
+      soul,
+      version: String(new FormData(form).get('version') ?? '').trim()
     };
   };
   const bindSurfaceInspectorEvolutionActions = overlay => {
@@ -1759,6 +1960,134 @@ function renderClientEngine(program) {
           return;
         }
         await clearSurfaceInspectorPreview({ widgetId: soul, statusMessage: 'Rolled back version for ' + soul + '.' });
+      });
+    });
+    overlay?.querySelectorAll?.('[data-surface-inspector-backend-evolution-form]')?.forEach?.(form => {
+      if (!form.__surfaceInspectorBackendEvolutionDraftBound) {
+        form.__surfaceInspectorBackendEvolutionDraftBound = true;
+        const syncDraft = () => storeSurfaceInspectorBackendEvolutionDraft(form);
+        form.addEventListener?.('input', syncDraft);
+        form.addEventListener?.('change', syncDraft);
+      }
+      form.addEventListener?.('submit', async event => {
+        event.preventDefault?.();
+        const widgetId = form.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
+        const soul = form.getAttribute('data-backend-soul') || '';
+        const evolution = selectedSurfaceBackendEvolution();
+        const authority = evolution?.authority || { ok: false, reason: '' };
+        try {
+          const previewSessionId = await ensureSurfaceInspectorPreviewSession();
+          storeSurfaceInspectorBackendEvolutionDraft(form);
+          const candidate = {
+            kind: 'backendProgram.version.activate',
+            input: {
+              soul,
+              version: String(new FormData(form).get('version') ?? '').trim()
+            }
+          };
+          setSurfaceInspectorStatus('Preparing backend preview for ' + soul + '...', 'ok');
+          updateSurfaceInspectorUi();
+          const result = await patchAppPreviewSessionCandidates({ sessionId: previewSessionId, candidates: [candidate] });
+          if (!result?.ok) throw new Error(result?.body?.error || 'Backend preview update failed.');
+          const previewResult = Array.isArray(result?.body?.results) ? result.body.results[0] : null;
+          setQueryParam({ name: 'previewSessionId', value: previewSessionId });
+          invalidateSurfaceInspectorGraph();
+          invalidateSurfaceInspectorWidgets();
+          await refreshProjection();
+          await selectSurfaceInspectorWidget(widgetId, {
+            refreshGraph: true,
+            statusMessage: previewResult?.ok
+              ? ('Preview active for backend ' + soul + (previewResult?.migrationStatus ? ' [' + previewResult.migrationStatus + '].' : '.'))
+              : (previewResult?.reason || 'Backend preview candidate blocked.')
+          });
+          if (!previewResult?.ok) {
+            setSurfaceInspectorStatus(previewResult?.reason || 'Backend preview candidate blocked.', 'error');
+            updateSurfaceInspectorUi();
+          } else if (!authority.ok) {
+            setSurfaceInspectorStatus('Backend preview active. Apply will create a proposal because direct mutation is blocked here.', 'ok');
+            updateSurfaceInspectorUi();
+          }
+        } catch (error) {
+          setSurfaceInspectorStatus(error instanceof Error ? error.message : String(error), 'error');
+          updateSurfaceInspectorUi();
+        }
+      });
+    });
+    overlay?.querySelectorAll?.('[data-surface-inspector-backend-evolution-apply]')?.forEach?.(button => {
+      button.addEventListener?.('click', async event => {
+        event.preventDefault?.();
+        const form = button.closest('[data-surface-inspector-backend-evolution-form]');
+        if (!form) return;
+        const widgetId = form.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
+        const soul = form.getAttribute('data-backend-soul') || '';
+        const evolution = selectedSurfaceBackendEvolution();
+        const authority = evolution?.authority || { ok: false, reason: '' };
+        const formData = new FormData(form);
+        const version = String(formData.get('version') ?? '').trim();
+        const reason = String(formData.get('reason') ?? '').trim();
+        setSurfaceInspectorStatus((authority.ok ? 'Applying ' : 'Proposing ') + soul + '...', 'ok');
+        updateSurfaceInspectorUi();
+        const result = authority.ok
+          ? await activateSurfaceBackendProgramVersion({ soul, version })
+          : await proposeSurfaceBackendProgramVersionAction({
+              targetProcess: 'backendProgramVersion.activate',
+              soul,
+              version,
+              reason
+            });
+        if (!result?.ok) {
+          setSurfaceInspectorStatus(result?.body?.error || 'Backend version apply failed.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        if (result.status === 202) {
+          setSurfaceInspectorStatus('Created proposal ' + (result?.body?.proposal?.id || result?.proposalId || 'proposal') + '.', 'ok');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        await clearSurfaceInspectorPreview({
+          widgetId,
+          statusMessage: 'Applied backend version change for ' + soul + '.'
+        });
+      });
+    });
+    overlay?.querySelectorAll?.('[data-surface-inspector-backend-evolution-discard]')?.forEach?.(button => {
+      button.addEventListener?.('click', async event => {
+        event.preventDefault?.();
+        const widgetId = button.closest('[data-surface-inspector-backend-evolution-form]')?.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
+        await clearSurfaceInspectorPreview({ widgetId, statusMessage: 'Discarded backend preview.' });
+      });
+    });
+    overlay?.querySelectorAll?.('[data-surface-inspector-backend-evolution-rollback]')?.forEach?.(button => {
+      button.addEventListener?.('click', async event => {
+        event.preventDefault?.();
+        const soul = button.getAttribute('data-surface-inspector-backend-evolution-rollback') || '';
+        if (!soul) return;
+        const widgetId = selectedSurfaceWidgetId();
+        const evolution = selectedSurfaceBackendEvolution();
+        const authority = evolution?.authority || { ok: false, reason: '' };
+        const result = authority.ok
+          ? await rollbackSurfaceBackendProgramVersion({ soul })
+          : await proposeSurfaceBackendProgramVersionAction({
+              targetProcess: 'backendProgramVersion.rollback',
+              soul,
+              version: evolution?.rollbackVersion || '',
+              reason: 'Rollback backend program version'
+            });
+        if (!result?.ok) {
+          setSurfaceInspectorStatus(result?.body?.error || 'Backend version rollback failed.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        if (result.status === 202) {
+          setSurfaceInspectorStatus('Created proposal ' + (result?.body?.proposal?.id || result?.proposalId || 'proposal') + '.', 'ok');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        await clearSurfaceInspectorPreview({
+          widgetId,
+          statusMessage: 'Rolled back backend version for ' + soul + '.'
+        });
       });
     });
   };
@@ -2607,9 +2936,23 @@ function renderClientEngine(program) {
     const text = String(url || '').trim();
     if (!text) return window.location.href;
     try {
-      return new URL(text, window.location.href).toString();
+      const resolved = new URL(text, window.location.href);
+      const previewSessionId = currentPreviewSessionId();
+      if (
+        previewSessionId
+        && resolved.origin === window.location.origin
+        && !resolved.searchParams.has('previewSessionId')
+      ) {
+        resolved.searchParams.set('previewSessionId', previewSessionId);
+      }
+      return resolved.toString();
     } catch {
-      return new URL(text, 'http://127.0.0.1').toString();
+      const resolved = new URL(text, 'http://127.0.0.1');
+      const previewSessionId = currentPreviewSessionId();
+      if (previewSessionId && !resolved.searchParams.has('previewSessionId')) {
+        resolved.searchParams.set('previewSessionId', previewSessionId);
+      }
+      return resolved.toString();
     }
   };
   const activateSurfaceWidgetVersion = async ({ soul, version }) => {
@@ -2626,6 +2969,41 @@ function renderClientEngine(program) {
     const url = '/api/widget-versions/' + encodeURIComponent(soul) + '/rollback';
     const response = await fetch(resolveRuntimeUrl(url), requestOptions({
       method: 'POST'
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body };
+  };
+  const activateSurfaceBackendProgramVersion = async ({ soul, version }) => {
+    const url = '/api/backend-program-versions/' + encodeURIComponent(soul) + '/activate';
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ version })
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body };
+  };
+  const rollbackSurfaceBackendProgramVersion = async ({ soul, reason = '' }) => {
+    const url = '/api/backend-program-versions/' + encodeURIComponent(soul) + '/rollback';
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(reason ? { reason } : {})
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body };
+  };
+  const proposeSurfaceBackendProgramVersionAction = async ({ targetProcess, soul, version = '', reason = '' }) => {
+    const url = targetProcess === 'backendProgramVersion.rollback'
+      ? '/api/backend-program-versions/' + encodeURIComponent(soul) + '/rollback'
+      : '/api/backend-program-versions/' + encodeURIComponent(soul) + '/activate';
+    const bodyPayload = targetProcess === 'backendProgramVersion.activate'
+      ? { version, reason: String(reason || '').trim() }
+      : { reason: String(reason || '').trim() };
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(bodyPayload)
     }, { url }));
     const body = await response.json().catch(() => ({}));
     return { ok: response.ok, status: response.status, body };

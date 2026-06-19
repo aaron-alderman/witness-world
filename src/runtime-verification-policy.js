@@ -25,6 +25,7 @@ function normalizeDefaults(raw = {}) {
     startup: booleanOrDefault(raw.startup, true),
     watch: booleanOrDefault(raw.watch, true),
     onChangeSet: booleanOrDefault(raw.onChangeSet, true),
+    startupSettleMs: integerOrDefault(raw.startupSettleMs, 15000),
     priority: integerOrDefault(raw.priority, 100),
     maxConcurrency: integerOrDefault(raw.maxConcurrency, 1, { minimum: 1 }),
     cpuBudget: integerOrDefault(raw.cpuBudget, 1, { minimum: 1 }),
@@ -58,6 +59,38 @@ function normalizeOverride(raw = {}) {
   return {
     runtimeProfile,
     defaults: normalizeDefaults(raw.defaults && typeof raw.defaults === "object" ? raw.defaults : {})
+  };
+}
+
+function uniqueStrings(values = []) {
+  return [...new Set((Array.isArray(values) ? values : []).map(value => String(value || "").trim()).filter(Boolean))];
+}
+
+function normalizeVerifierEntry(raw = {}) {
+  const gateId = optionalText(raw.gateId);
+  const providerId = optionalText(raw.providerId);
+  if (!gateId || !providerId) return null;
+  const enabled = booleanOrDefault(raw.enabled, true);
+  return {
+    gateId,
+    title: optionalText(raw.title) ?? gateId,
+    providerId,
+    enabled,
+    executionClass: optionalText(raw.executionClass),
+    safetyClass: optionalText(raw.safetyClass),
+    startup: booleanOrDefault(raw.startup, true),
+    watch: booleanOrDefault(raw.watch, true),
+    onChangeSet: booleanOrDefault(raw.onChangeSet, true),
+    invoke: raw.invoke == null ? enabled : booleanOrDefault(raw.invoke, true),
+    priority: integerOrDefault(raw.priority, 100),
+    timeoutMs: raw.timeoutMs == null ? null : integerOrDefault(raw.timeoutMs, null),
+    exclusive: booleanOrDefault(raw.exclusive, false),
+    requiresCleanWorkspace: booleanOrDefault(raw.requiresCleanWorkspace, false),
+    sourceDependencies: uniqueStrings(raw.sourceDependencies),
+    targetIds: uniqueStrings(raw.targetIds),
+    input: raw.input && typeof raw.input === "object" && !Array.isArray(raw.input)
+      ? structuredClone(raw.input)
+      : {}
   };
 }
 
@@ -101,6 +134,7 @@ export function resolveRunnerVerificationPolicy({
   let enabled = true;
   let defaults = normalizeDefaults();
   let gateOverlays = [];
+  let verifierEntries = [];
   let source = "synthesized";
 
   if (authored) {
@@ -109,6 +143,9 @@ export function resolveRunnerVerificationPolicy({
     defaults = normalizeDefaults(authored.defaults && typeof authored.defaults === "object" ? authored.defaults : {});
     gateOverlays = (Array.isArray(authored.gate) ? authored.gate : [])
       .map(normalizeGateOverlay)
+      .filter(Boolean);
+    verifierEntries = (Array.isArray(authored.verifier) ? authored.verifier : [])
+      .map(normalizeVerifierEntry)
       .filter(Boolean);
     const override = (Array.isArray(authored.override) ? authored.override : [])
       .map(normalizeOverride)
@@ -148,6 +185,7 @@ export function resolveRunnerVerificationPolicy({
     runtimeProfile: profile,
     defaults,
     gateOverlays,
+    verifierEntries,
     compatibility: {
       watchFs: legacy.watchFs,
       watchDebounceMs: legacy.watchDebounceMs,
@@ -159,6 +197,8 @@ export function resolveRunnerVerificationPolicy({
 }
 
 function inferExecutionClass(gate = {}) {
+  const explicit = optionalText(gate?.executionClass);
+  if (explicit) return explicit;
   const environment = optionalText(gate.environment);
   const protectedObjects = Array.isArray(gate.protectedObjects) ? gate.protectedObjects.map(String) : [];
   if (protectedObjects.includes("testEnvironment:platform-candidate-snapshot")) return "candidate_snapshot";
@@ -183,6 +223,7 @@ export function resolveVerificationGatePolicy(policy = null, gate = null) {
     watch: overlay?.watch ?? defaults.watch,
     onChangeSet: overlay?.onChangeSet ?? defaults.onChangeSet,
     priority: overlay?.priority ?? defaults.priority,
+    startupSettleMs: defaults.startupSettleMs,
     maxConcurrency: defaults.maxConcurrency,
     cpuBudget: defaults.cpuBudget,
     regressionMinDeltaMs: defaults.regressionMinDeltaMs,

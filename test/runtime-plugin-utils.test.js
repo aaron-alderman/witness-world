@@ -403,6 +403,15 @@ test("plugin compatibility follows profile metadata and startup activation stays
     assert.deepEqual(full.activePluginIds, ["plugin.inspect"]);
     assert.deepEqual(full.addedBundleIds, ["bundle-inspect"]);
     assert.deepEqual(full.selection.activeBundleIds, ["bundle-inspect"]);
+
+    const startup = await readRuntimePluginCatalog({
+      pluginRoot: root,
+      runtimeProfile: "full",
+      startupPluginIds: ["plugin.inspect"]
+    });
+    assert.deepEqual(startup.startupPluginIds, ["plugin.inspect"]);
+    assert.deepEqual(startup.packages[0].activation.requestedSources, ["profile", "startup"]);
+    assert.equal(startup.summary.requestedSourceCounts.startup, 1);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -764,6 +773,7 @@ test("runtime plugin reviews show executable composition deltas and metadata-onl
     assert.deepEqual(inspect.installPreview?.delta.addedRoutes, []);
     assert.equal(notes.installPreview?.available, false);
     assert.equal(notes.blockingReasons.some(reason => reason.includes("metadata-only")), true);
+    assert.equal(notes.reconcileActions.length, 0);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -815,6 +825,11 @@ test("runtime plugin reviews report no-op installs, missing dependencies, and re
     assert.ok(canvas);
     assert.equal(canvas.removePreview?.available, true);
     assert.equal(canvas.removePreview?.warnings.some(reason => reason.includes("plugin.inspect")), true);
+    assert.equal(missingInspect.reconcileActions.some(action =>
+      action.id === "install-missing-dependency:plugin.canvas"
+      && action.targetProcess === "runtimePlugin.reconcile"
+      && action.available === true
+    ), true);
 
     const fullReview = await readRuntimePluginReviews({
       pluginRoot: root,
@@ -837,6 +852,54 @@ test("runtime plugin reviews report no-op installs, missing dependencies, and re
     assert.ok(noOpInspect);
     assert.equal(noOpInspect.installPreview?.available, true);
     assert.equal(noOpInspect.installPreview?.delta.effectiveNoOp, true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("runtime plugin reviews expose reconcile actions for broken installed and missing authored plugin intent", async () => {
+  const root = await tempPluginRoot();
+  try {
+    await writePlugin(root, "notes-sidebar", {
+      id: "plugin.notes-sidebar",
+      version: "0.1.0",
+      displayName: "Notes Sidebar",
+      description: "Metadata only",
+      kind: "plugin",
+      contributes: {
+        capabilities: [{ id: "notes.sidebar" }]
+      }
+    });
+
+    const brokenInstalled = await readRuntimePluginReviews({
+      pluginRoot: root,
+      runtimeProfile: "minimal",
+      serverRunnerId: "demo_server",
+      authoredPluginIds: ["plugin.notes-sidebar"]
+    });
+    const notes = brokenInstalled.packages.find(row => row.plugin === "plugin.notes-sidebar");
+    assert.ok(notes);
+    assert.equal(notes.reconcileActions.some(action =>
+      action.id === "remove-broken-install"
+      && action.targetProcess === "runtimePlugin.reconcile"
+      && action.available === true
+      && action.preview?.action === "remove"
+    ), true);
+
+    const missingIntent = await readRuntimePluginReviews({
+      pluginRoot: root,
+      runtimeProfile: "minimal",
+      serverRunnerId: "demo_server",
+      authoredPluginIds: ["plugin.missing"]
+    });
+    const missing = missingIntent.packages.find(row => row.plugin === "plugin.missing");
+    assert.ok(missing);
+    assert.equal(missing.reconcileActions.some(action =>
+      action.id === "cleanup-missing-intent"
+      && action.targetProcess === "runtimePlugin.reconcile"
+      && action.available === true
+      && action.preview?.action === "remove"
+    ), true);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

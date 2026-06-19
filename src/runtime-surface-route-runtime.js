@@ -361,7 +361,17 @@ export function createBrowserRouteInvoker(window, {
       throw new Error("route invoker requires window.fetch");
     }
     const normalizedMethod = trimString(method)?.toUpperCase() || "POST";
-    const resolvedRoute = interpolateRouteTemplate(route, request);
+    const baseRoute = interpolateRouteTemplate(route, request);
+    const resolvedUrl = new URL(baseRoute, window.location.href);
+    const previewSessionId = new URL(window.location.href).searchParams.get("previewSessionId")?.trim() || "";
+    if (
+      previewSessionId
+      && resolvedUrl.origin === window.location.origin
+      && !resolvedUrl.searchParams.has("previewSessionId")
+    ) {
+      resolvedUrl.searchParams.set("previewSessionId", previewSessionId);
+    }
+    const resolvedRoute = resolvedUrl.toString();
     const headers = { "content-type": "application/json" };
     if (actorState && runtime && typeof runtime.value === "function") {
       const actor = trimString(runtime.value(actorState));

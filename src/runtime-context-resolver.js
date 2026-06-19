@@ -15,9 +15,6 @@ export function createRuntimeContextResolver({
     if (!resolvedRunner?.ok) return bootstrapRuntime;
     const liveRunner = resolvedRunner.runner;
     if (!liveRunner || liveRunner.id === bootstrapRunner.id) return bootstrapRuntime;
-    if (runtimeContexts.has(liveRunner.id)) {
-      return { runner: liveRunner, context: runtimeContexts.get(liveRunner.id) };
-    }
     const liveContext = await createContextForRunner(liveRunner);
     if (!liveContext?.ok) {
       return {

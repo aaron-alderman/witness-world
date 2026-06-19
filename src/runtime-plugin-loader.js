@@ -575,7 +575,9 @@ export function applyRuntimePluginLoadState(pluginCatalog, loadResult) {
   return {
     ...pluginCatalog,
     packages,
-    addedBundleIds: Object.keys(loadResult?.bundleOverrides ?? {}),
+    addedBundleIds: (pluginCatalog?.addedBundleIds ?? []).filter(bundleId =>
+      Object.prototype.hasOwnProperty.call(loadResult?.bundleOverrides ?? {}, bundleId)
+    ),
     rejectedPlugins: [
       ...(pluginCatalog?.rejectedPlugins ?? []),
       ...(loadResult?.failures ?? [])

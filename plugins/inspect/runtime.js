@@ -11,6 +11,10 @@ import { requestWidgetVersionActivation, rollbackWidgetVersion } from "./widget-
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { processRunProjection, processViewProjection, renderProcessPage } from "./process-view.js";
 import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
+import {
+  previewAwareAppContext,
+  resolvePreviewSessionRequest
+} from "../../src/runtime-preview.js";
 
 export const bundleId = "bundle-inspect";
 
@@ -599,42 +603,78 @@ export function createHandlers({
       sendJson(res, 200, model);
     },
 
-    "worldGraph.read": async ({ res, requestActor, requestId, appContext }) => {
-      world.observe({
+    "worldGraph.read": async ({ res, requestActor, requestId, requestUrl, appContext }) => {
+      const previewRequest = resolvePreviewSessionRequest({ appContext, requestUrl });
+      if (!previewRequest.ok && previewRequest.reason === "stale") {
+        sendJson(res, 409, {
+          error: previewRequest.session?.invalidReason || "preview no longer matches the active snapshot",
+          previewSession: previewRequest.session ?? null
+        });
+        return;
+      }
+      const requestWorld = previewRequest.ok ? previewRequest.world : world;
+      const requestAppContext = previewRequest.ok
+        ? previewAwareAppContext(appContext, requestWorld)
+        : appContext;
+      requestWorld.observe({
         process: "backend.readWorldGraph",
         actor: backendHost,
         claims: [relation(backendHost, "projected", "worldGraph")],
-        body: { count: world.allWitnesses().length }
+        body: { count: requestWorld.allWitnesses().length }
       });
-      const model = inspectWorldGraphReadModel(world.allWitnesses(), { requestActor, appContext });
-      const visibleCount = visibleWitnessesForProjection(world.allWitnesses(), { requestActor, appContext }).length;
+      const model = inspectWorldGraphReadModel(requestWorld.allWitnesses(), { requestActor, appContext: requestAppContext });
+      const visibleCount = visibleWitnessesForProjection(requestWorld.allWitnesses(), { requestActor, appContext: requestAppContext }).length;
       logInfo("worldGraph.projected", { requestId, witnesses: visibleCount, nodes: model.graph.nodes.length, edges: model.graph.edges.length });
       sendJson(res, 200, model);
     },
 
     "processView.read": async ({ res, requestUrl, requestActor, appContext }) => {
-      world.emit({
+      const previewRequest = resolvePreviewSessionRequest({ appContext, requestUrl });
+      if (!previewRequest.ok && previewRequest.reason === "stale") {
+        sendJson(res, 409, {
+          error: previewRequest.session?.invalidReason || "preview no longer matches the active snapshot",
+          previewSession: previewRequest.session ?? null
+        });
+        return;
+      }
+      const requestWorld = previewRequest.ok ? previewRequest.world : world;
+      const requestAppContext = previewRequest.ok
+        ? previewAwareAppContext(appContext, requestWorld)
+        : appContext;
+      requestWorld.emit({
         process: "backend.readProcessView",
         actor: requestActor || backendHost,
         claims: [],
         body: processSelection(requestUrl)
       });
-      const model = inspectProcessViewReadModel(world.allWitnesses(), {
+      const model = inspectProcessViewReadModel(requestWorld.allWitnesses(), {
         requestActor,
-        appContext,
+        appContext: requestAppContext,
         query: Object.fromEntries(requestUrl.searchParams.entries()),
-        observations: world.allObservations()
+        observations: requestWorld.allObservations()
       });
       sendJson(res, 200, model);
     },
 
     "processRun.read": async ({ res, requestUrl, requestActor, params, appContext }) => {
-      const result = inspectProcessRunReadModel(world.allWitnesses(), {
+      const previewRequest = resolvePreviewSessionRequest({ appContext, requestUrl });
+      if (!previewRequest.ok && previewRequest.reason === "stale") {
+        sendJson(res, 409, {
+          error: previewRequest.session?.invalidReason || "preview no longer matches the active snapshot",
+          previewSession: previewRequest.session ?? null
+        });
+        return;
+      }
+      const requestWorld = previewRequest.ok ? previewRequest.world : world;
+      const requestAppContext = previewRequest.ok
+        ? previewAwareAppContext(appContext, requestWorld)
+        : appContext;
+      const result = inspectProcessRunReadModel(requestWorld.allWitnesses(), {
         requestActor,
-        appContext,
+        appContext: requestAppContext,
         runId: params.runId || "",
         query: Object.fromEntries(requestUrl.searchParams.entries()),
-        observations: world.allObservations()
+        observations: requestWorld.allObservations()
       });
       if (!result.ok) {
         sendJson(res, result.status, result.body);

@@ -31,7 +31,6 @@ import {
   requireCoveredAuthoringRefInput,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
-  requestBootstrapFrontendMigrateLegacy,
   requestBootstrapFrontendUpliftLegacy,
   requestWidgetDefine,
   requestWidgetReplace,
@@ -39,7 +38,6 @@ import {
   requestWidgetUpdate
 } from "./authoring-core-processes.js";
 import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
-import { frontendLegacyMigrationAuthorityTargets } from "../../src/frontend-legacy-migration.js";
 import { frontendLegacyUpliftAuthorityTargets } from "../../src/frontend-legacy-uplift.js";
 import { resolveAuthoringHandlerSupport } from "../../src/runtime-authoring-handler-support.js";
 
@@ -1151,64 +1149,6 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       sendJson(res, result.status, { route: result.route, witness: result.witness });
-    },
-
-    "frontend.migrateLegacy": async ({ req, res, requestActor }) => {
-      const gate = requireBootstrapActor(requestActor);
-      if (!gate.ok) {
-        sendGateFailure(res, gate);
-        return;
-      }
-      const body = await readJson(req);
-      const migration = frontendLegacyMigrationAuthorityTargets(world);
-      let denied = null;
-      for (const entry of migration.targets) {
-        const auth = ensureTargetAuthority(gate.actor, entry.target);
-        if (auth.ok) continue;
-        if (auth.status === 403) {
-          denied = entry;
-          break;
-        }
-        sendGateFailure(res, auth);
-        return;
-      }
-      if (denied) {
-        const proposal = requestAuthoringCoreProposalCreate({
-          actor: gate.actor,
-          targetProcess: "frontend.migrateLegacy",
-          targetKind: denied.targetKind,
-          targetId: denied.target,
-          body,
-          reason: "Migrate legacy frontend routes through witnessed proposal"
-        });
-        if (!proposal.ok) {
-          sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
-          return;
-        }
-        sendJson(res, 202, {
-          ok: true,
-          status: "proposed",
-          proposal: proposal.proposal,
-          witness: proposal.witness,
-          preview: migration.preview
-        });
-        return;
-      }
-      const result = requestBootstrapFrontendMigrateLegacy(world, {
-        actor: gate.actor,
-        backendHost
-      });
-      if (!result.ok) {
-        sendJson(res, result.status, { error: result.error, witness: result.witness });
-        return;
-      }
-      sendJson(res, result.status, {
-        ok: true,
-        actions: result.actions,
-        previewBefore: result.previewBefore,
-        previewAfter: result.previewAfter,
-        witness: result.witness
-      });
     },
 
     "frontend.upliftLegacy": async ({ req, res, requestActor }) => {

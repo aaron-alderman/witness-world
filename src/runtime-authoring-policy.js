@@ -32,7 +32,6 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "message.create",
   "boundary.create",
   "policy.create",
-  "frontend.migrateLegacy",
   "frontend.upliftLegacy",
   "package.create",
   "packageRevision.create",
@@ -44,8 +43,10 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "route.create",
   "serve.create",
   "serverRunner.create",
+  "serverRunner.runtimeProfile.set",
   "runtimePlugin.install",
   "runtimePlugin.remove",
+  "runtimePlugin.reconcile",
   "capability.create",
   "capability.update",
   "capability.install",
@@ -78,7 +79,6 @@ export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
   "message.create",
   "boundary.create",
   "policy.create",
-  "frontend.migrateLegacy",
   "frontend.upliftLegacy",
   "package.create",
   "packageRevision.create",
@@ -90,6 +90,10 @@ export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
   "route.create",
   "serve.create",
   "serverRunner.create",
+  "serverRunner.runtimeProfile.set",
+  "runtimePlugin.install",
+  "runtimePlugin.remove",
+  "runtimePlugin.reconcile",
   "capability.create",
   "capability.update",
   "capability.install",
@@ -101,12 +105,7 @@ export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
   "mcpTool.remove"
 ]);
 
-export const MCP_ONLY_LEGACY_MCP_ACTIONS = Object.freeze([
-  "widget.create",
-  "widget.update",
-  "frontendProgram.create",
-  "frontendStep.create"
-]);
+export const MCP_ONLY_LEGACY_MCP_ACTIONS = Object.freeze([]);
 
 export const MCP_ONLY_FORBIDDEN_MUTATIONS = Object.freeze([
   "repo-tracked file edits outside plugin.authoring flows",
@@ -341,21 +340,19 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       }),
       widget: capabilityState({
         publicActions: ["widget.create", "widget.update"],
-        runtimeConsumers: ["page.home"],
+        runtimeConsumers: ["page.world"],
         status: "legacy_only",
-        reason: "widgets remain available only on the explicit legacy widget-program path until frontendLegacyMigration rewrites those routes onto page.surface compatibility surfaces"
+        reason: "widgets remain only as inspect and historical-analysis records; legacy app-serving routes must uplift onto canonical page.surface before they can run"
       }),
       frontendProgram: capabilityState({
-        publicAction: "frontendProgram.create",
-        runtimeConsumers: ["page.home", "compat.legacy-widget-program"],
+        runtimeConsumers: [],
         status: "legacy_only",
-        reason: "frontend programs remain legacy-only compatibility input until routes are uplifted onto native page.surface surface/process/projection/message/boundary/policy authoring."
+        reason: "frontend programs remain historical compatibility input only; no legacy app-serving runtime bridge remains after retirement"
       }),
       frontendStep: capabilityState({
-        publicAction: "frontendStep.create",
-        runtimeConsumers: ["page.home", "compat.legacy-widget-program"],
+        runtimeConsumers: [],
         status: "legacy_only",
-        reason: "frontend steps remain legacy-only compatibility input until routes are uplifted onto native page.surface surface/process/projection/message/boundary/policy authoring."
+        reason: "frontend steps remain historical compatibility input only; no legacy app-serving runtime bridge remains after retirement"
       }),
       frontendLegacyUplift: capabilityState({
         publicAction: "frontend.upliftLegacy",
@@ -433,7 +430,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       "page.home": {
         consumes: ["widget", "frontendProgram"],
         status: "legacy_only",
-        reason: "page.home now exists only as a compatibility shim while frontendLegacyMigration moves legacy widget-program routes onto page.surface"
+        reason: "page.home is retired for app-serving frontend; retained only as historical route state discoverable through frontendLegacyUplift retirement diagnostics"
       }
     },
     pairings: [
@@ -462,7 +459,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         authoring: ["widget", "frontendProgram", "frontendStep"],
         runtime: "page.home",
         status: "legacy_only",
-        reason: "legacy widget-program execution remains available only as a compatibility lane outside the constrained public MCP baseline; frontendLegacyMigration is the path onto page.surface"
+        reason: "legacy widget-program records remain available for inspect and uplift analysis only; retired routes must move onto canonical page.surface before they can run"
       }
     ],
     constrainedMcp: {

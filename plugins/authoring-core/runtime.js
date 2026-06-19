@@ -1,8 +1,4 @@
 import { createAuthoringCoreBundleHandlers } from "./authoring-core-handlers.js";
-import {
-  LEGACY_FRONTEND_SURFACE_CAPABILITY_ID,
-  legacyFrontendBridgeConfigFromSurface
-} from "../../src/legacy-frontend-bridge.js";
 
 function exactRoute(method, path, handler, params = {}) {
   return Object.freeze({ kind: "exact", method, path, handler, params });
@@ -43,7 +39,6 @@ const authoringHandlerCatalog = Object.freeze({
     "packageNamespace.create",
     "packageDependency.create",
     "packageTransformer.create",
-    "frontend.migrateLegacy",
     "frontend.upliftLegacy",
     "widgets.create",
     "widgets.update",
@@ -81,7 +76,6 @@ const authoringRoutes = Object.freeze([
   exactRoute("POST", "/api/package-namespaces", "packageNamespace.create"),
   exactRoute("POST", "/api/package-dependencies", "packageDependency.create"),
   exactRoute("POST", "/api/package-transformers", "packageTransformer.create"),
-  exactRoute("POST", "/api/frontend-migrations/legacy", "frontend.migrateLegacy"),
   exactRoute("POST", "/api/frontend-uplifts/legacy", "frontend.upliftLegacy"),
   exactRoute("POST", "/api/widgets", "widgets.create"),
   patternRoute("PATCH", /^\/api\/widgets\/([^/]+)$/, "widgets.update", Object.freeze(["id"])),
@@ -94,33 +88,7 @@ const authoringRoutes = Object.freeze([
 ]);
 
 const authoringSurfaces = Object.freeze([]);
-const authoringProviders = Object.freeze([
-  {
-    kind: "capabilityDefinitions",
-    id: "authoring-core.legacyFrontendCapability",
-    capabilities: Object.freeze([
-      Object.freeze({
-        id: LEGACY_FRONTEND_SURFACE_CAPABILITY_ID,
-        label: "Legacy Widget-Program Compatibility Bridge"
-      })
-    ])
-  },
-  {
-    kind: "surfaceCapabilityRenderer",
-    id: "authoring-core.legacyFrontendSurfaceRenderer",
-    capability: LEGACY_FRONTEND_SURFACE_CAPABILITY_ID,
-    factory() {
-      return {
-        capability: LEGACY_FRONTEND_SURFACE_CAPABILITY_ID,
-        renderSurface(surface) {
-          const bridge = legacyFrontendBridgeConfigFromSurface(surface);
-          if (!bridge) return null;
-          return `<section data-legacy-frontend-bridge="${surface.id}" data-root-widget="${bridge.rootWidget}"></section>`;
-        }
-      };
-    }
-  }
-]);
+const authoringProviders = Object.freeze([]);
 
 export const bundles = Object.freeze({
   "bundle-authoring-core": Object.freeze({

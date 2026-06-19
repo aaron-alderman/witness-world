@@ -10,8 +10,10 @@ export const PLATFORM_PROPOSAL_ACTIONS = Object.freeze([
   "changeSet.validate",
   "changeSet.apply",
   "defect.create",
+  "serverRunner.runtimeProfile.set",
   "runtimePlugin.install",
   "runtimePlugin.remove",
+  "runtimePlugin.reconcile",
   "mcpServer.define",
   "mcpTool.install",
   "mcpTool.remove",
@@ -133,6 +135,13 @@ export const PLATFORM_PROPOSAL_TEMPLATES = Object.freeze({
       reason: "Track recurring platform test failures through the proposal lane"
     })
   }),
+  "serverRunner.runtimeProfile.set": Object.freeze({
+    action: "serverRunner.runtimeProfile.set",
+    title: "Set server runner runtime profile",
+    targetKind: "serverRunner",
+    requiredBodyFields: Object.freeze(["serverRunner", "runtimeProfile"]),
+    sampleBody: Object.freeze({ serverRunner: "demo_server", runtimeProfile: "minimal" })
+  }),
   "runtimePlugin.install": Object.freeze({
     action: "runtimePlugin.install",
     title: "Install runtime plugin",
@@ -146,6 +155,13 @@ export const PLATFORM_PROPOSAL_TEMPLATES = Object.freeze({
     targetKind: "serverRunner",
     requiredBodyFields: Object.freeze(["serverRunner", "plugin"]),
     sampleBody: Object.freeze({ serverRunner: "demo_server", plugin: "plugin.inspect" })
+  }),
+  "runtimePlugin.reconcile": Object.freeze({
+    action: "runtimePlugin.reconcile",
+    title: "Repair runtime plugin install",
+    targetKind: "serverRunner",
+    requiredBodyFields: Object.freeze(["serverRunner", "plugin", "actionId"]),
+    sampleBody: Object.freeze({ serverRunner: "demo_server", plugin: "plugin.inspect", actionId: "remove-broken-install" })
   }),
   "mcpServer.define": Object.freeze({
     action: "mcpServer.define",
@@ -282,8 +298,10 @@ export function platformProposalTarget(action, body, explicit = {}) {
     case "changeSet.validate":
     case "changeSet.apply":
       return { targetKind: "changeSet", targetId: String(body.changeSetId || "") };
+    case "serverRunner.runtimeProfile.set":
     case "runtimePlugin.install":
     case "runtimePlugin.remove":
+    case "runtimePlugin.reconcile":
     case "mcpServer.define":
       return { targetKind: "serverRunner", targetId: String(body.serverRunner || "") };
     case "mcpTool.install":

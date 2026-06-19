@@ -12,7 +12,7 @@ test("bootstrap authored page main renders shell structure and replaces authored
   assert.match(html, /<main[^>]*>/);
   assert.match(html, /class="presentation-column column"/);
   assert.match(html, /Contexts, Stewardship, And Proposals/);
-  assert.match(html, /Focused Builders/);
+  assert.match(html, /Canonical Page Surface/);
   assert.match(html, /Current World/);
   assert.match(html, /surface-card surface-stack/);
   assert.match(html, /surface-badge/);
@@ -22,6 +22,15 @@ test("bootstrap authored page main renders shell structure and replaces authored
   assert.doesNotMatch(html, /witness:bootstrap-runtime-plugin-review-sync/);
   assert.match(html, /id="mcp-server-inventory"/);
   assert.match(html, /id="state-contexts"/);
+  assert.match(html, /id="state-collections"/);
+  assert.match(html, /id="state-surfaces"/);
+  assert.match(html, /id="state-processes"/);
+  assert.match(html, /id="state-messages"/);
+  assert.match(html, /id="state-boundaries"/);
+  assert.match(html, /id="state-policies"/);
+  assert.match(html, /id="state-legacy-frontend-retired"/);
+  assert.doesNotMatch(html, /id="state-programs"/);
+  assert.doesNotMatch(html, /id="state-steps"/);
   assert.match(html, /id="state-packages"/);
   assert.match(html, /id="state-package-convergence"/);
   assert.match(html, /id="state-package-apply-previews"/);

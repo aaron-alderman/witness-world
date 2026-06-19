@@ -163,6 +163,7 @@ export async function createRuntimeAppContext({
     if (runtime != null) providerRuntimes[providerId] = runtime;
   }
   appContext.providerRuntimes = providerRuntimes;
+  appContext.verificationProviders = runtimeContributions?.verificationProviders ?? {};
   appContext.secretStore = providerRuntimes["secret.store"] ?? null;
   appContext.dbSql = providerRuntimes["db.sql"] ?? null;
   appContext.searchIndex = providerRuntimes["search.index"] ?? null;

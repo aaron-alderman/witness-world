@@ -6,6 +6,11 @@ import {
   moduleProjectors,
   resolveCoveredContextualRef
 } from "../../src/modules.js";
+import {
+  buildRuntimePluginReview,
+  RUNTIME_PLUGIN_RECONCILE_TARGET_PROCESS
+} from "../../src/runtime-plugin-utils.js";
+import { availableRuntimeProfiles } from "../../src/runtime-bundles.js";
 import { processSpecFor, typeModelProjection, validateProcessInput } from "../../src/type-model.js";
 
 function fail(world, { process, actor, body }) {
@@ -52,6 +57,34 @@ function normalizeJsonObject(parsed, field) {
   return { ok: true, value: parsed.value };
 }
 
+function normalizedRuntimeProfile(raw) {
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+
+function validateRuntimeProfile(world, {
+  actor,
+  backendHost,
+  process,
+  runtimeProfile,
+  serverRunner = null
+}) {
+  const profile = normalizedRuntimeProfile(runtimeProfile);
+  if (!profile) return { ok: true, runtimeProfile: null };
+  const validProfiles = availableRuntimeProfiles();
+  if (validProfiles.includes(profile)) return { ok: true, runtimeProfile: profile };
+  const witness = fail(world, {
+    process: `${process}.failed`,
+    actor: actor || backendHost,
+    body: {
+      reason: "unknown runtime profile",
+      runtimeProfile: profile,
+      serverRunner,
+      validProfiles
+    }
+  });
+  return { ok: false, status: 400, error: "unknown runtime profile", witness };
+}
+
 function resolveBodyRef(world, body, {
   contextField = "context",
   idField,
@@ -90,6 +123,20 @@ function runtimePluginInstallExists(world, { serverRunner, plugin }) {
 
 function runtimePluginPackageById(pluginCatalog = null) {
   return new Map((pluginCatalog?.packages ?? []).map(row => [row.id, row]));
+}
+
+function currentRuntimePluginReview(world, {
+  serverRunner,
+  plugin,
+  pluginCatalog = null
+}) {
+  return buildRuntimePluginReview({
+    runtimeProfile: pluginCatalog?.activeProfile ?? null,
+    serverRunnerId: serverRunner,
+    authoredPluginIds: installedRuntimePluginRows(world, serverRunner).map(row => row.plugin),
+    pluginId: plugin,
+    pluginCatalog
+  });
 }
 
 function validateRuntimePluginPackageForInstall(pluginPackage, { serverRunner, plugin, actor, backendHost, world }) {
@@ -141,6 +188,42 @@ function validateRuntimePluginPackageForInstall(pluginPackage, { serverRunner, p
 function installedRuntimePluginRows(world, serverRunner) {
   return world.project(moduleProjectors.runtimePluginInstalls)
     .filter(row => row.serverRunner === serverRunner);
+}
+
+function emitServerRunnerState(world, {
+  actor,
+  owner = actor,
+  runner
+}) {
+  return world.emit({
+    process: "defineServerRunner",
+    actor,
+    claims: [
+      relation(runner.id, "hasModuleKind", "serverRunner"),
+      relation(runner.id, "supportsProcess", "serveRoute"),
+      relation(runner.id, "hostBoundary", "http"),
+      relation(owner, "owns", runner.id),
+      ...(runner.context ? [relation(runner.id, "inContext", runner.context)] : []),
+      ...(runner.backendHost ? [relation(runner.id, "usesBackendHost", runner.backendHost)] : []),
+      ...(runner.frontendHost ? [relation(runner.id, "usesFrontendHost", runner.frontendHost)] : [])
+    ],
+    body: {
+      id: runner.id,
+      backendHost: runner.backendHost ? String(runner.backendHost) : null,
+      frontendHost: runner.frontendHost ? String(runner.frontendHost) : null,
+      runtimeProfile: runner.runtimeProfile ? String(runner.runtimeProfile) : null,
+      handlerSet: runner.handlerSet ? String(runner.handlerSet) : null,
+      actors: Array.isArray(runner.actors) ? [...runner.actors] : null,
+      storage: runner.storage && typeof runner.storage === "object" ? { ...runner.storage } : null,
+      runtimeConfig: runner.runtimeConfig && typeof runner.runtimeConfig === "object" ? { ...runner.runtimeConfig } : null,
+      allowActorHeader: runner.allowActorHeader === true,
+      hosts: Array.isArray(runner.hosts) ? [...runner.hosts] : null,
+      default: runner.default === true,
+      requireAuth: runner.requireAuth === true,
+      context: runner.context ? String(runner.context) : null,
+      values: runner.values && typeof runner.values === "object" ? structuredClone(runner.values) : null
+    }
+  });
 }
 
 function dependencyIdsForPackage(pluginPackage) {
@@ -304,6 +387,14 @@ export function requestBootstrapServerRunnerDefine(world, {
   }
   const resolvedBackendHost = backendHostResolved.target ?? input.backendHost ?? null;
   const resolvedFrontendHost = frontendHostResolved.target ?? input.frontendHost ?? null;
+  const runtimeProfileValidation = validateRuntimeProfile(world, {
+    actor,
+    backendHost,
+    process: "serverRunner.define",
+    runtimeProfile: input.runtimeProfile,
+    serverRunner: input.id
+  });
+  if (!runtimeProfileValidation.ok) return runtimeProfileValidation;
   if (!resolvedBackendHost || !resolvedFrontendHost) {
     const witness = fail(world, {
       process: "serverRunner.define.failed",
@@ -345,6 +436,7 @@ export function requestBootstrapServerRunnerDefine(world, {
     id: input.id,
     backendHost: resolvedBackendHost,
     frontendHost: resolvedFrontendHost,
+    runtimeProfile: runtimeProfileValidation.runtimeProfile,
     handlerSet: input.handlerSet || null,
     storage: Object.keys(storage).length ? storage : null,
     runtimeConfig: runtimeConfigParsed.value,
@@ -356,6 +448,7 @@ export function requestBootstrapServerRunnerDefine(world, {
     id: input.id,
     backendHost: resolvedBackendHost,
     frontendHost: resolvedFrontendHost,
+    runtimeProfile: runtimeProfileValidation.runtimeProfile,
     handlerSet: input.handlerSet || null,
     storage: Object.keys(storage).length ? storage : null,
     runtimeConfig: runtimeConfigParsed.value,
@@ -369,6 +462,80 @@ export function requestBootstrapServerRunnerDefine(world, {
     body: { serverRunner: runner }
   });
   return { ok: true, status: 201, serverRunner: runner, witness };
+}
+
+export function requestBootstrapServerRunnerRuntimeProfileSet(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "serverRunner.runtimeProfile.set", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "serverRunner.runtimeProfile.set.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const serverRunnerResolved = resolveRuntimePluginServerRunnerInput(world, validated.value, {
+    label: "server runner"
+  });
+  if (!serverRunnerResolved.ok) {
+    const witness = fail(world, {
+      process: "serverRunner.runtimeProfile.set.failed",
+      actor: actor || backendHost,
+      body: { reason: serverRunnerResolved.error }
+    });
+    return { ok: false, status: 400, error: serverRunnerResolved.error, witness };
+  }
+  const serverRunnerId = serverRunnerResolved.target;
+  const runnerBefore = world.project(moduleProjectors.serverRunners)
+    .find(row => row.id === serverRunnerId) ?? null;
+  if (!runnerBefore) {
+    const witness = fail(world, {
+      process: "serverRunner.runtimeProfile.set.failed",
+      actor: actor || backendHost,
+      body: { reason: "server runner target not found", serverRunner: serverRunnerId }
+    });
+    return { ok: false, status: 404, error: "server runner target not found", witness };
+  }
+  const runtimeProfileValidation = validateRuntimeProfile(world, {
+    actor,
+    backendHost,
+    process: "serverRunner.runtimeProfile.set",
+    runtimeProfile: validated.value.runtimeProfile,
+    serverRunner: serverRunnerId
+  });
+  if (!runtimeProfileValidation.ok) return runtimeProfileValidation;
+  const nextRuntimeProfile = runtimeProfileValidation.runtimeProfile;
+  const runnerAfter = {
+    ...runnerBefore,
+    runtimeProfile: nextRuntimeProfile
+  };
+  emitServerRunnerState(world, {
+    actor: actor || backendHost,
+    owner: actor || backendHost,
+    runner: runnerAfter
+  });
+  const witness = world.emit({
+    process: "serverRunner.runtimeProfile.set",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", serverRunnerId)],
+    body: {
+      serverRunner: serverRunnerId,
+      profileBefore: runnerBefore.runtimeProfile ?? null,
+      profileAfter: nextRuntimeProfile
+    }
+  });
+  return {
+    ok: true,
+    status: 200,
+    serverRunner: runnerAfter,
+    profileBefore: runnerBefore.runtimeProfile ?? null,
+    profileAfter: nextRuntimeProfile,
+    witness
+  };
 }
 
 export function requestBootstrapRuntimePluginInstall(world, {
@@ -610,4 +777,179 @@ export function requestBootstrapRuntimePluginRemove(world, {
     }
   });
   return { ok: true, status: 200, runtimePluginInstall: existing, runtimePluginInstalls: removedRows, witness };
+}
+
+export function requestBootstrapRuntimePluginReconcile(world, {
+  actor,
+  backendHost,
+  body,
+  pluginCatalog = null
+}) {
+  const validated = validateInput(world, "runtimePlugin.reconcile", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "runtimePlugin.reconcile.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const serverRunnerResolved = resolveRuntimePluginServerRunnerInput(world, validated.value, {
+    label: "server runner"
+  });
+  if (!serverRunnerResolved.ok) {
+    const witness = fail(world, {
+      process: "runtimePlugin.reconcile.failed",
+      actor: actor || backendHost,
+      body: { reason: serverRunnerResolved.error }
+    });
+    return { ok: false, status: 400, error: serverRunnerResolved.error, witness };
+  }
+  const serverRunner = serverRunnerResolved.target;
+  const plugin = typeof validated.value.plugin === "string" ? validated.value.plugin.trim() : "";
+  const actionId = typeof validated.value.actionId === "string" ? validated.value.actionId.trim() : "";
+  if (!serverRunner || !plugin || !actionId) {
+    const witness = fail(world, {
+      process: "runtimePlugin.reconcile.failed",
+      actor: actor || backendHost,
+      body: { reason: "serverRunner, plugin, and actionId are required", serverRunner, plugin, actionId }
+    });
+    return { ok: false, status: 400, error: "serverRunner, plugin, and actionId are required", witness };
+  }
+  if (!world.project(moduleProjectors.serverRunners).some(row => row.id === serverRunner)) {
+    const witness = fail(world, {
+      process: "runtimePlugin.reconcile.failed",
+      actor: actor || backendHost,
+      body: { reason: "server runner target not found", serverRunner, plugin, actionId }
+    });
+    return { ok: false, status: 404, error: "server runner target not found", witness };
+  }
+
+  const reviewBefore = currentRuntimePluginReview(world, {
+    serverRunner,
+    plugin,
+    pluginCatalog
+  });
+  const row = reviewBefore.packages.find(entry => entry.plugin === plugin) ?? null;
+  if (!row) {
+    const witness = fail(world, {
+      process: "runtimePlugin.reconcile.failed",
+      actor: actor || backendHost,
+      body: { reason: "runtime plugin review row not found", serverRunner, plugin, actionId }
+    });
+    return { ok: false, status: 404, error: "runtime plugin review row not found", witness, currentReview: reviewBefore };
+  }
+  const action = row.reconcileActions?.find(entry => entry.id === actionId) ?? null;
+  if (!action) {
+    const witness = fail(world, {
+      process: "runtimePlugin.reconcile.failed",
+      actor: actor || backendHost,
+      body: { reason: "runtime plugin reconcile action no longer applies", serverRunner, plugin, actionId }
+    });
+    return {
+      ok: false,
+      status: 409,
+      error: "runtime plugin reconcile action no longer applies",
+      witness,
+      currentReview: reviewBefore
+    };
+  }
+  if (action.available !== true) {
+    const witness = fail(world, {
+      process: "runtimePlugin.reconcile.failed",
+      actor: actor || backendHost,
+      body: {
+        reason: "runtime plugin reconcile action is blocked",
+        serverRunner,
+        plugin,
+        actionId,
+        blockedReasons: [...(action.blockedReasons ?? [])]
+      }
+    });
+    return {
+      ok: false,
+      status: 409,
+      error: "runtime plugin reconcile action is blocked",
+      witness,
+      currentReview: reviewBefore
+    };
+  }
+
+  let result = null;
+  if (action.kind === "install") {
+    result = requestBootstrapRuntimePluginInstall(world, {
+      actor,
+      backendHost,
+      body: {
+        serverRunner,
+        serverRunnerRef: null,
+        plugin: action.targetPluginId || plugin
+      },
+      pluginCatalog
+    });
+  } else if (action.kind === "remove") {
+    result = requestBootstrapRuntimePluginRemove(world, {
+      actor,
+      backendHost,
+      body: {
+        serverRunner,
+        serverRunnerRef: null,
+        plugin: action.targetPluginId || plugin
+      },
+      pluginCatalog
+    });
+  } else {
+    const witness = fail(world, {
+      process: "runtimePlugin.reconcile.failed",
+      actor: actor || backendHost,
+      body: { reason: "unsupported runtime plugin reconcile action", serverRunner, plugin, actionId, kind: action.kind }
+    });
+    return { ok: false, status: 400, error: "unsupported runtime plugin reconcile action", witness, currentReview: reviewBefore };
+  }
+  if (!result?.ok) {
+    return {
+      ...result,
+      currentReview: reviewBefore
+    };
+  }
+
+  const reviewAfter = currentRuntimePluginReview(world, {
+    serverRunner,
+    plugin,
+    pluginCatalog
+  });
+  const witness = world.emit({
+    process: RUNTIME_PLUGIN_RECONCILE_TARGET_PROCESS,
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", serverRunner)],
+    body: {
+      serverRunner,
+      plugin,
+      actionId,
+      reconcileAction: {
+        id: action.id,
+        kind: action.kind,
+        label: action.label,
+        severity: action.severity,
+        description: action.description,
+        targetPluginId: action.targetPluginId || plugin
+      },
+      loweredProcess: action.kind === "install" ? "runtimePlugin.install" : "runtimePlugin.remove",
+      compositionBefore: reviewBefore.currentComposition,
+      compositionAfter: reviewAfter.currentComposition,
+      witnessIds: [result.witness?.id].filter(Boolean)
+    }
+  });
+  return {
+    ok: true,
+    status: 200,
+    action,
+    reviewBefore,
+    reviewAfter,
+    compositionBefore: reviewBefore.currentComposition,
+    compositionAfter: reviewAfter.currentComposition,
+    runtimePluginInstall: result.runtimePluginInstall ?? null,
+    runtimePluginInstalls: result.runtimePluginInstalls ?? [],
+    witness
+  };
 }

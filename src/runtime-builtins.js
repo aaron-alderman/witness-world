@@ -57,6 +57,7 @@ const VALUE_TYPES = [
   { id: "route.handler", label: "Route Handler", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "route.backendProgramSoul", label: "Route Backend Program Soul", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.id", label: "Server Runner Id", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "serverRunner.runtimeProfile", label: "Runtime Profile", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.handlerSet", label: "Handler Set", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.host", label: "Host Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.storage", label: "Storage Path", compatibleWith: ["textual"], editor: { control: "text" } },
@@ -267,6 +268,18 @@ const PROCESS_SPECS = [
     outputs: [{ name: "serverRunner", accepts: "serverRunner.id", required: true }]
   },
   {
+    id: "runtime_plugin_reconcile_spec",
+    process: "runtimePlugin.reconcile",
+    inputs: [
+      { name: "serverRunner", accepts: "serverRunner.id", required: false },
+      { name: "serverRunnerRef", accepts: "context.name", required: false },
+      { name: "plugin", accepts: "widget.text", required: true },
+      { name: "actionId", accepts: "widget.text", required: true },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "serverRunner", accepts: "serverRunner.id", required: true }]
+  },
+  {
     id: "frontend_program_define_spec",
     process: "frontendProgram.define",
     inputs: [
@@ -380,6 +393,17 @@ const PROCESS_SPECS = [
     outputs: [{ name: "route", accepts: "route.id", required: true }]
   },
   {
+    id: "server_runner_runtime_profile_set_spec",
+    process: "serverRunner.runtimeProfile.set",
+    inputs: [
+      { name: "serverRunner", accepts: "serverRunner.id", required: false },
+      { name: "serverRunnerRef", accepts: "context.name", required: false },
+      { name: "runtimeProfile", accepts: "serverRunner.runtimeProfile", required: true },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "serverRunner", accepts: "serverRunner.id", required: true }]
+  },
+  {
     id: "server_runner_define_spec",
     process: "serverRunner.define",
     inputs: [
@@ -388,6 +412,7 @@ const PROCESS_SPECS = [
       { name: "backendHostRef", accepts: "context.name", required: false },
       { name: "frontendHost", accepts: "serverRunner.host", required: false },
       { name: "frontendHostRef", accepts: "context.name", required: false },
+      { name: "runtimeProfile", accepts: "serverRunner.runtimeProfile", required: false },
       { name: "handlerSet", accepts: "serverRunner.handlerSet", required: false },
       { name: "runtimeConfigJson", accepts: "json.text", required: false },
       { name: "allowActorHeader", accepts: "widget.attach", required: false },

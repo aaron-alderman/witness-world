@@ -61,7 +61,7 @@ view PlatformConsolePage {
   kind page
   class platform-console
   prop title = "Platform Console"
-  prop summary = "RVM-authored platform pages for overview, workflow, verification, telemetry, defects, knowledge, signals compatibility, model inspection, and supplemental governance/model seams."
+  prop summary = "RVM-authored platform pages for overview, workflow, verification, telemetry, defects, security, artifacts, sessions, knowledge, signals compatibility, model inspection, and supplemental governance/model seams."
   capabilities {
     platform.self
   }
@@ -79,6 +79,9 @@ view PlatformConsolePage {
     PlatformVerificationRuntimePage
     PlatformTelemetryPage
     PlatformDefectsPage
+    PlatformSecurityPage
+    PlatformArtifactsPage
+    PlatformSessionsPage
     PlatformKnowledgePage
     PlatformKnowledgeDocsPage
     PlatformKnowledgeFoldersPage
@@ -298,6 +301,124 @@ view PlatformDefectsPage {
     PlatformDefectList
     PlatformDefectDetail
   }
+}
+
+view PlatformSecurityPage {
+  kind page
+  class platform-model
+  prop pageId = "security"
+  prop modelView = "security"
+  prop summaryCards = "Policies=authorityPolicies@count|Decisions=authorityDecisions@count|Denials=authorityDecisions@countWhere:decision=deny"
+  prop title = "Security"
+  prop summary = "Authority policies, allow and deny decisions, and linked governance context."
+  children {
+    PlatformSecurityList
+    PlatformSecurityDetail
+  }
+}
+
+view PlatformArtifactsPage {
+  kind page
+  class platform-model
+  prop pageId = "artifacts"
+  prop modelView = "artifacts"
+  prop summaryCards = "Artifacts=artifacts@count|Runs=testRuns@count|Sessions=sessions@count|Branches=branches@count|Snapshots=candidateSnapshots@count"
+  prop title = "Artifacts"
+  prop summary = "Cross-cutting durable artifacts, producer metadata, and linked execution context."
+  children {
+    PlatformArtifactsList
+    PlatformArtifactsDetail
+  }
+}
+
+view PlatformSessionsPage {
+  kind page
+  class platform-model
+  prop pageId = "sessions"
+  prop modelView = "sessions"
+  prop summaryCards = "Sessions=sessions@count|Executions=executions@count|Tags=sessionTags@count|Artifacts=executionArtifacts@count|Decisions=authorityDecisions@count"
+  prop title = "Sessions"
+  prop summary = "Sessions, executions, work-context tags, and execution artifacts."
+  children {
+    PlatformSessionsList
+    PlatformSessionsDetail
+  }
+}
+
+view PlatformArtifactsList {
+  kind table
+  class platform-model-list
+  prop title = "Artifacts"
+  prop summary = "Paginated list of durable artifacts, producer metadata, and linked execution context."
+  prop listSource = "artifactItems"
+  prop columns = "Kind|Producer|Artifact|Content Type|Summary"
+  prop rowFields = "Kind=scope|Producer=status|Artifact=id@concept|Content Type=contentType|Summary=summary"
+  prop sortOptions = "kind=scope|producer=status|artifact=title|contentType=contentType|summary=summary"
+  prop defaultSort = "artifact:asc"
+  prop emptyState = "No artifacts."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformArtifactsDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Artifact Detail"
+  prop summary = "Properties and linked relationships for the selected artifact."
+  prop detailSource = "artifacts"
+  prop detailSelectionSources = "artifacts"
+  prop emptyTitle = "Artifact Detail"
+  prop emptyState = "No artifact detail is available yet."
+  children {
+    PlatformArtifactsPrimaryPanel
+    PlatformArtifactsRelatedPanel
+    PlatformArtifactsRelationships
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformArtifactsPrimaryPanel {
+  kind region
+  class platform-model-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "artifact"
+  prop title = "Primary Detail"
+  prop summary = "Selected artifact properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop artifactCardTitle = "Artifact Detail"
+  prop artifactFields = "Artifact=id@concept|Kind=artifactKind|Producer=producerKind|Producer id=producerId@concept|Content Type=contentType|Bytes=sizeBytes|Preview=preview|Content=contentUrl@href|API resource=id@api"
+}
+
+view PlatformArtifactsRelatedPanel {
+  kind region
+  class platform-model-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "artifact"
+  prop title = "Related Resources"
+  prop summary = "Linked sessions, executions, branches, runs, and other platform context."
+  prop cardItemLimit = "12"
+  prop artifactLinkCards = "Session=sessionId|Execution=executionId|Branch=branchId|Change Set=changeSetId|Candidate Snapshot=candidateSnapshotId|Proposal=proposalId|Test Run=testRunId|Result=resultId|Gate=gateId|Compatibility Artifact=artifactSourceId"
+  prop artifactLinkCardEmptyStates = "Session=No linked session.|Execution=No linked execution.|Branch=No linked branch.|Change Set=No linked change set.|Candidate Snapshot=No linked candidate snapshot.|Proposal=No linked proposal.|Test Run=No linked test run.|Result=No linked result.|Gate=No linked gate.|Compatibility Artifact=No compatibility artifact."
+  prop artifactTextCards = "File=fileName|Preview=preview|Content Ref=contentRef"
+  prop artifactTextCardEmptyStates = "File=No file name.|Preview=No preview.|Content Ref=No durable content reference."
+}
+
+view PlatformArtifactsRelationships {
+  kind table
+  class platform-model-relationships
+  prop detailPanelRole = "relationships"
+  prop detailKinds = "artifact"
+  prop title = "Related Relationships"
+  prop summary = "Linked graph relationships for the selected artifact when available."
+  prop columns = "From|Relation|To"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
+  prop emptyState = "No related relationships."
+  prop rowLimit = "20"
 }
 
 view PlatformKnowledgePage {
@@ -582,6 +703,126 @@ view PlatformGovernanceDetail {
   prop emptyState = "No governance object selected."
 }
 
+view PlatformSecurityList {
+  kind table
+  class platform-model-list
+  prop title = "Security Rows"
+  prop summary = "Authority policies and recent allow and deny decisions."
+  prop listSource = "security"
+  prop columns = "Kind|Object|Status|Authority|Scope"
+  prop rowFields = "Kind=pageKind|Object=objectLink@concept|Status=decision||sensitivity|Authority=requiredAuthority||accessClass|Scope=scopeValue@value|Summary=summary"
+  prop emptyState = "No security rows."
+  prop pageSize = "20"
+}
+
+view PlatformSecurityDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Security Detail"
+  prop summary = "Selected policy or authority decision properties and long-tail fields."
+  prop detailSource = "security"
+  prop detailCardTitle = "Security Detail"
+  prop primaryFields = "Object=objectLink@concept|Kind=pageKind|Decision=decision||sensitivity|Authority=requiredAuthority||accessClass|Actor=effectiveActor||authenticatedActor|Target=targetObjectId@concept"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|objectLink|scopeValue"
+  prop emptyTitle = "Security Detail"
+  prop emptyState = "No security object selected."
+}
+
+view PlatformSessionsList {
+  kind table
+  class platform-model-list
+  prop title = "Sessions"
+  prop summary = "Paginated list of sessions, executions, session tags, execution artifacts, and linked authority decisions."
+  prop listSource = "sessionItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No session rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformSessionsDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Session Detail"
+  prop summary = "Properties and linked relationships for the selected session concept."
+  prop detailSource = "sessions"
+  prop detailSelectionSources = "sessions|executions|sessionTags|executionArtifacts|authorityDecisions"
+  prop emptyTitle = "Session Detail"
+  prop emptyState = "No session detail is available yet."
+  children {
+    PlatformSessionsPrimaryPanel
+    PlatformSessionsRelatedPanel
+    PlatformSessionsRelationships
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformSessionsPrimaryPanel {
+  kind region
+  class platform-model-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "session|execution|sessionTag|executionArtifact|authorityDecision"
+  prop title = "Primary Detail"
+  prop summary = "Selected session properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop sessionCardTitle = "Session Detail"
+  prop sessionFields = "Session=id@concept|Actor=effectiveActor||authenticatedActor|Authority mode=authorityMode|Executions=executionCount|Decisions=authorityDecisionCount|Started=startedAt|Last activity=lastActivityAt|API resource=id@api"
+  prop executionCardTitle = "Execution Detail"
+  prop executionFields = "Execution=id@concept|Session=sessionId@concept|Kind=executionKind|Status=status|Handler=handlerId|Route=routeId@concept|View=view|Branch=branchId@concept|Change set=changeSetId@concept|Test run=testRunId@concept|Duration=durationMs|API resource=id@api"
+  prop sessionTagCardTitle = "Session Tag Detail"
+  prop sessionTagFields = "Tag=id@concept|Session=sessionId@concept|Kind=tagKind|Value=value@concept|Executions=executionIds@value|API resource=id@api"
+  prop executionArtifactCardTitle = "Execution Artifact Detail"
+  prop executionArtifactFields = "Artifact=id@concept|Execution=executionId@concept|Session=sessionId@concept|Kind=artifactKind|Target=artifactId@concept|Produced=producedAt|API resource=id@api"
+  prop authorityDecisionCardTitle = "Authority Decision Detail"
+  prop authorityDecisionFields = "Decision=id@concept|Action=action|Decision=decision|Authority=requiredAuthority|Actor=effectiveActor||authenticatedActor|Session=sessionId@concept|Target=targetObjectId@concept|Evaluated=evaluatedAt|API resource=id@api"
+}
+
+view PlatformSessionsRelatedPanel {
+  kind region
+  class platform-model-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "session|execution|sessionTag|executionArtifact|authorityDecision"
+  prop title = "Related Resources"
+  prop summary = "Linked executions, tags, artifacts, targets, and authority context."
+  prop cardItemLimit = "12"
+  prop sessionLinkCards = "Executions=executionIds|Authority Decisions=authorityDecisionIds|Branches=branchIds|Change Sets=changeSetIds|Push Records=pushRecordIds|Ship Records=shipRecordIds|Test Runs=testRunIds"
+  prop sessionLinkCardEmptyStates = "Executions=No executions in this session.|Authority Decisions=No authority decisions in this session.|Branches=No linked branches.|Change Sets=No linked change sets.|Push Records=No linked push records.|Ship Records=No linked ship records.|Test Runs=No linked test runs."
+  prop sessionTextCards = "Views=views|Routes=routeIds|Runtime Profiles=runtimeProfiles|Targets=targetObjectIds"
+  prop sessionTextCardEmptyStates = "Views=No linked views.|Routes=No linked routes.|Runtime Profiles=No runtime profiles.|Targets=No linked targets."
+  prop executionLinkCards = "Session=sessionId|Authority Decision=authorityDecisionId|Branch=branchId|Change Set=changeSetId|Candidate Snapshot=candidateSnapshotId|Push Record=pushRecordId|Ship Record=shipRecordId|Test Run=testRunId|Gate=gateId"
+  prop executionLinkCardEmptyStates = "Session=No session linked.|Authority Decision=No authority decision linked.|Branch=No linked branch.|Change Set=No linked change set.|Candidate Snapshot=No linked candidate snapshot.|Push Record=No linked push record.|Ship Record=No linked ship record.|Test Run=No linked test run.|Gate=No linked gate."
+  prop executionTextCards = "Targets=targetObjectIds|Request Path=requestPath"
+  prop executionTextCardEmptyStates = "Targets=No linked targets.|Request Path=No request path."
+  prop sessionTagLinkCards = "Session=sessionId|Executions=executionIds|Value=value"
+  prop sessionTagLinkCardEmptyStates = "Session=No linked session.|Executions=No linked executions.|Value=No linked value."
+  prop executionArtifactLinkCards = "Execution=executionId|Session=sessionId|Target=artifactId"
+  prop executionArtifactLinkCardEmptyStates = "Execution=No linked execution.|Session=No linked session.|Target=No linked target."
+  prop authorityDecisionLinkCards = "Session=sessionId|Policy=policyId|Target=targetObjectId"
+  prop authorityDecisionLinkCardEmptyStates = "Session=No linked session.|Policy=No linked policy.|Target=No linked target."
+}
+
+view PlatformSessionsRelationships {
+  kind table
+  class platform-model-relationships
+  prop detailPanelRole = "relationships"
+  prop detailKinds = "session|execution|sessionTag|executionArtifact|authorityDecision"
+  prop title = "Related Relationships"
+  prop summary = "Linked graph relationships for the selected session concept when available."
+  prop columns = "From|Relation|To"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
+  prop emptyState = "No related relationships."
+  prop rowLimit = "20"
+}
+
 view PlatformSemanticsList {
   kind table
   class platform-model-list
@@ -843,6 +1084,9 @@ view PlatformWorkflowDetail {
   children {
     PlatformWorkflowPrimaryPanel
     PlatformWorkflowRelatedPanel
+    PlatformVerificationRequirementSummary
+    PlatformVerificationRequirementsTable
+    PlatformVerificationBlockingReasons
     PlatformWorkflowSnapshotHistory
     PlatformWorkflowEditHistory
   }
@@ -886,6 +1130,43 @@ view PlatformWorkflowRelatedPanel {
   prop changeSetLinkCardEmptyStates = "Changed Paths=No changed paths staged for this change set."
   prop proposalLinkCards = "Target Resource=targetId"
   prop proposalLinkCardEmptyStates = "Target Resource=No linked target resource."
+}
+
+view PlatformVerificationRequirementSummary {
+  kind region
+  class platform-verification-requirement-summary
+  prop detailPanelRole = "verificationRequirementSummary"
+  prop detailKinds = "changeSet|candidateSnapshot"
+  prop title = "Verification Requirement Summary"
+  prop summary = "Derived gating status for the selected change set or candidate snapshot."
+  prop propertyCardTitle = "Requirement Summary"
+  prop propertyFields = "Summary=id@concept|Blocking status=blockingStatus|Target=targetId@concept|Total gates=totalGateCount|Blocking gates=blockingGateCount|Satisfied=satisfiedCount|Failed=failedCount|Stale=staleCount|Missing=missingCount|Running=runningCount|Latest run=latestRunAt|Summary=summary"
+}
+
+view PlatformVerificationRequirementsTable {
+  kind table
+  class platform-verification-requirements
+  prop detailPanelRole = "verificationRequirements"
+  prop detailKinds = "changeSet|candidateSnapshot"
+  prop title = "Required Gates"
+  prop summary = "Selected verification gates and the latest evidence for the current target."
+  prop columns = "Status|Blocking|Gate|Execution Class|Freshness|Regression|Latest Run|Latest Passed"
+  prop rowFields = "Status=status|Blocking=blocking|Gate=gateId@concept|Execution Class=executionClass|Freshness=freshnessStatus|Regression=regressionStatus|Latest Run=latestRunId@concept|Latest Passed=latestPassedRunId@concept"
+  prop emptyState = "No verification requirements are derived for this target."
+  prop rowLimit = "20"
+}
+
+view PlatformVerificationBlockingReasons {
+  kind table
+  class platform-verification-blocking-reasons
+  prop detailPanelRole = "verificationBlockingReasons"
+  prop detailKinds = "changeSet|candidateSnapshot"
+  prop title = "Blocking Reasons"
+  prop summary = "Blocking verification requirements and the current stale, missing, running, or failed reason."
+  prop columns = "Gate|Status|Reason|Changed Paths|Targets"
+  prop rowFields = "Gate=gateId@concept|Status=status|Reason=reasonSummary|Changed Paths=changedPaths@value|Targets=targetIds@value"
+  prop emptyState = "No blocking verification requirements."
+  prop rowLimit = "20"
 }
 
 view PlatformWorkflowSnapshotHistory {
@@ -1238,6 +1519,9 @@ view PlatformVerificationDetail {
     PlatformVerificationBuildErrors
     PlatformVerificationFreshnessSummary
     PlatformVerificationInvalidationReasons
+    PlatformVerificationRequirementSummary
+    PlatformVerificationRequirementsTable
+    PlatformVerificationBlockingReasons
     PlatformVerificationReportSummary
     PlatformVerificationArtifactsReport
     PlatformVerificationSuiteSummary
@@ -1273,7 +1557,7 @@ view PlatformVerificationPrimaryPanel {
   prop longTailValueKinds = "string|number|boolean|scalarList"
   prop gateLongTailExcludedFields = "protectedObjects|selectedByBranches|selectedByChangeSets"
   prop gateCardTitle = "Test Gate Detail"
-  prop gateFields = "Gate=id@concept|Runner=runner|Environment=environment|Timeout=timeoutMs|Cost=costEstimate|Command=command|Latest result=lastResult@statusExit|API resource=id@api"
+  prop gateFields = "Gate=id@concept|Provider=providerId|Safety=safetyClass|Execution class=executionClass|Invoke=invoke|Runner=runner|Environment=environment|Timeout=timeoutMs|Cost=costEstimate|Command=command|Latest result=lastResult@statusExit|API resource=id@api"
   prop runtimeRevisionLongTailExcludedFields = "candidateBranchCount"
   prop runtimeRevisionCardTitle = "Runtime Revision Detail"
   prop runtimeRevisionFields = "Revision=id@concept|Status=status|Trigger=trigger|Branch=branchId@concept|Change set=changeSetId@concept|Changed sources=changedSources@count|Build errors=buildErrorCount|API resource=id@api"
@@ -1281,15 +1565,15 @@ view PlatformVerificationPrimaryPanel {
   prop candidateSnapshotCardTitle = "Candidate Snapshot Detail"
   prop candidateSnapshotFields = "Snapshot=id@concept|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Revision=revision|API resource=id@api"
   prop verificationPolicyCardTitle = "Verification Policy Detail"
-  prop verificationPolicyFields = "Policy=id@concept|Status=status|Source=policySource|Gate=gateId@concept|Execution class=executionClass|Enabled=enabled|Startup=startup|Watch=watch|Change set=onChangeSet|Exclusive=exclusive|Clean workspace=requiresCleanWorkspace|Priority=priority|Timeout=timeoutMs"
+  prop verificationPolicyFields = "Policy=id@concept|Status=status|Source=policySource|Gate=gateId@concept|Provider=providerId|Safety=safetyClass|Invoke=invoke|Execution class=executionClass|Enabled=enabled|Startup=startup|Watch=watch|Change set=onChangeSet|Startup settle=startupSettleMs|Exclusive=exclusive|Clean workspace=requiresCleanWorkspace|Priority=priority|Timeout=timeoutMs"
   prop verificationFreshnessCardTitle = "Verification Freshness"
   prop verificationFreshnessFields = "Freshness=id@concept|Status=status|Gate=gateId@concept|Latest run=latestRunId@concept|Latest passed=latestPassedRunId@concept|Reasons=reasonKinds@value|Summary=reasonSummary|Blocking=blocking|Stale since=staleSince"
   prop verificationInvalidationCardTitle = "Verification Invalidation"
   prop verificationInvalidationFields = "Invalidation=id@concept|Gate=gateId@concept|Reason=reasonKind|Summary=reasonSummary|Previous run=previousRunId@concept|Paths=changedPaths@value|Targets=targetIds@value|Produced=producedAt"
   prop verificationExecutionCardTitle = "Verification Execution Detail"
-  prop verificationExecutionFields = "Execution=id@concept|Status=status|Gate=gateId@concept|Run=runId@concept|Trigger=triggerKind|Execution class=executionClass|Exclusive=exclusive|Started=startedAt|Finished=finishedAt"
+  prop verificationExecutionFields = "Execution=id@concept|Status=status|Gate=gateId@concept|Run=runId@concept|Provider=providerId|Safety=safetyClass|Trigger=triggerKind|Execution class=executionClass|Workspace=workspaceMode|Cleanup=cleanupStatus|Cleanup summary=cleanupSummary|Timeout=timeoutKind|Exclusive=exclusive|Started=startedAt|Finished=finishedAt"
   prop testRunCardTitle = "Test Run Detail"
-  prop testRunFields = "Run=id@concept|Status=status|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Cache=cacheStatus|Cache hit run=cacheHitRunId@concept|Freshness=freshnessAtReadStatus|Freshness summary=freshnessAtReadSummary|Invalidations=invalidationReasonKinds@value|Duration=durationMs|Exit=exitCode|API resource=id@api"
+  prop testRunFields = "Run=id@concept|Status=status|Gate=gateId@concept|Provider=providerId|Safety=safetyClass|Execution class=executionClass|Trigger=triggerKind|Workspace=workspaceMode|Cleanup=cleanupStatus|Cleanup summary=cleanupSummary|Timeout=timeoutKind|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Cache=cacheStatus|Cache hit run=cacheHitRunId@concept|Freshness=freshnessAtReadStatus|Freshness summary=freshnessAtReadSummary|Invalidations=invalidationReasonKinds@value|Duration=durationMs|Exit=exitCode|API resource=id@api"
 }
 
 view PlatformVerificationRelatedPanel {
@@ -1385,7 +1669,7 @@ view PlatformVerificationReportSummary {
   prop title = "Report Summary"
   prop summary = "Derived run summary authored by RVM and populated from projected report rows."
   prop propertyCardTitle = "Run Report Summary"
-  prop propertyFields = "Report=reportId@concept|Status=status|Summary=summary|Format=format|Suites=suiteCount|Cases=caseCount|Passed=passedCount|Failed=failedCount|Errors=errorCount|Skipped=skippedCount|Cached=cached|Produced=producedAt"
+  prop propertyFields = "Report=reportId@concept|Kind=reportKind|Status=status|Summary=summary|Provider=providerId|Safety=safetyClass|Execution class=executionClass|Trigger=triggerKind|Workspace=workspaceMode|Cleanup=cleanupStatus|Cleanup summary=cleanupSummary|Timeout=timeoutKind|Format=format|Suites=suiteCount|Cases=caseCount|Passed=passedCount|Failed=failedCount|Errors=errorCount|Skipped=skippedCount|Cached=cached|Produced=producedAt"
 }
 
 view PlatformVerificationArtifactsReport {
@@ -1675,7 +1959,7 @@ view PlatformTelemetryDetail {
   prop title = "Telemetry Detail"
   prop summary = "Properties and linked relationships for the selected telemetry concept."
   prop detailSource = "telemetry"
-  prop detailSelectionSources = "telemetryMetrics|performanceRegressions|telemetryWindows|telemetrySamples"
+  prop detailSelectionSources = "telemetryMetrics|performanceRegressions|telemetryWindows|telemetrySamples|materializedViewStates|resourceProbeOperations"
   prop emptyTitle = "Detail"
   prop emptyState = "No telemetry detail is available yet."
   children {
@@ -1692,7 +1976,7 @@ view PlatformTelemetryPrimaryPanel {
   kind region
   class platform-telemetry-primary
   prop detailPanelRole = "primary"
-  prop detailKinds = "telemetryMetric|performanceRegression|telemetryWindow|telemetrySample"
+  prop detailKinds = "telemetryMetric|performanceRegression|telemetryWindow|telemetrySample|materializedViewState|resourceProbeOperation"
   prop title = "Primary Detail"
   prop summary = "Selected telemetry properties and long-tail fields."
   prop longTailCardTitle = "Properties"
@@ -1705,27 +1989,31 @@ view PlatformTelemetryPrimaryPanel {
   prop telemetryWindowFields = "Window=id@concept|Metric=metricId@concept|Owner=ownerId|Sample kind=sampleKind|Current=currentAggregateMs|Previous=previousAggregateMs|Samples=currentSampleCount|Previous samples=previousSampleCount|Failures=failureCount|API resource=id@api"
   prop telemetrySampleCardTitle = "Telemetry Sample Detail"
   prop telemetrySampleFields = "Sample=id@concept|Metric=metricId@concept|Owner=ownerId|Kind=sampleKind|Status=status|Duration=durationMs|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Observed=observedAt|API resource=id@api"
+  prop materializedViewStateCardTitle = "Materialized View Detail"
+  prop materializedViewStateFields = "View=id@concept|Kind=materializedViewKind|Slice=sliceKey|Model view=modelView|Cache strategy=cacheStrategy|Cache status=cacheStatus|Hits=hitCount|Misses=missCount|Builds=buildCount|Duration=durationMs|Last build=lastBuiltAt|Request view=requestView|Request path=requestPath|Cause=invalidationCause|API resource=id@api"
+  prop resourceProbeOperationCardTitle = "Resource Probe Detail"
+  prop resourceProbeOperationFields = "Operation=id@concept|Kind=operationKind|Status=status|Duration=durationMs|View=materializedViewId@concept|Request view=requestView|Request path=requestPath|CPU user=cpuUserUs|CPU system=cpuSystemUs|RSS delta=memoryRssDelta|Heap delta=heapUsedDelta|Event loop p95=eventLoopP95Ms|Event loop max=eventLoopMaxMs|Finished=finishedAt|API resource=id@api"
 }
 
 view PlatformTelemetryRelatedPanel {
   kind region
   class platform-telemetry-related
   prop detailPanelRole = "related"
-  prop detailKinds = "telemetryMetric|performanceRegression|telemetryWindow|telemetrySample"
+  prop detailKinds = "telemetryMetric|performanceRegression|telemetryWindow|telemetrySample|materializedViewState|resourceProbeOperation"
   prop title = "Related Resources"
   prop summary = "Linked telemetry context and supporting rows."
   prop cardItemLimit = "12"
-  prop linkCards = "Gate=gateId|Branch=branchId|Change Set=changeSetId|Candidate Snapshot=candidateSnapshotId|Latest Sample=latestSampleId|Window=windowId"
-  prop linkCardEmptyStates = "Gate=No linked gate.|Branch=No linked branch.|Change Set=No linked change set.|Candidate Snapshot=No linked candidate snapshot.|Latest Sample=No linked sample.|Window=No linked window."
-  prop textCards = "Current Samples=currentSampleIds|Previous Samples=previousSampleIds|Message=message|Branches=branchIds|Change Sets=changeSetIds|Gates=gateIds"
-  prop textCardEmptyStates = "Current Samples=No current sample set.|Previous Samples=No previous sample set.|Message=No message.|Branches=No linked branches.|Change Sets=No linked change sets.|Gates=No linked gates."
+  prop linkCards = "Gate=gateId|Branch=branchId|Change Set=changeSetId|Candidate Snapshot=candidateSnapshotId|Latest Sample=latestSampleId|Window=windowId|Materialized View=materializedViewId"
+  prop linkCardEmptyStates = "Gate=No linked gate.|Branch=No linked branch.|Change Set=No linked change set.|Candidate Snapshot=No linked candidate snapshot.|Latest Sample=No linked sample.|Window=No linked window.|Materialized View=No linked materialized view."
+  prop textCards = "Current Samples=currentSampleIds|Previous Samples=previousSampleIds|Message=message|Branches=branchIds|Change Sets=changeSetIds|Gates=gateIds|Signature=signature|Detail=detail"
+  prop textCardEmptyStates = "Current Samples=No current sample set.|Previous Samples=No previous sample set.|Message=No message.|Branches=No linked branches.|Change Sets=No linked change sets.|Gates=No linked gates.|Signature=No signature captured.|Detail=No probe detail."
 }
 
 view PlatformTelemetryRelationships {
   kind table
   class platform-telemetry-relationships
   prop detailPanelRole = "relationships"
-  prop detailKinds = "telemetryMetric|performanceRegression|telemetryWindow|telemetrySample"
+  prop detailKinds = "telemetryMetric|performanceRegression|telemetryWindow|telemetrySample|materializedViewState|resourceProbeOperation"
   prop title = "Related Relationships"
   prop summary = "Linked graph relationships for the selected telemetry concept when available."
   prop columns = "From|Relation|To"

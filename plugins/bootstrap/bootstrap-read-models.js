@@ -5,14 +5,8 @@ import {
   previewLegacyCapabilityMigrationFromProject
 } from "../../src/capability-legacy-migration.js";
 import {
-  previewLegacyFrontendMigrationFromProject
-} from "../../src/frontend-legacy-migration.js";
-import {
   previewLegacyFrontendUpliftFromProject
 } from "../../src/frontend-legacy-uplift.js";
-import {
-  legacyFrontendCompatibilityBridgeObservationsFromProject
-} from "../../src/legacy-frontend-bridge.js";
 import {
   packageApplyPreviewRowsFromProject,
   packageCoexistenceFromProject,
@@ -40,6 +34,7 @@ import {
 import { listSupportedMcpTools } from "../mcp/mcp-tools.js";
 import { typeModelProjection } from "../../src/type-model.js";
 import { buildBootstrapContributionState } from "./bootstrap-contribution-state.js";
+import { availableRuntimeProfiles } from "../../src/runtime-bundles.js";
 import {
   cloneRuntimeAuthoringPolicy,
   createRuntimeAuthoringPolicy,
@@ -52,11 +47,13 @@ import {
 } from "../../src/runtime-governance.js";
 import { resolveAuthoringHandlerSupport } from "../../src/runtime-authoring-handler-support.js";
 import { readBootstrapAppBoundaryState } from "./bootstrap-app-boundary.js";
+import { activeRequestWorld, previewAwareProject } from "../../src/runtime-preview.js";
 
 export function createBootstrapReadModels({
   world,
   runtimeProfile,
   runtimeBundleSummary,
+  runtimeContributions = null,
   supportedHandlers,
   supportedHandlerMetadata = {},
   supportedPageHandlers,
@@ -69,6 +66,15 @@ export function createBootstrapReadModels({
   buildPluginCapabilitySourceIndex,
   getRuntimeOperatorState = async () => null
 }) {
+  const witnessRowsByProcess = (project, process) => {
+    const rows = new Map();
+    for (const witness of project.allWitnesses()) {
+      if (witness?.process !== process || !witness.body?.id) continue;
+      rows.set(String(witness.body.id), JSON.parse(JSON.stringify(witness.body)));
+    }
+    return [...rows.values()];
+  };
+
   const runtimePluginAvailabilityRows = ({
     serverRunners = [],
     runtimePluginInstalls = [],
@@ -167,14 +173,27 @@ export function createBootstrapReadModels({
   };
 
   const bootstrapState = async (requestActor = null, appContext = null) => {
-    const project = appContext?.project ?? (projector => world.project(projector));
+    const requestWorld = activeRequestWorld(appContext, world);
+    const project = appContext?.requestWorldOverride
+      ? previewAwareProject(requestWorld, {
+          projectionContext: appContext?.projectionContext ?? null
+        })
+      : (appContext?.project ?? (projector => world.project(projector)));
     if (typeof project.allWitnesses !== "function") {
-      project.allWitnesses = () => world.allWitnesses();
+      project.allWitnesses = () => requestWorld.allWitnesses();
     }
+    const witnesses = requestWorld.allWitnesses();
     const routes = project(moduleProjectors.routes);
     const servedRoutes = project(moduleProjectors.servedRoutes);
     const serverRunners = project(moduleProjectors.serverRunners);
     const collections = project(moduleProjectors.collections);
+    const types = witnessRowsByProcess(project, "desire.defineType");
+    const processes = witnessRowsByProcess(project, "desire.defineProcess");
+    const messages = witnessRowsByProcess(project, "desire.defineMessage");
+    const projections = witnessRowsByProcess(project, "desire.defineProjection");
+    const boundaries = witnessRowsByProcess(project, "desire.defineBoundary");
+    const policies = witnessRowsByProcess(project, "desire.definePolicy");
+    const surfaces = witnessRowsByProcess(project, "desire.defineSurface");
     const contexts = project(moduleProjectors.contexts);
     const contextBindings = project(moduleProjectors.contextBindings);
     const contextExports = project(moduleProjectors.contextExports);
@@ -201,12 +220,10 @@ export function createBootstrapReadModels({
     const capabilityRevisionHistory = project(moduleProjectors.capabilityRevisionHistory);
     const legacyCapabilityCompatibilityMode = legacyCapabilityCompatibilityModeFromProject(project);
     const legacyCapabilityMigration = previewLegacyCapabilityMigrationFromProject(project);
-    const legacyFrontendMigration = previewLegacyFrontendMigrationFromProject(project);
     const legacyFrontendUplift = previewLegacyFrontendUpliftFromProject(project);
     const compatibilityBridges = buildCompatibilityBridgeLedger({
       capabilities,
-      capabilityInstalls,
-      additionalObservedBridges: legacyFrontendCompatibilityBridgeObservationsFromProject(project)
+      capabilityInstalls
     });
     const governanceRoutes = runtimeBundleSummary?.governanceRoutes
       ?? buildGovernanceRouteInventory(runtimeBundleSummary?.routes ?? []);
@@ -217,17 +234,17 @@ export function createBootstrapReadModels({
     const mcpToolInstalls = project(moduleProjectors.mcpToolInstalls);
     const identities = project(moduleProjectors.identities);
     const identityActorAssumptionGrants = project(moduleProjectors.identityActorAssumptionGrants);
-    const widgets = widgetDefinitions(world.allWitnesses());
-    const widgetVersionRows = widgetVersions(world.allWitnesses());
-    const widgetTransitions = widgetVersionTransitions(world.allWitnesses());
-    const widgetActivationHistoryRows = [...widgetVersionActivationHistory(world.allWitnesses()).values()].flat();
-    const frontendPrograms = frontendProgramsProjection(world.allWitnesses());
-    const frontendSteps = frontendStepsProjection(world.allWitnesses());
-    const backendPrograms = backendProgramsProjection(world.allWitnesses());
-    const backendProgramVersions = backendProgramVersionsProjection(world.allWitnesses());
-    const backendProgramTransitions = backendProgramVersionTransitions(world.allWitnesses());
-    const backendProgramActivationRows = [...backendProgramActivationHistory(world.allWitnesses()).values()].flat();
-    const backendSteps = backendStepsProjection(world.allWitnesses());
+    const widgets = widgetDefinitions(witnesses);
+    const widgetVersionRows = widgetVersions(witnesses);
+    const widgetTransitions = widgetVersionTransitions(witnesses);
+    const widgetActivationHistoryRows = [...widgetVersionActivationHistory(witnesses).values()].flat();
+    const frontendPrograms = frontendProgramsProjection(witnesses);
+    const frontendSteps = frontendStepsProjection(witnesses);
+    const backendPrograms = backendProgramsProjection(witnesses);
+    const backendProgramVersions = backendProgramVersionsProjection(witnesses);
+    const backendProgramTransitions = backendProgramVersionTransitions(witnesses);
+    const backendProgramActivationRows = [...backendProgramActivationHistory(witnesses).values()].flat();
+    const backendSteps = backendStepsProjection(witnesses);
     const pluginCatalog = await getRuntimePluginCatalog({
       activeProfile: runtimeProfile,
       serverRunnerId: null,
@@ -251,16 +268,18 @@ export function createBootstrapReadModels({
         })
       })
     );
-    const bootstrapContributionState = buildBootstrapContributionState(appContext?.runtimeContributions);
+    const bootstrapContributionState = buildBootstrapContributionState(
+      appContext?.runtimeContributions ?? runtimeContributions
+    );
     const operator = await getRuntimeOperatorState(appContext);
     const appBoundary = await readBootstrapAppBoundaryState({
-      world,
+      world: requestWorld,
       runtimeBundleSummary,
       bootstrapModel: {
         backendHosts: backendHosts.map(id => ({ id })),
         frontendHosts: frontendHosts.map(id => ({ id }))
       },
-      runtimeProfile,
+      runtimeProfile: appContext?.runtimeProfile ?? runtimeProfile,
       getRuntimePluginCatalog,
       appContext
     });
@@ -276,7 +295,7 @@ export function createBootstrapReadModels({
       canonicalIdPolicyClasses: [...CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES],
       perspectives,
       stewardships,
-      authority: authorityForActor(world, requestActor),
+      authority: authorityForActor(requestWorld, requestActor),
       proposals,
       packages,
       packageRevisions,
@@ -294,7 +313,6 @@ export function createBootstrapReadModels({
       capabilityRevisionHistory,
       legacyCapabilityCompatibilityMode,
       legacyCapabilityMigration,
-      legacyFrontendMigration,
       legacyFrontendUplift,
       compatibilityBridges,
       governanceRoutes,
@@ -312,6 +330,13 @@ export function createBootstrapReadModels({
       identities,
       identityActorAssumptionGrants,
       collections,
+      types,
+      processes,
+      messages,
+      projections,
+      boundaries,
+      policies,
+      surfaces,
       widgets,
       widgetVersions: widgetVersionRows,
       widgetVersionTransitions: widgetTransitions,
@@ -330,6 +355,7 @@ export function createBootstrapReadModels({
   };
 
   const bootstrapModel = async (appContext = null) => {
+    const requestWorld = activeRequestWorld(appContext, world);
     const authored = await bootstrapState(null, appContext);
     const pluginCatalog = await getRuntimePluginCatalog({
       activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
@@ -348,12 +374,10 @@ export function createBootstrapReadModels({
     const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/");
     const appReady = Boolean(
       homeRoute
-      && (
-        (homeRoute.handler === "page.home" && homeRoute.params?.rootWidget)
-        || (homeRoute.handler === "page.surface" && homeRoute.params?.rootSurface)
-      )
+      && homeRoute.handler === "page.surface"
+      && homeRoute.params?.rootSurface
     );
-    const typeModel = world.project(typeModelProjection);
+    const typeModel = requestWorld.project(typeModelProjection);
     const pageRoutes = (authored.routes || []).filter(route => {
       if (!String(route.handler || "").startsWith("page.")) return false;
       const rootWidget = route.params?.rootWidget ?? null;
@@ -375,6 +399,7 @@ export function createBootstrapReadModels({
       supportedMcpActingModes: ["delegated", "service"],
       supportedMcpTools: listSupportedMcpTools(),
       runtimeProfile,
+      runtimeProfiles: availableRuntimeProfiles().map(id => ({ id, label: id })),
       authoringPolicy: authored.authoringPolicy,
       runtimeBundles: runtimeBundleSummary?.bundles ?? [],
       runtimeRoutes: runtimeBundleSummary?.routes ?? [],
@@ -403,7 +428,6 @@ export function createBootstrapReadModels({
         ...(authored.packageTransformers || []),
         ...(authored.collections || []),
         ...(authored.widgets || []),
-        ...(authored.frontendPrograms || []),
         ...(authored.backendPrograms || []),
         ...(authored.backendProgramVersions || []),
         ...(authored.routes || []),

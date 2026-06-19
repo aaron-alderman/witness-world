@@ -16,6 +16,9 @@ const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
   Object.freeze({ id: "verificationRuntime", title: "Verification Runtime", subtitle: "Candidate snapshots, runtime revisions, snapshot builds, and runtime rebuild diagnostics.", modelView: "verificationRuntime" }),
   Object.freeze({ id: "telemetry", title: "Telemetry", subtitle: "Metrics, live samples, detector windows, and regressions.", modelView: "telemetry" }),
   Object.freeze({ id: "defects", title: "Defects", subtitle: "Defect records, observations, clusters, and linked proposals.", modelView: "defects" }),
+  Object.freeze({ id: "security", title: "Security", subtitle: "Authority policies, allow and deny decisions, and linked governance context.", modelView: "security" }),
+  Object.freeze({ id: "artifacts", title: "Artifacts", subtitle: "Cross-cutting durable artifacts, producer metadata, and linked execution context.", modelView: "artifacts" }),
+  Object.freeze({ id: "sessions", title: "Sessions", subtitle: "Sessions, executions, work-context tags, and execution artifacts.", modelView: "sessions" }),
   Object.freeze({ id: "knowledge", title: "Knowledge", subtitle: "Knowledge landing page with links into narrower docs, folders (this.folder.wtoml), and roadmap views.", modelView: "knowledgeOverview" }),
   Object.freeze({ id: "knowledgeDocs", title: "Knowledge Docs", subtitle: "Governed documents, authored references, and document detail.", modelView: "knowledgeDocs" }),
   Object.freeze({ id: "knowledgeFolders", title: "Knowledge Folders", subtitle: "Folders with this.folder.wtoml metadata and their linked platform concepts.", modelView: "knowledgeFolders" }),
@@ -229,6 +232,57 @@ const PLATFORM_IA = Object.freeze([
     ])
   }),
   Object.freeze({
+    id: "security",
+    title: "Security",
+    defaultSection: "summary",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "summary",
+        title: "Security",
+        subtitle: "Authority policies, recent allow and deny decisions, and linked governance coverage.",
+        pageIds: Object.freeze(["security"]),
+        modelView: "security",
+        sliceKey: "security",
+        emptyDetailTitle: "Security Detail",
+        emptyDetailMessage: "Select a policy or authority decision to inspect platform security detail."
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "artifacts",
+    title: "Artifacts",
+    defaultSection: "summary",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "summary",
+        title: "Artifacts",
+        subtitle: "Cross-cutting durable artifacts, producer metadata, and linked execution context.",
+        pageIds: Object.freeze(["artifacts"]),
+        modelView: "artifacts",
+        sliceKey: "artifacts",
+        emptyDetailTitle: "Artifact Detail",
+        emptyDetailMessage: "Select an artifact to inspect content, producer metadata, and linked platform context."
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "sessions",
+    title: "Sessions",
+    defaultSection: "summary",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "summary",
+        title: "Sessions",
+        subtitle: "Platform sessions, executions, context tags, and linked execution artifacts.",
+        pageIds: Object.freeze(["sessions"]),
+        modelView: "sessions",
+        sliceKey: "sessions",
+        emptyDetailTitle: "Session Detail",
+        emptyDetailMessage: "Select a session, execution, tag, or execution artifact to inspect work context."
+      })
+    ])
+  }),
+  Object.freeze({
     id: "knowledge",
     title: "Knowledge",
     defaultSection: "docs",
@@ -422,6 +476,7 @@ function destinationForRequestedView(rawView) {
     verification: { area: "verification", section: "status" },
     telemetry: { area: "telemetry", section: "summary" },
     defects: { area: "defects", section: "summary" },
+    security: { area: "security", section: "summary" },
     knowledge: { area: "knowledge", section: "docs" },
     signals: { area: "signals", section: "gaps" },
     model: { area: "advanced", section: "model" }
@@ -678,6 +733,15 @@ function conceptDestination(value) {
   if (raw.startsWith("defectCluster:") || raw.startsWith("defect:") || raw.startsWith("defectObservation:")) {
     return { area: "defects", section: "summary", id: raw };
   }
+  if (raw.startsWith("authorityPolicy:") || raw.startsWith("authorityDecision:")) {
+    return { area: "security", section: "summary", id: raw };
+  }
+  if (raw.startsWith("artifact:")) {
+    return { area: "artifacts", section: "summary", id: raw };
+  }
+  if (raw.startsWith("session:") || raw.startsWith("session.") || raw.startsWith("execution:") || raw.startsWith("sessionTag:") || raw.startsWith("executionArtifact:")) {
+    return { area: "sessions", section: "summary", id: raw };
+  }
   if (raw.startsWith("boundary:")) return { area: "signals", section: "catalog", id: raw };
   if (raw.startsWith("compatibilityBridge:")) return { area: "advanced", section: "bridges", id: raw };
   if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return { area: "advanced", section: "governance", id: raw };
@@ -733,6 +797,15 @@ function conceptApiHref(value) {
   }
   if (raw.startsWith("defectCluster:") || raw.startsWith("defect:") || raw.startsWith("defectObservation:")) {
     return `/api/platform-model?view=defects&id=${encodeURIComponent(raw)}`;
+  }
+  if (raw.startsWith("authorityPolicy:") || raw.startsWith("authorityDecision:")) {
+    return `/api/platform-model?view=security&id=${encodeURIComponent(raw)}`;
+  }
+  if (raw.startsWith("artifact:")) {
+    return `/api/platform-model?view=artifacts&id=${encodeURIComponent(raw)}`;
+  }
+  if (raw.startsWith("session:") || raw.startsWith("session.") || raw.startsWith("execution:") || raw.startsWith("sessionTag:") || raw.startsWith("executionArtifact:")) {
+    return `/api/platform-model?view=sessions&id=${encodeURIComponent(raw)}`;
   }
   if (raw.startsWith("compatibilityBridge:")) return `/api/platform-model?area=advanced&section=bridges&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return `/api/platform-model?area=advanced&section=governance&id=${encodeURIComponent(raw)}`;
@@ -1273,6 +1346,11 @@ function sectionDetailRecords(section, model) {
       return [
         ...(model.governanceRoutes ?? []),
         ...(model.proposalTargetGovernance ?? [])
+      ];
+    case "security":
+      return [
+        ...(model.authorityPolicies ?? []),
+        ...(model.authorityDecisions ?? [])
       ];
     case "bridges":
       return model.compatibilityBridges ?? [];
@@ -2107,7 +2185,7 @@ function verificationItems(model) {
     title: policy.gateId ? `Policy ${policy.gateId}` : "Verification Defaults",
     status: policy.status || (policy.enabled ? "resolved" : "disabled"),
     scope: policy.runtimeProfile || policy.policySource || "",
-    summary: `${policy.executionClass || "defaults"}, ${policy.policySource || "synthesized"}`
+    summary: `${policy.providerId || "policy"}, ${policy.executionClass || "defaults"}, ${policy.policySource || "synthesized"}`
   }));
   const freshnessRows = (model.verificationFreshness ?? []).map(row => ({
     pageKind: "verificationFreshness",
@@ -2131,7 +2209,7 @@ function verificationItems(model) {
     title: row.gateTitle || row.gateId || row.id,
     status: row.status,
     scope: row.triggerKind || "",
-    summary: `${row.executionClass || "child_process"}, ${row.runId || "no run"}`
+    summary: `${row.providerId || "verification.command"}, ${row.executionClass || "child_process"}, ${row.runId || "no run"}`
   }));
   const executions = (model.verificationExecutions ?? []).map(row => ({
     pageKind: "verificationExecution",
@@ -2139,7 +2217,7 @@ function verificationItems(model) {
     title: row.gateTitle || row.gateId || row.id,
     status: row.status,
     scope: row.triggerKind || "",
-    summary: `${row.executionClass || "child_process"}, ${row.runId || "no run"}`
+    summary: `${row.providerId || "verification.command"}, ${row.executionClass || "child_process"}, ${row.runId || "no run"}`
   }));
   const gates = (model.testGates ?? []).map(gate => ({
     pageKind: "testGate",
@@ -2147,7 +2225,7 @@ function verificationItems(model) {
     title: gate.title || gate.id,
     status: gate.lastResult?.status || "idle",
     scope: gate.environment || "",
-    summary: `${gate.runner || "runner"}, ${(gate.protectedObjects ?? []).length} protected objects`
+    summary: `${gate.providerId || gate.runner || "runner"}, ${(gate.protectedObjects ?? []).length} protected objects`
   }));
   const runs = (model.testRuns ?? []).map(run => ({
     pageKind: "testRun",
@@ -2155,7 +2233,7 @@ function verificationItems(model) {
     title: run.title || run.id,
     status: run.status,
     scope: run.branchId || run.gateId || "",
-    summary: `${run.durationMs ?? "?"} ms, exit ${run.exitCode ?? "n/a"}`
+    summary: `${run.providerId || "verification.command"}, ${run.durationMs ?? "?"} ms, exit ${run.exitCode ?? "n/a"}`
   }));
   const revisions = (model.runtimeRevisions ?? []).map(revision => ({
     pageKind: "runtimeRevision",
@@ -2357,6 +2435,68 @@ function defectItems(model) {
   );
 }
 
+function sessionItems(model) {
+  const sessions = (model.sessions ?? []).map(row => ({
+    pageKind: "session",
+    id: row.id,
+    title: row.effectiveActor || row.authenticatedActor || row.id,
+    status: row.authorityMode || "direct",
+    scope: `${row.executionCount || 0} executions`,
+    summary: row.lastActivityAt || row.startedAt || ""
+  }));
+  const executions = (model.executions ?? []).map(row => ({
+    pageKind: "execution",
+    id: row.id,
+    title: row.title || row.id,
+    status: row.status || "completed",
+    scope: row.executionKind || "",
+    summary: row.handlerId || row.routeId || row.sourceProcess || ""
+  }));
+  const tags = (model.sessionTags ?? []).map(row => ({
+    pageKind: "sessionTag",
+    id: row.id,
+    title: row.title || row.value || row.id,
+    status: row.tagKind || "tag",
+    scope: row.sessionId || "",
+    summary: row.value || ""
+  }));
+  const artifacts = (model.executionArtifacts ?? []).map(row => ({
+    pageKind: "executionArtifact",
+    id: row.id,
+    title: row.title || row.artifactId || row.id,
+    status: row.status || "observed",
+    scope: row.artifactKind || "",
+    summary: row.artifactId || ""
+  }));
+  const decisions = (model.authorityDecisions ?? []).map(row => ({
+    pageKind: "authorityDecision",
+    id: row.id,
+    title: row.action || row.handlerId || row.id,
+    status: row.decision || "deny",
+    scope: row.requiredAuthority || "",
+    summary: row.reason || ""
+  }));
+  return [...sessions, ...executions, ...tags, ...artifacts, ...decisions].sort((left, right) =>
+    left.pageKind.localeCompare(right.pageKind)
+    || left.id.localeCompare(right.id)
+  );
+}
+
+function artifactItems(model) {
+  return (model.artifacts ?? []).map(row => ({
+    pageKind: "artifact",
+    id: row.id,
+    title: row.title || row.fileName || row.id,
+    status: row.producerKind || "artifact",
+    scope: row.artifactKind || "",
+    contentType: row.contentType || "",
+    summary: row.preview || row.contentType || row.producerId || ""
+  })).sort((left, right) =>
+    left.pageKind.localeCompare(right.pageKind)
+    || left.id.localeCompare(right.id)
+  );
+}
+
 function pushItems(model) {
   const pushRecords = (model.pushRecords ?? []).map(row => ({
     pageKind: "pushRecord",
@@ -2540,6 +2680,16 @@ function detailRecordsForSource(source, model) {
       return model.pushRecords ?? [];
     case "shipRecords":
       return model.shipRecords ?? [];
+    case "sessions":
+      return model.sessions ?? [];
+    case "artifacts":
+      return model.artifacts ?? [];
+    case "executions":
+      return model.executions ?? [];
+    case "sessionTags":
+      return model.sessionTags ?? [];
+    case "executionArtifacts":
+      return model.executionArtifacts ?? [];
     case "releaseChannels":
       return model.releaseChannels ?? [];
     case "gitRemotes":
@@ -2556,6 +2706,10 @@ function detailRecordsForSource(source, model) {
       return model.performanceRegressions ?? [];
     case "telemetryThresholds":
       return model.telemetryThresholds ?? [];
+    case "materializedViewStates":
+      return model.materializedViewStates ?? [];
+    case "resourceProbeOperations":
+      return model.resourceProbeOperations ?? [];
     case "defects":
       return model.defects ?? [];
     case "defectObservations":
@@ -2578,6 +2732,7 @@ function detailRecordsForSource(source, model) {
       return model.gaps ?? [];
     case "bridges":
     case "governance":
+    case "security":
     case "semantics":
     case "packageCoexistence":
     case "packageConvergence":
@@ -2648,6 +2803,9 @@ function findAuthoredDetailBySources(surface, model, id, fallback = []) {
 function renderWorkflowDetail(surface, detail, model, ctx) {
   const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformWorkflowPrimaryPanel");
   const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related", "PlatformWorkflowRelatedPanel");
+  const requirementSummarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationRequirementSummary", "PlatformVerificationRequirementSummary");
+  const requirementsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationRequirements", "PlatformVerificationRequirementsTable");
+  const blockingSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationBlockingReasons", "PlatformVerificationBlockingReasons");
   const snapshotSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "snapshotHistory", "PlatformWorkflowSnapshotHistory");
   const editSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "editHistory", "PlatformWorkflowEditHistory");
   const branchIdPrefixes = surfaceIdPrefixes(surface, "branchIdPrefixes");
@@ -2718,6 +2876,17 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     setAuthoredDetailSection(sections, relatedSurface, detailKind, `
       ${renderCardSpecs(relatedSurface, "changeSetLinkCards", "changeSetLinkCardEmptyStates", ctx, changeSet, "links")}
     `);
+    setVerificationRequirementSections({
+      sections,
+      detailKind,
+      summarySurface: requirementSummarySurface,
+      requirementsSurface,
+      blockingSurface,
+      model,
+      ctx,
+      targetKind: "changeSet",
+      targetId: changeSet.id
+    });
     setAuthoredDetailSection(sections, editSurface, detailKind, renderAuthoredSurfaceTable(editSurface, renderRowsFromSurfaceSchema(editSurface, "rowFields", editRows, ctx, edit => `
       <tr>
         <td>${esc(edit.path || "")}</td>
@@ -2860,6 +3029,74 @@ function renderComputedPropertySection(surface, model, ctx) {
   return renderSurfaceFrame(surface, renderPropertyCard(card));
 }
 
+function setVerificationRequirementSections({
+  sections,
+  detailKind,
+  summarySurface,
+  requirementsSurface,
+  blockingSurface,
+  model,
+  ctx,
+  targetKind,
+  targetId
+}) {
+  const requirementRows = (model.verificationRequirements ?? [])
+    .filter(row =>
+      String(row?.targetKind || "") === String(targetKind || "")
+      && String(row?.targetId || "") === String(targetId || "")
+    )
+    .slice(0, surfaceRowLimit(requirementsSurface, 20));
+  const summaryRow = (model.verificationRequirementSummaries ?? []).find(row =>
+    String(row?.targetKind || "") === String(targetKind || "")
+    && String(row?.targetId || "") === String(targetId || "")
+  ) ?? null;
+  const blockingRows = requirementRows.filter(row =>
+    row.blocking === true
+    && ["failed", "stale", "missing", "running"].includes(String(row.status || ""))
+  );
+  const summaryCard = summaryRow
+    ? propertyRowsFromSurfaceSchema(summarySurface, "propertyCardTitle", "propertyFields", ctx, summaryRow, "Requirement Summary")
+    : null;
+  setAuthoredDetailSection(
+    sections,
+    summarySurface,
+    detailKind,
+    summaryCard
+      ? renderSurfaceFrame(summarySurface, renderPropertyCard(summaryCard))
+      : renderSurfaceEmptyCard(summarySurface, {
+          title: surfacePropText(summarySurface, "title", "Verification Requirement Summary"),
+          message: "No verification requirement summary is derived for this target."
+        })
+  );
+  setAuthoredDetailSection(sections, requirementsSurface, detailKind, renderAuthoredSurfaceTable(
+    requirementsSurface,
+    renderRowsFromSurfaceSchema(requirementsSurface, "rowFields", requirementRows, ctx, row => `
+      <tr>
+        <td>${esc(row.status || "")}</td>
+        <td>${esc(row.blocking === true ? "yes" : "no")}</td>
+        <td>${renderConceptLink(ctx, row.gateId)}</td>
+        <td>${esc(row.executionClass || "")}</td>
+        <td>${esc(row.freshnessStatus || "")}</td>
+        <td>${esc(row.regressionStatus || "")}</td>
+        <td>${row.latestRunId ? renderConceptLink(ctx, row.latestRunId) : ""}</td>
+        <td>${row.latestPassedRunId ? renderConceptLink(ctx, row.latestPassedRunId) : ""}</td>
+      </tr>
+    `)
+  ));
+  setAuthoredDetailSection(sections, blockingSurface, detailKind, renderAuthoredSurfaceTable(
+    blockingSurface,
+    renderRowsFromSurfaceSchema(blockingSurface, "rowFields", blockingRows, ctx, row => `
+      <tr>
+        <td>${renderConceptLink(ctx, row.gateId)}</td>
+        <td>${esc(row.status || "")}</td>
+        <td>${esc(row.reasonSummary || "")}</td>
+        <td>${esc((row.changedPaths ?? []).join(", "))}</td>
+        <td>${renderValue(ctx, row.targetIds ?? [])}</td>
+      </tr>
+    `)
+  ));
+}
+
 function renderVerificationDetail(surface, detail, model, ctx) {
   const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformVerificationPrimaryPanel");
   const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related", "PlatformVerificationRelatedPanel");
@@ -2873,6 +3110,9 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const regressionSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "regressionSummary", "PlatformVerificationRegressionSummary");
   const freshnessSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "freshnessSummary", "PlatformVerificationFreshnessSummary");
   const invalidationSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "invalidationReasons", "PlatformVerificationInvalidationReasons");
+  const requirementSummarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationRequirementSummary", "PlatformVerificationRequirementSummary");
+  const requirementsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationRequirements", "PlatformVerificationRequirementsTable");
+  const blockingSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationBlockingReasons", "PlatformVerificationBlockingReasons");
   const verificationPolicyIdPrefixes = surfaceIdPrefixes(surface, "verificationPolicyIdPrefixes");
   const verificationFreshnessIdPrefixes = surfaceIdPrefixes(surface, "verificationFreshnessIdPrefixes");
   const verificationInvalidationIdPrefixes = surfaceIdPrefixes(surface, "verificationInvalidationIdPrefixes");
@@ -3089,6 +3329,17 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     setAuthoredDetailSection(sections, relatedSurface, detailKind, `
       ${renderCardSpecs(relatedSurface, "candidateSnapshotTextCards", "candidateSnapshotTextCardEmptyStates", ctx, snapshot, "text")}
     `);
+    setVerificationRequirementSections({
+      sections,
+      detailKind,
+      summarySurface: requirementSummarySurface,
+      requirementsSurface,
+      blockingSurface,
+      model,
+      ctx,
+      targetKind: "candidateSnapshot",
+      targetId: snapshot.id
+    });
     return renderAuthoredDetailLayout(surface, sections);
   }
   const selectedReport = recordMatchesIdPrefixes(detail, testReportIdPrefixes) ? detail : null;
@@ -3133,7 +3384,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   };
   const runReports = (model.testReports ?? []).filter(report => report.runId === run.id);
   const reportByKind = Object.fromEntries(runReports.map(report => [report.reportKind, report]));
-  const summaryReport = selectedReport?.reportKind === "summary" ? selectedReport : (reportByKind.summary ?? null);
+  const summaryReport = selectedReport ?? (reportByKind.summary ?? null);
   const suitesReport = selectedReport?.reportKind === "suites" ? selectedReport : (reportByKind.suites ?? null);
   const failuresReport = selectedReport?.reportKind === "failures" ? selectedReport : (reportByKind.failures ?? null);
   const regressionReport = selectedReport?.reportKind === "regression" ? selectedReport : (reportByKind.regression ?? null);
@@ -3181,6 +3432,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   if (summaryReport) {
     const summaryRecord = {
       reportId: summaryReport.id,
+      reportKind: summaryReport.reportKind ?? null,
       status: summaryReport.status,
       summary: summaryReport.summary,
       format: summaryReport.format ?? null,
@@ -3191,7 +3443,15 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       errorCount: summaryReport.errorCount ?? 0,
       skippedCount: summaryReport.skippedCount ?? 0,
       cached: summaryReport.cached === true ? "yes" : "no",
-      producedAt: summaryReport.producedAt ?? null
+      producedAt: summaryReport.producedAt ?? null,
+      providerId: summaryReport.providerId ?? run.providerId ?? null,
+      safetyClass: summaryReport.safetyClass ?? run.safetyClass ?? null,
+      executionClass: summaryReport.executionClass ?? run.executionClass ?? null,
+      cleanupStatus: summaryReport.cleanupStatus ?? run.cleanupStatus ?? null,
+      cleanupSummary: summaryReport.cleanupSummary ?? run.cleanupSummary ?? null,
+      timeoutKind: summaryReport.timeoutKind ?? run.timeoutKind ?? null,
+      triggerKind: summaryReport.triggerKind ?? run.triggerKind ?? null,
+      workspaceMode: summaryReport.workspaceMode ?? run.workspaceMode ?? null
     };
     const card = propertyRowsFromSurfaceSchema(reportSummarySurface, "propertyCardTitle", "propertyFields", ctx, summaryRecord, "Report Summary");
     setAuthoredDetailSection(sections, reportSummarySurface, detailKind, renderPropertyCard(card));
@@ -3493,6 +3753,24 @@ function renderTelemetryDetail(surface, detail, model, ctx) {
       ${renderPropertyCard(primaryCard)}
       ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
     `);
+  } else if (kind === "materializedViewState") {
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "materializedViewStateCardTitle", "materializedViewStateFields", ctx, detail, "Materialized View Detail");
+    const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "materializedViewStateFields").length
+      ? rootKeysFromSurfaceSchema(primarySurface, "materializedViewStateFields")
+      : ["id", "materializedViewKind", "sliceKey", "modelView", "cacheStrategy", "cacheStatus", "buildCount", "hitCount", "missCount", "durationMs", "lastBuiltAt", "requestView", "requestPath", "invalidationCause"];
+    setAuthoredDetailSection(sections, primarySurface, kind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
+    `);
+  } else if (kind === "resourceProbeOperation") {
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "resourceProbeOperationCardTitle", "resourceProbeOperationFields", ctx, detail, "Resource Probe Detail");
+    const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "resourceProbeOperationFields").length
+      ? rootKeysFromSurfaceSchema(primarySurface, "resourceProbeOperationFields")
+      : ["id", "operationKind", "status", "durationMs", "materializedViewId", "requestView", "requestPath", "cpuUserUs", "cpuSystemUs", "memoryRssDelta", "heapUsedDelta", "eventLoopP95Ms", "eventLoopMaxMs", "finishedAt"];
+    setAuthoredDetailSection(sections, primarySurface, kind, `
+      ${renderPropertyCard(primaryCard)}
+      ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
+    `);
   } else {
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "telemetrySampleCardTitle", "telemetrySampleFields", ctx, detail, "Telemetry Sample Detail");
     const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "telemetrySampleFields").length
@@ -3696,6 +3974,97 @@ function renderShipDetail(surface, detail, model, ctx) {
   return renderAuthoredDetailLayout(surface, sections);
 }
 
+function renderSessionsDetail(surface, detail, model, ctx) {
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related");
+  const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships");
+  const emptyDetail = () => renderSurfaceEmptyCard(surface, {
+    title: surfacePropText(surface, "emptyTitle", "Detail"),
+    message: surfaceEmptyState(surface, "No session rows are projected yet.")
+  });
+  if (!detail) return emptyDetail();
+  const relatedEdges = (model.edges ?? []).filter(edge => edge.from === detail.id || edge.to === detail.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
+  const inferredKind = optionalText(detail.kind)
+    || optionalText(detail.pageKind)
+    || (String(detail.id || "").startsWith("authorityDecision:") ? "authorityDecision" : null)
+    || (String(detail.id || "").startsWith("executionArtifact:") ? "executionArtifact" : null)
+    || (String(detail.id || "").startsWith("sessionTag:") ? "sessionTag" : null)
+    || (String(detail.id || "").startsWith("execution:") ? "execution" : null)
+    || "session";
+  const fieldsProp = inferredKind === "execution"
+    ? "executionFields"
+    : inferredKind === "sessionTag"
+      ? "sessionTagFields"
+      : inferredKind === "executionArtifact"
+        ? "executionArtifactFields"
+        : inferredKind === "authorityDecision"
+          ? "authorityDecisionFields"
+          : "sessionFields";
+  const titleProp = inferredKind === "execution"
+    ? "executionCardTitle"
+    : inferredKind === "sessionTag"
+      ? "sessionTagCardTitle"
+      : inferredKind === "executionArtifact"
+        ? "executionArtifactCardTitle"
+        : inferredKind === "authorityDecision"
+          ? "authorityDecisionCardTitle"
+          : "sessionCardTitle";
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, titleProp, fieldsProp, ctx, detail, "Session Detail");
+  const usedKeys = rootKeysFromSurfaceSchema(primarySurface, fieldsProp).length
+    ? rootKeysFromSurfaceSchema(primarySurface, fieldsProp)
+    : ["id", "status", "sessionId"];
+  const sections = new Map();
+  setAuthoredDetailSection(sections, primarySurface, inferredKind, `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
+  `);
+  setAuthoredDetailSection(sections, relatedSurface, inferredKind, `
+    ${renderCardSpecs(relatedSurface, `${inferredKind}LinkCards`, `${inferredKind}LinkCardEmptyStates`, ctx, detail, "links")}
+    ${renderCardSpecs(relatedSurface, `${inferredKind}TextCards`, `${inferredKind}TextCardEmptyStates`, ctx, detail, "text")}
+  `);
+  setAuthoredDetailSection(sections, relationshipsSurface, inferredKind, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+    <tr>
+      <td>${renderConceptLink(ctx, edge.from)}</td>
+      <td>${esc(edge.rel || "")}</td>
+      <td>${renderConceptLink(ctx, edge.to)}</td>
+    </tr>
+  `)));
+  return renderAuthoredDetailLayout(surface, sections);
+}
+
+function renderArtifactDetail(surface, detail, model, ctx) {
+  const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary");
+  const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related");
+  const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships");
+  const emptyDetail = () => renderSurfaceEmptyCard(surface, {
+    title: surfacePropText(surface, "emptyTitle", "Detail"),
+    message: surfaceEmptyState(surface, "No artifact rows are projected yet.")
+  });
+  if (!detail) return emptyDetail();
+  const relatedEdges = (model.edges ?? []).filter(edge => edge.from === detail.id || edge.to === detail.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "artifactCardTitle", "artifactFields", ctx, detail, "Artifact Detail");
+  const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "artifactFields").length
+    ? rootKeysFromSurfaceSchema(primarySurface, "artifactFields")
+    : ["id", "artifactKind", "producerKind", "producerId", "contentType", "sizeBytes"];
+  const sections = new Map();
+  setAuthoredDetailSection(sections, primarySurface, "artifact", `
+    ${renderPropertyCard(primaryCard)}
+    ${renderLongTailProperties(primarySurface, ctx, detail, usedKeys)}
+  `);
+  setAuthoredDetailSection(sections, relatedSurface, "artifact", `
+    ${renderCardSpecs(relatedSurface, "artifactLinkCards", "artifactLinkCardEmptyStates", ctx, detail, "links")}
+    ${renderCardSpecs(relatedSurface, "artifactTextCards", "artifactTextCardEmptyStates", ctx, detail, "text")}
+  `);
+  setAuthoredDetailSection(sections, relationshipsSurface, "artifact", renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+    <tr>
+      <td>${renderConceptLink(ctx, edge.from)}</td>
+      <td>${esc(edge.rel || "")}</td>
+      <td>${renderConceptLink(ctx, edge.to)}</td>
+    </tr>
+  `)));
+  return renderAuthoredDetailLayout(surface, sections);
+}
+
 function renderDefectDetail(surface, detail, model, ctx) {
   const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary");
   const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related");
@@ -3813,6 +4182,10 @@ function recordsForAuthoredListSource(source, model) {
       return telemetryItems(model);
     case "defectItems":
       return defectItems(model);
+    case "sessionItems":
+      return sessionItems(model);
+    case "artifactItems":
+      return artifactItems(model);
     case "pushItems":
       return pushItems(model);
     case "shipItems":
@@ -3821,6 +4194,7 @@ function recordsForAuthoredListSource(source, model) {
       return modelItems(model);
     case "bridges":
     case "governance":
+    case "security":
     case "semantics":
     case "packageCoexistence":
     case "packageConvergence":
@@ -3947,6 +4321,20 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
         model,
         ctx
       ));
+    case "sessions":
+      return renderSurfaceFrame(surface, renderSessionsDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id),
+        model,
+        ctx
+      ));
+    case "artifacts":
+      return renderSurfaceFrame(surface, renderArtifactDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id),
+        model,
+        ctx
+      ));
     case "pushes":
       return renderSurfaceFrame(surface, renderPushDetail(
         surface,
@@ -3970,6 +4358,7 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
       ));
     case "bridges":
     case "governance":
+    case "security":
     case "semantics":
     case "packageCoexistence":
     case "packageConvergence":
@@ -4388,6 +4777,27 @@ function platformSourceRows(source, model) {
           scopeValue: row.targetProcess || "",
           scope: row.authorityMechanism || "",
           summary: row.notes || ""
+        }))
+      ];
+    case "security":
+      return [
+        ...(model.authorityPolicies ?? []).map(row => ({
+          ...row,
+          pageKind: "policy",
+          title: row.title || row.policyKey || row.id,
+          objectLink: { id: row.id, title: row.title || row.policyKey || row.id },
+          scopeValue: row.requiredAuthority || row.accessClass || "",
+          scope: row.sensitivity || "",
+          summary: row.summary || ""
+        })),
+        ...(model.authorityDecisions ?? []).map(row => ({
+          ...row,
+          pageKind: "decision",
+          title: row.action || row.handlerId || row.id,
+          objectLink: { id: row.id, title: row.action || row.handlerId || row.id },
+          scopeValue: row.targetObjectId || row.view || row.routeId || "",
+          scope: row.decision || "",
+          summary: row.reason || ""
         }))
       ];
     case "semantics":

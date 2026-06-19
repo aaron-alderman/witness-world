@@ -25,7 +25,6 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "authority.grants.create",
       "authority.grants.revoke",
       "backendProgram.run",
-      "page.home",
       "page.surface",
       "guidance.progress.read",
       "guidance.progress.write",
@@ -49,7 +48,6 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
     ],
     handlerMetadata: {
       "backendProgram.run": { routeKind: "backendProgram", responseKind: "json" },
-      "page.home": { routeKind: "page", responseKind: "page", methods: ["GET"] },
       "page.surface": { routeKind: "page", responseKind: "page", methods: ["GET"] },
       "session.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
       "session.open": { routeKind: "json", responseKind: "json", methods: ["POST"] },
@@ -74,7 +72,7 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "app.preview.session.inspect.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
       "app.preview.session.properties.patch": { routeKind: "json", responseKind: "json", methods: ["PATCH"] }
     },
-    pageHandlers: ["page.home", "page.surface"],
+    pageHandlers: ["page.surface"],
     dispatchHandlers: [
       "session.read",
       "session.open",
@@ -83,7 +81,6 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "authority.grants.create",
       "authority.grants.revoke",
       "backendProgram.run",
-      "page.home",
       "page.surface",
       "guidance.progress.read",
       "guidance.progress.write",

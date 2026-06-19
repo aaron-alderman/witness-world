@@ -6,15 +6,16 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createWorld } from "../../src/kernel.js";
 import { applyWitnessToml } from "../../src/dsl.js";
-import { approveProposal, bindContextName, createProposal, moduleProjectors, updateCapability } from "../../src/modules.js";
+import { approveProposal, bindContextName, createProposal, grantStewardship, moduleProjectors, updateCapability } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { compileRvmToDesirePlus } from "../../src/desire/index.js";
 import { bundleId, capabilities, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
-import { buildPlatformCssDriftGap, buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LIFECYCLES } from "./platform-model.js";
+import { buildPlatformCssDriftGap, buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LIFECYCLES, selectVerificationRequirementState } from "./platform-model.js";
 import { renderPlatformPage, renderPlatformPageFragment, renderPlatformShellPage, sortRecordsForSurface } from "./platform-page.js";
 import { readPlatformConsoleLayout } from "./platform-console-layout.js";
 import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./platform-proposals.js";
 import { executePlatformProposalTarget } from "./platform-proposal-targets.js";
+import { platformModuleProjectors } from "./projections.js";
 import { applyPlatformChangeSet, readPlatformBranch, validatePlatformChangeSet } from "./change-sets.js";
 import { renderPlatformConsoleCss } from "./platform-style.js";
 import { runPlatformTestGate } from "./test-runs.js";
@@ -178,6 +179,7 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.create"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.approve"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.reject"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.artifact.content"), true);
   assert.equal(handlerCatalog.pageHandlers.includes("page.platform"), true);
   assert.equal(routes.some(route => route.path === "/platform" && route.handler === "page.platform"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-page" && route.handler === "platform.page.read"), true);
@@ -196,6 +198,7 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(routes.some(route => route.handler === "platform.changeSet.apply"), true);
   assert.equal(routes.some(route => route.handler === "platform.changeSet.reject"), true);
   assert.equal(routes.some(route => route.handler === "platform.changeSet.abandon"), true);
+  assert.equal(routes.some(route => route.handler === "platform.artifact.content"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-proposals" && route.handler === "platform.proposal.create"), true);
   assert.equal(routes.some(route => route.handler === "platform.proposal.approve"), true);
   assert.equal(surfaces.some(surface => surface.id === "surface:platform" && surface.href === "/platform"), true);
@@ -219,7 +222,8 @@ test("platform runtime declares every change-set route with owned handler metada
     { method: "POST", handler: "platform.changeSet.abandon", pattern: /^\/api\/platform-change-sets\/([^/]+)\/abandon$/, paramNames: ["id"] },
     { method: "POST", path: "/api/platform-test-runs", handler: "platform.testRun.create" },
     { method: "GET", path: "/api/platform-test-runs/events", handler: "platform.testRun.events" },
-    { method: "GET", handler: "platform.testRun.read", pattern: /^\/api\/platform-test-runs\/([^/]+)$/, paramNames: ["id"] }
+    { method: "GET", handler: "platform.testRun.read", pattern: /^\/api\/platform-test-runs\/([^/]+)$/, paramNames: ["id"] },
+    { method: "GET", handler: "platform.artifact.content", pattern: /^\/api\/platform-artifacts\/([^/]+)\/content$/, paramNames: ["id"] }
   ];
 
   for (const expected of expectedRoutes) {
@@ -336,7 +340,11 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(activeProfile?.runnerSummary, "server_runner (authored-server-runner)");
   assert.match(activeProfile?.compositionSummary ?? "", /authored runner server_runner/);
   assert.equal(model.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.importedVisibleTarget" && row.status === "policy"), true);
-  assert.equal(model.governanceRoutes.some(row => row.handler === "platform.changeSet.apply" && row.governanceMode === "operator-only"), true);
+  assert.equal(model.governanceRoutes.some(row =>
+    row.handler === "platform.changeSet.apply"
+    && row.governanceMode === "direct-authority"
+    && row.authorityMechanism === "platform-policy:platform.execute.operator"
+  ), true);
   assert.equal(model.proposalTargetGovernance.some(row => row.targetProcess === "runtimePlugin.install" && row.governanceMode === "proposal-fallback"), true);
   assert.equal(model.mutableSurfaceSemantics.some(row => row.id === "mutableSurface:demo.privateNotes" && row.sharingClass === "personal" && row.stateClass === "actor-scoped"), true);
   assert.equal(model.mutableSurfaceSemantics.some(row => row.id === "mutableSurface:canvas.perspective" && row.sharingClass === "mixed"), true);
@@ -752,7 +760,7 @@ test("platform console is declared through RVM and styled through WCSS", async (
   assert.equal(page?.semantic.identity, "surface:platform");
   assert.equal(page?.semantic.className, "platform-console");
   assert.equal(page?.semantic.props?.title, "Platform Console");
-  assert.equal(page?.semantic.props?.summary, "RVM-authored platform pages for overview, workflow, verification, telemetry, defects, knowledge, signals compatibility, model inspection, and supplemental governance/model seams.");
+  assert.equal(page?.semantic.props?.summary, "RVM-authored platform pages for overview, workflow, verification, telemetry, defects, security, artifacts, sessions, knowledge, signals compatibility, model inspection, and supplemental governance/model seams.");
   assert.equal(page?.semantic.children.includes("PlatformWorkflowPage"), true);
   assert.equal(createCommand?.semantic.route, "/api/platform-proposals");
   assert.match(css, /Generated from plugins\/platform\/platform-console\.wcss/);
@@ -774,6 +782,7 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformWorkflowBranchesPage",
     "PlatformWorkflowChangeSetsPage",
     "PlatformWorkflowPushesPage",
+    "PlatformWorkflowShipsPage",
     "PlatformWorkflowProposalsPage",
     "PlatformVerificationPage",
     "PlatformVerificationStatusPage",
@@ -781,6 +790,9 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationRuntimePage",
     "PlatformTelemetryPage",
     "PlatformDefectsPage",
+    "PlatformSecurityPage",
+    "PlatformArtifactsPage",
+    "PlatformSessionsPage",
     "PlatformKnowledgePage",
     "PlatformKnowledgeDocsPage",
     "PlatformKnowledgeFoldersPage",
@@ -810,6 +822,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   const verificationRuntimePage = layout.children.find(surface => surface.name === "PlatformVerificationRuntimePage");
   const telemetryPage = layout.children.find(surface => surface.name === "PlatformTelemetryPage");
   const defectsPage = layout.children.find(surface => surface.name === "PlatformDefectsPage");
+  const artifactsPage = layout.children.find(surface => surface.name === "PlatformArtifactsPage");
+  const sessionsPage = layout.children.find(surface => surface.name === "PlatformSessionsPage");
   const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
   const knowledgeDocsPage = layout.children.find(surface => surface.name === "PlatformKnowledgeDocsPage");
   const knowledgeFoldersPage = layout.children.find(surface => surface.name === "PlatformKnowledgeFoldersPage");
@@ -893,18 +907,27 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.deepEqual(workflowDetailSurface.children, [
     "PlatformWorkflowPrimaryPanel",
     "PlatformWorkflowRelatedPanel",
+    "PlatformVerificationRequirementSummary",
+    "PlatformVerificationRequirementsTable",
+    "PlatformVerificationBlockingReasons",
     "PlatformWorkflowSnapshotHistory",
     "PlatformWorkflowEditHistory"
   ]);
   assert.deepEqual(workflowDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
     "primary",
     "related",
+    "verificationRequirementSummary",
+    "verificationRequirements",
+    "verificationBlockingReasons",
     "snapshotHistory",
     "editHistory"
   ]);
   assert.deepEqual(workflowDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
     "branch|changeSet|proposal",
     "branch|changeSet|proposal",
+    "changeSet|candidateSnapshot",
+    "changeSet|candidateSnapshot",
+    "changeSet|candidateSnapshot",
     "branch|changeSet",
     "changeSet"
   ]);
@@ -918,11 +941,21 @@ test("platform console layout compiles authored top-level surface metadata from 
   const workflowEditSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowEditHistory");
   assert.ok(workflowEditSurface);
   assert.equal(workflowEditSurface.props.rowFields, "Path=path|Language=sourceLanguage|Previous Hash=previousHashShort|Next Hash=nextHashShort");
+  const workflowRequirementSummarySurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRequirementSummary");
+  assert.ok(workflowRequirementSummarySurface);
+  assert.equal(workflowRequirementSummarySurface.props.detailKinds, "changeSet|candidateSnapshot");
+  assert.match(workflowRequirementSummarySurface.props.propertyFields, /Blocking status=blockingStatus/);
+  const workflowRequirementsSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRequirementsTable");
+  assert.ok(workflowRequirementsSurface);
+  assert.equal(workflowRequirementsSurface.props.columns, "Status|Blocking|Gate|Execution Class|Freshness|Regression|Latest Run|Latest Passed");
+  const workflowBlockingSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationBlockingReasons");
+  assert.ok(workflowBlockingSurface);
+  assert.equal(workflowBlockingSurface.props.emptyState, "No blocking verification requirements.");
   const workflowPrimarySurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowPrimaryPanel");
   assert.ok(workflowPrimarySurface);
   assert.equal(workflowPrimarySurface.props.longTailCardTitle, "Properties");
   assert.equal(workflowPrimarySurface.props.longTailValueKinds, "string|number|boolean|scalarList");
-  assert.equal(workflowPrimarySurface.props.branchLongTailExcludedFields, "changeSetIds|pushRecordIds|affectedSystemSummaries|telemetryImpactSummaries");
+  assert.equal(workflowPrimarySurface.props.branchLongTailExcludedFields, "changeSetIds|pushRecordIds|shipRecordIds|affectedSystemSummaries|telemetryImpactSummaries");
   assert.equal(workflowPrimarySurface.props.changeSetLongTailExcludedFields, "changedPaths");
   assert.equal(workflowPrimarySurface.props.branchCardTitle, "Branch Detail");
   assert.match(workflowPrimarySurface.props.branchFields, /Branch=id@concept/);
@@ -931,8 +964,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   const workflowRelatedSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowRelatedPanel");
   assert.ok(workflowRelatedSurface);
   assert.equal(workflowRelatedSurface.props.cardItemLimit, "12");
-  assert.equal(workflowRelatedSurface.props.branchLinkCards, "Change Sets=changeSetIds|Push Records=pushRecordIds");
-  assert.equal(workflowRelatedSurface.props.branchLinkCardEmptyStates, "Change Sets=No change sets linked to this branch.|Push Records=No push records linked to this branch.");
+  assert.equal(workflowRelatedSurface.props.branchLinkCards, "Change Sets=changeSetIds|Push Records=pushRecordIds|Ship Records=shipRecordIds");
+  assert.equal(workflowRelatedSurface.props.branchLinkCardEmptyStates, "Change Sets=No change sets linked to this branch.|Push Records=No push records linked to this branch.|Ship Records=No ship records linked to this branch.");
   assert.equal(workflowRelatedSurface.props.branchTextCards, "Affected Systems=affectedSystemSummaries@label|Telemetry Impacts=telemetryImpactSummaries@label");
   assert.equal(workflowRelatedSurface.props.branchTextCardEmptyStates, "Affected Systems=No affected system summaries.|Telemetry Impacts=No telemetry impact summaries.");
   assert.equal(workflowRelatedSurface.props.changeSetLinkCards, "Changed Paths=changedPaths");
@@ -1105,6 +1138,9 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationBuildErrors",
     "PlatformVerificationFreshnessSummary",
     "PlatformVerificationInvalidationReasons",
+    "PlatformVerificationRequirementSummary",
+    "PlatformVerificationRequirementsTable",
+    "PlatformVerificationBlockingReasons",
     "PlatformVerificationReportSummary",
     "PlatformVerificationArtifactsReport",
     "PlatformVerificationSuiteSummary",
@@ -1119,6 +1155,9 @@ test("platform console layout compiles authored top-level surface metadata from 
     "buildErrors",
     "freshnessSummary",
     "invalidationReasons",
+    "verificationRequirementSummary",
+    "verificationRequirements",
+    "verificationBlockingReasons",
     "reportSummary",
     "artifacts",
     "suiteSummary",
@@ -1133,6 +1172,9 @@ test("platform console layout compiles authored top-level surface metadata from 
     "runtimeRevision",
     "gate|verificationFreshness|verificationInvalidation|testRun|testReport",
     "gate|verificationFreshness|verificationInvalidation|testRun|testReport",
+    "changeSet|candidateSnapshot",
+    "changeSet|candidateSnapshot",
+    "changeSet|candidateSnapshot",
     "testRun|testReport",
     "testRun|testReport",
     "testRun|testReport",
@@ -1194,6 +1236,19 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationInvalidationSurface.props.detailKinds, "gate|verificationFreshness|verificationInvalidation|testRun|testReport");
   assert.equal(verificationInvalidationSurface.props.columns, "Reason|Summary|Changed Paths|Targets");
   assert.equal(verificationInvalidationSurface.props.rowFields, "Reason=reasonKind|Summary=reasonSummary|Changed Paths=changedPaths@value|Targets=targetIds@value");
+  const verificationRequirementSummarySurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRequirementSummary");
+  assert.ok(verificationRequirementSummarySurface);
+  assert.equal(verificationRequirementSummarySurface.props.detailPanelRole, "verificationRequirementSummary");
+  assert.equal(verificationRequirementSummarySurface.props.detailKinds, "changeSet|candidateSnapshot");
+  assert.match(verificationRequirementSummarySurface.props.propertyFields, /Blocking status=blockingStatus/);
+  const verificationRequirementsSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRequirementsTable");
+  assert.ok(verificationRequirementsSurface);
+  assert.equal(verificationRequirementsSurface.props.detailPanelRole, "verificationRequirements");
+  assert.equal(verificationRequirementsSurface.props.rowFields, "Status=status|Blocking=blocking|Gate=gateId@concept|Execution Class=executionClass|Freshness=freshnessStatus|Regression=regressionStatus|Latest Run=latestRunId@concept|Latest Passed=latestPassedRunId@concept");
+  const verificationBlockingSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationBlockingReasons");
+  assert.ok(verificationBlockingSurface);
+  assert.equal(verificationBlockingSurface.props.detailPanelRole, "verificationBlockingReasons");
+  assert.equal(verificationBlockingSurface.props.rowFields, "Gate=gateId@concept|Status=status|Reason=reasonSummary|Changed Paths=changedPaths@value|Targets=targetIds@value");
   const verificationStreamsSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStreams");
   assert.ok(verificationStreamsSurface);
   assert.equal(verificationStreamsSurface.props.propertyCardTitle, "Event Streams");
@@ -1344,7 +1399,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const telemetryDetailSurface = telemetryPage.childSurfaces.find(surface => surface.name === "PlatformTelemetryDetail");
   assert.ok(telemetryDetailSurface);
   assert.equal(telemetryDetailSurface.props.detailSource, "telemetry");
-  assert.equal(telemetryDetailSurface.props.detailSelectionSources, "telemetryMetrics|performanceRegressions|telemetryWindows|telemetrySamples");
+  assert.equal(telemetryDetailSurface.props.detailSelectionSources, "telemetryMetrics|performanceRegressions|telemetryWindows|telemetrySamples|materializedViewStates|resourceProbeOperations");
   assert.deepEqual(telemetryDetailSurface.children, [
     "PlatformTelemetryPrimaryPanel",
     "PlatformTelemetryRelatedPanel",
@@ -1370,6 +1425,43 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformDefectPrimaryPanel",
     "PlatformDefectRelatedPanel",
     "PlatformDefectRelationships"
+  ]);
+  assert.ok(sessionsPage);
+  assert.ok(artifactsPage);
+  assert.equal(artifactsPage.pageId, "artifacts");
+  assert.equal(artifactsPage.props.modelView, "artifacts");
+  assert.match(artifactsPage.props.summaryCards, /Artifacts=artifacts@count/);
+  assert.deepEqual(artifactsPage.children, [
+    "PlatformArtifactsList",
+    "PlatformArtifactsDetail"
+  ]);
+  const artifactsListSurface = artifactsPage.childSurfaces.find(surface => surface.name === "PlatformArtifactsList");
+  assert.ok(artifactsListSurface);
+  assert.equal(artifactsListSurface.props.listSource, "artifactItems");
+  assert.equal(artifactsListSurface.props.pageSize, "20");
+  const artifactsDetailSurface = artifactsPage.childSurfaces.find(surface => surface.name === "PlatformArtifactsDetail");
+  assert.ok(artifactsDetailSurface);
+  assert.equal(artifactsDetailSurface.props.detailSource, "artifacts");
+  assert.equal(artifactsDetailSurface.props.detailSelectionSources, "artifacts");
+  assert.equal(sessionsPage.pageId, "sessions");
+  assert.equal(sessionsPage.props.modelView, "sessions");
+  assert.match(sessionsPage.props.summaryCards, /Sessions=sessions@count/);
+  assert.deepEqual(sessionsPage.children, [
+    "PlatformSessionsList",
+    "PlatformSessionsDetail"
+  ]);
+  const sessionsListSurface = sessionsPage.childSurfaces.find(surface => surface.name === "PlatformSessionsList");
+  assert.ok(sessionsListSurface);
+  assert.equal(sessionsListSurface.props.listSource, "sessionItems");
+  assert.equal(sessionsListSurface.props.pageSize, "20");
+  const sessionsDetailSurface = sessionsPage.childSurfaces.find(surface => surface.name === "PlatformSessionsDetail");
+  assert.ok(sessionsDetailSurface);
+  assert.equal(sessionsDetailSurface.props.detailSource, "sessions");
+  assert.equal(sessionsDetailSurface.props.detailSelectionSources, "sessions|executions|sessionTags|executionArtifacts|authorityDecisions");
+  assert.deepEqual(sessionsDetailSurface.children, [
+    "PlatformSessionsPrimaryPanel",
+    "PlatformSessionsRelatedPanel",
+    "PlatformSessionsRelationships"
   ]);
   assert.ok(knowledgePage);
   assert.equal(knowledgePage.props.modelView, "knowledgeOverview");
@@ -1718,8 +1810,15 @@ test("platform page views filter the model to page-scoped slices", () => {
     snapshotDiagnostics: { appRevision: 7 },
     testMonitorDiagnostics: { status: "idle", pendingSourceCount: 0, pendingChangeSetCount: 0 },
     compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget", bridgeClass: "canonical-id-sugar", owner: "context.naming", surfaces: ["src/modules.js"], sampleTargets: [], status: "policy" }],
-    governanceRoutes: [{ id: "governanceRoute:POST /api/platform-change-sets/demo/apply", routeId: "route:POST /api/platform-change-sets/demo/apply", method: "POST", matcher: "/api/platform-change-sets/demo/apply", handler: "platform.changeSet.apply", operationSemantics: "governed-mutation", governanceMode: "operator-only", authorityMechanism: "bootstrap-operator", sharedAuthorityPath: false, workflowRole: "direct-mutation", notes: "Platform change-set apply is still bootstrap-operator-only.", ownerClass: "runtime-plugin", ownerBundleId: "bundle-platform", ownerPluginId: "plugin.platform" }],
+    governanceRoutes: [{ id: "governanceRoute:POST /api/platform-change-sets/demo/apply", routeId: "route:POST /api/platform-change-sets/demo/apply", method: "POST", matcher: "/api/platform-change-sets/demo/apply", handler: "platform.changeSet.apply", operationSemantics: "governed-mutation", governanceMode: "direct-authority", authorityMechanism: "platform-policy:platform.execute.operator", sharedAuthorityPath: false, workflowRole: "direct-mutation", notes: "Platform change-set apply evaluates the operator execution policy before mutating active platform state.", ownerClass: "runtime-plugin", ownerBundleId: "bundle-platform", ownerPluginId: "plugin.platform" }],
     proposalTargetGovernance: [{ id: "governanceProposalTarget:runtimePlugin.install", targetProcess: "runtimePlugin.install", operationSemantics: "governed-mutation", governanceMode: "proposal-fallback", authorityMechanism: "bootstrap-target-authority", sharedAuthorityPath: true, workflowRole: "proposal-target", bootstrapSelectable: true, notes: "Runtime-plugin install proposals execute through shared server-runner target authority once approved." }],
+    authorityPolicies: [{ id: "authorityPolicy:platform.read.general", policyKey: "platform.read.general", title: "Platform General Read", requiredAuthority: "platform.read.general", accessClass: "read", sensitivity: "general", summary: "General platform reads.", source: "platform-policy" }],
+    authorityDecisions: [{ id: "authorityDecision:w_demo", policyId: "authorityPolicy:platform.read.general", action: "platform.model.read", decision: "allow", requiredAuthority: "platform.read.general", handlerId: "platform.model.read", routeId: "route:GET /api/platform-model", view: "overview", effectiveActor: "aaron", targetObjectId: "plugin.platform", reason: "authenticated actor aaron may read general platform surfaces" }],
+    artifacts: [{ id: "artifact:testRun:platform:stdout", artifactKind: "stdout", producerKind: "testRun", producerId: "testRun:platform", testRunId: "testRun:platform", sessionId: "session.platform", executionId: "execution:w_demo", branchId: "branch:platform", changeSetId: "changeSet:platform", candidateSnapshotId: "candidateSnapshot:platform", gateId: "gate:platform", contentType: "text/plain", sizeBytes: 14, preview: "platform stdout", contentUrl: "/api/platform-artifacts/artifact%3AtestRun%3Aplatform%3Astdout/content", artifactSourceId: "testArtifact:testRun:platform:stdout" }],
+    sessions: [{ id: "session.platform", effectiveActor: "aaron", authorityMode: "direct", executionIds: ["execution:w_demo"], authorityDecisionIds: ["authorityDecision:w_demo"], branchIds: ["branch:platform"], changeSetIds: ["changeSet:platform"], pushRecordIds: ["pushRecord:platform:1"], shipRecordIds: ["shipRecord:platform:1"], testRunIds: ["testRun:platform"], executionCount: 1, authorityDecisionCount: 1, startedAt: "2026-01-01T00:00:00.000Z", lastActivityAt: "2026-01-01T00:01:00.000Z" }],
+    executions: [{ id: "execution:w_demo", sessionId: "session.platform", title: "platform.model.read", executionKind: "read", status: "observed", handlerId: "platform.model.read", routeId: "route:GET /api/platform-model", view: "overview", branchId: "branch:platform", changeSetId: "changeSet:platform", pushRecordId: "pushRecord:platform:1", shipRecordId: "shipRecord:platform:1", testRunId: "testRun:platform", targetObjectIds: ["plugin.platform"] }],
+    sessionTags: [{ id: "sessionTag:platform:branch", sessionId: "session.platform", tagKind: "branch", value: "branch:platform", executionIds: ["execution:w_demo"] }],
+    executionArtifacts: [{ id: "executionArtifact:platform:push", executionId: "execution:w_demo", sessionId: "session.platform", artifactKind: "pushRecord", artifactId: "pushRecord:platform:1", producedAt: "2026-01-01T00:01:00.000Z" }],
     mutableSurfaceSemantics: [{ id: "mutableSurface:demo.privateNotes", surface: "demo.privateNotes", title: "Private Notes", sharingClass: "personal", stateClass: "actor-scoped", visibilityRule: "actor-private", authorityRule: "request-actor", mutationMode: "direct", variantOf: null, readSurfaces: ["/api/private-notes"], mutationSurfaces: ["POST /api/private-notes"], witnessProcesses: ["privateNote.create"], sourceFiles: ["plugins/demo/projections.js"], variants: [], notes: "Private notes stay actor-private." }],
     branchTestRedGreen: [{ id: "branchRedGreen:platform", branchId: "branch:platform", status: "green" }],
     changeSetTestRedGreen: [{ id: "changeSetRedGreen:platform", changeSetId: "changeSet:platform", status: "green" }],
@@ -1757,6 +1856,9 @@ test("platform page views filter the model to page-scoped slices", () => {
   const signalsCatalog = filterPlatformModel(model, "signalsCatalog");
   const telemetry = filterPlatformModel(model, "telemetry");
   const defects = filterPlatformModel(model, "defects");
+  const security = filterPlatformModel(model, "security");
+  const artifacts = filterPlatformModel(model, "artifacts");
+  const sessions = filterPlatformModel(model, "sessions");
   const pushes = filterPlatformModel(model, "pushes");
   const ships = filterPlatformModel(model, "ships");
   const modelPage = filterPlatformModel(model, "model");
@@ -1768,8 +1870,8 @@ test("platform page views filter the model to page-scoped slices", () => {
   const semantics = filterPlatformModel(model, "semantics");
 
   assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleBoard", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
-  assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "pushRecords", "summaries"]);
-  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites", "verificationExecutions", "verificationFreshness", "verificationInvalidations", "verificationPersistence", "verificationPolicies", "verificationQueue"]);
+  assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "pushRecords", "shipRecords", "summaries", "verificationRequirementSummaries", "verificationRequirements"]);
+  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites", "verificationExecutions", "verificationFreshness", "verificationInvalidations", "verificationPersistence", "verificationPolicies", "verificationQueue", "verificationRequirementSummaries", "verificationRequirements"]);
   assert.deepEqual(Object.keys(knowledge).sort(), ["docTasks", "docs", "epics", "features", "folders", "roadmapTasks", "summaries"]);
   assert.deepEqual(Object.keys(knowledgeDocs).sort(), ["docSections", "docTasks", "docs", "summaries"]);
   assert.deepEqual(Object.keys(knowledgeFolders).sort(), ["edges", "folders", "summaries"]);
@@ -1777,10 +1879,13 @@ test("platform page views filter the model to page-scoped slices", () => {
   assert.deepEqual(Object.keys(signals).sort(), ["gaps", "nodes", "summaries"]);
   assert.deepEqual(Object.keys(signalsGaps).sort(), ["gaps", "summaries"]);
   assert.deepEqual(Object.keys(signalsCatalog).sort(), ["edges", "nodes", "summaries"]);
-  assert.deepEqual(Object.keys(telemetry).sort(), ["branches", "changeSets", "latestTestResultsByGate", "performanceRegressions", "summaries", "telemetryEdges", "telemetryMetrics", "telemetrySamples", "telemetryThresholds", "telemetryWindows", "testGates"]);
+  assert.deepEqual(Object.keys(telemetry).sort(), ["branches", "changeSets", "latestTestResultsByGate", "materializedViewStates", "performanceRegressions", "resourceProbeOperations", "summaries", "telemetryEdges", "telemetryMetrics", "telemetrySamples", "telemetryThresholds", "telemetryWindows", "testGates"]);
   assert.deepEqual(Object.keys(defects).sort(), ["branches", "changeSets", "defectClusters", "defectObservations", "defects", "proposals", "summaries", "testGates"]);
+  assert.deepEqual(Object.keys(artifacts).sort(), ["artifacts", "branches", "candidateSnapshots", "changeSets", "executions", "proposals", "sessions", "summaries", "testReports", "testResults", "testRuns"]);
+  assert.deepEqual(Object.keys(sessions).sort(), ["authorityDecisions", "branches", "changeSets", "executionArtifacts", "executions", "proposals", "pushRecords", "sessionTags", "sessions", "shipRecords", "summaries", "testRuns"]);
   assert.deepEqual(Object.keys(pushes).sort(), ["branches", "changeSets", "defects", "gitRefs", "gitRemotes", "proposals", "pushRecords", "summaries"]);
   assert.deepEqual(Object.keys(ships).sort(), ["branches", "changeSets", "defects", "latestTestResultsByGate", "performanceRegressions", "proposals", "pushRecords", "releaseChannels", "shipRecords", "summaries", "testGates"]);
+  assert.deepEqual(Object.keys(security).sort(), ["authorityDecisions", "authorityPolicies", "branches", "changeSets", "governanceRoutes", "proposalTargetGovernance", "proposals", "pushRecords", "shipRecords", "summaries"]);
   assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
   assert.deepEqual(Object.keys(modelObjects).sort(), ["edges", "nodes", "summaries"]);
   assert.deepEqual(Object.keys(modelProfiles).sort(), ["profiles", "summaries"]);
@@ -1802,6 +1907,13 @@ test("platform page views filter the model to page-scoped slices", () => {
   assert.equal(defects.defects.length, 1);
   assert.equal(defects.defectObservations.length, 1);
   assert.equal(defects.defectClusters.length, 1);
+  assert.equal(artifacts.artifacts.length, 1);
+  assert.equal(artifacts.sessions.length, 1);
+  assert.equal(artifacts.executions.length, 1);
+  assert.equal(sessions.sessions.length, 1);
+  assert.equal(sessions.executions.length, 1);
+  assert.equal(sessions.sessionTags.length, 1);
+  assert.equal(sessions.executionArtifacts.length, 1);
   assert.equal(pushes.pushRecords.length, 1);
   assert.equal(pushes.gitRemotes.length, 1);
   assert.equal(pushes.gitRefs.length, 1);
@@ -1986,6 +2098,144 @@ test("platform telemetry and defect projectors derive regressions, hot loops, an
   assert.equal(clusters.some(row => row.id === "defectCluster:telemetrymetric-platform-self" && row.defectCount >= 2), true);
   assert.equal(clusters.some(row => row.id === "defectCluster:gate-demo" && row.defectCount >= 2), true);
 }));
+
+test("platform session projectors derive sessions, executions, tags, and artifacts deterministically", async () => withRegisteredPluginProjectors(providers, async () => {
+  const witnesses = [
+    {
+      id: "w_decision",
+      process: "platform.authority.decision",
+      actor: "aaron",
+      body: {
+        action: "platform.model.read",
+        kind: "read",
+        handlerId: "platform.model.read",
+        routeId: "route:GET /api/platform-model",
+        requestPath: "/api/platform-model?view=sessions",
+        view: "sessions",
+        targetObjectId: "plugin.platform",
+        sessionId: "session.platform",
+        policyId: "authorityPolicy:platform.read.sensitive",
+        requiredAuthority: "platform.read.sensitive",
+        decision: "allow",
+        reason: "platform steward may read sensitive platform surfaces",
+        authenticatedActor: "aaron",
+        effectiveActor: "aaron",
+        authorityMode: "direct",
+        evaluatedAt: "2026-01-01T00:00:00.000Z"
+      }
+    },
+    {
+      id: "w_read",
+      process: "backend.readPlatformModel",
+      actor: "backendHost",
+      body: {
+        sessionId: "session.platform",
+        handlerId: "platform.model.read",
+        routeId: "route:GET /api/platform-model",
+        requestPath: "/api/platform-model?view=sessions",
+        view: "sessions",
+        targetObjectId: "plugin.platform",
+        authenticatedActor: "aaron",
+        effectiveActor: "aaron",
+        authorityMode: "direct",
+        authorityDecisionId: "authorityDecision:w_decision",
+        authorityPolicyId: "authorityPolicy:platform.read.sensitive",
+        runtimeProfile: "full",
+        startedAt: "2026-01-01T00:00:01.000Z",
+        finishedAt: "2026-01-01T00:00:02.000Z",
+        durationMs: 11
+      }
+    },
+    {
+      id: "w_validate",
+      process: "platform.changeSet.validate",
+      actor: "aaron",
+      body: {
+        id: "changeSet.demo",
+        branchId: "branch.demo",
+        session: "session.platform",
+        status: "valid",
+        startedAt: "2026-01-01T00:01:00.000Z",
+        validatedAt: "2026-01-01T00:01:03.000Z",
+        durationMs: 31,
+        candidateSnapshot: {
+          id: "candidateSnapshot:changeSet.demo:1"
+        }
+      }
+    },
+    {
+      id: "w_push",
+      process: "platform.branch.push",
+      actor: "aaron",
+      body: {
+        id: "pushRecord:branch.demo:1",
+        branchId: "branch.demo",
+        changeSetId: "changeSet.demo",
+        session: "session.platform",
+        status: "pushed",
+        gitBranchName: "platform/demo",
+        createdAt: "2026-01-01T00:02:00.000Z"
+      }
+    }
+  ];
+
+  const sessions = platformModuleProjectors.sessions(witnesses);
+  const executions = platformModuleProjectors.executions(witnesses);
+  const sessionTags = platformModuleProjectors.sessionTags(witnesses);
+  const executionArtifacts = platformModuleProjectors.executionArtifacts(witnesses);
+  const decisions = platformModuleProjectors.authorityDecisions(witnesses);
+
+  assert.equal(sessions.length, 1);
+  assert.equal(sessions[0].id, "session.platform");
+  assert.equal(sessions[0].effectiveActor, "aaron");
+  assert.equal(sessions[0].executionCount, 3);
+  assert.equal(sessions[0].authorityDecisionCount, 1);
+  assert.equal(sessions[0].branchIds.includes("branch.demo"), true);
+  assert.equal(sessions[0].changeSetIds.includes("changeSet.demo"), true);
+  assert.equal(executions.some(row => row.sourceProcess === "backend.readPlatformModel" && row.authorityDecisionId === "authorityDecision:w_decision"), true);
+  assert.equal(executions.some(row => row.sourceProcess === "platform.changeSet.validate" && row.candidateSnapshotId === "candidateSnapshot:changeSet.demo:1"), true);
+  assert.equal(executions.some(row => row.sourceProcess === "platform.branch.push" && row.pushRecordId === "pushRecord:branch.demo:1"), true);
+  assert.equal(sessionTags.some(row => row.tagKind === "view" && row.value === "sessions"), true);
+  assert.equal(sessionTags.some(row => row.tagKind === "branch" && row.value === "branch.demo"), true);
+  assert.equal(executionArtifacts.some(row => row.artifactKind === "authorityDecision" && row.artifactId === "authorityDecision:w_decision"), true);
+  assert.equal(executionArtifacts.some(row => row.artifactKind === "candidateSnapshot" && row.artifactId === "candidateSnapshot:changeSet.demo:1"), true);
+  assert.equal(executionArtifacts.some(row => row.artifactKind === "pushRecord" && row.artifactId === "pushRecord:branch.demo:1"), true);
+  assert.equal(decisions[0].sessionId, "session.platform");
+}));
+
+test("platform artifact projectors derive canonical artifacts and execution provenance deterministically", async () => withRegisteredPluginProjectors(providers, async () => {
+  const witnesses = [
+    {
+      id: "w_run",
+      process: "platform.test.run.finish",
+      actor: "aaron",
+      body: {
+        id: "testRun:demo",
+        title: "Demo run",
+        gateId: "gate:demo",
+        branchId: "branch.demo",
+        changeSetId: "changeSet.demo",
+        candidateSnapshotId: "candidateSnapshot:demo:1",
+        session: "session.platform",
+        stdout: "stdout text",
+        stderr: "stderr text",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        finishedAt: "2026-01-01T00:00:01.000Z",
+        status: "passed"
+      }
+    }
+  ];
+
+  const artifacts = platformModuleProjectors.artifacts(witnesses);
+  const executionArtifacts = platformModuleProjectors.executionArtifacts(witnesses);
+  const testArtifacts = platformModuleProjectors.testArtifacts(witnesses);
+
+  assert.equal(artifacts.some(row => row.id === "artifact:testRun:demo:stdout" && row.artifactSourceId === "testArtifact:testRun:demo:stdout"), true);
+  assert.equal(artifacts.some(row => row.id === "artifact:testRun:demo:stdout" && row.sessionId === "session.platform" && row.executionId === "execution:w_run"), true);
+  assert.equal(artifacts.some(row => row.id === "artifact:testRun:demo:stdout" && row.contentUrl === "/api/platform-artifacts/artifact%3AtestRun%3Ademo%3Astdout/content"), true);
+  assert.equal(testArtifacts.some(row => row.id === "testArtifact:testRun:demo:stdout" && row.artifactId === "artifact:testRun:demo:stdout"), true);
+  assert.equal(executionArtifacts.some(row => row.artifactKind === "artifact" && row.artifactId === "artifact:testRun:demo:stdout"), true);
+})); 
 
 test("platform push projectors derive deterministic push records and pushed branch state", async () => withRegisteredPluginProjectors(providers, async () => {
   const witnesses = [
@@ -4074,6 +4324,118 @@ test("platform proposal handlers create and review through proposal machinery", 
   assert.equal(sent.at(-1).body.proposal.status, "approved");
 });
 
+test("platform security policies enforce steward and operator lanes and emit auditable decisions", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  grantStewardship(world, {
+    actor: "platform-owner",
+    steward: "steward",
+    target: "plugin.platform",
+    targetKind: "plugin"
+  });
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor === "operator"
+        ? { ok: true, actor }
+        : { ok: false, status: 403, reason: "operator authority required" },
+      executeBootstrapProposal: actor => async proposal => ({ ok: true, actor, proposal })
+    },
+    sendGateFailure: (res, gate) => sent.push({ status: gate.status, body: { error: gate.reason } }),
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeSet.security", title: "Security policy test" } },
+    res: {},
+    requestActor: "steward",
+    requestSession: { id: "session.steward", actor: "steward" }
+  });
+  assert.equal(sent.at(-1).status, 201);
+
+  await handlers["platform.changeSet.apply"]({
+    req: { body: {} },
+    res: {},
+    params: { id: "changeSet.security" },
+    requestActor: "steward",
+    requestSession: { id: "session.steward", actor: "steward" }
+  });
+  assert.equal(sent.at(-1).status, 403);
+  assert.equal(sent.at(-1).body.policyId, "authorityPolicy:platform.execute.operator");
+  assert.equal(sent.at(-1).body.requiredAuthority, "platform.execute.operator");
+  assert.match(sent.at(-1).body.decisionId || "", /^authorityDecision:/);
+
+  await handlers["platform.model.read"]({
+    res: {},
+    requestUrl: new URL("http://platform.local/api/platform-model?view=security"),
+    requestActor: "viewer",
+    requestSession: { id: "session.viewer", actor: "viewer" },
+    appContext: {
+      runtimeProfile: "full",
+      project: projector => world.project(projector)
+    }
+  });
+  assert.equal(sent.at(-1).status, 403);
+  assert.equal(sent.at(-1).body.policyId, "authorityPolicy:platform.read.sensitive");
+  assert.equal(sent.at(-1).body.requiredAuthority, "platform.read.sensitive");
+  assert.match(sent.at(-1).body.decisionId || "", /^authorityDecision:/);
+
+  await handlers["platform.model.read"]({
+    res: {},
+    requestUrl: new URL("http://platform.local/api/platform-model?view=security"),
+    requestActor: "aaron",
+    requestSession: {
+      id: "session.assumed",
+      actor: "aaron",
+      authenticatedActor: "aaron",
+      effectiveActor: "operator",
+      authorityMode: "assumed",
+      assumptionGrantId: "assumptionGrant:platform-security"
+    },
+    appContext: {
+      runtimeProfile: "full",
+      project: projector => world.project(projector)
+    }
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(Array.isArray(sent.at(-1).body.authorityPolicies), true);
+  assert.equal(Array.isArray(sent.at(-1).body.authorityDecisions), true);
+
+  const decisions = world.project(platformModuleProjectors.authorityDecisions);
+  assert.equal(decisions.some(row =>
+    row.handlerId === "platform.changeSet.create"
+    && row.decision === "allow"
+    && row.policyId === "authorityPolicy:platform.write.steward"
+    && row.effectiveActor === "steward"
+  ), true);
+  assert.equal(decisions.some(row =>
+    row.handlerId === "platform.changeSet.apply"
+    && row.decision === "deny"
+    && row.policyId === "authorityPolicy:platform.execute.operator"
+    && row.effectiveActor === "steward"
+  ), true);
+  assert.equal(decisions.some(row =>
+    row.handlerId === "platform.model.read"
+    && row.view === "security"
+    && row.decision === "deny"
+    && row.policyId === "authorityPolicy:platform.read.sensitive"
+    && row.effectiveActor === "viewer"
+  ), true);
+  assert.equal(decisions.some(row =>
+    row.handlerId === "platform.model.read"
+    && row.view === "security"
+    && row.decision === "allow"
+    && row.policyId === "authorityPolicy:platform.read.sensitive"
+    && row.authorityMode === "assumed"
+    && row.assumptionGrantId === "assumptionGrant:platform-security"
+    && row.effectiveActor === "operator"
+  ), true);
+}));
+
 test("platform proposal handlers approve change-set proposals through the shared executor", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const sent = [];
@@ -4762,7 +5124,9 @@ test("platform test run handlers execute modeled gates and expose read model sta
 
   await handlers["platform.testRun.read"]({
     res: {},
-    params: { id: "testRun.platform.demo" }
+    params: { id: "testRun.platform.demo" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
   });
 
   assert.equal(sent.at(-1).status, 200);
@@ -4771,7 +5135,7 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.testArtifacts.length, 4);
   assert.equal(sent.at(-1).body.testSuites.length, 2);
   assert.equal(sent.at(-1).body.testCases.length, 1);
-  assert.equal(sent.at(-1).body.testReports.length, 4);
+  assert.equal(sent.at(-1).body.testReports.length, 6);
   assert.equal(sent.at(-1).body.regressionSummary.status, "unknown");
   assert.equal(sent.at(-1).body.testRun.environmentInputs.environment, "platform-candidate-snapshot");
   assert.equal(sent.at(-1).body.testResults[0].sourceRevision.branchId, "branch.platform.demo");
@@ -5700,6 +6064,8 @@ test("platform test run event stream publishes start and finish witnesses", asyn
   await handlers["platform.testRun.events"]({
     req,
     res,
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
     appContext: { runtimeProfile: "full" }
   });
 
@@ -5975,7 +6341,7 @@ test("platform branch push creates mirror commits, updates branch state, and rec
     assert.equal(response.body.pushRecord.remoteName, "origin");
     assert.equal(response.body.pushRecord.provider, "generic");
     assert.match(response.body.pushRecord.commitSha || "", /^[0-9a-f]{40}$/);
-    assert.equal(response.body.ref?.refName, "refs/remotes/origin/platform/push-real");
+    assert.equal(response.body.pushRecord.remoteBranchRef, "refs/heads/platform/push-real");
 
     const remoteHead = await runGitFixtureCommand(["rev-parse", "refs/heads/platform/push-real"], fixture.remoteRoot);
     assert.equal(remoteHead.stdout.trim(), response.body.pushRecord.commitSha);
@@ -7090,6 +7456,295 @@ test("platform change-set apply rolls back previously promoted files on mid-appl
   }
 }));
 
+test("platform change-set validate returns derived verification requirements", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const scheduled = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+    const appContext = {
+      runtimeProfile: "full",
+      verificationPolicy: {
+        enabled: true,
+        serverRunnerId: "runner.main",
+        runtimeProfile: "full",
+        defaults: { onChangeSet: true },
+        verifierEntries: [{
+          gateId: "gate:changeset.validate.requirement",
+          title: "Change-set requirement gate",
+          providerId: "verification.javascriptModule",
+          executionClass: "candidate_snapshot",
+          safetyClass: "safe",
+          sourceDependencies: [fixture.first],
+          targetIds: ["testEnvironment:platform-candidate-snapshot"],
+          input: { module: "plugins/platform/test-verifier-fixture.js" }
+        }]
+      },
+      providerRuntimes: {
+        "platform.testMonitor": {
+          scheduleChangeSetValidation: meta => scheduled.push({ ...meta })
+        }
+      }
+    };
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.requirements.validate", branchId: "branch.requirements.validate" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: {
+        body: {
+          edits: [{ path: fixture.first, content: JSON.stringify({ value: 99 }, null, 2) }]
+        }
+      },
+      res: {},
+      params: { id: "changeset.requirements.validate" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.requirements.validate" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext
+    });
+
+    const response = sent.at(-1);
+    assert.equal(response.status, 200);
+    assert.equal(Array.isArray(response.body.verificationRequirements), true);
+    assert.equal(response.body.verificationRequirements.some(row => row.gateId === "gate:changeset.validate.requirement"), true);
+    assert.equal(response.body.verificationRequirementSummary?.targetKind, "candidateSnapshot");
+    assert.equal((response.body.verificationRequirementSummary?.missingCount ?? 0) >= 1, true);
+    assert.equal(scheduled.length >= 1, true);
+    assert.equal(scheduled.at(-1).candidateSnapshotId, response.body.candidateSnapshot.id);
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
+test("platform verification requirements keep candidate-snapshot evidence scoped to the snapshot id", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const world = createWorld();
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: () => {}
+    });
+    const appContext = {
+      runtimeProfile: "full",
+      verificationPolicy: {
+        enabled: true,
+        serverRunnerId: "runner.main",
+        runtimeProfile: "full",
+        defaults: { onChangeSet: true },
+        verifierEntries: [{
+          gateId: "gate:candidate.snapshot.scope",
+          title: "Candidate snapshot scope gate",
+          providerId: "verification.javascriptModule",
+          executionClass: "candidate_snapshot",
+          safetyClass: "safe",
+          sourceDependencies: [fixture.first],
+          targetIds: ["testEnvironment:platform-candidate-snapshot"],
+          input: { module: "plugins/platform/test-verifier-fixture.js" }
+        }]
+      }
+    };
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.snapshot.scope", branchId: "branch.snapshot.scope" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: { body: { edits: [{ path: fixture.first, content: JSON.stringify({ value: 10 }, null, 2) }] } },
+      res: {},
+      params: { id: "changeset.snapshot.scope" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.snapshot.scope" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext
+    });
+    const snapshotOne = world.project(moduleProjectors.candidateSnapshotIndex).byChangeSet["changeset.snapshot.scope"]?.at(-1) ?? null;
+    assert.ok(snapshotOne);
+
+    const run = await runPlatformTestGate(world, {
+      actor: "aaron",
+      gate: {
+        id: "gate:candidate.snapshot.scope",
+        title: "Candidate snapshot scope gate",
+        executionClass: "candidate_snapshot",
+        command: "node --test plugins/platform/platform.test.js",
+        runner: "node-test",
+        timeoutMs: 1200,
+        protectedObjects: ["testEnvironment:platform-candidate-snapshot"],
+        sourceDependencies: [fixture.first]
+      },
+      branchId: "branch.snapshot.scope",
+      changeSetId: "changeset.snapshot.scope",
+      candidateSnapshotId: snapshotOne.id,
+      runtimeProfile: "full",
+      appContext,
+      runCommand: async () => ({
+        startedAt: "2026-06-19T00:00:00.000Z",
+        finishedAt: "2026-06-19T00:00:00.015Z",
+        durationMs: 15,
+        exitCode: 0,
+        signal: null,
+        status: "passed",
+        stdout: "ok 1 - candidate snapshot scope",
+        stderr: "",
+        timedOut: false,
+        error: null
+      })
+    });
+    assert.equal(run.status, 201);
+
+    await handlers["platform.changeSet.edit"]({
+      req: { body: { edits: [{ path: fixture.first, content: JSON.stringify({ value: 11 }, null, 2) }] } },
+      res: {},
+      params: { id: "changeset.snapshot.scope" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.snapshot.scope" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext
+    });
+    const snapshotTwo = world.project(moduleProjectors.candidateSnapshotIndex).byChangeSet["changeset.snapshot.scope"]?.at(-1) ?? null;
+    assert.ok(snapshotTwo);
+    assert.notEqual(snapshotTwo.id, snapshotOne.id);
+
+    const model = await buildPlatformModel({
+      appContext,
+      project: projector => world.project(projector)
+    });
+    const verificationState = selectVerificationRequirementState(model, {
+      changeSetId: "changeset.snapshot.scope",
+      candidateSnapshotId: snapshotTwo.id
+    });
+    const requirement = verificationState.verificationRequirements.find(row =>
+      row.targetKind === "candidateSnapshot" && row.gateId === "gate:candidate.snapshot.scope"
+    );
+    assert.ok(requirement);
+    assert.notEqual(requirement.status, "satisfied");
+    assert.equal(verificationState.verificationRequirementSummary?.blockingStatus, "blocked");
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
+test("platform change-set apply blocks when verification requirements are missing and leaves files unchanged", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const scheduled = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+    const appContext = {
+      runtimeProfile: "full",
+      verificationPolicy: {
+        enabled: true,
+        serverRunnerId: "runner.main",
+        runtimeProfile: "full",
+        defaults: { onChangeSet: true },
+        verifierEntries: [{
+          gateId: "gate:changeset.apply.blocked",
+          title: "Apply gating requirement",
+          providerId: "verification.javascriptModule",
+          executionClass: "candidate_snapshot",
+          safetyClass: "safe",
+          sourceDependencies: [fixture.first],
+          targetIds: ["testEnvironment:platform-candidate-snapshot"],
+          input: { module: "plugins/platform/test-verifier-fixture.js" }
+        }]
+      },
+      providerRuntimes: {
+        "platform.testMonitor": {
+          scheduleChangeSetValidation: meta => scheduled.push({ ...meta })
+        }
+      }
+    };
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.apply.blocked", branchId: "branch.apply.blocked" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: { body: { edits: [{ path: fixture.first, content: JSON.stringify({ value: 7 }, null, 2) }] } },
+      res: {},
+      params: { id: "changeset.apply.blocked" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.apply"]({
+      res: {},
+      params: { id: "changeset.apply.blocked" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext
+    });
+
+    const response = sent.at(-1);
+    assert.equal(response.status, 409);
+    assert.equal(response.body.error, "verification requirements block apply");
+    assert.equal(Array.isArray(response.body.verificationRequirements), true);
+    assert.equal(response.body.verificationRequirements[0].status, "missing");
+    assert.equal(response.body.verificationRequirementSummary?.blockingStatus, "blocked");
+    assert.equal(scheduled.length, 1);
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "first.json"), "utf8")), { value: 1 });
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
 test("platform page renders required operating views", async () => {
   const baseModel = await buildPlatformModel({
     diagnostics: {
@@ -7572,6 +8227,87 @@ test("platform page renders required operating views", async () => {
       gateIds: ["gate:demo"],
       docIds: ["doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"]
     }],
+    authorityDecisions: [{
+      id: "authorityDecision:session",
+      action: "platform.model.read",
+      decision: "allow",
+      requiredAuthority: "platform.read.sensitive",
+      sessionId: "session.platform",
+      effectiveActor: "aaron",
+      targetObjectId: "plugin.platform",
+      reason: "platform steward may read sensitive platform surfaces",
+      evaluatedAt: "2026-01-01T00:00:00.000Z"
+    }],
+    sessions: [{
+      id: "session.platform",
+      effectiveActor: "aaron",
+      authorityMode: "direct",
+      executionIds: ["execution:render"],
+      authorityDecisionIds: ["authorityDecision:session"],
+      branchIds: ["branch:demo-0"],
+      changeSetIds: ["changeSet:demo-0"],
+      pushRecordIds: ["pushRecord:demo-1:1"],
+      shipRecordIds: ["shipRecord:demo-1:1"],
+      testRunIds: ["testRun:demo"],
+      executionCount: 1,
+      authorityDecisionCount: 1,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      lastActivityAt: "2026-01-01T00:02:00.000Z"
+    }],
+    executions: [{
+      id: "execution:render",
+      sessionId: "session.platform",
+      title: "platform.model.read",
+      executionKind: "read",
+      status: "observed",
+      handlerId: "platform.model.read",
+      routeId: "route:GET /api/platform-model",
+      view: "sessions",
+      branchId: "branch:demo-0",
+      changeSetId: "changeSet:demo-0",
+      pushRecordId: "pushRecord:demo-1:1",
+      shipRecordId: "shipRecord:demo-1:1",
+      testRunId: "testRun:demo",
+      authorityDecisionId: "authorityDecision:session",
+      targetObjectIds: ["plugin.platform"]
+    }],
+    sessionTags: [{
+      id: "sessionTag:platform:branch",
+      sessionId: "session.platform",
+      tagKind: "branch",
+      value: "branch:demo-0",
+      executionIds: ["execution:render"]
+    }],
+    executionArtifacts: [{
+      id: "executionArtifact:platform:push",
+      executionId: "execution:render",
+      sessionId: "session.platform",
+      artifactKind: "pushRecord",
+      artifactId: "pushRecord:demo-1:1",
+      producedAt: "2026-01-01T00:02:00.000Z"
+    }],
+    artifacts: [{
+      id: "artifact:testRun:demo:stdout",
+      title: "Demo stdout",
+      artifactKind: "stdout",
+      producerKind: "testRun",
+      producerId: "testRun:demo",
+      contentType: "text/plain",
+      sizeBytes: 11,
+      contentRef: "verification/artifacts/artifact-testRun-demo-stdout/blob",
+      contentUrl: "/api/platform-artifacts/artifact%3AtestRun%3Ademo%3Astdout/content",
+      preview: "hello world",
+      producedAt: "2026-01-01T00:02:00.000Z",
+      sessionId: "session.platform",
+      executionId: "execution:render",
+      branchId: "branch:demo-0",
+      changeSetId: "changeSet:demo-0",
+      candidateSnapshotId: "candidateSnapshot:demo-0",
+      testRunId: "testRun:demo",
+      resultId: "testResult:demo",
+      gateId: "gate:demo",
+      artifactSourceId: "testArtifact:testRun:demo:stdout"
+    }],
     gaps: [{ id: "gap.demo", severity: "low", kind: "meta-defect", target: "branch:demo-0", reason: "Demo gap" }],
     nodes: [
       ...baseModel.nodes,
@@ -7608,6 +8344,10 @@ test("platform page renders required operating views", async () => {
   const telemetryDetailHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=telemetry&id=telemetryMetric:requests") });
   const defectsLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=defects") });
   const defectsDetailHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=defects&id=defect:requests") });
+  const artifactsLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=artifacts") });
+  const artifactsDetailHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=artifacts&id=artifact:testRun:demo:stdout") });
+  const sessionsLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=sessions") });
+  const sessionsDetailHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=sessions&id=session.platform") });
   const knowledgeLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=knowledge&section=docs") });
   const knowledgeDocsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=knowledge&section=docs&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
   const knowledgeFoldersHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?area=knowledge&section=folders&id=folder:docs") });
@@ -7691,11 +8431,11 @@ test("platform page renders required operating views", async () => {
   assert.doesNotMatch(workflowPushesHtml, /<pre/);
   assert.match(workflowShipsHtml, /Platform Console - Change \/ Ships/);
   assert.match(workflowShipsHtml, /Ship Records/);
-  assert.match(workflowShipsHtml, /Paginated list of ship records, release channels, and rollback follow-up\./);
+  assert.match(workflowShipsHtml, /Paginated list of ship records, release channels, linked pushes, and rollback proposals\./);
   assert.match(workflowShipsHtml, /Ship Detail/);
   assert.match(workflowShipsHtml, /Ship Record Detail/);
   assert.match(workflowShipsHtml, /Release channel/);
-  assert.match(workflowShipsHtml, /Observation status/);
+  assert.match(workflowShipsHtml, /Observation Status/);
   assert.match(workflowShipsHtml, /\/api\/platform-model\?view=ships&amp;id=shipRecord%3Ademo-1%3A1/);
   assert.doesNotMatch(workflowShipsHtml, /<pre/);
   assert.match(workflowProposalHtml, /Platform Console - Change \/ Proposals/);
@@ -7787,6 +8527,28 @@ test("platform page renders required operating views", async () => {
   assert.match(defectsDetailHtml, /proposal:demo-defect/);
   assert.match(defectsDetailHtml, /\/api\/platform-model\?view=defects&amp;id=defect%3Arequests/);
   assert.doesNotMatch(defectsDetailHtml, /<pre/);
+  assert.match(artifactsLandingHtml, /Platform Console - Artifacts/);
+  assert.match(artifactsLandingHtml, /Paginated list of durable artifacts, producer metadata, and linked execution context\./);
+  assert.match(artifactsLandingHtml, /Primary Detail/);
+  assert.doesNotMatch(artifactsLandingHtml, /<pre/);
+  assert.match(artifactsDetailHtml, /Properties and linked relationships for the selected artifact\./);
+  assert.match(artifactsDetailHtml, /Artifact Detail/);
+  assert.match(artifactsDetailHtml, /Related Resources/);
+  assert.match(artifactsDetailHtml, /Content/);
+  assert.match(artifactsDetailHtml, /\/api\/platform-artifacts\/artifact%3AtestRun%3Ademo%3Astdout\/content/);
+  assert.match(artifactsDetailHtml, /session\.platform/);
+  assert.match(artifactsDetailHtml, /execution:render/);
+  assert.doesNotMatch(artifactsDetailHtml, /<pre/);
+  assert.match(sessionsLandingHtml, /Platform Console - Sessions/);
+  assert.match(sessionsLandingHtml, /Paginated list of sessions, executions, session tags, execution artifacts, and linked authority decisions\./);
+  assert.match(sessionsLandingHtml, /Primary Detail/);
+  assert.doesNotMatch(sessionsLandingHtml, /<pre/);
+  assert.match(sessionsDetailHtml, /Properties and linked relationships for the selected session concept\./);
+  assert.match(sessionsDetailHtml, /Session Detail/);
+  assert.match(sessionsDetailHtml, /Related Resources/);
+  assert.match(sessionsDetailHtml, /execution:render/);
+  assert.match(sessionsDetailHtml, /\/api\/platform-model\?view=sessions&amp;id=session\.platform/);
+  assert.doesNotMatch(sessionsDetailHtml, /<pre/);
 
   assert.match(knowledgeLandingHtml, /Platform Console - Knowledge \/ Docs/);
   assert.match(knowledgeLandingHtml, /Governed Docs/);
@@ -7918,8 +8680,8 @@ test("platform page renders authored supplemental pages from the RVM page tree",
       method: "POST",
       matcher: "/api/platform-change-sets/demo/apply",
       handler: "platform.changeSet.apply",
-      governanceMode: "operator-only",
-      authorityMechanism: "bootstrap-operator"
+      governanceMode: "direct-authority",
+      authorityMechanism: "platform-policy:platform.execute.operator"
     }],
     proposalTargetGovernance: [{
       id: "governanceProposalTarget:runtimePlugin.install",
@@ -8148,6 +8910,140 @@ test("platform workflow detail follows authored child-surface order", () => {
   const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowChangeSets&id=changeSet:demo") });
 
   assert.ok(html.indexOf("Candidate Snapshots") < html.indexOf("Staged Edits"));
+});
+
+test("platform page renders verification requirement sections for change sets and candidate snapshots", () => {
+  const model = {
+    lifecycleVocabulary: [],
+    lifecycleBoard: [],
+    branchLifecycleVocabulary: [],
+    branchBoard: [],
+    branches: [],
+    changeSets: [{
+      id: "changeSet:demo",
+      title: "Demo Change Set",
+      status: "validated",
+      branchId: "branch:demo",
+      owner: "aaron",
+      changedPaths: ["plugins/platform/platform-console.rvm"]
+    }],
+    changeSetEdits: [],
+    candidateSnapshots: [{
+      id: "candidateSnapshot:demo",
+      status: "valid",
+      branchId: "branch:demo",
+      changeSetId: "changeSet:demo",
+      revision: 1,
+      files: [],
+      errors: []
+    }],
+    verificationRequirementSummaries: [{
+      id: "verificationRequirementSummary:changeSet:changeSet:demo",
+      targetKind: "changeSet",
+      targetId: "changeSet:demo",
+      changeSetId: "changeSet:demo",
+      candidateSnapshotId: null,
+      blockingStatus: "blocked",
+      totalGateCount: 1,
+      blockingGateCount: 1,
+      satisfiedCount: 0,
+      failedCount: 0,
+      staleCount: 1,
+      missingCount: 0,
+      runningCount: 0,
+      latestRunAt: "2026-06-19T00:00:00Z",
+      summary: "1 gate selected, 1 stale",
+      producedAt: "2026-06-19T00:00:00Z"
+    }, {
+      id: "verificationRequirementSummary:candidateSnapshot:candidateSnapshot:demo",
+      targetKind: "candidateSnapshot",
+      targetId: "candidateSnapshot:demo",
+      changeSetId: "changeSet:demo",
+      candidateSnapshotId: "candidateSnapshot:demo",
+      blockingStatus: "blocked",
+      totalGateCount: 1,
+      blockingGateCount: 1,
+      satisfiedCount: 0,
+      failedCount: 0,
+      staleCount: 1,
+      missingCount: 0,
+      runningCount: 0,
+      latestRunAt: "2026-06-19T00:00:00Z",
+      summary: "1 gate selected, 1 stale",
+      producedAt: "2026-06-19T00:00:00Z"
+    }],
+    verificationRequirements: [{
+      id: "verificationRequirement:changeSet:changeSet:demo:gate:demo",
+      targetKind: "changeSet",
+      targetId: "changeSet:demo",
+      changeSetId: "changeSet:demo",
+      candidateSnapshotId: null,
+      gateId: "gate:demo",
+      gateTitle: "Demo Gate",
+      serverRunnerId: "runner.main",
+      runtimeProfile: "full",
+      executionClass: "candidate_snapshot",
+      blocking: true,
+      status: "stale",
+      latestRunId: "testRun:demo",
+      latestPassedRunId: "testRun:demo",
+      freshnessStatus: "stale",
+      reasonKinds: ["source_changed"],
+      reasonSummary: "Source changed after the last passing run.",
+      regressionStatus: "steady",
+      changedPaths: ["plugins/platform/platform-console.rvm"],
+      targetIds: ["testEnvironment:platform-candidate-snapshot"],
+      producedAt: "2026-06-19T00:00:00Z"
+    }, {
+      id: "verificationRequirement:candidateSnapshot:candidateSnapshot:demo:gate:demo",
+      targetKind: "candidateSnapshot",
+      targetId: "candidateSnapshot:demo",
+      changeSetId: "changeSet:demo",
+      candidateSnapshotId: "candidateSnapshot:demo",
+      gateId: "gate:demo",
+      gateTitle: "Demo Gate",
+      serverRunnerId: "runner.main",
+      runtimeProfile: "full",
+      executionClass: "candidate_snapshot",
+      blocking: true,
+      status: "stale",
+      latestRunId: "testRun:demo",
+      latestPassedRunId: "testRun:demo",
+      freshnessStatus: "stale",
+      reasonKinds: ["source_changed"],
+      reasonSummary: "Source changed after the last passing run.",
+      regressionStatus: "steady",
+      changedPaths: ["plugins/platform/platform-console.rvm"],
+      targetIds: ["testEnvironment:platform-candidate-snapshot"],
+      producedAt: "2026-06-19T00:00:00Z"
+    }],
+    proposals: [],
+    proposalActions: [],
+    testRuns: [],
+    testReports: [],
+    testArtifacts: [],
+    testSuites: [],
+    testCases: [],
+    runtimeRevisions: [],
+    snapshotBuilds: [],
+    snapshotBuildErrors: [],
+    snapshotDiagnostics: {},
+    testMonitorDiagnostics: {},
+    summaries: {}
+  };
+
+  const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowChangeSets&id=changeSet:demo") });
+  const runtimeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuntime&id=candidateSnapshot:demo") });
+
+  assert.match(workflowHtml, /Verification Requirement Summary/);
+  assert.match(workflowHtml, /Required Gates/);
+  assert.match(workflowHtml, /Blocking Reasons/);
+  assert.match(workflowHtml, /gate:demo/);
+  assert.match(workflowHtml, /Source changed after the last passing run\./);
+  assert.match(runtimeHtml, /Verification Requirement Summary/);
+  assert.match(runtimeHtml, /Required Gates/);
+  assert.match(runtimeHtml, /Blocking Reasons/);
+  assert.match(runtimeHtml, /candidateSnapshot:demo/);
 });
 
 test("platform detail sections render authored child-surface metadata", () => {

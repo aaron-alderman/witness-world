@@ -139,7 +139,8 @@ export async function requestBootstrapProposalApprove(world, {
   actor,
   backendHost,
   proposalId,
-  executeTarget
+  executeTarget,
+  executionContext = {}
 }) {
   const proposal = world.project(moduleProjectors.proposals).find(row => row.id === proposalId) ?? null;
   if (!proposal) {
@@ -158,7 +159,7 @@ export async function requestBootstrapProposalApprove(world, {
     });
     return { ok: false, status: 409, error: "proposal is not open", witness };
   }
-  const executed = await executeTarget(proposal);
+  const executed = await executeTarget(proposal, executionContext);
   if (!executed.ok) return executed;
   approveProposal(world, {
     actor: actor || backendHost,

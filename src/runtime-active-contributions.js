@@ -36,6 +36,7 @@ export function collectActiveRuntimeContributions({
   const supportServices = {};
   const coreHooks = {};
   const providerRuntimeFactories = {};
+  const verificationProviders = {};
   const jobHandlerFactories = {};
   const handlerSetProviders = {};
   const backendProcessRequestHandlers = {};
@@ -75,6 +76,25 @@ export function collectActiveRuntimeContributions({
         throw new Error(`provider runtime factory ${providerId} must expose id and factory`);
       }
       mergeNamed(providerRuntimeFactories, { [factoryId]: provider.factory }, providerId);
+      continue;
+    }
+    if (provider.kind === "verificationProvider") {
+      const verificationProviderId = String(provider.id || "");
+      if (!verificationProviderId || typeof provider.run !== "function") {
+        throw new Error(`verification provider ${providerId} must expose id and run(context)`);
+      }
+      mergeNamed(verificationProviders, {
+        [verificationProviderId]: Object.freeze({
+          ...provider,
+          id: verificationProviderId,
+          supportedExecutionClasses: Array.isArray(provider.supportedExecutionClasses)
+            ? Object.freeze(provider.supportedExecutionClasses.map(String))
+            : Object.freeze([]),
+          defaultSafetyClass: typeof provider.defaultSafetyClass === "string" && provider.defaultSafetyClass.trim()
+            ? provider.defaultSafetyClass.trim()
+            : null
+        })
+      }, providerId);
       continue;
     }
     if (provider.kind === "jobHandlerFactory") {
@@ -207,6 +227,7 @@ export function collectActiveRuntimeContributions({
     supportServices: Object.freeze(supportServices),
     coreHooks: Object.freeze(coreHooks),
     providerRuntimeFactories: Object.freeze(providerRuntimeFactories),
+    verificationProviders: Object.freeze(verificationProviders),
     jobHandlerFactories: Object.freeze(jobHandlerFactories),
     handlerSetProviders: Object.freeze(handlerSetProviders),
     backendProcessRequestHandlers: Object.freeze(backendProcessRequestHandlers),

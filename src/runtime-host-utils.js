@@ -138,23 +138,31 @@ export function resolveStartupRunner(world, serverRunnerId = null) {
     return resolved;
   }
   if (serverRunnerId || resolved.reason !== "no server runners defined") return resolved;
+  const bootstrapRunner = buildBootstrapStartupRunner(world, { startupOwned: false });
+  if (!bootstrapRunner) {
+    return { ok: false, reason: "no server runners defined", body: {} };
+  }
+  return { ok: true, runner: bootstrapRunner };
+}
+
+export function buildBootstrapStartupRunner(world, {
+  startupOwned = true
+} = {}) {
   const backendHost = uniqueHostByCapability(world, "http.serve");
   const frontendHost = uniqueHostByCapability(world, "dom.render");
   if (!backendHost || !frontendHost) {
-    return { ok: false, reason: "no server runners defined", body: {} };
+    return null;
   }
   return {
-    ok: true,
-    runner: {
-      id: "__bootstrap__",
-      backendHost,
-      frontendHost,
-      handlerSet: null,
-      actors: null,
-      storage: null,
-      allowActorHeader: false,
-      bootstrapOnly: true
-    }
+    id: "__bootstrap__",
+    backendHost,
+    frontendHost,
+    handlerSet: null,
+    actors: null,
+    storage: null,
+    allowActorHeader: false,
+    bootstrapOnly: true,
+    startupOwned: startupOwned === true
   };
 }
 

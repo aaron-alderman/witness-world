@@ -167,6 +167,8 @@ test("runtime plugin review sync binds the documented host event and handles aut
       activeProfile: "full",
       packages: [{ plugin: "plugin.inspect" }]
     }),
+    postJson: async () => ({}),
+    refresh: async () => {},
     requestState: { current: 0 },
     getReview: () => review,
     setReview: next => {
@@ -175,6 +177,7 @@ test("runtime plugin review sync binds the documented host event and handles aut
     },
     getRuntimeProfile: () => "full",
     renderPage: () => calls.push(["renderPage"]),
+    renderDetail: () => calls.push(["renderDetail"]),
     setStatus: (id, value) => calls.push(["setStatus", id, value])
   });
 
@@ -200,4 +203,52 @@ test("runtime plugin review sync binds the documented host event and handles aut
   assert.equal(factory.includes("const selectBootstrapRuntimePluginReviewPlugin ="), true);
   assert.equal(factory.includes("const createBootstrapRuntimePluginReviewSyncHandler ="), true);
   assert.equal(factory.includes("const bindBootstrapRuntimePluginReviewSync ="), true);
+});
+
+test("runtime plugin review sync submits reconcile actions through the shared repair route", async () => {
+  const calls = [];
+  let review = {
+    serverRunner: "demo_server",
+    selectedPluginId: "plugin.notes-sidebar",
+    packages: [{
+      plugin: "plugin.notes-sidebar",
+      reconcileActions: [{
+        id: "remove-broken-install",
+        label: "Remove broken install",
+        available: true
+      }]
+    }]
+  };
+
+  const handler = createBootstrapRuntimePluginReviewSyncHandler({
+    postJson: async (url, body) => {
+      calls.push(["postJson", url, body]);
+      return {};
+    },
+    refresh: async () => {
+      calls.push(["refresh"]);
+    },
+    getReview: () => review,
+    setReview: next => {
+      review = next;
+    },
+    renderDetail: () => calls.push(["renderDetail"]),
+    setStatus: (id, value) => calls.push(["setStatus", id, value])
+  });
+
+  assert.deepEqual(
+    await handler({ detail: { source: "bootstrap-page-main", trigger: "repair", actionId: "remove-broken-install", actionLabel: "Remove broken install" } }),
+    { handled: true }
+  );
+  assert.deepEqual(calls, [
+    ["setStatus", "runtime-plugin-review-note", "Submitting Remove broken install."],
+    ["postJson", "/api/runtime-plugin-reconciles", {
+      serverRunner: "demo_server",
+      plugin: "plugin.notes-sidebar",
+      actionId: "remove-broken-install"
+    }],
+    ["refresh"],
+    ["renderDetail"],
+    ["setStatus", "runtime-plugin-review-note", "Remove broken install applied."]
+  ]);
 });

@@ -1,6 +1,4 @@
 import {
-  requestBootstrapFrontendProgramDefine,
-  requestBootstrapFrontendStepDefine,
   requestBootstrapBackendProgramDefine,
   requestBootstrapBackendProgramVersionDefine,
   requestBootstrapBackendStepDefine,
@@ -55,88 +53,6 @@ export function createProgramAuthoringBundleHandlers({
     }
   });
   return {
-    "frontendProgram.create": async ({ req, res, requestActor }) => {
-      const gate = requireBootstrapActor(requestActor);
-      if (!gate.ok) {
-        sendGateFailure(res, gate);
-        return;
-      }
-      const body = await readJson(req);
-      const auth = ensureContextAuthority(gate.actor, body.context ?? null);
-      if (!auth.ok) {
-        if (auth.status === 403) {
-          const proposal = requestProgramProposalCreate({
-            actor: gate.actor,
-            targetProcess: "frontendProgram.define",
-            targetKind: "context",
-            targetId: body.context ?? null,
-            body,
-            reason: "Create a frontend program through witnessed proposal"
-          });
-          if (!proposal.ok) {
-            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
-            return;
-          }
-          sendJson(res, 202, {
-            ok: true,
-            status: "proposed",
-            proposal: proposal.proposal,
-            witness: proposal.witness
-          });
-          return;
-        }
-        sendGateFailure(res, auth);
-        return;
-      }
-      const result = requestBootstrapFrontendProgramDefine(world, { actor: gate.actor, backendHost, body });
-      if (!result.ok) {
-        sendJson(res, result.status, { error: result.error, witness: result.witness });
-        return;
-      }
-      sendJson(res, result.status, { frontendProgram: result.frontendProgram, witness: result.witness });
-    },
-
-    "frontendStep.create": async ({ req, res, requestActor }) => {
-      const gate = requireBootstrapActor(requestActor);
-      if (!gate.ok) {
-        sendGateFailure(res, gate);
-        return;
-      }
-      const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.program ?? "");
-      if (!auth.ok) {
-        if (auth.status === 403) {
-          const proposal = requestProgramProposalCreate({
-            actor: gate.actor,
-            targetProcess: "frontendStep.define",
-            targetKind: "frontendProgram",
-            targetId: body.program ?? null,
-            body,
-            reason: "Add a frontend step through witnessed proposal"
-          });
-          if (!proposal.ok) {
-            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
-            return;
-          }
-          sendJson(res, 202, {
-            ok: true,
-            status: "proposed",
-            proposal: proposal.proposal,
-            witness: proposal.witness
-          });
-          return;
-        }
-        sendGateFailure(res, auth);
-        return;
-      }
-      const result = requestBootstrapFrontendStepDefine(world, { actor: gate.actor, backendHost, body, allowedOps: supportedFrontendOps });
-      if (!result.ok) {
-        sendJson(res, result.status, { error: result.error, witness: result.witness });
-        return;
-      }
-      sendJson(res, result.status, { frontendStep: result.frontendStep, witness: result.witness });
-    },
-
     "backendProgram.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
@@ -216,7 +132,13 @@ export function createProgramAuthoringBundleHandlers({
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
       }
-      sendJson(res, result.status, { backendProgramVersion: result.backendProgramVersion, witness: result.witness });
+      sendJson(res, result.status, {
+        backendProgramVersion: result.backendProgramVersion,
+        activationStatus: result.activationStatus,
+        migrationStatus: result.migrationStatus,
+        witness: result.witness,
+        witnesses: result.witnesses
+      });
     },
 
     "backendStep.create": async ({ req, res, requestActor }) => {
@@ -299,7 +221,13 @@ export function createProgramAuthoringBundleHandlers({
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
       }
-      sendJson(res, result.status, { backendProgramVersion: result.backendProgramVersion, witness: result.witness });
+      sendJson(res, result.status, {
+        backendProgramVersion: result.backendProgramVersion,
+        rollbackStatus: result.rollbackStatus,
+        migrationStatus: result.migrationStatus,
+        witness: result.witness,
+        witnesses: result.witnesses
+      });
     },
 
     "backendProgramVersions.rollback": async ({ req, res, requestActor, params }) => {

@@ -308,21 +308,9 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "Transactions are immediate and always run through the shared server-runner mutation gate.",
     { operationSemantics: "operational-mutation" }
   ),
-  "frontendProgram.create": proposalFallback(
-    "bootstrap-target-authority",
-    "Bootstrap authoring attempts shared context authority first and routes to proposal creation when direct frontend-program creation is not allowed."
-  ),
-  "frontendStep.create": proposalFallback(
-    "bootstrap-target-authority",
-    "Bootstrap authoring attempts shared frontend-program authority first and routes to proposal creation when direct frontend-step creation is not allowed."
-  ),
-  "frontend.migrateLegacy": proposalFallback(
-    "bootstrap-target-authority",
-    "Legacy frontend migration attempts shared route authority across every affected page.home route first and routes to proposal creation when direct migration is not allowed."
-  ),
   "frontend.upliftLegacy": proposalFallback(
     "bootstrap-target-authority",
-    "Legacy frontend uplift attempts shared route authority across every bridge-backed route first and routes to proposal creation when direct native uplift is not allowed."
+    "Legacy frontend uplift attempts shared route authority across every retired legacy route first and routes to proposal creation when direct native uplift is not allowed."
   ),
   "fs.blob.delete": directAuthority(
     "storage-scope-authority",
@@ -459,51 +447,75 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "Operator restore writes host-managed runtime artifacts and is intentionally limited to the bootstrap operator.",
     { operationSemantics: "operational-mutation" }
   ),
-  "platform.branch.create": operatorOnly(
-    "Platform branches are first-class platform nouns, but this route is still bootstrap-operator-only instead of shared target authority."
+  "platform.branch.create": directAuthority(
+    "platform-policy:platform.write.steward",
+    "Platform branch creation now evaluates the platform steward policy on plugin.platform before recording shared workflow state.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.branch.push": operatorOnly(
-    "Platform branch push mutates the tracked remote publication state and remains bootstrap-operator-only instead of shared target authority."
+  "platform.branch.push": directAuthority(
+    "platform-policy:platform.execute.operator",
+    "Platform branch push evaluates the operator execution policy before mutating tracked remote publication state.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.branch.ship": operatorOnly(
-    "Platform branch ship mutates tracked release publication state and remains bootstrap-operator-only instead of shared target authority."
+  "platform.branch.ship": directAuthority(
+    "platform-policy:platform.execute.operator",
+    "Platform branch ship evaluates the operator execution policy before mutating tracked release publication state.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.changeSet.abandon": operatorOnly(
-    "Platform change-set lifecycle is first-class, but this route is still bootstrap-operator-only instead of shared target authority."
+  "platform.changeSet.abandon": directAuthority(
+    "platform-policy:platform.write.steward",
+    "Platform change-set abandonment now evaluates the platform steward policy before closing staged work.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.changeSet.apply": operatorOnly(
-    "Platform change-set apply is first-class, but execution is still bootstrap-operator-only instead of shared target authority."
+  "platform.changeSet.apply": directAuthority(
+    "platform-policy:platform.execute.operator",
+    "Platform change-set apply evaluates the operator execution policy before mutating active platform state.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.changeSet.create": operatorOnly(
-    "Platform change sets are first-class platform nouns, but creation is still bootstrap-operator-only instead of shared target authority."
+  "platform.changeSet.create": directAuthority(
+    "platform-policy:platform.write.steward",
+    "Platform change-set creation now evaluates the platform steward policy before creating staged platform work.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.changeSet.edit": operatorOnly(
-    "Platform staged edits are first-class platform nouns, but staging is still bootstrap-operator-only instead of shared target authority."
+  "platform.changeSet.edit": directAuthority(
+    "platform-policy:platform.write.steward",
+    "Platform staged edit writes now evaluate the platform steward policy before mutating overlay state.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.changeSet.reject": operatorOnly(
-    "Platform change-set lifecycle is first-class, but this route is still bootstrap-operator-only instead of shared target authority."
+  "platform.changeSet.reject": directAuthority(
+    "platform-policy:platform.write.steward",
+    "Platform change-set rejection now evaluates the platform steward policy before closing staged work.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.changeSet.removeEdit": operatorOnly(
-    "Platform staged edits are first-class platform nouns, but removal is still bootstrap-operator-only instead of shared target authority."
+  "platform.changeSet.removeEdit": directAuthority(
+    "platform-policy:platform.write.steward",
+    "Platform staged edit removal now evaluates the platform steward policy before mutating overlay state.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.changeSet.validate": operatorOnly(
-    "Platform change-set validation is first-class, but this route is still bootstrap-operator-only instead of shared target authority."
+  "platform.changeSet.validate": directAuthority(
+    "platform-policy:platform.write.steward",
+    "Platform change-set validation now evaluates the platform steward policy before rebuilding candidate overlays.",
+    { sharedAuthorityPath: false }
   ),
-  "platform.proposal.approve": operatorOnly(
-    "Platform proposal approval reuses the bootstrap proposal executor and remains bootstrap-operator-only.",
-    { workflowRole: "proposal-review" }
+  "platform.proposal.approve": directAuthority(
+    "platform-policy:platform.execute.operator",
+    "Platform proposal approval reuses the bootstrap proposal executor, but authority is now expressed through the platform operator execution policy.",
+    { sharedAuthorityPath: false, workflowRole: "proposal-review" }
   ),
-  "platform.proposal.create": operatorOnly(
-    "Platform proposal creation emits a bootstrap proposal artifact and remains bootstrap-operator-only.",
-    { workflowRole: "proposal-entry" }
+  "platform.proposal.create": directAuthority(
+    "platform-policy:platform.write.steward",
+    "Platform proposal creation now evaluates the platform steward policy before emitting platform-scoped bootstrap proposals.",
+    { sharedAuthorityPath: false, workflowRole: "proposal-entry" }
   ),
-  "platform.proposal.reject": operatorOnly(
-    "Platform proposal rejection mutates the bootstrap proposal lane and remains bootstrap-operator-only.",
-    { workflowRole: "proposal-review" }
+  "platform.proposal.reject": directAuthority(
+    "platform-policy:platform.execute.operator",
+    "Platform proposal rejection mutates the bootstrap proposal lane under the platform operator execution policy.",
+    { sharedAuthorityPath: false, workflowRole: "proposal-review" }
   ),
-  "platform.testRun.create": operatorOnly(
-    "Platform test runs mutate verification records and runtime evidence, but execution is still bootstrap-operator-only.",
-    { operationSemantics: "operational-mutation", workflowRole: "verification-run" }
+  "platform.testRun.create": directAuthority(
+    "platform-policy:platform.execute.operator",
+    "Platform test runs mutate verification records and runtime evidence under the platform operator execution policy.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "verification-run" }
   ),
   "proposal.approve": operatorOnly(
     "Bootstrap proposal approval remains in the operator lane; it is the shared review path, but not yet target-derived authority.",
@@ -541,6 +553,10 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-target-authority",
     "Runtime plugin removal attempts shared server-runner authority first and routes to bootstrap proposal creation when direct removal is not allowed."
   ),
+  "runtimePlugin.reconcile": proposalFallback(
+    "bootstrap-target-authority",
+    "Runtime plugin repair attempts shared server-runner authority first and routes to bootstrap proposal creation when direct reconcile work is not allowed."
+  ),
   "search.index.build": directAuthority(
     "server-runner-authority",
     "Search index build mutates runtime index state immediately under the shared server-runner mutation gate.",
@@ -572,9 +588,17 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-context-authority",
     "Server-runner creation attempts shared context authority first and routes to bootstrap proposal creation when direct creation is not allowed."
   ),
+  "serverRunner.runtimeProfile.set": proposalFallback(
+    "bootstrap-target-authority",
+    "Server-runner runtime-profile updates attempt shared server-runner authority first and route to bootstrap proposal creation when direct mutation is not allowed."
+  ),
   "serve.create": proposalFallback(
     "bootstrap-target-authority",
     "Serve-mount creation attempts shared server-runner or context authority first and routes to bootstrap proposal creation when direct mounting is not allowed."
+  ),
+  "starter.todo.apply": directAuthority(
+    "bootstrap-target-authority",
+    "The maintained bootstrap starter shortcut applies a curated starter blueprint and immediately uplifts its retired frontend route through the signed-in bootstrap operator lane."
   ),
   "stewardship.create": proposalFallback(
     "bootstrap-target-authority",
@@ -888,13 +912,9 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
     "bootstrap-target-authority",
     "Route-define proposals execute through shared target authority and contextual visibility checks once approved."
   ),
-  "frontend.migrateLegacy": proposalTarget(
-    "bootstrap-target-authority",
-    "Legacy frontend migration proposals execute through shared route authority before rewriting page.home routes onto page.surface compatibility surfaces."
-  ),
   "frontend.upliftLegacy": proposalTarget(
     "bootstrap-target-authority",
-    "Legacy frontend uplift proposals execute through shared route authority before rewriting compatibility routes onto native page.surface authored surfaces."
+    "Legacy frontend uplift proposals execute through shared route authority before rewriting retired legacy routes onto native page.surface authored surfaces."
   ),
   "serve.define": proposalTarget(
     "bootstrap-target-authority",
@@ -903,6 +923,10 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   "serverRunner.define": proposalTarget(
     "bootstrap-context-authority",
     "Server-runner define proposals execute through shared context authority on the authored runner context once approved."
+  ),
+  "serverRunner.runtimeProfile.set": proposalTarget(
+    "bootstrap-target-authority",
+    "Server-runner runtime-profile proposals execute through the shared server-runner profile helper once approved."
   ),
   "mcpServer.define": proposalTarget(
     "bootstrap-target-authority",
@@ -940,6 +964,10 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
     "bootstrap-target-authority",
     "Runtime-plugin remove proposals execute through shared server-runner target authority once approved."
   ),
+  "runtimePlugin.reconcile": proposalTarget(
+    "bootstrap-target-authority",
+    "Runtime-plugin repair proposals execute through the shared server-runner review/reconcile helper once approved."
+  ),
   "mcpTool.install": proposalTarget(
     "bootstrap-target-authority",
     "MCP-tool install proposals execute through shared MCP-server target authority once approved."
@@ -948,8 +976,10 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
     "bootstrap-target-authority",
     "MCP-tool remove proposals execute through shared MCP-server target authority once approved."
   ),
-  "branch.create": proposalTargetOperatorOnly(
-    "Platform branch-create proposals currently execute only through the platform operator lane."
+  "branch.create": proposalTarget(
+    "platform-policy:platform.write.steward",
+    "Platform branch-create proposals now record steward-scoped platform workflow intent without bypassing operator review.",
+    { governanceMode: "direct-authority", sharedAuthorityPath: false }
   ),
   "branch.merge": proposalTargetOperatorOnly(
     "Platform branch-merge proposals currently execute only through the platform operator lane."
@@ -957,26 +987,40 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   "branch.rebase": proposalTargetOperatorOnly(
     "Platform branch-rebase proposals currently execute only through the platform operator lane."
   ),
-  "branch.push": proposalTargetOperatorOnly(
-    "Platform branch-push proposals currently execute only through the platform operator lane."
+  "branch.push": proposalTarget(
+    "platform-policy:platform.execute.operator",
+    "Platform branch-push proposals execute through the platform operator execution lane once approved.",
+    { governanceMode: "direct-authority", sharedAuthorityPath: false }
   ),
-  "branch.ship": proposalTargetOperatorOnly(
-    "Platform branch-ship proposals currently execute only through the platform operator lane."
+  "branch.ship": proposalTarget(
+    "platform-policy:platform.execute.operator",
+    "Platform branch-ship proposals execute through the platform operator execution lane once approved.",
+    { governanceMode: "direct-authority", sharedAuthorityPath: false }
   ),
-  "branch.rollback": proposalTargetOperatorOnly(
-    "Platform branch-rollback proposals currently execute only through the platform operator lane."
+  "branch.rollback": proposalTarget(
+    "platform-policy:platform.execute.operator",
+    "Platform branch-rollback proposals execute through the platform operator execution lane once approved.",
+    { governanceMode: "direct-authority", sharedAuthorityPath: false }
   ),
-  "changeSet.create": proposalTargetOperatorOnly(
-    "Platform change-set create proposals currently execute only through the platform operator lane."
+  "changeSet.create": proposalTarget(
+    "platform-policy:platform.write.steward",
+    "Platform change-set create proposals now record steward-scoped staged work without bypassing operator review.",
+    { governanceMode: "direct-authority", sharedAuthorityPath: false }
   ),
-  "changeSet.edit": proposalTargetOperatorOnly(
-    "Platform change-set edit proposals currently execute only through the platform operator lane."
+  "changeSet.edit": proposalTarget(
+    "platform-policy:platform.write.steward",
+    "Platform change-set edit proposals now record steward-scoped staged edits without bypassing operator review.",
+    { governanceMode: "direct-authority", sharedAuthorityPath: false }
   ),
-  "changeSet.validate": proposalTargetOperatorOnly(
-    "Platform change-set validate proposals currently execute only through the platform operator lane."
+  "changeSet.validate": proposalTarget(
+    "platform-policy:platform.write.steward",
+    "Platform change-set validate proposals now record steward-scoped overlay validation without bypassing operator review.",
+    { governanceMode: "direct-authority", sharedAuthorityPath: false }
   ),
-  "changeSet.apply": proposalTargetOperatorOnly(
-    "Platform change-set apply proposals currently execute only through the platform operator lane."
+  "changeSet.apply": proposalTarget(
+    "platform-policy:platform.execute.operator",
+    "Platform change-set apply proposals execute through the platform operator execution lane once approved.",
+    { governanceMode: "direct-authority", sharedAuthorityPath: false }
   )
 });
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { installRuntimePlugin } from "../src/modules.js";
 import { expectNoRuntimeErrors, launchBrowser, startBlankUiServer, startBlankUiServerWithWorldHome, waitForAppReady } from "./support/harness.js";
 
 async function waitUntil(predicate, { timeoutMs = 5000, stepMs = 50, message = "condition not met" } = {}) {
@@ -48,6 +49,47 @@ async function openStarterDetails(page) {
   await page.locator('summary').filter({ hasText: "Advanced Shortcut" }).evaluate(node => {
     node.parentElement.open = true;
   });
+}
+
+async function createDemoServerRunner(page, context, serverUrl) {
+  const cookie = await cookieHeaderFor(context, serverUrl);
+  const model = await fetch(`${serverUrl}/api/bootstrap-model`, {
+    headers: { cookie }
+  }).then(response => response.json());
+  const backendHost = model?.backendHosts?.[0]?.id ?? null;
+  const frontendHost = model?.frontendHosts?.[0]?.id ?? null;
+  assert.ok(backendHost, "expected bootstrap model backend host");
+  assert.ok(frontendHost, "expected bootstrap model frontend host");
+
+  const response = await fetch(`${serverUrl}/api/server-runners`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie
+    },
+    body: JSON.stringify({
+      id: "demo_server",
+      backendHost,
+      frontendHost
+    })
+  });
+  assert.equal(response.status, 201);
+  await page.reload();
+  await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+  await page.waitForFunction(() => document.getElementById("state-runners")?.textContent.includes("demo_server"));
+}
+
+async function installRuntimePluginOnDemoRunner(page, pluginId) {
+  await page.locator('summary').filter({ hasText: "Runtime Plugins" }).evaluate(node => {
+    node.parentElement.open = true;
+  });
+  await page.selectOption('#runtime-plugin-install-runner', "demo_server");
+  await page.selectOption('#runtime-plugin-install-plugin', pluginId);
+  await page.locator('#runtime-plugin-install-form button[type="submit"]').click();
+  await page.waitForFunction(() => document.getElementById("runtime-plugin-install-status")?.textContent.includes("Saved."));
+  await page.waitForFunction(targetPluginId =>
+    document.getElementById("state-runtime-plugin-installs")?.textContent.includes(`demo_server -> ${targetPluginId}`),
+  pluginId);
 }
 
 test("bootstrap UI establishes the canonical app boundary and then opens the authored app", async () => {
@@ -853,7 +895,7 @@ test("bootstrap UI can define, install, and remove a route-page capability", asy
 
 test("bootstrap UI can install, remove, propose, and approve runtime plugins for a server runner", async () => {
   const { server, close: closeServer } = await startBlankUiServer();
-  const { page, close: closeBrowser } = await launchBrowser();
+  const { page, context, close: closeBrowser } = await launchBrowser();
 
   try {
     await page.goto(`${server.url}/`);
@@ -873,11 +915,9 @@ test("bootstrap UI can install, remove, propose, and approve runtime plugins for
     await page.locator('#session-form button[type="submit"]').click();
     await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
 
-    await openStarterDetails(page);
-    await page.locator('#create-todo-starter').click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
-
-    await page.locator('summary').filter({ hasText: "Runtime Plugins" }).evaluate(node => { node.parentElement.open = true; });
+    await createDemoServerRunner(page, context, server.url);
+    await installRuntimePluginOnDemoRunner(page, "plugin.inspect");
+    await installRuntimePluginOnDemoRunner(page, "plugin.canvas");
 
     await page.selectOption('#runtime-plugin-remove-runner', "demo_server");
     await page.selectOption('#runtime-plugin-remove-plugin', "plugin.inspect");
@@ -897,6 +937,29 @@ test("bootstrap UI can install, remove, propose, and approve runtime plugins for
     await page.waitForFunction(() => document.getElementById("runtime-plugin-remove-status")?.textContent.includes("Removed."));
     await page.waitForFunction(() => !document.getElementById("state-runtime-plugin-installs")?.textContent.includes("demo_server -> plugin.canvas"));
 
+    const aaronCookie = await cookieHeaderFor(context, server.url);
+    const createCallan = await fetch(`${server.url}/api/identities`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaronCookie },
+      body: JSON.stringify({
+        id: "identity.callan",
+        actor: "callan",
+        label: "Callan",
+        username: "callan",
+        password: "callan",
+        homePerspective: "callan:personal"
+      })
+    });
+    assert.equal(createCallan.status, 201);
+
+    await page.locator("#logout-session").click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Sign in to continue editing"));
+    await page.fill('#session-form input[name="username"]', "callan");
+    await page.fill('#session-form input[name="password"]', "callan");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Callan"));
+
+    await page.locator('summary').filter({ hasText: "Runtime Plugins" }).evaluate(node => { node.parentElement.open = true; });
     await page.selectOption('#runtime-plugin-install-proposal-runner', "demo_server");
     await page.fill('#runtime-plugin-install-proposal-form input[name="id"]', "proposal.runtime-plugin.install.canvas");
     await page.selectOption('#runtime-plugin-install-proposal-plugin', "plugin.canvas");
@@ -905,14 +968,31 @@ test("bootstrap UI can install, remove, propose, and approve runtime plugins for
     await page.fill('#runtime-plugin-install-proposal-form input[name="reason"]', "Need canvas on this runner");
     await page.locator('#runtime-plugin-install-proposal-form button[type="submit"]').click();
     await page.waitForFunction(() => document.getElementById("runtime-plugin-install-proposal-status")?.textContent.includes("Saved."));
-    await page.waitForFunction(() => document.getElementById("state-proposals")?.textContent.includes("proposal.runtime-plugin.install.canvas [open] runtimePlugin.install"));
 
+    await page.locator("#logout-session").click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Sign in to continue editing"));
+    await page.fill('#session-form input[name="username"]', "aaron");
+    await page.fill('#session-form input[name="password"]', "aaron");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
     await page.locator('summary').filter({ hasText: "Proposals" }).evaluate(node => { node.parentElement.open = true; });
+    await page.waitForFunction(() =>
+      Array.from(document.querySelectorAll('#proposal-approve-id option')).some(option =>
+        option.value === "proposal.runtime-plugin.install.canvas"
+      )
+    );
     await page.selectOption('#proposal-approve-id', "proposal.runtime-plugin.install.canvas");
     await page.waitForFunction(() => document.querySelector('#proposal-approve-form button[type="submit"]')?.disabled === false);
     await page.locator('#proposal-approve-form button[type="submit"]').click();
     await page.waitForFunction(() => document.getElementById("proposal-approve-status")?.textContent.includes("Approved."));
     await page.waitForFunction(() => document.getElementById("state-runtime-plugin-installs")?.textContent.includes("demo_server -> plugin.canvas"));
+
+    await page.locator("#logout-session").click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Sign in to continue editing"));
+    await page.fill('#session-form input[name="username"]', "callan");
+    await page.fill('#session-form input[name="password"]', "callan");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Callan"));
 
     await page.locator('summary').filter({ hasText: "Runtime Plugins" }).evaluate(node => { node.parentElement.open = true; });
     await page.selectOption('#runtime-plugin-remove-proposal-runner', "demo_server");
@@ -923,9 +1003,19 @@ test("bootstrap UI can install, remove, propose, and approve runtime plugins for
     await page.fill('#runtime-plugin-remove-proposal-form input[name="reason"]', "Remove canvas from this runner");
     await page.locator('#runtime-plugin-remove-proposal-form button[type="submit"]').click();
     await page.waitForFunction(() => document.getElementById("runtime-plugin-remove-proposal-status")?.textContent.includes("Saved."));
-    await page.waitForFunction(() => document.getElementById("state-proposals")?.textContent.includes("proposal.runtime-plugin.remove.canvas [open] runtimePlugin.remove"));
 
+    await page.locator("#logout-session").click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Sign in to continue editing"));
+    await page.fill('#session-form input[name="username"]', "aaron");
+    await page.fill('#session-form input[name="password"]', "aaron");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
     await page.locator('summary').filter({ hasText: "Proposals" }).evaluate(node => { node.parentElement.open = true; });
+    await page.waitForFunction(() =>
+      Array.from(document.querySelectorAll('#proposal-approve-id option')).some(option =>
+        option.value === "proposal.runtime-plugin.remove.canvas"
+      )
+    );
     await page.selectOption('#proposal-approve-id', "proposal.runtime-plugin.remove.canvas");
     await page.waitForFunction(() => document.querySelector('#proposal-approve-form button[type="submit"]')?.disabled === false);
     await page.locator('#proposal-approve-form button[type="submit"]').click();
@@ -1059,8 +1149,8 @@ test("bootstrap UI can author MCP servers and manage MCP tool installs with prop
 });
 
 test("bootstrap UI shows authored runtime plugin review details and composition previews", async () => {
-  const { server, close: closeServer } = await startBlankUiServer();
-  const { page, close: closeBrowser } = await launchBrowser();
+  const { world, server, close: closeServer } = await startBlankUiServer();
+  const { page, context, close: closeBrowser } = await launchBrowser();
 
   try {
     await page.goto(`${server.url}/`);
@@ -1080,9 +1170,8 @@ test("bootstrap UI shows authored runtime plugin review details and composition 
     await page.locator('#session-form button[type="submit"]').click();
     await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
 
-    await openStarterDetails(page);
-    await page.locator('#create-todo-starter').click();
-    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
+    await createDemoServerRunner(page, context, server.url);
+    await installRuntimePluginOnDemoRunner(page, "plugin.inspect");
 
     await page.locator('summary').filter({ hasText: "Runtime Plugins" }).evaluate(node => { node.parentElement.open = true; });
     await page.selectOption('#runtime-plugin-review-runner', "demo_server");
@@ -1112,6 +1201,22 @@ test("bootstrap UI shows authored runtime plugin review details and composition 
     await page.selectOption('#runtime-plugin-review-plugin', "plugin.inspect");
     await page.waitForFunction(() => document.getElementById("runtime-plugin-review-detail")?.textContent.includes("Remove Preview"));
     await page.waitForFunction(() => document.getElementById("runtime-plugin-review-detail")?.textContent.includes("installed"));
+
+    installRuntimePlugin(world, {
+      actor: "system",
+      serverRunner: "demo_server",
+      plugin: "plugin.notes-sidebar"
+    });
+    await page.reload();
+    await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+    await page.locator('summary').filter({ hasText: "Runtime Plugins" }).evaluate(node => { node.parentElement.open = true; });
+    await page.selectOption('#runtime-plugin-review-runner', "demo_server");
+    await page.waitForFunction(() => document.querySelectorAll('#runtime-plugin-review-plugin option').length > 0);
+    await page.selectOption('#runtime-plugin-review-plugin', "plugin.notes-sidebar");
+    await page.waitForFunction(() => document.getElementById("runtime-plugin-review-detail")?.textContent.includes("Remove broken install"));
+    await page.getByRole("button", { name: "Remove broken install" }).click();
+    await page.waitForFunction(() => document.getElementById("runtime-plugin-review-note")?.textContent.includes("Remove broken install applied."));
+    await page.waitForFunction(() => !document.getElementById("state-runtime-plugin-installs")?.textContent.includes("demo_server -> plugin.notes-sidebar"));
   } finally {
     await closeBrowser();
     await closeServer();
@@ -1680,13 +1785,6 @@ test("bootstrap UI can bind, export, import, consume, and remove contextual name
     await page.fill('#context-import-form input[name="name"]', "landingPage");
     await page.locator('#context-import-form button[type="submit"]').click();
     await page.waitForFunction(() => document.getElementById("state-context-imports")?.textContent.includes("ctx.target <- ctx.source :: landingPage => homePage"));
-
-    await page.locator('summary').filter({ hasText: "Frontend Programs" }).evaluate(node => { node.parentElement.open = true; });
-    await page.fill('#program-form input[name="id"]', "landing_program");
-    await page.selectOption('#program-context', "ctx.target");
-    await page.fill('#program-form input[name="rootWidgetRef"]', "landingPage");
-    await page.locator('#program-form button[type="submit"]').click();
-    await page.waitForFunction(() => document.getElementById("state-programs")?.textContent.includes("landing_program -> page_root"));
     await page.waitForFunction(() => document.getElementById("state-context-scopes")?.textContent.includes("ctx.target :: landingPage -> page_root [import]"));
 
     await page.fill('#identity-form input[name="id"]', "identity.callan");

@@ -3,20 +3,24 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
 import { applyWitnessToml } from "../../src/dsl.js";
-import { moduleProjectors } from "../../src/modules.js";
+import { installRuntimePlugin, moduleProjectors } from "../../src/modules.js";
 import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
 import { executeServerRunnerAuthoringProposalTarget } from "./server-runner-proposal-targets.js";
 
 const SERVER_RUNNER_HANDLER_IDS = [
   "serverRunner.create",
+  "serverRunner.runtimeProfile.set",
   "runtimePlugin.install",
-  "runtimePlugin.remove"
+  "runtimePlugin.remove",
+  "runtimePlugin.reconcile"
 ];
 
 const SERVER_RUNNER_PROCESS_EXPORTS = [
   "requestBootstrapServerRunnerDefine",
+  "requestBootstrapServerRunnerRuntimeProfileSet",
   "requestBootstrapRuntimePluginInstall",
-  "requestBootstrapRuntimePluginRemove"
+  "requestBootstrapRuntimePluginRemove",
+  "requestBootstrapRuntimePluginReconcile"
 ];
 
 test("server-runner-authoring plugin owns server-runner routes and handlers", async () => {
@@ -26,11 +30,13 @@ test("server-runner-authoring plugin owns server-runner routes and handlers", as
   assert.deepEqual(manifest.activatesBundles, ["bundle-server-runner-authoring"]);
   assert.equal(manifest.runtime.entry, "./runtime.js");
   assert.equal(bundleId, "bundle-server-runner-authoring");
-  assert.deepEqual(handlerCatalog.authorableHandlers, ["runtimePlugin.install", "runtimePlugin.remove"]);
+  assert.deepEqual(handlerCatalog.authorableHandlers, ["serverRunner.runtimeProfile.set", "runtimePlugin.install", "runtimePlugin.remove", "runtimePlugin.reconcile"]);
   assert.deepEqual(handlerCatalog.dispatchHandlers, SERVER_RUNNER_HANDLER_IDS);
   assert.equal(routes.some(route => route.path === "/api/server-runners" && route.handler === "serverRunner.create"), true);
+  assert.equal(routes.some(route => route.method === "PATCH" && route.handler === "serverRunner.runtimeProfile.set"), true);
   assert.equal(routes.some(route => route.path === "/api/runtime-plugin-installs" && route.handler === "runtimePlugin.install"), true);
   assert.equal(routes.some(route => route.method === "DELETE" && route.path === "/api/runtime-plugin-installs" && route.handler === "runtimePlugin.remove"), true);
+  assert.equal(routes.some(route => route.path === "/api/runtime-plugin-reconciles" && route.handler === "runtimePlugin.reconcile"), true);
 
   const handlers = createHandlers({
     world: createWorld(),
@@ -63,8 +69,10 @@ test("server-runner-authoring plugin owns process helpers and proposal targets",
   await assert.rejects(readFile(new URL("../../src/bootstrap-authoring.js", import.meta.url), "utf8"));
   for (const targetProcess of [
     "serverRunner.define",
+    "serverRunner.runtimeProfile.set",
     "runtimePlugin.install",
-    "runtimePlugin.remove"
+    "runtimePlugin.remove",
+    "runtimePlugin.reconcile"
   ]) {
     assert.equal(proposalTargetSource.includes(`case "${targetProcess}"`), true);
   }
@@ -176,6 +184,75 @@ name = "importedRunner"
   assert.equal(world.project(moduleProjectors.runtimePluginInstalls).some(row =>
     row.serverRunner === "source_server" && row.plugin === "plugin.inspect"
   ), true);
+});
+
+test("server-runner authoring handlers reconcile seeded broken plugin installs through the shared repair route", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "demo_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+`);
+  installRuntimePlugin(world, {
+    actor: "system",
+    serverRunner: "demo_server",
+    plugin: "plugin.notes-sidebar"
+  });
+
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    runtimeProfile: "minimal",
+    readJson: async () => ({
+      serverRunner: "demo_server",
+      plugin: "plugin.notes-sidebar",
+      actionId: "remove-broken-install"
+    }),
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureContextAuthority: () => ({ ok: true }),
+      ensureTargetAuthority: () => ({ ok: true })
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ status, body });
+    },
+    supportedHandlerSets: [],
+    getRuntimePluginCatalog: async () => ({
+      activeProfile: "minimal",
+      packages: [{
+        id: "plugin.notes-sidebar",
+        validation: { ok: true, errors: [] },
+        execution: { executable: false, reason: "metadata-only plugin package; provider loading is not enabled" },
+        compatibility: { activeProfile: "minimal", compatible: true, reasons: [] },
+        metadata: { displayName: "Notes Sidebar", version: "0.1.0", contributes: {} },
+        manifest: { dependsOnPlugins: [] },
+        resolvedBundles: [],
+        resolvedRuntimeContributions: { capabilities: [], routes: [], surfaces: [], handlerSets: [], handlerMetadata: {} }
+      }]
+    })
+  });
+
+  await handlers["runtimePlugin.reconcile"]({ req: {}, res: {}, requestActor: "aaron", appContext: {} });
+
+  assert.equal(sent[0]?.status, 200);
+  assert.equal(sent[0]?.body?.action?.id, "remove-broken-install");
+  assert.equal(world.project(moduleProjectors.runtimePluginInstalls).some(row =>
+    row.serverRunner === "demo_server" && row.plugin === "plugin.notes-sidebar"
+  ), false);
 });
 
 test("server-runner authoring handlers reject hidden foreign canonical runner ids before authority checks", async () => {
@@ -349,8 +426,17 @@ name = "importedRunner"
   await handlers["serverRunner.create"]({ req: {}, res: {}, requestActor: "callan" });
   await handlers["runtimePlugin.install"]({ req: {}, res: {}, requestActor: "callan", appContext: {} });
   await handlers["runtimePlugin.remove"]({ req: {}, res: {}, requestActor: "callan", appContext: {} });
+  bodies.push({
+    context: "ctx.target",
+    serverRunnerRef: "importedRunner",
+    plugin: "plugin.inspect",
+    actionId: "remove-broken-install",
+    id: "proposal.runtime-plugin.reconcile.inspect",
+    reason: "Repair inspect on the shared runner"
+  });
+  await handlers["runtimePlugin.reconcile"]({ req: {}, res: {}, requestActor: "callan", appContext: {} });
 
-  assert.deepEqual(seenTargets, ["source_server", "source_server"]);
+  assert.deepEqual(seenTargets, ["source_server", "source_server", "source_server"]);
   assert.equal(sent[0]?.status, 202);
   assert.equal(sent[0]?.body?.proposal?.targetProcess, "serverRunner.define");
   assert.equal(sent[0]?.body?.proposal?.targetId, "ctx.shared");
@@ -373,6 +459,17 @@ name = "importedRunner"
     context: "ctx.target",
     serverRunnerRef: "importedRunner",
     plugin: "plugin.inspect"
+  });
+  assert.equal(sent[3]?.status, 202);
+  assert.equal(sent[3]?.body?.proposal?.targetProcess, "runtimePlugin.reconcile");
+  assert.equal(sent[3]?.body?.proposal?.targetId, "source_server");
+  assert.equal(sent[3]?.body?.proposal?.id, "proposal.runtime-plugin.reconcile.inspect");
+  assert.equal(sent[3]?.body?.proposal?.reason, "Repair inspect on the shared runner");
+  assert.deepEqual(sent[3]?.body?.proposal?.body, {
+    context: "ctx.target",
+    serverRunnerRef: "importedRunner",
+    plugin: "plugin.inspect",
+    actionId: "remove-broken-install"
   });
 });
 
@@ -455,4 +552,61 @@ name = "importedRunner"
   assert.equal(world.project(moduleProjectors.runtimePluginInstalls).some(row =>
     row.serverRunner === "source_server" && row.plugin === "plugin.inspect"
   ), true);
+});
+
+test("server-runner authoring proposal targets reconcile seeded broken plugin installs", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "demo_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+`);
+  installRuntimePlugin(world, {
+    actor: "system",
+    serverRunner: "demo_server",
+    plugin: "plugin.notes-sidebar"
+  });
+
+  const result = await executeServerRunnerAuthoringProposalTarget({
+    world,
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: { targetProcess: "runtimePlugin.reconcile" },
+    body: {
+      serverRunner: "demo_server",
+      plugin: "plugin.notes-sidebar",
+      actionId: "remove-broken-install"
+    },
+    supportedHandlerSets: [],
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: () => ({ ok: true }),
+    getRuntimePluginCatalog: async () => ({
+      activeProfile: "minimal",
+      packages: [{
+        id: "plugin.notes-sidebar",
+        validation: { ok: true, errors: [] },
+        execution: { executable: false, reason: "metadata-only plugin package; provider loading is not enabled" },
+        compatibility: { activeProfile: "minimal", compatible: true, reasons: [] },
+        metadata: { displayName: "Notes Sidebar", version: "0.1.0", contributes: {} },
+        manifest: { dependsOnPlugins: [] },
+        resolvedBundles: [],
+        resolvedRuntimeContributions: { capabilities: [], routes: [], surfaces: [], handlerSets: [], handlerMetadata: {} }
+      }]
+    })
+  });
+
+  assert.equal(result?.ok, true);
+  assert.equal(world.project(moduleProjectors.runtimePluginInstalls).some(row =>
+    row.serverRunner === "demo_server" && row.plugin === "plugin.notes-sidebar"
+  ), false);
 });

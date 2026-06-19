@@ -29,12 +29,12 @@ test("tutorial concepts are authored per step and reveal progressively with prog
     ["identity-principal"]
   );
   assert.deepEqual(
-    tutorialStepConcepts(tutorial, "app:create-note").map(concept => concept.id),
-    ["perspective-data"]
+    tutorialStepConcepts(tutorial, "app:review-collection").map(concept => concept.id),
+    ["native-collection"]
   );
   assert.deepEqual(
     tutorialStepConcepts(tutorial, "world:inspect").map(concept => concept.id),
-    ["app-boundary", "witnessed-app-state", "perspective-data", "operating-surface"]
+    ["app-boundary", "native-process-graph", "native-collection", "operating-surface"]
   );
 
   const runnerProgress = createTutorialProgress(tutorial, "runner:create");
@@ -43,25 +43,23 @@ test("tutorial concepts are authored per step and reveal progressively with prog
     ["identity-principal", "session-auth", "runtime-wiring"]
   );
 
-  const noteProgress = createTutorialProgress(tutorial, "app:create-note");
+  const reviewProgress = createTutorialProgress(tutorial, "app:review-collection");
   assert.deepEqual(
-    tutorialRevealedConcepts(tutorial, noteProgress).map(concept => concept.id),
+    tutorialRevealedConcepts(tutorial, reviewProgress).map(concept => concept.id),
     [
       "identity-principal",
       "session-auth",
       "runtime-wiring",
-      "widget-tree",
-      "frontend-program",
-      "route-mounts",
+      "native-page-surface",
+      "native-process-graph",
       "app-boundary",
-      "witnessed-app-state",
-      "perspective-data"
+      "native-collection"
     ]
   );
 
-  const replayed = restartTutorialFromHere(tutorial, noteProgress, "app:create-note");
-  assert.equal(replayed.stepId, "app:create-note");
-  assert.equal(replayed.replayStepId, "app:create-note");
+  const replayed = restartTutorialFromHere(tutorial, reviewProgress, "app:review-collection");
+  assert.equal(replayed.stepId, "app:review-collection");
+  assert.equal(replayed.replayStepId, "app:review-collection");
   assert.equal(replayed.completedAt, null);
 
   const worldProgress = createTutorialProgress(tutorial, "world:inspect");
@@ -72,12 +70,10 @@ test("tutorial concepts are authored per step and reveal progressively with prog
       "identity-principal",
       "session-auth",
       "runtime-wiring",
-      "widget-tree",
-      "frontend-program",
-      "route-mounts",
+      "native-page-surface",
+      "native-process-graph",
       "app-boundary",
-      "witnessed-app-state",
-      "perspective-data",
+      "native-collection",
       "operating-surface"
     ]
   );
@@ -99,7 +95,7 @@ test("tutorial progress normalizes legacy fields into scope-aware progress and p
 
   assert.deepEqual(tutorialDisabledScopeKeys(tutorial, progress), ["page:app"]);
   assert.deepEqual(tutorialDisabledContextIds(tutorial, progress), []);
-  assert.equal(tutorialReplayScopeKey(tutorial, progress), "widget:todo_title");
+  assert.equal(tutorialReplayScopeKey(tutorial, progress), "widget:native_todo_title");
   assert.deepEqual(progress.disabledPages, ["app"]);
   assert.equal(progress.replayStepId, "app:intro");
 });
@@ -109,7 +105,7 @@ test("disabling a section scope does not disable the whole app page", () => {
   const progress = createTutorialProgress(tutorial, "app:create-todo");
   const updated = setTutorialScopeDisabled(tutorial, progress, tutorialStepScope(tutorial, "app:create-todo")?.key, true);
 
-  assert.deepEqual(tutorialDisabledScopeKeys(tutorial, updated), ["section:app:todo_form"]);
+  assert.deepEqual(tutorialDisabledScopeKeys(tutorial, updated), ["section:app:native_todo_form"]);
   assert.deepEqual(updated.disabledPages, []);
 });
 
@@ -129,7 +125,7 @@ test("disabling the app intro widget does not disable later app scopes on the sa
   const updated = setTutorialScopeDisabled(tutorial, progress, tutorialStepScope(tutorial, "app:intro")?.key, true);
   const next = normalizeTutorialProgress(tutorial, { ...updated, stepId: "app:create-todo" });
 
-  assert.deepEqual(tutorialDisabledScopeKeys(tutorial, updated), ["widget:todo_title"]);
+  assert.deepEqual(tutorialDisabledScopeKeys(tutorial, updated), ["widget:native_todo_title"]);
   assert.equal(isTutorialScopeDisabled(tutorial, next, tutorialStepScope(tutorial, "app:create-todo")?.key), false);
 });
 
@@ -156,6 +152,18 @@ test("tutorial scope catalog includes bootstrap operator anchors beyond the Todo
 test("tutorial scope catalog includes authored non-step anchors for shipped app and world surfaces", () => {
   const tutorial = todoTutorialDefinition();
 
+  assert.deepEqual(
+    tutorialScopeInfo(tutorial, "section:app:native_todo_list_panel"),
+    {
+      key: "section:app:native_todo_list_panel",
+      kind: "section",
+      page: "app",
+      label: "Todo list",
+      chapterId: "use-app",
+      sectionId: "native_todo_list_panel",
+      target: "todo-list-panel"
+    }
+  );
   assert.deepEqual(
     tutorialScopeInfo(tutorial, "widget:todo_widget_editor_button"),
     {

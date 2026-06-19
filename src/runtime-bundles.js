@@ -33,7 +33,12 @@ import {
 } from "./runtime-store-seeds.js";
 
 export const DEFAULT_RUNTIME_PROFILE = "full";
-export const DEFAULT_BOOTSTRAP_RUNTIME_PROFILE = "authoring";
+export const DEFAULT_BOOTSTRAP_RUNTIME_PROFILE = "minimal";
+export const DEFAULT_BOOTSTRAP_STARTUP_PLUGIN_IDS = Object.freeze([
+  "plugin.authoring",
+  "plugin.starter",
+  "plugin.tutorial"
+]);
 
 /**
  * @typedef {Object} BundleManifest
@@ -436,13 +441,16 @@ export function runtimeCompositionStory({
   startupRunner = null,
   startupMode = "serve",
   profilePluginIds = [],
+  startupPluginIds = [],
   authoredPluginIds = [],
   operatorPluginIds = [],
   effectivePluginIds = []
 } = {}) {
   const runnerId = startupRunner?.id ? String(startupRunner.id) : null;
   const bootstrapOnly = startupRunner?.bootstrapOnly === true;
+  const startupOwned = startupRunner?.startupOwned === true;
   const normalizedProfilePluginIds = [...new Set((profilePluginIds ?? []).map(String).filter(Boolean))];
+  const normalizedStartupPluginIds = [...new Set((startupPluginIds ?? []).map(String).filter(Boolean))];
   const normalizedAuthoredPluginIds = [...new Set((authoredPluginIds ?? []).map(String).filter(Boolean))];
   const normalizedOperatorPluginIds = [...new Set((operatorPluginIds ?? []).map(String).filter(Boolean))];
   const normalizedEffectivePluginIds = [...new Set((effectivePluginIds ?? []).map(String).filter(Boolean))];
@@ -454,16 +462,20 @@ export function runtimeCompositionStory({
     activePluginSource = "authored-installs-plus-operator-defaults";
   } else if (usesAuthoredRuntimePluginInstalls) {
     activePluginSource = "authored-runtime-plugin-installs";
+  } else if (normalizedStartupPluginIds.length > 0) {
+    activePluginSource = "startup-defaults";
   } else if (normalizedProfilePluginIds.length > 0 || normalizedOperatorPluginIds.length > 0) {
     activePluginSource = "profile-or-operator-defaults";
   }
 
   const storyId = usesAuthoredServerRunner
     ? "authored-runner-driven"
-    : "synthetic-runner-profile-driven";
+    : (startupOwned ? "startup-runner-driven" : "synthetic-runner-profile-driven");
   const notes = [];
   if (usesAuthoredServerRunner) {
     notes.push(`Active runtime is anchored by authored server runner ${runnerId}.`);
+  } else if (runnerId && startupOwned) {
+    notes.push(`Active runtime is anchored by startup default runner ${runnerId}; no authored serverRunner row owns the current runtime yet.`);
   } else if (runnerId) {
     notes.push(`Active runtime is anchored by synthetic startup runner ${runnerId}; no authored serverRunner row owns the current runtime.`);
   } else {
@@ -471,6 +483,8 @@ export function runtimeCompositionStory({
   }
   if (usesAuthoredRuntimePluginInstalls) {
     notes.push("Authored runtimePluginInstall rows participate in the active runtime plugin composition.");
+  } else if (normalizedStartupPluginIds.length > 0) {
+    notes.push("Effective runtime plugins come from explicit startup defaults, not authored runtimePluginInstall rows.");
   } else if (normalizedEffectivePluginIds.length > 0) {
     notes.push("Effective runtime plugins come from the startup profile and operator-configured defaults, not authored runtimePluginInstall rows.");
   } else {
@@ -479,7 +493,9 @@ export function runtimeCompositionStory({
 
   const explanation = usesAuthoredServerRunner
     ? `Runtime is running in ${startupMode} mode from authored runner ${runnerId}; plugin activation source is ${activePluginSource}.`
-    : `Runtime is running in ${startupMode} mode from synthetic startup runner ${runnerId ?? "<none>"}; plugin activation source is ${activePluginSource}.`;
+    : (startupOwned
+        ? `Runtime is running in ${startupMode} mode from startup default runner ${runnerId ?? "<none>"}; plugin activation source is ${activePluginSource}.`
+        : `Runtime is running in ${startupMode} mode from synthetic startup runner ${runnerId ?? "<none>"}; plugin activation source is ${activePluginSource}.`);
 
   return {
     storyId,
@@ -487,7 +503,7 @@ export function runtimeCompositionStory({
     activeRunnerId: runnerId,
     activeRunnerSource: usesAuthoredServerRunner
       ? "authored-server-runner"
-      : "synthetic-startup-runner",
+      : (startupOwned ? "startup-default-runner" : "synthetic-startup-runner"),
     activePluginSource,
     usesAuthoredServerRunner,
     usesAuthoredRuntimePluginInstalls,
@@ -521,6 +537,47 @@ export function resolveRuntimeProfileStrict(profileName = DEFAULT_RUNTIME_PROFIL
   return {
     ok: true,
     ...resolveRuntimeProfile(normalized)
+  };
+}
+
+export function effectiveRuntimeProfileForRunner({
+  serverRunner = null,
+  startupOverrideProfile = null,
+  startupMode = "serve",
+  fallbackProfile = DEFAULT_RUNTIME_PROFILE
+} = {}) {
+  const overrideProfile = typeof startupOverrideProfile === "string" && startupOverrideProfile.trim()
+    ? startupOverrideProfile.trim()
+    : null;
+  const authoredRuntimeProfile = typeof serverRunner?.runtimeProfile === "string" && serverRunner.runtimeProfile.trim()
+    ? serverRunner.runtimeProfile.trim()
+    : null;
+  if (overrideProfile) {
+    return {
+      authoredRuntimeProfile,
+      effectiveRuntimeProfile: overrideProfile,
+      effectiveRuntimeProfileSource: "startup-override",
+      overrideActive: true
+    };
+  }
+  if (authoredRuntimeProfile) {
+    return {
+      authoredRuntimeProfile,
+      effectiveRuntimeProfile: authoredRuntimeProfile,
+      effectiveRuntimeProfileSource: "authored-server-runner",
+      overrideActive: false
+    };
+  }
+  const startupDefault = startupMode === "bootstrap"
+    ? DEFAULT_BOOTSTRAP_RUNTIME_PROFILE
+    : fallbackProfile;
+  return {
+    authoredRuntimeProfile: null,
+    effectiveRuntimeProfile: startupDefault,
+    effectiveRuntimeProfileSource: serverRunner?.startupOwned === true
+      ? "startup-default-runner"
+      : "legacy-startup-default",
+    overrideActive: false
   };
 }
 
@@ -818,6 +875,10 @@ export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PRO
 export function buildRuntimeDiagnosticsForProfile({
   requestedProfile = null,
   profileName = DEFAULT_RUNTIME_PROFILE,
+  authoredRuntimeProfile = null,
+  effectiveRuntimeProfileSource = null,
+  runtimeProfileOverrideActive = false,
+  runtimeProfileOverrideProfile = null,
   additionalBundleIds = [],
   bundleOverrides = {},
   startupRunner = null,
@@ -828,6 +889,7 @@ export function buildRuntimeDiagnosticsForProfile({
   operatorState = null,
   pluginCatalogSummary = null,
   configuredPluginIds = [],
+  startupPluginIds = [],
   authoredPluginIds = [],
   operatorPluginIds = [],
   effectivePluginIds = [],
@@ -852,6 +914,7 @@ export function buildRuntimeDiagnosticsForProfile({
     startupRunner,
     startupMode,
     profilePluginIds: summary.profilePluginIds ?? [],
+    startupPluginIds,
     authoredPluginIds,
     operatorPluginIds,
     effectivePluginIds
@@ -859,13 +922,19 @@ export function buildRuntimeDiagnosticsForProfile({
   return {
     requestedProfile: requestedProfile ?? profileName,
     activeProfile: summary.profile,
+    authoredRuntimeProfile: authoredRuntimeProfile ?? null,
+    effectiveRuntimeProfile: summary.profile,
+    effectiveRuntimeProfileSource: effectiveRuntimeProfileSource ?? null,
+    runtimeProfileOverrideActive: runtimeProfileOverrideActive === true,
+    runtimeProfileOverrideProfile: runtimeProfileOverrideProfile ?? null,
     availableProfiles: availableRuntimeProfiles(),
     startupRunner: startupRunner ? {
       id: startupRunner.id ?? null,
       backendHost: startupRunner.backendHost ?? null,
       frontendHost: startupRunner.frontendHost ?? null,
       handlerSet: startupRunner.handlerSet ?? null,
-      bootstrapOnly: startupRunner.bootstrapOnly === true
+      bootstrapOnly: startupRunner.bootstrapOnly === true,
+      startupOwned: startupRunner.startupOwned === true
     } : null,
     activeBundles: summary.bundles.map(bundle => ({
       id: bundle.id,
@@ -982,6 +1051,7 @@ export function buildRuntimeDiagnosticsForProfile({
           activeProfile: pluginCatalogSummary.activeProfile,
           profilePluginIds: [...(summary.profilePluginIds ?? [])],
           resolvedProfilePluginIds: [...(summary.resolvedProfilePluginIds ?? [])],
+          startupPluginIds: [...startupPluginIds],
           authoredPluginIds: [...authoredPluginIds],
           operatorPluginIds: [...operatorPluginIds],
           effectivePluginIds: [...effectivePluginIds],
@@ -1006,6 +1076,7 @@ export function buildRuntimeDiagnosticsForProfile({
           rejectedCount: pluginCatalogSummary.rejectedCount ?? 0,
           loadedRuntimeCount: pluginCatalogSummary.loadedRuntimeCount ?? 0,
           failedRuntimeCount: pluginCatalogSummary.failedRuntimeCount ?? 0,
+          requestedSourceCounts: { ...(pluginCatalogSummary.requestedSourceCounts ?? {}) },
           trustStateCounts: { ...(pluginCatalogSummary.trustStateCounts ?? {}) }
         }
       : null

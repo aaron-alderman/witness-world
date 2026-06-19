@@ -128,6 +128,7 @@ Implementation:
 
 - detect missing, invalid, incompatible, dependency-broken, and obsolete local packages
 - add reconcile recommendations and cleanup actions
+- first shipped slice: runner-scoped `runtimePlugin.reconcile` with review-derived repair actions, bootstrap operator controls, direct authority success, and proposal fallback through the shared server-runner path
 
 Acceptance:
 

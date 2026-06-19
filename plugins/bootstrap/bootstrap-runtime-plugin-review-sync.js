@@ -82,11 +82,14 @@ export function selectBootstrapRuntimePluginReviewPlugin({
 export function createBootstrapRuntimePluginReviewSyncHandler({
   byId = () => null,
   request = async () => ({}),
+  postJson = async () => ({}),
+  refresh = async () => {},
   requestState = { current: 0 },
   getReview = () => null,
   setReview = () => {},
   getRuntimeProfile = () => "full",
   renderPage = () => {},
+  renderDetail = () => {},
   setStatus = () => {}
 } = {}) {
   return async event => {
@@ -116,6 +119,30 @@ export function createBootstrapRuntimePluginReviewSyncHandler({
         renderPage();
         return { handled: true };
       }
+      if (detail.trigger === "repair") {
+        const review = getReview();
+        const actionId = typeof detail.actionId === "string" ? detail.actionId.trim() : "";
+        const actionLabel = typeof detail.actionLabel === "string" ? detail.actionLabel.trim() : "Runtime plugin repair";
+        if (!review?.serverRunner || !review?.selectedPluginId || !actionId) {
+          setStatus("runtime-plugin-review-note", "Repair action is unavailable.");
+          return { handled: true };
+        }
+        setStatus("runtime-plugin-review-note", `Submitting ${actionLabel}.`);
+        const result = await postJson("/api/runtime-plugin-reconciles", {
+          serverRunner: review.serverRunner,
+          plugin: review.selectedPluginId,
+          actionId
+        });
+        await refresh();
+        renderDetail();
+        setStatus(
+          "runtime-plugin-review-note",
+          result?.proposal
+            ? (result.statusMessage || `Proposed ${actionLabel} for review.`)
+            : `${actionLabel} applied.`
+        );
+        return { handled: true };
+      }
     } catch (error) {
       setStatus("runtime-plugin-review-note", error.message);
       return { handled: true, error };
@@ -128,36 +155,60 @@ export function bindBootstrapRuntimePluginReviewSync({
   target = null,
   byId = () => null,
   request = async () => ({}),
+  postJson = async () => ({}),
+  refresh = async () => {},
   requestState = { current: 0 },
   getReview = () => null,
   setReview = () => {},
   getRuntimeProfile = () => "full",
   renderPage = () => {},
+  renderDetail = () => {},
   setStatus = () => {}
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
   const resolvedDocument = resolvedTarget?.document || globalThis?.document || null;
-  if (!resolvedDocument?.getElementById) return null;
   const handler = createBootstrapRuntimePluginReviewSyncHandler({
     byId,
     request,
+    postJson,
+    refresh,
     requestState,
     getReview,
     setReview,
     getRuntimeProfile,
     renderPage,
+    renderDetail,
     setStatus
   });
+  resolvedTarget?.addEventListener?.("witness:bootstrap-runtime-plugin-review-sync", handler);
+  if (!resolvedDocument?.getElementById) return handler;
   for (const [id, trigger] of [
     ["runtime-plugin-review-runner", "server-runner"],
     ["runtime-plugin-review-plugin", "plugin"]
   ]) {
     const field = resolvedDocument?.getElementById?.(id);
-    if (!field || field.__bootstrapRuntimePluginReviewSyncBound) continue;
+    if (!field || field.__bootstrapRuntimePluginReviewSyncBound || typeof field.addEventListener !== "function") continue;
     field.__bootstrapRuntimePluginReviewSyncBound = true;
     field.addEventListener("change", () => handler({
       detail: { source: "bootstrap-page-main", family: "runtime-plugin-review", trigger }
     }));
+  }
+  const detailRoot = resolvedDocument?.getElementById?.("runtime-plugin-review-detail");
+  if (detailRoot && !detailRoot.__bootstrapRuntimePluginReviewActionBound && typeof detailRoot.addEventListener === "function") {
+    detailRoot.__bootstrapRuntimePluginReviewActionBound = true;
+    detailRoot.addEventListener("click", event => {
+      const button = event?.target?.closest?.("[data-runtime-plugin-review-action-id]");
+      if (!button) return;
+      handler({
+        detail: {
+          source: "bootstrap-page-main",
+          family: "runtime-plugin-review",
+          trigger: "repair",
+          actionId: button.dataset.runtimePluginReviewActionId || "",
+          actionLabel: button.dataset.runtimePluginReviewActionLabel || "Runtime plugin repair"
+        }
+      });
+    });
   }
   return handler;
 }

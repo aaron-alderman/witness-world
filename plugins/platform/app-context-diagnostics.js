@@ -12,10 +12,12 @@ export function diagnosticsFromPlatformAppContext(appContext) {
   const composition = runtimeCompositionStory({
     startupRunner: {
       id: appContext?.serverRunnerId ?? null,
-      bootstrapOnly: appContext?.bootstrapOnly === true
+      bootstrapOnly: appContext?.bootstrapOnly === true,
+      startupOwned: appContext?.startupRunnerOwned === true
     },
     startupMode: appContext?.runtimeStartupMode ?? "serve",
     profilePluginIds: summary.profilePluginIds ?? [],
+    startupPluginIds: appContext?.startupRuntimePluginIds ?? [],
     authoredPluginIds: appContext?.authoredRuntimePluginIds ?? [],
     operatorPluginIds: appContext?.operatorRuntimePluginIds ?? [],
     effectivePluginIds: appContext?.effectiveRuntimePluginIds ?? []
@@ -32,6 +34,7 @@ export function diagnosticsFromPlatformAppContext(appContext) {
     routes: (summary.routes ?? []).map(route => ({ ...route })),
     surfaces: (summary.surfaces ?? appContext?.runtimeSurfaceEntries ?? []).map(surface => ({ ...surface })),
     plugins: {
+      startupPluginIds: [...(appContext?.startupRuntimePluginIds ?? appContext?.runtimePluginCatalog?.startupPluginIds ?? [])],
       activePluginIds: [...(appContext?.activeRuntimePluginIds ?? appContext?.runtimePluginCatalog?.activePluginIds ?? [])],
       effectivePluginIds: [...(appContext?.effectiveRuntimePluginIds ?? appContext?.runtimePluginCatalog?.effectivePluginIds ?? [])],
       rejectedPlugins: [...(appContext?.runtimePluginCatalog?.rejectedPlugins ?? [])]

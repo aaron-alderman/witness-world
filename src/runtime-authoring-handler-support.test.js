@@ -5,10 +5,10 @@ import { mergeAuthoringHandlerSupport, resolveAuthoringHandlerSupport } from "./
 test("mergeAuthoringHandlerSupport adds compatible plugin-provided handlers, metadata, and handler sets", () => {
   const support = mergeAuthoringHandlerSupport({
     supportedHandlerSets: [],
-    supportedHandlers: ["page.home"],
-    supportedPageHandlers: ["page.home"],
+    supportedHandlers: ["page.surface"],
+    supportedPageHandlers: ["page.surface"],
     supportedHandlerMetadata: {
-      "page.home": { routeKind: "page", methods: ["GET"] }
+      "page.surface": { routeKind: "page", methods: ["GET"] }
     },
     pluginCatalog: {
       packages: [
@@ -28,7 +28,7 @@ test("mergeAuthoringHandlerSupport adds compatible plugin-provided handlers, met
     }
   });
 
-  assert.equal(support.supportedHandlers.includes("page.home"), true);
+  assert.equal(support.supportedHandlers.includes("page.surface"), true);
   assert.equal(support.supportedHandlers.includes("events.stream"), true);
   assert.equal(support.supportedHandlerSets.includes("demo"), true);
   assert.equal(support.supportedHandlerMetadata["events.stream"]?.routeKind, "stream");

@@ -161,7 +161,7 @@ function bootstrapOrderedRouteHandlers(handlers = []) {
   return [...(handlers || [])].sort((left, right) => {
     const a = String(left || "");
     const b = String(right || "");
-    const rank = value => value === "page.surface" ? 0 : (value === "page.home" ? 1 : 2);
+    const rank = value => value === "page.surface" ? 0 : 1;
     return rank(a) - rank(b) || a.localeCompare(b);
   });
 }
@@ -186,17 +186,12 @@ export function applyBootstrapShellSelectFill({
   fillSelect("perspective-context", authored.contexts || [], x => x.id, x => x.id);
   fillSelect("widget-context", authored.contexts || [], x => x.id, x => x.id);
   fillSelect("widget-parent", authored.widgets || [], x => x.id, x => x.id);
-  fillSelect("program-root-widget", authored.widgets || [], x => x.id, x => x.id);
-  fillSelect("program-context", authored.contexts || [], x => x.id, x => x.id);
   fillSelect("route-root-widget", authored.widgets || [], x => x.id, x => x.id);
   fillSelect("route-root-surface", authored.surfaces || [], x => x.id, x => x.id);
-  fillSelect("route-frontend-program", authored.frontendPrograms || [], x => x.id, x => x.id);
   fillSelect("route-state-process", authored.processes || [], x => x.id, x => x.id);
   fillSelect("route-state-state", (authored.types || []).filter(row => row.role === "state"), x => x.id, x => x.id);
   fillSelect("route-backend-program-soul", authored.backendPrograms || [], x => x.soul, x => x.soul);
   fillSelect("route-context", authored.contexts || [], x => x.id, x => x.id);
-  fillSelect("step-program", authored.frontendPrograms || [], x => x.id, x => x.id, { includeBlank: false });
-  fillSelect("step-op", model?.supportedFrontendOps || [], x => x, x => x, { includeBlank: false });
   fillSelect("route-method", model?.supportedMethods || [], x => x, x => x, { includeBlank: false });
   fillSelect("route-handler", bootstrapOrderedRouteHandlers(model?.supportedHandlers || []), x => x, x => x, { includeBlank: false });
   fillSelect("serve-route", authored.routes || [], x => x.id, x => x.id);
@@ -204,6 +199,7 @@ export function applyBootstrapShellSelectFill({
   fillSelect("serve-context", authored.contexts || [], x => x.id, x => x.id);
   fillSelect("runner-handler-set", model?.supportedHandlerSets || [], x => x, x => x);
   fillSelect("runner-context", authored.contexts || [], x => x.id, x => x.id);
+  fillSelect("runner-runtime-profile", model?.runtimeProfiles || [], x => x.id || x, x => x.label || x);
   fillSelect("runner-backend-host", model?.backendHosts || [], x => x.id, x => x.id);
   fillSelect("runner-frontend-host", model?.frontendHosts || [], x => x.id, x => x.id);
   fillSelect("runtime-plugin-review-runner", buildServerRunnerOptionsFn(authored.serverRunners || []), row => row.value, row => row.label, { includeBlank: false });
@@ -213,5 +209,6 @@ export function applyBootstrapShellSelectFill({
 
   setSelectedValue("runtime-plugin-review-runner", runtimePluginReview?.serverRunner);
   setSelectedValue("runtime-plugin-review-plugin", runtimePluginReview?.selectedPluginId);
+  setSelectedValue("runner-runtime-profile", model?.runtimeProfile);
   if (runtimePluginReview) runtimePluginReview.selectedPluginId = byId("runtime-plugin-review-plugin")?.value || "";
 }

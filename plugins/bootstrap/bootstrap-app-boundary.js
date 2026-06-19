@@ -137,7 +137,8 @@ export function buildBootstrapAppBoundaryPlan({
         id: BOOTSTRAP_APP_BOUNDARY_IDS.serverRunner,
         context: BOOTSTRAP_APP_BOUNDARY_IDS.context,
         backendHost: "backendHost",
-        frontendHost: "frontendHost"
+        frontendHost: "frontendHost",
+        runtimeProfile: "minimal"
       }
     ],
     runtimePluginInstalls: [
@@ -524,11 +525,13 @@ function boundaryRootComposition({
         id: appContext?.serverRunnerId ?? "__bootstrap__",
         backendHost: appContext?.backendHost ?? null,
         frontendHost: appContext?.frontendHost ?? null,
-        bootstrapOnly: appContext?.bootstrapOnly !== false
+        bootstrapOnly: appContext?.bootstrapOnly !== false,
+        startupOwned: appContext?.startupRunnerOwned === true
       },
       startupMode: appContext?.runtimeStartupMode ?? "serve",
-      authoredPluginIds: runtimePluginIds,
-      effectivePluginIds: runtimePluginIds
+      startupPluginIds: appContext?.startupRuntimePluginIds ?? [],
+      operatorPluginIds: appContext?.operatorRuntimePluginIds ?? [],
+      effectivePluginIds: appContext?.effectiveRuntimePluginIds ?? runtimePluginIds
     });
   if (!mountedRoot) {
     return {

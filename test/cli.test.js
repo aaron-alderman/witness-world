@@ -25,7 +25,7 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
     const html = await fetch(url).then(response => response.text());
     const diagnostics = await fetch(`${url}/api/runtime/diagnostics`).then(response => response.json());
     assert.match(html, /Recover And Author The App Boundary/);
-    assert.equal(diagnostics.activeProfile, "authoring");
+    assert.equal(diagnostics.activeProfile, "minimal");
     assert.deepEqual([...diagnostics.activeBundles.map(bundle => bundle.id)].sort(), [
       "bundle-core-runtime",
       "bundle-bootstrap",
@@ -39,6 +39,8 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
       "bundle-tutorial"
     ].sort());
     assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
+    assert.equal(diagnostics.startupRunner?.startupOwned, true);
+    assert.deepEqual([...diagnostics.plugins.startupPluginIds].sort(), ["plugin.authoring", "plugin.starter", "plugin.tutorial"]);
     assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.starter", "plugin.tutorial"]);
   } finally {
     if (!child.killed) child.kill("SIGINT");
@@ -52,7 +54,7 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
   assert.notEqual(path.resolve(runtimeRoot), path.resolve(os.tmpdir()));
   assert.match(stdout, /Persistence:\s+cold/);
   assert.match(stdout, /World home:\s+/);
-  assert.match(stdout, /Runtime profile:\s+authoring/);
+  assert.match(stdout, /Runtime profile:\s+minimal/);
   assert.deepEqual(cliListLine(stdout, "Active bundles").sort(), [
     "bundle-core-runtime",
     "bundle-bootstrap",
@@ -65,7 +67,8 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
     "bundle-starter",
     "bundle-tutorial"
   ].sort());
-  assert.match(stdout, /Operator runtime plugins:\s+plugin\.authoring/);
+  assert.match(stdout, /Startup default runtime plugins:\s+plugin\.authoring, plugin\.starter, plugin\.tutorial/);
+  assert.match(stdout, /Configured runtime plugins:\s+\(none\)/);
   assert.match(stdout, /Activated runtime plugins:\s+.*plugin\.mcp-authoring/);
   assert.match(stdout, /Bundle counts:\s+capabilities=\d+ routes=\d+ surfaces=\d+/);
   assert.match(stdout, /Runtime diagnostics:\s+http:\/\/[^\s]+\/api\/runtime\/diagnostics/);
@@ -220,6 +223,7 @@ test("bootstrap CLI activates local runtime plugins through --runtime-plugin", a
   try {
     const url = await waitForServerUrl(() => stdout);
     const diagnostics = await fetch(`${url}/api/runtime/diagnostics`).then(response => response.json());
+    assert.deepEqual(diagnostics.plugins.startupPluginIds, []);
     assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring"]);
     assert.deepEqual([...diagnostics.plugins.addedBundleIds].sort(), ["bundle-authoring-core", "bundle-bootstrap", "bundle-capability-authoring", "bundle-mcp-authoring", "bundle-program-authoring", "bundle-proposals", "bundle-server-runner-authoring"]);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring-core"), true);
@@ -237,9 +241,10 @@ test("bootstrap CLI activates local runtime plugins through --runtime-plugin", a
   }
 
   assert.equal(normalizeCliStderr(stderr), "");
+  assert.match(stdout, /Startup default runtime plugins:\s+\(none\)/);
   assert.match(stdout, /Configured runtime plugins:\s+plugin\.authoring/);
   assert.match(stdout, /Activated runtime plugins:\s+.*plugin\.mcp-authoring/);
-  assert.match(stdout, /Plugin-added bundles:\s+.*bundle-mcp-authoring/);
+  assert.match(stdout, /plugin\.mcp-authoring -> bundle-mcp-authoring/);
   assert.match(stdout, /Handler route kinds:\s+/);
 });
 
@@ -538,6 +543,19 @@ test("bootstrap CLI default activation fails when plugin.authoring-core runtime.
     contributes: {}
   }, null, 2));
   await fs.writeFile(path.join(proposalsDir, "runtime.js"), `export const bundleId = "bundle-proposals"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["proposal.create"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/proposals", handler: "proposal.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "proposal.create": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  const starterDir = path.join(pluginRoot, "starter");
+  await fs.mkdir(starterDir, { recursive: true });
+  await fs.writeFile(path.join(starterDir, "plugin.json"), JSON.stringify({
+    id: "plugin.starter",
+    version: "0.1.0",
+    displayName: "Starter Plugin",
+    description: "Starter plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-starter"],
+    contributes: {}
+  }, null, 2));
+  await fs.writeFile(path.join(starterDir, "runtime.js"), `export const bundleId = "bundle-starter"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["starter.blueprints.read"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "GET", path: "/api/starter-blueprints", handler: "starter.blueprints.read", params: {} }]; export const surfaces = []; export function createHandlers() { return { "starter.blueprints.read": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
   const tutorialDir = path.join(pluginRoot, "tutorial");
   await fs.mkdir(tutorialDir, { recursive: true });
   await fs.writeFile(path.join(tutorialDir, "plugin.json"), JSON.stringify({
@@ -669,6 +687,16 @@ test("serve CLI rejects authored plugin.canvas when runtime.js is missing", asyn
     activatesBundles: ["bundle-proposals"],
     contributes: {}
   }, `export const bundleId = "bundle-proposals"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["proposal.create"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/proposals", handler: "proposal.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "proposal.create": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("starter", {
+    id: "plugin.starter",
+    version: "0.1.0",
+    displayName: "Starter Plugin",
+    description: "Starter plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-starter"],
+    contributes: {}
+  }, `export const bundleId = "bundle-starter"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["starter.blueprints.read"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "GET", path: "/api/starter-blueprints", handler: "starter.blueprints.read", params: {} }]; export const surfaces = []; export function createHandlers() { return { "starter.blueprints.read": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
   await writePlugin("tutorial", {
     id: "plugin.tutorial",
     version: "0.1.0",

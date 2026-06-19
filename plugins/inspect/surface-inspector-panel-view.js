@@ -453,6 +453,7 @@ export function renderSurfaceInspectorPanelView({
   runtimeCorrelationRows = [],
   runtimeCorrelationOps = [],
   runtimeCorrelationUnavailableReason = "",
+  backendEvolutionHtml = "",
   evolutionHtml = "",
   childCreateHtml = "",
   editorHtml = "",
@@ -552,6 +553,7 @@ export function renderSurfaceInspectorPanelView({
       runtimeCorrelationUnavailableReason,
       escapeHtml
     })
+    + backendEvolutionHtml
     + renderSurfaceInspectorVersionsView({
       versionState,
       versionRows,

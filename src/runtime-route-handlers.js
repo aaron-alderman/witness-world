@@ -79,6 +79,7 @@ export function createRuntimeRouteHandlers({
   runtimeContributions = null,
   runtimePluginRoot = null,
   runtimePluginIds = [],
+  startupRuntimePluginIds = [],
   authoredRuntimePluginIds = [],
   appSnapshotManager = null,
   currentAppRenderWorld = null,
@@ -199,6 +200,9 @@ export function createRuntimeRouteHandlers({
     const configuredPluginIds = typeof options === "object" && options && Array.isArray(options.configuredPluginIds)
       ? options.configuredPluginIds
       : runtimePluginIds;
+    const startupPluginIds = typeof options === "object" && options && Array.isArray(options.startupPluginIds)
+      ? options.startupPluginIds
+      : startupRuntimePluginIds;
     const authoredPluginIds = typeof options === "object" && options && Array.isArray(options.authoredPluginIds)
       ? options.authoredPluginIds
       : (serverRunnerId ? runtimePluginInstallIdsForRunner(serverRunnerId) : authoredRuntimePluginIds);
@@ -206,6 +210,7 @@ export function createRuntimeRouteHandlers({
       pluginRoot: runtimePluginRoot,
       runtimeProfile: activeProfile,
       configuredPluginIds,
+      startupPluginIds,
       authoredPluginIds
     });
   };

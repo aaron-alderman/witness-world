@@ -2,7 +2,7 @@ import path from "node:path";
 import fsWatch from "node:fs";
 import { moduleProjectors } from "../../src/modules.js";
 import { buildPlatformModel } from "./platform-model.js";
-import { diagnosticsFromPlatformAppContext } from "./app-context-diagnostics.js";
+import { readDeclaredPlatformVerificationView } from "./materialized-platform-views.js";
 import {
   buildPlatformRuntimeCompositionFingerprint,
   buildPlatformTestCacheIdentity,
@@ -14,7 +14,11 @@ import {
   runPlatformTestCommand,
   runPlatformTestGate
 } from "./test-runs.js";
-import { selectContinuousTestGates } from "./test-gate-catalog.js";
+import {
+  buildFlakeScoreByGate,
+  resolveEffectivePlatformTestGates,
+  selectContinuousTestGates
+} from "./test-gate-catalog.js";
 import {
   resolveRunnerVerificationPolicy,
   resolveVerificationGatePolicy
@@ -48,6 +52,10 @@ function compareStable(left, right) {
 function comparePolicyPriority(left, right) {
   return Number(right?.priority || 0) - Number(left?.priority || 0)
     || String(left?.gateId || "").localeCompare(String(right?.gateId || ""));
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
 function emitVerificationEvent(world, process, actor, body) {
@@ -218,7 +226,17 @@ export function createPlatformTestMonitorRuntime({
       runtimeProfile: appContext?.runtimeProfile ?? null,
       runtimeConfig: appContext?.runtimeConfig ?? runtimeConfig
     });
-    const gates = appContext?.project?.(moduleProjectors.testGates) ?? project(moduleProjectors.testGates) ?? [];
+    const latestResultsByGate = appContext?.project?.(moduleProjectors.latestTestResultsByGate)?.byGate
+      ?? project(moduleProjectors.latestTestResultsByGate)?.byGate
+      ?? Object.create(null);
+    const testResults = appContext?.project?.(moduleProjectors.testResults) ?? project(moduleProjectors.testResults) ?? [];
+    const gates = resolveEffectivePlatformTestGates({
+      projectedTestGates: appContext?.project?.(moduleProjectors.testGates) ?? project(moduleProjectors.testGates) ?? [],
+      verificationPolicy: policy,
+      appRoot: appContext?.appRoot ?? repoRoot,
+      latestResultsByGate,
+      flakeScoresByGate: buildFlakeScoreByGate(testResults)
+    });
     const gatePolicies = gates
       .map(gate => resolveVerificationGatePolicy(policy, gate))
       .filter(Boolean)
@@ -227,7 +245,8 @@ export function createPlatformTestMonitorRuntime({
       appContext,
       policy,
       gatePolicies,
-      gatePolicyById: Object.fromEntries(gatePolicies.map(row => [row.gateId, row]))
+      gatePolicyById: Object.fromEntries(gatePolicies.map(row => [row.gateId, row])),
+      gates
     };
   };
 
@@ -255,6 +274,9 @@ export function createPlatformTestMonitorRuntime({
         policyKind: "gate",
         status: row.diagnostics?.length ? "invalid" : "resolved",
         gateTitle: gateLookup.get(row.gateId)?.title ?? row.gateId,
+        providerId: gateLookup.get(row.gateId)?.providerId ?? null,
+        safetyClass: gateLookup.get(row.gateId)?.safetyClass ?? null,
+        invoke: gateLookup.get(row.gateId)?.invoke !== false,
         producedAt
       }))
     ];
@@ -266,7 +288,7 @@ export function createPlatformTestMonitorRuntime({
 
   const gatesById = () => {
     const appContext = getAppContext?.() ?? null;
-    const gates = appContext?.project?.(moduleProjectors.testGates) ?? project(moduleProjectors.testGates) ?? [];
+    const gates = resolvedState().gates;
     for (const gate of gates) {
       const gateId = String(gate?.id || "");
       if (!gateId) continue;
@@ -510,6 +532,8 @@ export function createPlatformTestMonitorRuntime({
     runtimeProfile: meta.runtimeProfile ?? null,
     gateId: String(gate.id || gatePolicy.gateId || ""),
     gateTitle: String(gate.title || gate.id || gatePolicy.gateId || ""),
+    providerId: String(gate.providerId || "verification.command"),
+    safetyClass: String(gate.safetyClass || (gatePolicy.executionClass === "in_process" ? "safe" : "unsafe")),
     executionClass: gatePolicy.executionClass,
     exclusive: gatePolicy.exclusive === true,
     requiresCleanWorkspace: gatePolicy.requiresCleanWorkspace === true,
@@ -578,14 +602,21 @@ export function createPlatformTestMonitorRuntime({
     if (!state.policy.enabled) return;
     const appContext = state.appContext;
     if (!appContext || String(queued?.status || "") !== "valid" || !queued?.changeSetId) return;
-    const model = await buildPlatformModelImpl({
-      appContext,
-      diagnostics: diagnosticsFromPlatformAppContext(appContext),
-      project: appContext.project ?? project
+    const verificationView = await readDeclaredPlatformVerificationView(world, appContext, {
+      request: {
+        id: `platform.testMonitor:${queued.changeSetId}`,
+        actor: "platform.testMonitor",
+        path: "/internal/platform/test-monitor",
+        view: "verificationQueue"
+      },
+      buildPlatformVerificationViewImpl: buildArgs => buildPlatformModelImpl({
+        appContext: buildArgs.appContext,
+        project: buildArgs.project
+      })
     });
-    const selectedGateIds = [...(model.selectedTestGatesByChangeSet?.[queued.changeSetId] ?? [])];
+    const selectedGateIds = [...(verificationView.selectedTestGatesByChangeSet?.[queued.changeSetId] ?? [])];
     const gateMap = new Map(
-      (((model?.testGates ?? []).length ? model.testGates : [...gatesById().values()]) ?? [])
+      (((verificationView?.testGates ?? []).length ? verificationView.testGates : [...gatesById().values()]) ?? [])
         .map(gate => [String(gate?.id || ""), gate])
     );
     for (const [gateId, gate] of gateMap) gateRegistry.set(gateId, gate);
@@ -622,6 +653,27 @@ export function createPlatformTestMonitorRuntime({
     enqueueEntries(entries);
   };
 
+  const enqueueInvokeEntries = (gateIds = [], meta = {}) => {
+    const state = resolvedState();
+    if (!state.policy.enabled) return [];
+    const gateMap = gatesById();
+    const entries = unique(gateIds)
+      .map(gateId => gateMap.get(gateId) ?? null)
+      .filter(Boolean)
+      .map(gate => ({ gate, gatePolicy: state.gatePolicyById[gate.id] ?? null }))
+      .filter(row => row.gatePolicy?.enabled && row.gate?.invoke !== false)
+      .map(({ gate, gatePolicy }) => createQueueEntry(gate, gatePolicy, {
+        runtimeProfile: state.policy.runtimeProfile,
+        triggerKind: "invoke",
+        trigger: meta.trigger ?? "platform.testRun.create",
+        branchId: meta.branchId ?? null,
+        changeSetId: meta.changeSetId ?? null,
+        candidateSnapshotId: meta.candidateSnapshotId ?? null
+      }));
+    enqueueEntries(entries);
+    return entries;
+  };
+
   const runEntry = async entry => {
     const state = resolvedState();
     const gate = gatesById().get(entry.gateId) ?? null;
@@ -654,10 +706,13 @@ export function createPlatformTestMonitorRuntime({
       runtimeProfile: entry.runtimeProfile,
       gateId: entry.gateId,
       gateTitle: entry.gateTitle,
+      providerId: entry.providerId,
+      safetyClass: entry.safetyClass,
       executionClass: entry.executionClass,
       exclusive: entry.exclusive,
       requiresCleanWorkspace: entry.requiresCleanWorkspace,
       triggerKind: entry.triggerKind,
+      workspaceMode: shouldUseIsolatedWorkspace(entry) ? "isolated-temp-workspace" : "live-workspace",
       branchId: entry.branchId,
       changeSetId: entry.changeSetId,
       candidateSnapshotId: entry.candidateSnapshotId,
@@ -711,6 +766,9 @@ export function createPlatformTestMonitorRuntime({
       status: result.ok ? String(result.latestResult?.status || "finished") : "error",
       runId: result.testRun?.id ?? null,
       resultStatus: result.latestResult?.status ?? null,
+      cleanupStatus: result.latestResult?.cleanupStatus ?? null,
+      cleanupSummary: result.latestResult?.cleanupSummary ?? null,
+      timeoutKind: result.latestResult?.timeoutKind ?? null,
       error: result.ok ? null : result.error,
       finishedAt
     };
@@ -721,6 +779,10 @@ export function createPlatformTestMonitorRuntime({
       status: executionRow.status,
       runId: result.testRun?.id ?? null,
       resultStatus: result.latestResult?.status ?? null,
+      cleanupStatus: result.latestResult?.cleanupStatus ?? null,
+      cleanupSummary: result.latestResult?.cleanupSummary ?? null,
+      timeoutKind: result.latestResult?.timeoutKind ?? null,
+      workspaceMode: executionRow.workspaceMode ?? null,
       timedOut: result.latestResult?.timedOut === true,
       error: result.ok ? null : result.error,
       finishedAt
@@ -730,6 +792,10 @@ export function createPlatformTestMonitorRuntime({
       status: executionRow.status,
       runId: result.testRun?.id ?? null,
       resultStatus: result.latestResult?.status ?? null,
+      cleanupStatus: result.latestResult?.cleanupStatus ?? null,
+      cleanupSummary: result.latestResult?.cleanupSummary ?? null,
+      timeoutKind: result.latestResult?.timeoutKind ?? null,
+      workspaceMode: executionRow.workspaceMode ?? null,
       timedOut: result.latestResult?.timedOut === true,
       error: result.ok ? null : result.error,
       finishedAt
@@ -801,6 +867,11 @@ export function createPlatformTestMonitorRuntime({
       emitResolvedPolicies();
       await recomputeFreshnessForStartup();
       startWatchers();
+      const startupSettleMs = Number(resolvedState().policy.defaults?.startupSettleMs || 0);
+      if (startupSettleMs > 0) {
+        await delay(startupSettleMs);
+        if (closed) return;
+      }
       enqueueStartupGates();
     },
     scheduleSourceChanges(paths = [], meta = {}) {
@@ -851,6 +922,16 @@ export function createPlatformTestMonitorRuntime({
           }
         );
       })();
+    },
+    scheduleInvoke(request = {}) {
+      const gateIds = Array.isArray(request?.gateIds) ? request.gateIds : (request?.gateId ? [request.gateId] : []);
+      const entries = enqueueInvokeEntries(gateIds, request);
+      return {
+        ok: entries.length > 0,
+        status: entries.length > 0 ? 202 : 409,
+        queueEntries: entries,
+        gateIds: unique(gateIds)
+      };
     },
     inspect() {
       const state = resolvedState();

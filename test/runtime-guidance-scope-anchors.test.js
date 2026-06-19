@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildGuidanceScopeCatalogEntries,
   guidanceScopeAnchorsFromBootstrapSections,
+  guidanceScopeAnchorsFromSurfaces,
   guidanceScopeAnchorsFromWidgets
 } from "../src/runtime-guidance-scope-anchors.js";
 import { guidanceScopeInfo } from "../src/runtime-guidance-model.js";
@@ -43,6 +44,32 @@ test("guidanceScopeAnchorsFromBootstrapSections lets packages opt into bootstrap
   assert.equal(anchors.length, 2);
   assert.equal(anchors[0].scopeKey, "section:bootstrap:proposal-form");
   assert.equal(anchors[1].scopeKey, "widget:bootstrap_identity_id_input");
+});
+
+test("guidanceScopeAnchorsFromSurfaces derives non-step anchors from authored surface guidance metadata", () => {
+  const anchors = guidanceScopeAnchorsFromSurfaces("app", [
+    { id: "native_todo_title", surfaceKind: "text", props: { text: "Witness Todo", dataGuidanceTarget: "app-title" } },
+    { id: "native_todo_form", surfaceKind: "generic", props: { tag: "form", dataGuidanceTarget: "todo-form" } }
+  ]);
+
+  assert.deepEqual(anchors, [
+    {
+      scopeKey: "widget:native_todo_title",
+      scopeKind: "widget",
+      scopePage: "app",
+      scopeWidgetId: "native_todo_title",
+      scopeLabel: "Witness Todo",
+      target: "app-title"
+    },
+    {
+      scopeKey: "section:app:native_todo_form",
+      scopeKind: "section",
+      scopePage: "app",
+      scopeSectionId: "native_todo_form",
+      scopeLabel: "Native Todo Form",
+      target: "todo-form"
+    }
+  ]);
 });
 
 test("buildGuidanceScopeCatalogEntries composes widget and bootstrap anchors for arbitrary guidance definitions", () => {

@@ -32,7 +32,7 @@ export function createProposalBundleHandlers({
       sendJson(res, result.status, { proposal: result.proposal, witness: result.witness });
     },
 
-    "proposal.approve": async ({ res, params, requestActor }) => {
+    "proposal.approve": async ({ res, params, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
         sendGateFailure(res, gate);
@@ -42,7 +42,8 @@ export function createProposalBundleHandlers({
         actor: gate.actor,
         backendHost,
         proposalId: params.id || "",
-        executeTarget: executeBootstrapProposal(gate.actor)
+        executeTarget: executeBootstrapProposal(gate.actor),
+        executionContext: { appContext }
       });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });

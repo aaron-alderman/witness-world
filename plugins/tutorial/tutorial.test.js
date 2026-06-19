@@ -31,14 +31,18 @@ test("tutorial plugin keeps authored guidance content while delegating generic c
   const progressStateSource = await readFile(new URL("./tutorial-progress-state.js", import.meta.url), "utf8");
   const coreClientSource = await readFile(new URL("../../src/runtime-guidance-client.js", import.meta.url), "utf8");
   const coreProgressStateSource = await readFile(new URL("../../src/runtime-guidance-progress-state.js", import.meta.url), "utf8");
+  const starterBlueprintSource = await readFile(new URL("../starter/starter-blueprints.js", import.meta.url), "utf8");
   const tutorialSeedSource = await readFile(new URL("./todo-tutorial-seed.js", import.meta.url), "utf8");
   const tutorial = tutorialDefinition(TODO_TUTORIAL_ID);
 
   assert.equal(tutorial?.id, TODO_TUTORIAL_ID);
   assert.equal(normalizeTutorialProgress(tutorial, { stepId: tutorial.steps[0].id })?.stepId, tutorial.steps[0].id);
   assert.equal(tutorialSource.includes("export function tutorialDefinition"), true);
-  assert.equal(tutorialSource.includes('./todo-tutorial-seed.js'), true);
+  assert.equal(tutorialSource.includes('../starter/starter-blueprints.js'), true);
+  assert.equal(tutorialSource.includes('./todo-tutorial-seed.js'), false);
+  assert.equal(starterBlueprintSource.includes("native_todo_surface_root"), true);
   assert.equal(tutorialSeedSource.includes("TODO_TUTORIAL_SEED_BASE64"), true);
+  assert.equal(tutorialSeedSource.includes("Historical legacy tutorial/demo substrate"), true);
   await assert.rejects(readFile(new URL("./runtime-builtins.js", import.meta.url), "utf8"));
 
   assert.equal(appClientSource.includes('../../src/runtime-guidance-client.js'), true);

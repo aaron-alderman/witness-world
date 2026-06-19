@@ -8,7 +8,7 @@ The runtime already has a local plugin package contract:
 
 - discovery happens from `plugins/<plugin-id>/plugin.json`
 - package validation and review are real
-- `runtimePlugin.install` and `runtimePlugin.remove` are real witnessed mutations
+- `runtimePlugin.install`, `runtimePlugin.remove`, and `runtimePlugin.reconcile` are real witnessed mutations
 - proposal fallback exists for runtime-plugin, MCP, capability, program, and generic authoring writes
 
 What does not exist yet is a first-class authored model for the reusable unit itself.
@@ -42,6 +42,7 @@ The model must fit the system that already exists:
   - activated internal bundles
   - plugin runtime entrypoints where the manifest/runtime contract allows it
 - `runtimePlugin.install` selects package intent on a `serverRunner`; it does not author the package contents.
+- `runtimePlugin.reconcile` is the current governed cleanup/repair lane for broken or stale authored runner intent; it still operates on runner selection intent rather than package authorship.
 - Runtime composition, diagnostics, and review already distinguish:
   - profile-selected plugins
   - authored plugin installs
@@ -258,7 +259,7 @@ The bridge from current runtime plugins to authored packages should be explicit:
 Important boundary:
 
 - package authorship defines what exists
-- runtime-plugin install defines what a runner selects
+- runtime-plugin install and reconcile define what a runner selects or cleans up
 
 Those are related, but they are not the same mutation.
 

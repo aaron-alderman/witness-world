@@ -95,13 +95,6 @@ frontendProgram = "bootstrap_widget_authoring_controls_program"
 frontendProgramScriptId = "witness-bootstrap-widget-authoring-controls-program"
 
 [[bootstrapPageSlot]]
-slotDomId = "bootstrap-frontend-programs-slot"
-wtomlFile = "bootstrap-app-authoring-controls.wtoml"
-rootWidget = "bootstrap_frontend_program_authoring_controls_root"
-frontendProgram = "bootstrap_frontend_program_authoring_controls_program"
-frontendProgramScriptId = "witness-bootstrap-frontend-program-authoring-controls-program"
-
-[[bootstrapPageSlot]]
 slotDomId = "bootstrap-backend-authoring-slot"
 wtomlFile = "bootstrap-backend-authoring-controls.wtoml"
 rootWidget = "bootstrap_backend_authoring_controls_root"

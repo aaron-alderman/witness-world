@@ -1,4 +1,3 @@
-import { projectors } from "./kernel.js";
 import { DEFAULT_RUNTIME_PROFILE, matchRuntimeBundleRoute } from "./runtime-bundles.js";
 
 export function compileRouteMatcher(routePath) {
@@ -34,10 +33,9 @@ export function hasReachableHomeRoute(world, routeTable) {
   const rootRoutes = routeTable.filter(route => route.method === "GET" && route.path === "/");
   if (!rootRoutes.length) return false;
   for (const route of rootRoutes) {
-    if (route.handler !== "page.home") return true;
-    const rootWidget = route.params?.rootWidget;
-    if (!rootWidget) return true;
-    if (world.project(projectors.things).has(rootWidget)) return true;
+    if (route.handler !== "page.surface") continue;
+    const rootSurface = route.params?.rootSurface;
+    if (rootSurface) return true;
   }
   return false;
 }

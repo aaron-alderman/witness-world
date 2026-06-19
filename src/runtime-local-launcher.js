@@ -3,6 +3,7 @@ import path from "node:path";
 import { createWorld } from "./kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "./host.js";
 import {
+  DEFAULT_BOOTSTRAP_STARTUP_PLUGIN_IDS,
   DEFAULT_BOOTSTRAP_RUNTIME_PROFILE,
   DEFAULT_RUNTIME_PROFILE,
   resolveRuntimeProfile,
@@ -114,7 +115,7 @@ export async function startBlankRuntime({
     && explicitRuntimePlugins.length === 0
     && !envRuntimePlugins
   )
-    ? ["plugin.authoring"]
+    ? [...DEFAULT_BOOTSTRAP_STARTUP_PLUGIN_IDS]
     : [];
 
   const server = await startupTelemetry.runPhase("server.start", () => startServerImpl(world, {
@@ -122,9 +123,13 @@ export async function startBlankRuntime({
     port,
     runtimeRoot: operatorContract.directories.runtimeRoot,
     runtimeProfile: runtimeProfileInfo.id,
+    runtimeProfileExplicit,
     runtimePluginIds: explicitRuntimePlugins.length
       ? explicitRuntimePlugins
-      : (defaultBootstrapRuntimePluginIds.length ? defaultBootstrapRuntimePluginIds : null),
+      : null,
+    startupRuntimePluginIds: defaultBootstrapRuntimePluginIds.length
+      ? defaultBootstrapRuntimePluginIds
+      : null,
     runtimeStartupMode: startupMode,
     runtimeOperatorContract: operatorContract,
     startupPersistenceCommitMode: "post-ready",

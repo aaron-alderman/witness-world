@@ -114,7 +114,7 @@ domId = "bootstrap-proposal-review-slot"
 [[box]]
 id = "bootstrap_app_surface_card"
 class = "surface-card surface-stack"
-children = ["bootstrap_app_surface_badge", "bootstrap_app_surface_heading", "bootstrap_app_surface_copy", "bootstrap_widgets_details", "bootstrap_frontend_programs_details", "bootstrap_backend_programs_details", "bootstrap_route_mounts_details", "bootstrap_runtime_wiring_details", "bootstrap_runtime_plugins_details", "bootstrap_mcp_details", "bootstrap_capabilities_details"]
+children = ["bootstrap_app_surface_badge", "bootstrap_app_surface_heading", "bootstrap_app_surface_copy", "bootstrap_widgets_details", "bootstrap_backend_programs_details", "bootstrap_route_mounts_details", "bootstrap_runtime_wiring_details", "bootstrap_runtime_plugins_details", "bootstrap_mcp_details", "bootstrap_capabilities_details"]
 
 [[text]]
 id = "bootstrap_app_surface_badge"
@@ -124,11 +124,11 @@ text = "App Surface"
 [[heading]]
 id = "bootstrap_app_surface_heading"
 level = 2
-text = "Focused Builders"
+text = "Canonical Page Surface"
 
 [[text]]
 id = "bootstrap_app_surface_copy"
-text = "These forms edit app-visible structures. Advanced step conditions and params use JSON when needed, but the main surface stays oriented around the app rather than the substrate."
+text = "New app work authors surface, process, collection, boundary, and policy nouns directly on page.surface. Widget controls remain inspect substrate, and retired legacy frontend routes are tracked in authored-state diagnostics."
 
 [[details]]
 id = "bootstrap_widgets_details"
@@ -137,23 +137,11 @@ children = ["bootstrap_widgets_summary", "bootstrap_widgets_slot"]
 
 [[summary]]
 id = "bootstrap_widgets_summary"
-text = "Widgets"
+text = "Inspect Widgets"
 
 [[box]]
 id = "bootstrap_widgets_slot"
 domId = "bootstrap-widgets-slot"
-
-[[details]]
-id = "bootstrap_frontend_programs_details"
-children = ["bootstrap_frontend_programs_summary", "bootstrap_frontend_programs_slot"]
-
-[[summary]]
-id = "bootstrap_frontend_programs_summary"
-text = "Frontend Programs"
-
-[[box]]
-id = "bootstrap_frontend_programs_slot"
-domId = "bootstrap-frontend-programs-slot"
 
 [[details]]
 id = "bootstrap_backend_programs_details"
@@ -402,7 +390,7 @@ text = "The active guidance uses the same authored structures shown here. Nothin
 [[box]]
 id = "bootstrap_authored_state_stack"
 class = "surface-stack"
-children = ["bootstrap_state_contexts_section", "bootstrap_state_context_bindings_section", "bootstrap_state_context_exports_section", "bootstrap_state_context_imports_section", "bootstrap_state_context_scopes_section", "bootstrap_state_perspectives_section", "bootstrap_state_stewardships_section", "bootstrap_state_proposals_section", "bootstrap_state_packages_section", "bootstrap_state_package_revisions_section", "bootstrap_state_package_patches_section", "bootstrap_state_package_namespaces_section", "bootstrap_state_package_dependencies_section", "bootstrap_state_package_transformers_section", "bootstrap_state_package_coexistence_section", "bootstrap_state_package_convergence_section", "bootstrap_state_package_apply_previews_section", "bootstrap_state_authority_section", "bootstrap_state_identities_section", "bootstrap_state_widgets_section", "bootstrap_state_programs_section", "bootstrap_state_steps_section", "bootstrap_state_backend_programs_section", "bootstrap_state_backend_versions_section", "bootstrap_state_backend_steps_section", "bootstrap_state_routes_section", "bootstrap_state_serves_section", "bootstrap_state_runners_section", "bootstrap_state_capabilities_section", "bootstrap_state_capability_installs_section", "bootstrap_state_runtime_plugin_installs_section", "bootstrap_state_runtime_plugin_availability_section", "bootstrap_state_mcp_servers_section", "bootstrap_state_mcp_tool_installs_section"]
+children = ["bootstrap_state_contexts_section", "bootstrap_state_context_bindings_section", "bootstrap_state_context_exports_section", "bootstrap_state_context_imports_section", "bootstrap_state_context_scopes_section", "bootstrap_state_perspectives_section", "bootstrap_state_stewardships_section", "bootstrap_state_proposals_section", "bootstrap_state_packages_section", "bootstrap_state_package_revisions_section", "bootstrap_state_package_patches_section", "bootstrap_state_package_namespaces_section", "bootstrap_state_package_dependencies_section", "bootstrap_state_package_transformers_section", "bootstrap_state_package_coexistence_section", "bootstrap_state_package_convergence_section", "bootstrap_state_package_apply_previews_section", "bootstrap_state_authority_section", "bootstrap_state_identities_section", "bootstrap_state_collections_section", "bootstrap_state_surfaces_section", "bootstrap_state_processes_section", "bootstrap_state_messages_section", "bootstrap_state_projections_section", "bootstrap_state_boundaries_section", "bootstrap_state_policies_section", "bootstrap_state_widgets_section", "bootstrap_state_legacy_frontend_retired_section", "bootstrap_state_legacy_frontend_pending_section", "bootstrap_state_legacy_frontend_blocked_section", "bootstrap_state_backend_programs_section", "bootstrap_state_backend_versions_section", "bootstrap_state_backend_steps_section", "bootstrap_state_routes_section", "bootstrap_state_serves_section", "bootstrap_state_runners_section", "bootstrap_state_capabilities_section", "bootstrap_state_capability_installs_section", "bootstrap_state_runtime_plugin_installs_section", "bootstrap_state_runtime_plugin_availability_section", "bootstrap_state_mcp_servers_section", "bootstrap_state_mcp_tool_installs_section"]
 
 [[section]]
 id = "bootstrap_state_contexts_section"
@@ -671,13 +659,111 @@ domId = "state-identities"
 class = "surface-state-list"
 
 [[section]]
+id = "bootstrap_state_collections_section"
+children = ["bootstrap_state_collections_heading", "bootstrap_state_collections_list"]
+
+[[heading]]
+id = "bootstrap_state_collections_heading"
+level = 3
+text = "Collections"
+
+[[box]]
+id = "bootstrap_state_collections_list"
+domId = "state-collections"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_surfaces_section"
+children = ["bootstrap_state_surfaces_heading", "bootstrap_state_surfaces_list"]
+
+[[heading]]
+id = "bootstrap_state_surfaces_heading"
+level = 3
+text = "Surfaces"
+
+[[box]]
+id = "bootstrap_state_surfaces_list"
+domId = "state-surfaces"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_processes_section"
+children = ["bootstrap_state_processes_heading", "bootstrap_state_processes_list"]
+
+[[heading]]
+id = "bootstrap_state_processes_heading"
+level = 3
+text = "Processes"
+
+[[box]]
+id = "bootstrap_state_processes_list"
+domId = "state-processes"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_messages_section"
+children = ["bootstrap_state_messages_heading", "bootstrap_state_messages_list"]
+
+[[heading]]
+id = "bootstrap_state_messages_heading"
+level = 3
+text = "Messages"
+
+[[box]]
+id = "bootstrap_state_messages_list"
+domId = "state-messages"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_projections_section"
+children = ["bootstrap_state_projections_heading", "bootstrap_state_projections_list"]
+
+[[heading]]
+id = "bootstrap_state_projections_heading"
+level = 3
+text = "Projections"
+
+[[box]]
+id = "bootstrap_state_projections_list"
+domId = "state-projections"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_boundaries_section"
+children = ["bootstrap_state_boundaries_heading", "bootstrap_state_boundaries_list"]
+
+[[heading]]
+id = "bootstrap_state_boundaries_heading"
+level = 3
+text = "Boundaries"
+
+[[box]]
+id = "bootstrap_state_boundaries_list"
+domId = "state-boundaries"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_policies_section"
+children = ["bootstrap_state_policies_heading", "bootstrap_state_policies_list"]
+
+[[heading]]
+id = "bootstrap_state_policies_heading"
+level = 3
+text = "Policies"
+
+[[box]]
+id = "bootstrap_state_policies_list"
+domId = "state-policies"
+class = "surface-state-list"
+
+[[section]]
 id = "bootstrap_state_widgets_section"
 children = ["bootstrap_state_widgets_heading", "bootstrap_state_widgets_list"]
 
 [[heading]]
 id = "bootstrap_state_widgets_heading"
 level = 3
-text = "Widgets"
+text = "Widgets (Inspect-Only)"
 
 [[box]]
 id = "bootstrap_state_widgets_list"
@@ -685,31 +771,45 @@ domId = "state-widgets"
 class = "surface-state-list"
 
 [[section]]
-id = "bootstrap_state_programs_section"
-children = ["bootstrap_state_programs_heading", "bootstrap_state_programs_list"]
+id = "bootstrap_state_legacy_frontend_retired_section"
+children = ["bootstrap_state_legacy_frontend_retired_heading", "bootstrap_state_legacy_frontend_retired_list"]
 
 [[heading]]
-id = "bootstrap_state_programs_heading"
+id = "bootstrap_state_legacy_frontend_retired_heading"
 level = 3
-text = "Frontend Programs"
+text = "Retired Legacy Frontend Routes"
 
 [[box]]
-id = "bootstrap_state_programs_list"
-domId = "state-programs"
+id = "bootstrap_state_legacy_frontend_retired_list"
+domId = "state-legacy-frontend-retired"
 class = "surface-state-list"
 
 [[section]]
-id = "bootstrap_state_steps_section"
-children = ["bootstrap_state_steps_heading", "bootstrap_state_steps_list"]
+id = "bootstrap_state_legacy_frontend_pending_section"
+children = ["bootstrap_state_legacy_frontend_pending_heading", "bootstrap_state_legacy_frontend_pending_list"]
 
 [[heading]]
-id = "bootstrap_state_steps_heading"
+id = "bootstrap_state_legacy_frontend_pending_heading"
 level = 3
-text = "Frontend Steps"
+text = "Legacy Uplift Pending"
 
 [[box]]
-id = "bootstrap_state_steps_list"
-domId = "state-steps"
+id = "bootstrap_state_legacy_frontend_pending_list"
+domId = "state-legacy-frontend-pending"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_legacy_frontend_blocked_section"
+children = ["bootstrap_state_legacy_frontend_blocked_heading", "bootstrap_state_legacy_frontend_blocked_list"]
+
+[[heading]]
+id = "bootstrap_state_legacy_frontend_blocked_heading"
+level = 3
+text = "Legacy Uplift Blocked"
+
+[[box]]
+id = "bootstrap_state_legacy_frontend_blocked_list"
+domId = "state-legacy-frontend-blocked"
 class = "surface-state-list"
 
 [[section]]

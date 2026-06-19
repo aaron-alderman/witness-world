@@ -12,7 +12,6 @@ import {
   legacyCapabilityCompatibilityModeFromProject,
   previewLegacyCapabilityMigrationFromProject
 } from "../../src/capability-legacy-migration.js";
-import { previewLegacyFrontendMigrationFromProject } from "../../src/frontend-legacy-migration.js";
 import { previewLegacyFrontendUpliftFromProject } from "../../src/frontend-legacy-uplift.js";
 import { contextNamingStateFromProject } from "../../src/context-naming-world.js";
 import { moduleProjectors } from "../../src/modules.js";
@@ -107,14 +106,6 @@ async function blockedCanonicalAuthoringAction(callHandler, {
   });
 }
 
-function legacyAuthoringActionResult(action) {
-  return errorToolResult("legacy frontend authoring action is not available in constrained MCP mode", {
-    action,
-    legacy: true,
-    message: `${action} remains available only on the explicit legacy widget-program path`
-  });
-}
-
 function rawResult(response) {
   if (response.status >= 400) {
     const message = typeof response.body?.error === "string"
@@ -153,7 +144,7 @@ const TOOL_DEFINITIONS = [
     title: "World Read",
     description: "Read bootstrap state, witnesses, source, world graph, process projections, contextual naming state, authored package coexistence, or authoring capability state.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "frontendLegacyMigration", "frontendLegacyUplift", "capabilityRevisionHistory", "authoringMatrix"] },
+      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "frontendLegacyUplift", "capabilityRevisionHistory", "authoringMatrix"] },
       id: { type: "string" },
       context: { type: "string" },
       name: { type: "string" },
@@ -302,20 +293,6 @@ const TOOL_DEFINITIONS = [
               id: args.id ?? null
             });
           }
-        case "frontendLegacyMigration":
-          if (typeof appContext?.project !== "function") {
-            return errorToolResult("frontendLegacyMigration read requires projected world access");
-          }
-          try {
-            return jsonToolResult({
-              legacyFrontendMigration: previewLegacyFrontendMigrationFromProject(appContext.project)
-            });
-          } catch (error) {
-            return errorToolResult(error instanceof Error ? error.message : String(error), {
-              view: args.view,
-              id: args.id ?? null
-            });
-          }
         case "frontendLegacyUplift":
           if (typeof appContext?.project !== "function") {
             return errorToolResult("frontendLegacyUplift read requires projected world access");
@@ -428,7 +405,6 @@ const TOOL_DEFINITIONS = [
           "route.create",
           "serve.create",
           "serverRunner.create",
-          "frontend.migrateLegacy",
           "frontend.upliftLegacy",
           "capability.create",
           "capability.update",
@@ -542,19 +518,12 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "packageDependency.create", method: "POST", path: "/api/package-dependencies", body });
         case "packageTransformer.create":
           return runJsonHandler(callHandler, { handler: "packageTransformer.create", method: "POST", path: "/api/package-transformers", body });
-        case "widget.create":
-        case "widget.update":
-        case "frontendProgram.create":
-        case "frontendStep.create":
-          return legacyAuthoringActionResult(args.action);
         case "route.create":
           return runJsonHandler(callHandler, { handler: "route.create", method: "POST", path: "/api/routes", body });
         case "serve.create":
           return runJsonHandler(callHandler, { handler: "serve.create", method: "POST", path: "/api/serve-mounts", body });
         case "serverRunner.create":
           return runJsonHandler(callHandler, { handler: "serverRunner.create", method: "POST", path: "/api/server-runners", body });
-        case "frontend.migrateLegacy":
-          return runJsonHandler(callHandler, { handler: "frontend.migrateLegacy", method: "POST", path: "/api/frontend-migrations/legacy", body });
         case "frontend.upliftLegacy":
           return runJsonHandler(callHandler, { handler: "frontend.upliftLegacy", method: "POST", path: "/api/frontend-uplifts/legacy", body });
         case "capability.create":
@@ -659,9 +628,9 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.read",
     title: "Platform Read",
-    description: "Read the platform self-model (including first-class docs with knowledge relations, and folders from this.folder.wtoml), gaps, docs, folders, roadmap, telemetry, defects, profiles, compatibility bridges, mutable-surface semantics, governance, branches, change sets, package coexistence, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
+    description: "Read the platform self-model (including first-class docs with knowledge relations, folders from this.folder.wtoml, and durable artifacts), gaps, docs, folders, roadmap, telemetry, defects, security, artifacts, sessions, profiles, compatibility bridges, mutable-surface semantics, governance, branches, change sets, package coexistence, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["model", "gaps", "docs", "folders", "roadmap", "telemetry", "defects", "pushes", "ships", "profiles", "plugin", "bundle", "capability", "mcp", "bridges", "semantics", "governance", "gates", "proposals", "branches", "changeSets", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityRevisionHistory", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
+      view: { type: "string", enum: ["model", "gaps", "docs", "folders", "roadmap", "telemetry", "defects", "security", "artifacts", "sessions", "pushes", "ships", "profiles", "plugin", "bundle", "capability", "mcp", "bridges", "semantics", "governance", "gates", "proposals", "branches", "changeSets", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityRevisionHistory", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
       id: { type: "string" },
       context: { type: "string" },
       name: { type: "string" },

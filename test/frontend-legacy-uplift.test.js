@@ -104,10 +104,11 @@ event = "submit:login_form"
 order = 2
 op = "clearForm"
 params = { widget = "login_form" }
-`);
+  `);
 
   const preview = previewLegacyFrontendUplift(world);
-  assert.equal(preview.compatibilityMode, "bridge-active");
+  assert.equal(preview.retirementStatus, "legacy-present");
+  assert.equal(preview.retiredRoutes.some(row => row.routeId === "login_route" && row.retirementKind === "page.home"), true);
   assert.deepEqual(preview.blocked, []);
   assert.equal(preview.pending.some(row => row.action === "route.rewrite" && row.routeId === "login_route"), true);
   assert.equal(preview.pending.some(row => row.action === "boundary.define"), true);
@@ -121,7 +122,7 @@ params = { widget = "login_form" }
   });
   assert.equal(result.ok, true);
   assert.equal(result.witness.process, "frontend.upliftLegacy");
-  assert.equal(result.previewAfter.compatibilityMode, "first-class-only");
+  assert.equal(result.previewAfter.retirementStatus, "first-class-only");
   assert.deepEqual(result.previewAfter.pending, []);
   assert.deepEqual(result.previewAfter.blocked, []);
 
@@ -190,7 +191,7 @@ params = { widget = "todo_list", from = "payload.items", template = "todo_row" }
 `);
 
   const preview = previewLegacyFrontendUplift(world);
-  assert.equal(preview.compatibilityMode, "bridge-active");
+  assert.equal(preview.retirementStatus, "legacy-present");
   assert.equal(preview.pending.some(row => row.kind === "collection" && row.action === "collection.define"), true);
   assert.equal(preview.pending.some(row => row.kind === "surface" && row.action === "surface.define"), true);
   assert.deepEqual(preview.blocked, []);

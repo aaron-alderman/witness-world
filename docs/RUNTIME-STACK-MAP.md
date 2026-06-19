@@ -83,7 +83,10 @@ Primary file:
 
 - `src/runtime-core-handlers.js`
 
-This is where `page.home` and `page.surface` actually enter the runtime. It is
+This is where canonical `page.surface` enters the runtime. Retired legacy
+frontend routes are intercepted earlier in `src/runtime-server.js` and fail
+with explicit retirement responses instead of entering a hidden compatibility
+path. This layer is
 the correct seam for:
 
 - dispatch from route resolution into a page handler

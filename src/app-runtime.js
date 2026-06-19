@@ -132,6 +132,7 @@ export async function startAppRuntime({
     logger,
     mcpInternalToken,
     runtimeProfile: runtimeProfileInfo.id,
+    runtimeProfileExplicit,
     runtimePluginIds: runtimePluginIds.length ? runtimePluginIds : null,
     runtimeStartupMode: startupMode,
     runtimeOperatorContract: operatorContract,

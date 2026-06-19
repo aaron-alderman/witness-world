@@ -563,6 +563,13 @@ function classTokensForSurface(surface) {
 
 const GENERIC_ATTRIBUTE_PROPS = [
   ["htmlRole", "role"],
+  ["dataRole", "data-role"],
+  ["dataWidget", "data-widget"],
+  ["dataAction", "data-action"],
+  ["dataId", "data-id"],
+  ["dataDone", "data-done"],
+  ["dataGuidanceTarget", "data-guidance-target"],
+  ["dataTutorialTarget", "data-tutorial-target"],
   ["ariaLabel", "aria-label"],
   ["ariaLabelledBy", "aria-labelledby"],
   ["ariaDescribedBy", "aria-describedby"],

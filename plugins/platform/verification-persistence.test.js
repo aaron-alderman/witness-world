@@ -159,6 +159,7 @@ test("verification persistence synthesizes sqlite and disk backends and survives
     const rows = reopened.readModelRows();
     assert.equal(rows.testRuns.some(row => row.id === "testRun:durable"), true);
     assert.equal(rows.testReports.some(row => row.id === "testReport:testRun:durable:summary"), true);
+    assert.equal(rows.artifacts.some(row => row.id === "artifact:testRun:durable:stdout"), true);
     assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:runner.main:full:defaults"), true);
     assert.equal(rows.verificationFreshness.some(row => row.id === "verificationFreshness:runner.main:full:gate:demo"), true);
     assert.equal(rows.verificationInvalidations.some(row => row.id === "verificationInvalidation:runner.main:full:gate:demo:source_changed:1"), true);
@@ -166,6 +167,7 @@ test("verification persistence synthesizes sqlite and disk backends and survives
     assert.equal(rows.verificationExecutions.some(row => row.id === "verificationExecution:verificationQueue:runner.main:1"), true);
     const artifact = rows.testArtifacts.find(row => row.id === "testArtifact:testRun:durable:stdout");
     assert.ok(artifact);
+    assert.equal(artifact.artifactId, "artifact:testRun:durable:stdout");
     assert.equal(typeof artifact.contentRef, "string");
     assert.equal(typeof artifact.contentUrl, "string");
     assert.equal("content" in artifact, false);
@@ -174,6 +176,9 @@ test("verification persistence synthesizes sqlite and disk backends and survives
     const content = await reopened.readArtifactContent("testArtifact:testRun:durable:stdout");
     assert.equal(content.ok, true);
     assert.equal(content.content, "durable stdout");
+    const canonicalContent = await reopened.readArtifactContent("artifact:testRun:durable:stdout");
+    assert.equal(canonicalContent.ok, true);
+    assert.equal(canonicalContent.content, "durable stdout");
   } finally {
     try { persistence?.close?.(); } catch {}
     try { reopened?.close?.(); } catch {}
@@ -310,9 +315,24 @@ test("platform verification reads durable rows and serves persisted artifact con
     await handlers["platform.testArtifact.content"]({
       res: {},
       params: { id: "testArtifact:testRun:verification:junit" },
+      requestActor: "aaron",
+      requestSession: { authenticatedActor: "aaron", effectiveActor: "aaron" },
+      appContext: { verificationPersistence: persistence }
+    });
+    await handlers["platform.artifact.content"]({
+      res: {},
+      params: { id: "artifact:testRun:verification:junit" },
+      requestActor: "aaron",
+      requestSession: { authenticatedActor: "aaron", effectiveActor: "aaron" },
       appContext: { verificationPersistence: persistence }
     });
     assert.deepEqual(sent[0], {
+      kind: "content",
+      status: 200,
+      contentType: "application/xml",
+      body: "<testsuite failures=\"1\"></testsuite>"
+    });
+    assert.deepEqual(sent[1], {
       kind: "content",
       status: 200,
       contentType: "application/xml",
@@ -346,7 +366,9 @@ test("platform verification reads durable rows and serves persisted artifact con
       project: () => []
     });
     const verification = filterPlatformModel(model, "verification");
+    const artifacts = filterPlatformModel(model, "artifacts");
     assert.equal(verification.testRuns.some(row => row.id === "testRun:verification"), true);
+    assert.equal(artifacts.artifacts.some(row => row.id === "artifact:testRun:verification:junit"), true);
     assert.equal(verification.verificationPolicies.some(row => row.id === "verificationPolicy:runner.main:full:defaults"), true);
     assert.equal(verification.verificationFreshness.some(row => row.id === "verificationFreshness:runner.main:full:gate:verification"), true);
     assert.equal(verification.verificationInvalidations.some(row => row.id === "verificationInvalidation:runner.main:full:gate:verification:verification_policy_changed:1"), true);

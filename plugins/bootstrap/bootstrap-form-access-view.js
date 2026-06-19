@@ -26,7 +26,7 @@ export function applyBootstrapFormAccessView({
     "context-form", "perspective-form", "context-binding-form", "context-binding-remove-form",
     "context-export-form", "context-export-remove-form", "context-import-form", "context-import-remove-form",
     "stewardship-form", "stewardship-remove-form", "proposal-form", "proposal-approve-form",
-    "proposal-reject-form", "widget-form", "program-form", "step-form", "backend-program-form",
+    "proposal-reject-form", "widget-form", "backend-program-form",
     "backend-program-version-form", "backend-step-form", "backend-program-activate-form",
     "backend-program-rollback-form", "route-form", "serve-form", "runner-form",
     "runtime-plugin-install-form", "runtime-plugin-remove-form", "runtime-plugin-install-proposal-form",

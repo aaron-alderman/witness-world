@@ -43,7 +43,7 @@ test("mcp-only authoring policy exposes plugin.authoring as the canonical write 
   assert.equal(policy.publicMcpActions.includes("policy.create"), true);
   assert.equal(policy.publicMcpActions.includes("frontend.upliftLegacy"), true);
   assert.equal(policy.publicMcpActions.includes("widget.create"), false);
-  assert.equal(policy.legacyMcpActions.includes("frontendProgram.create"), true);
+  assert.equal(policy.legacyMcpActions.includes("frontendProgram.create"), false);
   assert.equal(policy.proposalAccess, "read_only");
   assert.equal(policy.forbiddenMutations.includes("custom browser runtime files"), true);
   assert.equal(policy.stopOnLimitation, true);

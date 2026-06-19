@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
 import { parseWitnessToml, applyWitnessDocsWithRuntimePlugins } from "../../src/dsl.js";
 import { createModuleProjectorContext } from "../../src/modules.js";
-import { bundleId, createHandlers, desireExtensions, handlerCatalog, providers, routes } from "./runtime.js";
+import { bundleId, createHandlers, handlerCatalog, providers, routes } from "./runtime.js";
 import { executeMcpAuthoringProposalTarget } from "./mcp-proposal-targets.js";
 import { mcpModuleProjectors } from "../mcp/projections.js";
 
@@ -33,11 +33,6 @@ test("mcp-authoring plugin owns MCP authoring routes and handlers", async () => 
   assert.equal(routes.some(route => route.path === "/api/mcp-tool-installs" && route.handler === "mcpTool.install"), true);
   assert.equal(routes.some(route => route.method === "DELETE" && route.path === "/api/mcp-tool-installs" && route.handler === "mcpTool.remove"), true);
   assert.equal(providers.some(provider => provider.kind === "runtimeBuiltinSeeds" && provider.processSpecs?.some(spec => spec.id === "mcp_server_define_spec")), true);
-  assert.deepEqual(desireExtensions.runtimeDeclarations.map(entry => entry.kind), [
-    "mcpServer",
-    "mcpToolInstall",
-    "mcpToolRemove"
-  ]);
 
   const handlers = createHandlers({
     world: createWorld(),
@@ -55,6 +50,13 @@ test("mcp-authoring plugin owns MCP authoring routes and handlers", async () => 
   for (const handlerId of MCP_AUTHORING_HANDLER_IDS) {
     assert.equal(typeof handlers[handlerId], "function");
   }
+});
+
+test("mcp-authoring runtime defers MCP runtime declaration ownership to the core registry", async () => {
+  const runtimeSource = await readFile(new URL("./runtime.js", import.meta.url), "utf8");
+
+  assert.equal(runtimeSource.includes('from "./desire-runtime.js"'), false);
+  assert.equal(runtimeSource.includes("desireExtensions"), false);
 });
 
 test("mcp-authoring plugin owns process helpers and proposal targets", async () => {

@@ -23,12 +23,12 @@ test("route authoring contracts load from authored WTOML", async () => {
 
   assert.equal(source.includes('routeKind = "backendProgram"'), true);
   assert.equal(source.includes('routeKind = "resource"'), true);
-  assert.equal(source.includes('handler = "page.home"'), true);
+  assert.equal(source.includes('handler = "page.surface"'), true);
   assert.equal(contracts.policiesByRouteKind.backendProgram.responseKind, "json");
   assert.equal(contracts.policiesByRouteKind.resource.responseKind, "resource");
   assert.equal(contracts.handlerRulesByHandler["page.world"].requiresRootWidget, true);
   assert.equal(contracts.managedFields.includes("rootWidgetRef"), true);
-  assert.equal(contracts.managedFields.includes("frontendProgramRef"), true);
+  assert.equal(contracts.managedFields.includes("frontendProgramRef"), false);
   assert.equal(contracts.managedFields.includes("routeStateProcessRef"), true);
 });
 
@@ -41,8 +41,8 @@ function createRouteFormHarness() {
     page: { value: "home", disabled: false, type: "text" },
     rootWidget: { value: "page_root", disabled: false, type: "select-one" },
     rootWidgetRef: { value: "landingPage", disabled: false, type: "text" },
-    frontendProgram: { value: "landing_program", disabled: false, type: "select-one" },
-    frontendProgramRef: { value: "landingProgram", disabled: false, type: "text" },
+    rootSurface: { value: "landing_surface", disabled: false, type: "select-one" },
+    rootSurfaceRef: { value: "landingSurface", disabled: false, type: "text" },
     routeStateProcess: { value: "ShellNavigation", disabled: false, type: "select-one" },
     routeStateProcessRef: { value: "shellNavigation", disabled: false, type: "text" },
     routeStateState: { value: "ActiveRoute", disabled: false, type: "select-one" },
@@ -50,6 +50,10 @@ function createRouteFormHarness() {
     liveProjection: { value: "on", checked: true, disabled: false, type: "checkbox" }
   };
   const routeForm = {
+    listeners: [],
+    addEventListener(name, handler) {
+      this.listeners.push([name, handler]);
+    },
     querySelector(selector) {
       if (selector === 'button[type="submit"]') return submitButton;
       return null;
@@ -84,14 +88,14 @@ function createRouteFormHarness() {
 
 test("route authoring view explains page handlers and preserves page fields", () => {
   const harness = createRouteFormHarness();
-  harness.fields.handler.value = "page.home";
+  harness.fields.handler.value = "page.surface";
   harness.fields.method.value = "GET";
 
   const view = buildBootstrapRouteAuthoringView({
     model: {
       runtimeProfile: "full",
       supportedHandlerMetadata: {
-        "page.home": {
+        "page.surface": {
           routeKind: "page",
           responseKind: "page",
           methods: ["GET"]
@@ -102,12 +106,12 @@ test("route authoring view explains page handlers and preserves page fields", ()
     routeAuthoringContracts: bootstrapRouteAuthoringContracts
   });
 
-  assert.equal(view.enabledFields.page, true);
+  assert.equal(view.enabledFields.page, false);
   assert.equal(view.enabledFields.backendProgramSoul, false);
-  assert.equal(view.enabledFields.frontendProgramRef, true);
+  assert.equal(view.enabledFields.rootSurfaceRef, true);
   assert.equal(view.enabledFields.routeStateProcessRef, true);
   assert.equal(view.enabledFields.routeStateStateRef, true);
-  assert.equal(view.helpText.includes("page.home"), true);
+  assert.equal(view.helpText.includes("page.surface"), true);
   assert.equal(view.helpText.includes("page -> page"), true);
   assert.equal(view.submitDisabled, false);
 });
@@ -169,8 +173,6 @@ test("route authoring sync disables incompatible fields and blocks invalid backe
   assert.equal(harness.fields.page.value, "");
   assert.equal(harness.fields.rootWidget.disabled, true);
   assert.equal(harness.fields.rootWidget.value, "");
-  assert.equal(harness.fields.frontendProgramRef.disabled, true);
-  assert.equal(harness.fields.frontendProgramRef.value, "");
   assert.equal(harness.fields.routeStateProcessRef.disabled, true);
   assert.equal(harness.fields.routeStateProcessRef.value, "");
   assert.equal(harness.fields.routeStateStateRef.disabled, true);
@@ -220,14 +222,14 @@ test("route authoring deps builder keeps model and form reads live at event time
   state.model = {
     runtimeProfile: "minimal",
     supportedHandlerMetadata: {
-      "page.home": {
+      "page.surface": {
         routeKind: "page",
         responseKind: "page",
         methods: ["GET"]
       }
     }
   };
-  harness.fields.handler.value = "page.home";
+  harness.fields.handler.value = "page.surface";
 
   const directDeps = buildBootstrapRouteAuthoringSyncDeps({
     liveState,
@@ -240,20 +242,21 @@ test("route authoring deps builder keeps model and form reads live at event time
     }
   });
   assert.equal(directDeps.model.runtimeProfile, "minimal");
-  assert.equal(directDeps.readFieldValue("route-form", "handler"), "page.home");
+  assert.equal(directDeps.readFieldValue("route-form", "handler"), "page.surface");
 });
 
 test("route authoring sync bridge binds one documented event family", () => {
-  const events = [];
+  const harness = createRouteFormHarness();
   const target = {
-    addEventListener(name, handler) {
-      events.push([name, handler]);
+    document: {
+      getElementById(id) {
+        return id === "route-form" ? harness.routeForm : null;
+      }
     }
   };
 
   const registered = bindBootstrapRouteAuthoringSync({ target });
-  assert.equal(events.length, 1);
-  assert.equal(events[0][0], "witness:bootstrap-route-authoring-sync");
+  assert.deepEqual(harness.routeForm.listeners.map(([name]) => name), ["change", "input"]);
   assert.equal(typeof registered, "function");
 
   const handler = createBootstrapRouteAuthoringSyncHandler({
@@ -288,7 +291,7 @@ test("route authoring binding re-resolves model and form reads on each event", (
     model: {
       runtimeProfile: "full",
       supportedHandlerMetadata: {
-        "page.home": {
+        "page.surface": {
           routeKind: "page",
           responseKind: "page",
           methods: ["GET"]
@@ -310,20 +313,22 @@ test("route authoring binding re-resolves model and form reads on each event", (
     }
   });
   const target = {
-    addEventListener(name, handler) {
-      this.name = name;
-      this.handler = handler;
+    document: {
+      getElementById(id) {
+        return id === "route-form" ? harness.routeForm : null;
+      }
     }
   };
 
-  harness.fields.handler.value = "page.home";
+  harness.fields.handler.value = "page.surface";
   bindBootstrapRouteAuthoringSync({ target, buildDeps });
-  assert.equal(target.name, "witness:bootstrap-route-authoring-sync");
+  assert.deepEqual(harness.routeForm.listeners.map(([name]) => name), ["change", "input"]);
+  const trigger = harness.routeForm.listeners[0][1];
 
-  const first = target.handler({ detail: { source: "bootstrap-app-authoring-controls" } });
+  const first = trigger();
   assert.equal(first.handled, true);
-  assert.equal(first.view.helpText.includes("page.home"), true);
-  assert.equal(first.view.enabledFields.page, true);
+  assert.equal(first.view.helpText.includes("page.surface"), true);
+  assert.equal(first.view.enabledFields.page, false);
 
   state.model = {
     runtimeProfile: "minimal",
@@ -339,7 +344,7 @@ test("route authoring binding re-resolves model and form reads on each event", (
   harness.fields.method.value = "POST";
   harness.fields.backendProgramSoul.value = "todo.todos.list";
 
-  const second = target.handler({ detail: { source: "bootstrap-app-authoring-controls" } });
+  const second = trigger();
   assert.equal(second.handled, true);
   assert.equal(second.view.helpText.includes("backendProgram.run"), true);
   assert.equal(second.view.enabledFields.backendProgramSoul, true);

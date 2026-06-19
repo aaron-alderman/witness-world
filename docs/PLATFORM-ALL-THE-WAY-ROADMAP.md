@@ -735,10 +735,10 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add MCP tool `platform.test` or extend `platform.proposal` gate execution.
 - [L] Current V1 test execution now models a `testRunner` boundary actor plus named local-node, local-browser, isolated-temp-workspace, and candidate-snapshot execution environments in the platform graph. Commands still run through the same `plugin.platform` handler lane used by the human HTTP path, but explicit `isolated-temp-workspace` runs and candidate-snapshot runs now materialize a temp workspace copy before execution instead of running directly against the live repo root.
 - [L] `local Rust/cargo` is named in the execution environment catalog and chosen for cargo-shaped gate commands, but the current repo does not yet expose a discovered cargo gate that exercises that path end to end.
-- [L] Current stdout/stderr artifacts are projected as inline witness-backed `testArtifact` rows attached to each run/result. They are first-class platform objects now, but they are not yet external blob-backed artifacts or structured report files.
+- [L] Current verification outputs now land in a canonical durable `artifact` store backed by managed disk content plus compatibility `testArtifact` projections. The implemented V1 covers text-first stdout/stderr/TAP/JUnit artifacts and the new `/platform` Artifacts browser, but it does not yet ingest standalone report files, screenshots, traces, or non-verification artifact producers.
 - [L] Structured report capture currently derives TAP and JUnit artifacts opportunistically from captured stdout/stderr content and projects `testSuite` / `testCase` rows from those structured artifacts. It does not yet ingest standalone report files, merge multi-file reports, or preserve richer failure metadata.
 - [L] Direct test-run inspection now returns those derived `testSuite` / `testCase` rows alongside the underlying `testArtifact` records through `GET /api/platform-test-runs/:id` and the shared `platform.test` read/run path.
-- [L] Current V1 captures exit code, duration, stdout, stderr, timeout state, branch id, change-set id, candidate snapshot id, runtime profile, shell/cwd/env input metadata, and source revision dependency hashes for candidate-snapshot/workspace inputs. Memory, CPU, standalone structured report ingestion, artifact storage, and richer SSE/replay semantics remain later work.
+- [L] Current V1 captures exit code, duration, stdout, stderr, timeout state, branch id, change-set id, candidate snapshot id, runtime profile, shell/cwd/env input metadata, and source revision dependency hashes for candidate-snapshot/workspace inputs. Verification artifact storage is now durable and canonicalized through `artifact` rows, but memory, CPU, standalone structured report ingestion, and richer SSE/replay semantics remain later work.
 - [L] Source revision capture is mixed by design in V1: dependency hashes come from candidate snapshot overlay entries when the dependency is staged there, and from the live workspace for other declared source dependencies. This improves provenance, and candidate-snapshot execution now applies those staged overlays inside a temp workspace, but local-node/local-browser/local-rust-cargo execution still runs directly from the live workspace.
 - [L] Candidate-snapshot temp workspaces currently reconstruct overlay content from the current staged `changeSetEdit` rows by matching the requested snapshot file hashes. This means a stale candidate snapshot ID can stop being executable once its change-set edits drift, because the platform does not yet store full overlay contents as snapshot artifacts.
 - [L] Current `platform.test` supports list/read/run over the shared platform handlers. It does not yet expose richer operations such as cancellation, streaming progress, or proposal-mediated execution policy.
@@ -1034,10 +1034,10 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 9.1 Session Model
 
-- [ ] Add `session` module kind.
-- [ ] Add `execution` module kind.
-- [ ] Add `sessionTag` module kind.
-- [ ] Add `executionArtifact` module kind.
+- [X] Add `session` module kind.
+- [X] Add `execution` module kind.
+- [X] Add `sessionTag` module kind.
+- [X] Add `executionArtifact` module kind.
 - [ ] Session kinds:
   - [ ] human
   - [ ] LLM
@@ -1064,8 +1064,9 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] proposal
   - [ ] actor
   - [ ] runtime profile
-- [ ] Add Platform Console sessions view.
-- [ ] Add MCP view `platform.read { view: "sessions" }`.
+- [X] Add Platform Console sessions view.
+- [X] Add MCP view `platform.read { view: "sessions" }`.
+- [L] Current V1 now projects first-class `session`, `execution`, `sessionTag`, and `executionArtifact` rows from platform authority decisions plus witnessed platform reads and mutation executions, exposes them through `/api/platform-model?view=sessions`, routes `session:*` / `execution:*` / `sessionTag:*` / `executionArtifact:*` concept links to the Sessions page, and keeps the surface behind the same `full`-only platform profile gate as the rest of `/platform`. It does not yet claim the broader later coverage for LLM turns, boundary commands, or independent background-job session classes from the rest of Phase 9.
 
 ### 9.2 Parallel Development
 
@@ -1196,7 +1197,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [B] Add Defects view.
 - [X] Add Defect Clusters view.
 - [X] Add Telemetry view.
-- [B] Add Sessions view.
+- [X] Add Sessions view.
 - [X] Add Roadmap/Epics view.
 - [X] Add Boundaries view.
 - [X] Add Meta-System view.
@@ -1207,7 +1208,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] The current defect-cluster view is backed by existing `defectCluster` graph nodes and their relationships to branches, features, epics, and historically relevant gates. It does not claim the later full `defect` / `defectObservation` / `rootCauseHypothesis` model is complete.
 - [L] The current telemetry view is backed by existing `telemetryMetric` graph nodes plus linked `verifies` / `verifiedBy` relationships and branch/change-set telemetry-impact hints. It does not claim the later live `telemetrySample` / `telemetryWindow` / detector model from Phase 8 is complete.
 - [L] `Add Defects view.` is currently blocked on the later standalone defect model from Phase 7.3. The platform can project defect clusters today, but it does not yet expose first-class `defect`, `defectObservation`, `rootCauseHypothesis`, or fix-proposal rows that would make a dedicated defects view truthful.
-- [L] `Add Sessions view.` is currently blocked on the later Phase 9 session/execution model. The current platform flow carries transient request/session metadata for witnesses and handlers, but it does not yet project first-class `session`, `execution`, `sessionTag`, or `executionArtifact` rows that would make a dedicated sessions view truthful.
+- [L] `/platform` now includes a dedicated Sessions page backed by `/api/platform-model?view=sessions`, with paginated session/execution/tag/artifact lists, property-card detail, and concept links for `session:*`, `execution:*`, `sessionTag:*`, and `executionArtifact:*`. The implemented slice is the current platform-work-context model, not yet the broader Phase 9 coverage for LLM turns, boundary sessions, or richer parallel branch work orchestration.
 - [L] The current dependency-graph view is backed by the existing platform-model `nodes` and `edges` projection rather than by the later dedicated `dependencyGraph` / `dependencyEdge` module kinds from Phase 6.1. It makes the already-modeled relationships inspectable in `/platform` without claiming the later incremental graph subsystem is complete.
 
 ### 12.2 RVM/WCSS Dogfooding
@@ -1299,6 +1300,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add MCP tool:
   - [X] `platform.branch`
   - [X] `platform.changeSet`
+  - [X] `platform.read { view: "sessions" }`
   - [X] `platform.read { view: "testGates" }`
   - [X] `platform.read { view: "testRuns" }`
   - [X] `platform.test`
@@ -1311,9 +1313,9 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, checkbox task rows, evidence-backed derived task status, branch-metadata-backed `roadmap` / `epic` / `feature` projections, aggregated `testsByFeature` coverage rows, and aggregated `defectsByEpic` coverage rows backed by `defectCluster` targets. Milestones, acceptance criteria, and deeper planning coverage remain later work.
 - [L] `platform.telemetry` now routes through the shared `/api/platform-model?view=telemetry` handler lane and exposes the current telemetry surface truthfully: `telemetryMetric` graph nodes, telemetry-linked edges, branch/change-set telemetry-impact summaries, and telemetry-protecting gates/latest gate results. It does not claim the later live `telemetrySample` / `telemetryWindow` / detector model from Phase 8 is complete.
 - [L] `platform.defects` is currently blocked for the same reason as the standalone Defects view: the current platform can project `defectCluster` coverage, but it still does not expose first-class `defect`, `defectObservation`, `rootCauseHypothesis`, or fix-proposal rows that would make a dedicated defects MCP lane truthful.
-- [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, telemetry, branch, change-set, proposal-create, and test-run/list/read flows. Future defect and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
+- [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, telemetry, sessions, branch, change-set, proposal-create, and test-run/list/read flows. Future defect and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
 - [L] Current `/platform` mutation surfaces all have MCP equivalents on the shared handler lane: proposal create/review maps to `platform.proposal`, branch creation maps to `platform.branch create`, change-set create/edit/validate/apply/reject/abandon maps to `platform.changeSet`, and explicit or selected test execution maps to `platform.test run` / `runSelected`.
-- [L] Current `/platform` read surfaces all have MCP equivalents on the shared handler lane: proposals, branches, change sets, candidate snapshots, runtime revisions, docs, roadmap/epics, telemetry, test gates, test runs, and red/green state are exposed through `platform.read`, `platform.docs`, `platform.roadmap`, `platform.telemetry`, `platform.branch`, `platform.changeSet`, and `platform.test` depending on the scope. Future defect, boundary, session, and meta-system surfaces will need their own MCP coverage when those console views exist.
+- [L] Current `/platform` read surfaces all have MCP equivalents on the shared handler lane: proposals, branches, change sets, candidate snapshots, runtime revisions, docs, roadmap/epics, telemetry, sessions, test gates, test runs, and red/green state are exposed through `platform.read`, `platform.docs`, `platform.roadmap`, `platform.telemetry`, `platform.branch`, `platform.changeSet`, and `platform.test` depending on the scope. Future defect, boundary, and broader meta-system surfaces will need their own MCP coverage when those console views exist.
 - [L] Current MCP authority parity is enforced at the shared-handler layer: the implemented mutation tools only target `plugin.platform` handlers and HTTP methods that are already exposed on the human surface, so MCP does not gain a stronger mutation lane than `/platform`. Richer actor/policy authorization remains later Phase 13 work.
 - [L] The live docs model now projects explicit `docIndex`, `docReference`, `docDependencies`, and `docsByPlatformObject` rows from governed targets and resolved Markdown references to routes, plugins, capabilities, proposal IDs, branch IDs, governed docs, authored RVM/WCSS sources, JSON/WTOML config sources, and generic repo file/test nodes when the referenced workspace path exists.
 
@@ -1337,12 +1339,12 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ## Phase 14: Artifact Store
 
-- [ ] Add `artifact` module kind.
+- [X] Add `artifact` module kind.
 - [ ] Add artifact types:
   - [ ] source diff
   - [ ] generated file
-  - [ ] test log
-  - [ ] test report
+  - [X] test log
+  - [X] test report
   - [ ] screenshot
   - [ ] trace
   - [ ] telemetry window
@@ -1351,13 +1353,14 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] dependency graph snapshot
   - [ ] coverage report
   - [ ] push output
-- [ ] Store artifact metadata in world state.
-- [ ] Store artifact content in managed storage.
-- [ ] Link artifacts to session/execution/branch/proposal.
-- [ ] Add artifact retention policy.
-- [ ] Add artifact redaction policy.
-- [ ] Add Platform Console artifact browser.
-- [ ] Add tests for artifact creation and retrieval.
+- [X] Store artifact metadata in world state.
+- [X] Store artifact content in managed storage.
+- [~] Link artifacts to session/execution/branch/proposal.
+- [~] Add artifact retention policy.
+- [~] Add artifact redaction policy.
+- [X] Add Platform Console artifact browser.
+- [X] Add tests for artifact creation and retrieval.
+- [L] Current V1 is verification-first: persisted stdout/stderr/TAP/JUnit outputs now create canonical `artifact` rows, `testArtifact` remains as a compatibility projection, artifact reads are sensitive platform reads, and `/platform` + `platform.read view=artifacts` expose paginated metadata/detail plus content links. Push/ship, doc-render, snapshot-build, audit-export, and broader binary/blob producers remain later work.
 
 ## Phase 15: Implementation Milestones
 
@@ -1404,7 +1407,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [~] Run dependency-aware selected tests.
 - [X] Add red/green view.
 - [X] Add tests for affected test selection.
-- [L] Current V1 exposes per-gate `lastResult`, witness-backed stdout/stderr/TAP/JUnit artifacts, derived `testSuite` / `testCase` rows, a test-runs panel, on-demand selected-gate execution through the shared HTTP/MCP/platform-console path, latest-result state, and scope-specific branch/change-set red/green summaries in the platform model and console. It is not yet an automatically executed dependency-aware red/green orchestration view with durable artifact-backed history.
+- [L] Current V1 exposes per-gate `lastResult`, durable canonical verification artifacts plus compatibility `testArtifact` rows, derived `testSuite` / `testCase` rows, a test-runs panel, a cross-cutting Artifacts page, on-demand selected-gate execution through the shared HTTP/MCP/platform-console path, latest-result state, and scope-specific branch/change-set red/green summaries in the platform model and console. It is not yet an automatically executed dependency-aware red/green orchestration view.
 
 ### Milestone E: Defects And Telemetry V1
 

@@ -19,8 +19,7 @@ import {
   AppSnapshotManager
 } from "./app-snapshot-manager.js";
 import {
-  createRuntimeAppContextForRunner,
-  createRuntimeResolverForServer
+  createRuntimeAppContextForRunner
 } from "./runtime-startup-services.js";
 import { createRuntimeContextResolver } from "./runtime-context-resolver.js";
 import {
@@ -33,9 +32,11 @@ import { ensureRuntimeBuiltins } from "./runtime-builtins.js";
 import { createRuntimeVerificationPersistence } from "./runtime-verification-persistence.js";
 import { createMaterializedViewRegistry } from "./materialized-views.js";
 import {
+  DEFAULT_BOOTSTRAP_RUNTIME_PROFILE,
   DEFAULT_RUNTIME_PROFILE,
   defaultHostCapabilitiesForProfile,
   dispatchHandlerIdsForProfile,
+  effectiveRuntimeProfileForRunner,
   handlerSetDefinitionsForProfile,
   handlerSetFactoriesForProfile,
   handlerMetadataForProfile,
@@ -67,6 +68,67 @@ import { buildRuntimeOperatorContract } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService } from "./runtime-operator-service.js";
 import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.js";
 import { createStartupTelemetry } from "./startup-telemetry.js";
+import { retiredLegacyFrontendRouteState } from "./legacy-frontend-bridge.js";
+
+function surfaceRowsFromWitnesses(witnesses = []) {
+  const rows = new Map();
+  for (const witness of witnesses ?? []) {
+    if (witness?.process !== "desire.defineSurface" || typeof witness?.body?.id !== "string" || !witness.body.id.trim()) continue;
+    rows.set(witness.body.id, witness.body);
+  }
+  return [...rows.values()];
+}
+
+function uniqueStrings(values = []) {
+  return [...new Set((values ?? []).map(String).filter(Boolean))];
+}
+
+function mergePluginCatalogs(catalogs = []) {
+  const packageById = new Map();
+  const rejectedById = new Map();
+  for (const catalog of catalogs ?? []) {
+    for (const pluginPackage of catalog?.packages ?? []) {
+      const requestedSources = uniqueStrings(pluginPackage?.activation?.requestedSources ?? []);
+      const current = packageById.get(pluginPackage.id);
+      if (!current) {
+        packageById.set(pluginPackage.id, {
+          ...pluginPackage,
+          activation: {
+            ...(pluginPackage?.activation ?? {}),
+            active: pluginPackage?.activation?.active === true,
+            requestedSources
+          }
+        });
+        continue;
+      }
+      packageById.set(pluginPackage.id, {
+        ...current,
+        activation: {
+          ...(current.activation ?? {}),
+          active: current?.activation?.active === true || pluginPackage?.activation?.active === true,
+          requestedSources: uniqueStrings([
+            ...(current?.activation?.requestedSources ?? []),
+            ...requestedSources
+          ])
+        }
+      });
+    }
+    for (const rejected of catalog?.rejectedPlugins ?? []) {
+      const current = rejectedById.get(rejected.id) ?? {
+        id: rejected.id,
+        reasons: [],
+        requestedSources: []
+      };
+      current.reasons = uniqueStrings([...(current.reasons ?? []), ...(rejected?.reasons ?? [])]);
+      current.requestedSources = uniqueStrings([...(current.requestedSources ?? []), ...(rejected?.requestedSources ?? [])]);
+      rejectedById.set(rejected.id, current);
+    }
+  }
+  return {
+    packages: [...packageById.values()].sort((left, right) => String(left.id || "").localeCompare(String(right.id || ""))),
+    rejectedPlugins: [...rejectedById.values()].sort((left, right) => String(left.id || "").localeCompare(String(right.id || "")))
+  };
+}
 
 export async function startRuntimeServer(world, {
   actor,
@@ -77,7 +139,9 @@ export async function startRuntimeServer(world, {
   logger,
   mcpInternalToken = null,
   runtimeProfile = DEFAULT_RUNTIME_PROFILE,
+  runtimeProfileExplicit = false,
   runtimePluginIds = null,
+  startupRuntimePluginIds = null,
   runtimeStartupMode = "serve",
   runtimeAuthoringMode = null,
   runtimeOperatorContract = null,
@@ -90,6 +154,7 @@ export async function startRuntimeServer(world, {
   const {
     createGenericRouteHandlers,
     hostCapabilities,
+    buildBootstrapStartupRunner = () => null,
     resolveRuntimeConfig,
     resolveServerRunner,
     resolveRunnerForHost,
@@ -109,7 +174,6 @@ export async function startRuntimeServer(world, {
     runtimeBuiltinSeedContributionsForProfile: runtimeBuiltinSeedContributionsForProfileImpl = runtimeBuiltinSeedContributionsForProfile,
     startupRequiredHostCapabilitiesForProfile: startupRequiredHostCapabilitiesForProfileImpl = startupRequiredHostCapabilitiesForProfile,
     createRuntimeAppContextForRunner: createRuntimeAppContextForRunnerImpl = createRuntimeAppContextForRunner,
-    createRuntimeResolverForServer: createRuntimeResolverForServerImpl = createRuntimeResolverForServer,
     createRuntimeAppContext: createRuntimeAppContextImpl = createRuntimeAppContext,
     createUnavailableRuntimeAppContext: createUnavailableRuntimeAppContextImpl = createUnavailableRuntimeAppContext,
     createRuntimeContextResolver: createRuntimeContextResolverImpl = createRuntimeContextResolver,
@@ -132,8 +196,8 @@ export async function startRuntimeServer(world, {
       return;
     }
     const compositionOptions = {
-      operatorPluginIds: appContext?.operatorRuntimePluginIds ?? [],
-      authoredPluginIds: appContext?.authoredRuntimePluginIds ?? []
+      additionalBundleIds: appContext?.runtimeAdditionalBundleIds ?? [],
+      bundleOverrides: appContext?.runtimeBundleOverrides ?? {}
     };
     const fullMatched = matchRuntimeBundleRoute("full", method, pathname, compositionOptions);
     if (fullMatched) {
@@ -159,6 +223,58 @@ export async function startRuntimeServer(world, {
     });
     res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
     res.end(html);
+  };
+  const handleRetiredLegacyFrontendRoute = async ({ req, res, route, routeWorld, appContext }) => {
+    const surfaceMap = routeWorld ? new Map(surfaceRowsFromWitnesses(routeWorld.allWitnesses?.() ?? []).map(surface => [surface.id, surface])) : new Map();
+    const retired = retiredLegacyFrontendRouteState(route, rootSurfaceId => surfaceMap.get(rootSurfaceId) ?? null);
+    if (!retired) return false;
+    const body = {
+      error: "legacy frontend route retired",
+      route: route?.id ?? null,
+      handler: route?.handler ?? null,
+      message: retired.message
+    };
+    const wantsHtml = String(req.headers["accept"] || "").includes("text/html");
+    if (!wantsHtml) {
+      sendJson(res, 410, body);
+      return true;
+    }
+    const html = renderCompositionGatedPage({
+      title: "Legacy Frontend Retired",
+      heading: "Legacy Frontend Retired",
+      reason: retired.message,
+      activeProfile: appContext?.runtimeProfile ?? null
+    });
+    res.writeHead(410, { "content-type": "text/html; charset=utf-8" });
+    res.end(html);
+    return true;
+  };
+  const handleRetiredLegacyFrontendAuthoringEndpoint = async ({ req, res, pathname, appContext }) => {
+    const normalizedPath = typeof pathname === "string" ? pathname.trim() : "";
+    if (!["/api/frontend-programs", "/api/frontend-steps"].includes(normalizedPath)) return false;
+    const retiredAction = normalizedPath === "/api/frontend-programs"
+      ? "frontendProgram.create"
+      : "frontendStep.create";
+    const message = `${retiredAction} is retired. Author app frontend with canonical page.surface nouns (surface, process, projection, collection, boundary, and policy), or run frontend.upliftLegacy to migrate existing legacy routes.`;
+    const body = {
+      error: "legacy frontend authoring retired",
+      path: normalizedPath,
+      message
+    };
+    const wantsHtml = String(req.headers["accept"] || "").includes("text/html");
+    if (!wantsHtml) {
+      sendJson(res, 410, body);
+      return true;
+    }
+    const html = renderCompositionGatedPage({
+      title: "Legacy Frontend Authoring Retired",
+      heading: "Legacy Frontend Authoring Retired",
+      reason: message,
+      activeProfile: appContext?.runtimeProfile ?? null
+    });
+    res.writeHead(410, { "content-type": "text/html; charset=utf-8" });
+    res.end(html);
+    return true;
   };
   const logInfo = typeof logger?.info === "function"
     ? (event, fields) => logger.info(event, fields)
@@ -218,8 +334,22 @@ export async function startRuntimeServer(world, {
 
   const runtimePluginRoot = resolveRuntimePluginRootImpl({ env });
   const configuredRuntimePluginIds = resolveConfiguredRuntimePluginIdsImpl({ env, runtimePluginIds });
+  const startupDefaultRuntimePluginIds = Array.isArray(startupRuntimePluginIds)
+    ? [...new Set(startupRuntimePluginIds.map(String).filter(Boolean))]
+    : [];
 
-  const resolved = resolveStartupRunner(world, serverRunnerId);
+  let resolved = resolveStartupRunner(world, serverRunnerId);
+  if (
+    runtimeStartupMode === "bootstrap"
+    && !serverRunnerId
+    && resolved.ok
+    && resolved.runner?.bootstrapOnly === true
+  ) {
+    const startupRunner = buildBootstrapStartupRunner(world, { startupOwned: true });
+    if (startupRunner) {
+      resolved = { ok: true, runner: startupRunner };
+    }
+  }
   if (!resolved.ok) {
     world.emit({
       process: "server.start.failed",
@@ -231,44 +361,99 @@ export async function startRuntimeServer(world, {
   }
 
   const serverRunner = resolved.runner;
-  const runtimePluginInstallIndex = world.project(moduleProjectors.runtimePluginInstallIndex);
-  // Load plugin modules authored for ANY runner, not just the primary: a multi-host instance must
-  // have every host's handlers available. Per-runner route filtering (servedRoutes) still scopes
-  // which routes each host actually exposes, so loading extra handler code is inert for other hosts.
-  const authoredRuntimePluginIds = [...new Set(
-    (runtimePluginInstallIndex?.rows ?? []).map(row => row.plugin)
-  )];
-  const runtimePluginCatalog = await startupTelemetry.runPhase("runtime.plugins.catalog", () => readRuntimePluginCatalogImpl({
-    pluginRoot: runtimePluginRoot,
-    runtimeProfile,
-    configuredPluginIds: configuredRuntimePluginIds,
-    authoredPluginIds: authoredRuntimePluginIds
-  }), {
+  const startupOverrideProfile = runtimeProfileExplicit ? runtimeProfile : null;
+  const runtimeAuthoringPolicy = createRuntimeAuthoringPolicy({
+    mode: runtimeAuthoringMode ?? defaultRuntimeAuthoringMode({ runtimeStartupMode })
+  });
+  const authoredServerRunners = world.project(moduleProjectors.serverRunners);
+  const candidateRunnersById = new Map();
+  for (const runner of authoredServerRunners ?? []) {
+    if (runner?.id) candidateRunnersById.set(runner.id, runner);
+  }
+  if (serverRunner?.id && !candidateRunnersById.has(serverRunner.id)) {
+    candidateRunnersById.set(serverRunner.id, serverRunner);
+  }
+  const runnerCatalogSeedById = new Map();
+  const readRunnerCatalogSeed = async runner => {
+    if (!runner?.id) return null;
+    const cacheVersion = Number(world?.allWitnesses?.().length || 0);
+    const cachedSeed = runnerCatalogSeedById.get(runner.id);
+    if (cachedSeed && cachedSeed.witnessCount === cacheVersion) return cachedSeed.seed;
+    const profileState = effectiveRuntimeProfileForRunner({
+      serverRunner: runner,
+      startupOverrideProfile,
+      startupMode: runtimeStartupMode,
+      fallbackProfile: runtimeProfile
+    });
+    const runtimePluginInstallIndex = world.project(moduleProjectors.runtimePluginInstallIndex);
+    const authoredRuntimePluginIds = runner.bootstrapOnly === true
+      ? []
+      : uniqueStrings((runtimePluginInstallIndex?.byServerRunner?.[runner.id] ?? []).map(row => row.plugin));
+    const startupPluginIdsForRunner = runner.startupOwned === true
+      ? startupDefaultRuntimePluginIds
+      : [];
+    const runtimePluginCatalog = await readRuntimePluginCatalogImpl({
+      pluginRoot: runtimePluginRoot,
+      runtimeProfile: profileState.effectiveRuntimeProfile,
+      configuredPluginIds: configuredRuntimePluginIds,
+      startupPluginIds: startupPluginIdsForRunner,
+      authoredPluginIds: authoredRuntimePluginIds
+    });
+    const seed = {
+      runner,
+      profileState,
+      authoredRuntimePluginIds,
+      startupPluginIds: startupPluginIdsForRunner,
+      runtimePluginCatalog
+    };
+    runnerCatalogSeedById.set(runner.id, { witnessCount: cacheVersion, seed });
+    return seed;
+  };
+  const runnerCatalogSeeds = await startupTelemetry.runPhase("runtime.plugins.catalog", async () => {
+    const seeds = [];
+    for (const runner of candidateRunnersById.values()) {
+      const seed = await readRunnerCatalogSeed(runner);
+      if (seed) seeds.push(seed);
+    }
+    return seeds;
+  }, {
     label: "Read runtime plugin catalog"
   });
-  if (runtimePluginCatalog.selection.hasBlockingErrors) {
+  const blockingCatalogSeed = runnerCatalogSeeds.find(seed => seed.runtimePluginCatalog?.selection?.hasBlockingErrors);
+  if (blockingCatalogSeed) {
     world.emit({
       process: "server.start.failed",
       actor,
       claims: [],
       body: {
         reason: "runtime plugins unresolved",
-        serverRunner: serverRunner.id,
+        serverRunner: blockingCatalogSeed.runner.id,
         pluginRoot: runtimePluginRoot,
-        authoredRuntimePlugins: runtimePluginCatalog.authoredPluginIds,
-        operatorRuntimePlugins: runtimePluginCatalog.operatorPluginIds,
-        effectiveRuntimePlugins: runtimePluginCatalog.effectivePluginIds,
-        rejectedRuntimePlugins: runtimePluginCatalog.rejectedPlugins
+        authoredRuntimePlugins: blockingCatalogSeed.runtimePluginCatalog.authoredPluginIds,
+        operatorRuntimePlugins: blockingCatalogSeed.runtimePluginCatalog.operatorPluginIds,
+        effectiveRuntimePlugins: blockingCatalogSeed.runtimePluginCatalog.effectivePluginIds,
+        rejectedRuntimePlugins: blockingCatalogSeed.runtimePluginCatalog.rejectedPlugins,
+        runtimeProfile: blockingCatalogSeed.profileState.effectiveRuntimeProfile
       }
     });
-    return { ok: false, reason: "runtime plugins unresolved", runtimePluginCatalog };
+    return {
+      ok: false,
+      reason: "runtime plugins unresolved",
+      runtimePluginCatalog: blockingCatalogSeed.runtimePluginCatalog
+    };
   }
+  const mergedRuntimePluginCatalog = mergePluginCatalogs(
+    runnerCatalogSeeds.map(seed => seed.runtimePluginCatalog)
+  );
   const runtimePluginLoadResult = await startupTelemetry.runPhase("runtime.plugins.load", () => loadRuntimePluginModulesImpl({
-    pluginCatalog: runtimePluginCatalog
+    pluginCatalog: mergedRuntimePluginCatalog
   }), {
     label: "Load runtime plugin modules"
   });
-  const effectiveRuntimePluginCatalog = applyRuntimePluginLoadStateImpl(runtimePluginCatalog, runtimePluginLoadResult);
+  const startupRuntimePluginSeed = runnerCatalogSeedById.get(serverRunner.id) ?? runnerCatalogSeeds[0] ?? null;
+  const effectiveRuntimePluginCatalog = startupRuntimePluginSeed
+    ? applyRuntimePluginLoadStateImpl(startupRuntimePluginSeed.runtimePluginCatalog, runtimePluginLoadResult)
+    : null;
   if (runtimePluginLoadResult.hasBlockingErrors) {
     world.emit({
       process: "server.start.failed",
@@ -278,93 +463,167 @@ export async function startRuntimeServer(world, {
         reason: "runtime plugin modules unresolved",
         serverRunner: serverRunner.id,
         pluginRoot: runtimePluginRoot,
-        authoredRuntimePlugins: effectiveRuntimePluginCatalog.authoredPluginIds,
-        operatorRuntimePlugins: effectiveRuntimePluginCatalog.operatorPluginIds,
-        effectiveRuntimePlugins: effectiveRuntimePluginCatalog.effectivePluginIds,
-        rejectedRuntimePlugins: effectiveRuntimePluginCatalog.rejectedPlugins
+        authoredRuntimePlugins: effectiveRuntimePluginCatalog?.authoredPluginIds ?? [],
+        operatorRuntimePlugins: effectiveRuntimePluginCatalog?.operatorPluginIds ?? [],
+        effectiveRuntimePlugins: effectiveRuntimePluginCatalog?.effectivePluginIds ?? [],
+        rejectedRuntimePlugins: mergedRuntimePluginCatalog.rejectedPlugins ?? []
       }
     });
-    return { ok: false, reason: "runtime plugin modules unresolved", runtimePluginCatalog: effectiveRuntimePluginCatalog };
+    return {
+      ok: false,
+      reason: "runtime plugin modules unresolved",
+      runtimePluginCatalog: effectiveRuntimePluginCatalog ?? mergedRuntimePluginCatalog
+    };
   }
   const bundleOverrides = runtimePluginLoadResult.bundleOverrides ?? {};
-  const additionalBundleIds = [...new Set([
-    ...(runtimePluginCatalog.addedBundleIds ?? []),
-    ...Object.keys(bundleOverrides)
-  ])];
-  const resolvedRuntime = runtimeBundleSummaryForProfileImpl(runtimeProfile, {
-    additionalBundleIds,
-    bundleOverrides
-  });
-  let runtimeContributions;
-  let projectionContext;
-  let removeWorldProjectionContext = () => {};
-  try {
-    const runtimeContributionsPhase = startupTelemetry.beginPhase("runtime.contributions", {
-      label: "Collect runtime contributions"
-    });
+  const runnerStateCache = new Map();
+  const runnerContextCache = new Map();
+  const projectionContextRemovers = [];
+  const currentWorldWitnessCount = () => Number(world?.allWitnesses?.().length || 0);
+  const buildRunnerState = async runner => {
+    if (!runner?.id) return { ok: false, reason: "server runner missing" };
+    const cacheVersion = currentWorldWitnessCount();
+    const cachedState = runnerStateCache.get(runner.id);
+    if (cachedState && cachedState.witnessCount === cacheVersion) return cachedState.state;
+    const seed = await readRunnerCatalogSeed(runner);
+    const runtimePluginCatalog = applyRuntimePluginLoadStateImpl(seed.runtimePluginCatalog, runtimePluginLoadResult);
+    const additionalBundleIds = uniqueStrings(runtimePluginCatalog.addedBundleIds ?? []);
+    const compositionOptions = {
+      additionalBundleIds,
+      bundleOverrides
+    };
+    const runtimeBundleSummary = runtimeBundleSummaryForProfileImpl(seed.profileState.effectiveRuntimeProfile, compositionOptions);
+    let runtimeContributions;
+    let projectionContext;
+    let removeProjectionContext = () => {};
     try {
       runtimeContributions = collectActiveRuntimeContributionsImpl({
-        bundles: resolvedRuntime.bundles ?? []
+        bundles: runtimeBundleSummary.bundles ?? []
       });
       projectionContext = createModuleProjectorContext(runtimeContributions.moduleProjectors ?? {}, {
-        owner: `runtime.activePlugins:${serverRunner.id}`
+        owner: `runtime.activePlugins:${runner.id}`
       });
-      runtimeContributionsPhase.complete();
+      removeProjectionContext = world._pushProjectionContext?.(projectionContext) ?? (() => {});
+      projectionContextRemovers.push(removeProjectionContext);
     } catch (error) {
-      runtimeContributionsPhase.fail(error);
-      throw error;
+      const state = {
+        ok: false,
+        reason: "runtime plugin contributions unresolved",
+        error
+      };
+      runnerStateCache.set(runner.id, { witnessCount: cacheVersion, state });
+      return state;
     }
-    removeWorldProjectionContext = world._pushProjectionContext?.(projectionContext) ?? (() => {});
-  } catch (error) {
+    try {
+      ensureRuntimeBuiltinsImpl(world, {
+        capabilityIds: providedCapabilityIdsForProfileImpl(seed.profileState.effectiveRuntimeProfile, compositionOptions),
+        capabilityDefinitions: runtimeCapabilityDefinitionsForProfileImpl(seed.profileState.effectiveRuntimeProfile, compositionOptions),
+        seedContributions: runtimeBuiltinSeedContributionsForProfileImpl(seed.profileState.effectiveRuntimeProfile, compositionOptions)
+      });
+    } catch (error) {
+      const state = {
+        ok: false,
+        reason: "runtime builtins unresolved",
+        error
+      };
+      runnerStateCache.set(runner.id, { witnessCount: cacheVersion, state });
+      return state;
+    }
+    const backendHost = runner.backendHost;
+    const frontendHost = runner.frontendHost;
+    if (!backendHost || !frontendHost) {
+      const state = {
+        ok: false,
+        reason: "server runner host bindings incomplete",
+        backendHost,
+        frontendHost
+      };
+      runnerStateCache.set(runner.id, { witnessCount: cacheVersion, state });
+      return state;
+    }
+    const backendDefaults = defaultHostCapabilitiesForProfileImpl(seed.profileState.effectiveRuntimeProfile, "backend", compositionOptions);
+    const frontendDefaults = defaultHostCapabilitiesForProfileImpl(seed.profileState.effectiveRuntimeProfile, "frontend", compositionOptions);
+    for (const capability of backendDefaults) {
+      if (hostCapabilities(world, backendHost).has(capability)) continue;
+      ensureCapabilityDefinition(world, {
+        actor,
+        id: capability,
+        label: capability,
+        provenance: { source: "server.start.defaultHostCapabilities" }
+      });
+      installCapability(world, { actor, capability, target: backendHost, targetKind: "host" });
+    }
+    for (const capability of frontendDefaults) {
+      if (hostCapabilities(world, frontendHost).has(capability)) continue;
+      ensureCapabilityDefinition(world, {
+        actor,
+        id: capability,
+        label: capability,
+        provenance: { source: "server.start.defaultHostCapabilities" }
+      });
+      installCapability(world, { actor, capability, target: frontendHost, targetKind: "host" });
+    }
+    const backendCaps = hostCapabilities(world, backendHost);
+    const frontendCaps = hostCapabilities(world, frontendHost);
+    const requiredBackend = startupRequiredHostCapabilitiesForProfileImpl(seed.profileState.effectiveRuntimeProfile, "backend", compositionOptions);
+    const requiredFrontend = startupRequiredHostCapabilitiesForProfileImpl(seed.profileState.effectiveRuntimeProfile, "frontend", compositionOptions);
+    const missingBackend = requiredBackend.filter(capability => !backendCaps.has(capability));
+    const missingFrontend = requiredFrontend.filter(capability => !frontendCaps.has(capability));
+    const runtimeConfigResult = resolveRuntimeConfig(runner.runtimeConfig, env);
+    const state = {
+      ok: missingBackend.length === 0 && missingFrontend.length === 0 && runtimeConfigResult.ok !== false,
+      reason: missingBackend.length || missingFrontend.length
+        ? "missing host capabilities"
+        : (runtimeConfigResult.ok === false ? "runtime config unresolved" : null),
+      runner,
+      profileState: seed.profileState,
+      runtimePluginCatalog,
+      runtimeBundleSummary,
+      runtimeAdditionalBundleIds: additionalBundleIds,
+      runtimeBundleOverrides: bundleOverrides,
+      runtimeSurfaceEntries: runtimeSurfaceEntriesForProfileImpl(seed.profileState.effectiveRuntimeProfile, null, compositionOptions),
+      activeDispatchHandlers: new Set(
+        runtimeBundleSummary.dispatchHandlers
+        ?? dispatchHandlerIdsForProfileImpl(seed.profileState.effectiveRuntimeProfile, compositionOptions)
+      ),
+      handlerSetFactories: handlerSetFactoriesForProfileImpl(seed.profileState.effectiveRuntimeProfile, compositionOptions),
+      handlerSetDefinitions: handlerSetDefinitionsForProfileImpl(seed.profileState.effectiveRuntimeProfile, compositionOptions),
+      runtimeContributions,
+      projectionContext,
+      removeProjectionContext,
+      runtimeConfigResult,
+      missingBackend,
+      missingFrontend,
+      storage: resolveStorageConfig(runner.storage, runtimeRoot),
+      backendHost,
+      frontendHost
+    };
+    runnerStateCache.set(runner.id, { witnessCount: cacheVersion, state });
+    return state;
+  };
+  const bootstrapRuntimeState = await startupTelemetry.runPhase("runtime.runnerState", () => buildRunnerState(serverRunner), {
+    label: "Resolve startup runner runtime state"
+  });
+  if (!bootstrapRuntimeState?.ok) {
     world.emit({
       process: "server.start.failed",
       actor,
       claims: [],
       body: {
-        reason: "runtime plugin contributions unresolved",
-        message: error instanceof Error ? error.message : String(error)
+        serverRunner: serverRunner.id,
+        reason: bootstrapRuntimeState?.reason ?? "runtime state unresolved",
+        backendHost: bootstrapRuntimeState?.backendHost ?? null,
+        frontendHost: bootstrapRuntimeState?.frontendHost ?? null,
+        missingBackend: bootstrapRuntimeState?.missingBackend ?? [],
+        missingFrontend: bootstrapRuntimeState?.missingFrontend ?? [],
+        runtimeConfigFailures: bootstrapRuntimeState?.runtimeConfigResult?.failures ?? [],
+        message: bootstrapRuntimeState?.error instanceof Error
+          ? bootstrapRuntimeState.error.message
+          : (bootstrapRuntimeState?.error ? String(bootstrapRuntimeState.error) : null)
       }
     });
-    return { ok: false, reason: "runtime plugin contributions unresolved", error };
+    return { ok: false, reason: bootstrapRuntimeState?.reason ?? "runtime state unresolved" };
   }
-  const activeRuntimeProfile = resolvedRuntime.profile;
-  const compositionOptions = { additionalBundleIds, bundleOverrides };
-  // Per-runner bundle gating (multi-host): plugin-contributed bundles are loaded process-wide so
-  // every host's handlers exist, but generic endpoints from authored runner installs must only
-  // answer on runners that actually install that plugin. Bundles activated by the runtime profile
-  // or explicit operator config are global and must stay mounted on every runner.
-  const pluginBundleIdsByPlugin = new Map();
-  const globalPluginIds = new Set();
-  for (const pluginPackage of effectiveRuntimePluginCatalog.packages ?? []) {
-    const ids = pluginPackage?.runtimeModule?.bundleIds ?? [];
-    if (ids.length) pluginBundleIdsByPlugin.set(pluginPackage.id, new Set(ids));
-    if (
-      pluginPackage?.activation?.active === true
-      && (pluginPackage.activation.requestedSources ?? []).some(source => source !== "authored")
-    ) {
-      globalPluginIds.add(pluginPackage.id);
-    }
-  }
-  const optInBundleIds = new Set();
-  for (const [pluginId, bundleIds] of pluginBundleIdsByPlugin.entries()) {
-    if (globalPluginIds.has(pluginId)) continue;
-    for (const bundleId of bundleIds) optInBundleIds.add(bundleId);
-  }
-  const activeAddedBundlesForRunner = runnerId => {
-    const active = new Set();
-    const installs = world.project(moduleProjectors.runtimePluginInstallIndex)?.byServerRunner?.[runnerId] ?? [];
-    for (const row of installs) {
-      const owned = pluginBundleIdsByPlugin.get(row.plugin);
-      if (owned) for (const bundleId of owned) active.add(bundleId);
-    }
-    return active;
-  };
-  // True when a matched generic endpoint belongs to an opt-in bundle this runner does not activate.
-  const genericEndpointGatedForRunner = (endpoint, runnerId) => {
-    const bundleId = endpoint?.bundleId ?? null;
-    if (!bundleId || !optInBundleIds.has(bundleId)) return false;
-    return !activeAddedBundlesForRunner(runnerId).has(bundleId);
-  };
   // Universal auth gate (opt-in per runner via `requireAuth`). On a gated runner every endpoint
   // requires an authenticated session except an allowlist: the auth/session endpoints needed to sign
   // in, MCP (which carries its own industry-standard auth — see plugins/mcp), and any route that
@@ -386,112 +645,135 @@ export async function startRuntimeServer(world, {
     if (matchedRoute?.params?.auth) return false; // route owns its auth flow (login/forbidden pages)
     return true;
   };
-  const runtimeSurfaceEntries = runtimeSurfaceEntriesForProfileImpl(activeRuntimeProfile, null, compositionOptions);
-  const activeDispatchHandlers = new Set(resolvedRuntime.dispatchHandlers ?? dispatchHandlerIdsForProfileImpl(activeRuntimeProfile, compositionOptions));
-  const handlerSetFactories = handlerSetFactoriesForProfileImpl(activeRuntimeProfile, compositionOptions);
-  const handlerSetDefinitions = handlerSetDefinitionsForProfileImpl(activeRuntimeProfile, compositionOptions);
-  const ensureRuntimeBuiltinsPhase = startupTelemetry.beginPhase("runtime.builtins", {
-    label: "Ensure runtime builtins"
+  const unionAdditionalBundleIds = uniqueStrings(
+    (await Promise.all([...candidateRunnersById.values()].map(async runner => {
+      const state = await buildRunnerState(runner);
+      return state?.runtimeAdditionalBundleIds ?? [];
+    }))).flat()
+  );
+  const unionCompositionOptions = {
+    additionalBundleIds: unionAdditionalBundleIds,
+    bundleOverrides
+  };
+  const unionRuntimeBundleSummary = runtimeBundleSummaryForProfileImpl("full", unionCompositionOptions);
+  const unionRuntimeContributions = collectActiveRuntimeContributionsImpl({
+    bundles: unionRuntimeBundleSummary.bundles ?? []
   });
-  try {
-    ensureRuntimeBuiltinsImpl(world, {
-      capabilityIds: providedCapabilityIdsForProfileImpl(activeRuntimeProfile, compositionOptions),
-      capabilityDefinitions: runtimeCapabilityDefinitionsForProfileImpl(activeRuntimeProfile, compositionOptions),
-      seedContributions: runtimeBuiltinSeedContributionsForProfileImpl(activeRuntimeProfile, compositionOptions)
+  const unionHandlerSetDefinitions = handlerSetDefinitionsForProfileImpl("full", unionCompositionOptions);
+  const backendHost = bootstrapRuntimeState.backendHost;
+  const frontendHost = bootstrapRuntimeState.frontendHost;
+  const decorateAppContext = (appContext, runner, runnerState) => {
+    appContext.requestedRuntimeProfile = runtimeProfile;
+    appContext.authoredRuntimeProfile = runnerState.profileState.authoredRuntimeProfile;
+    appContext.runtimeProfile = runnerState.profileState.effectiveRuntimeProfile;
+    appContext.effectiveRuntimeProfile = runnerState.profileState.effectiveRuntimeProfile;
+    appContext.effectiveRuntimeProfileSource = runnerState.profileState.effectiveRuntimeProfileSource;
+    appContext.runtimeProfileOverrideActive = runnerState.profileState.overrideActive === true;
+    appContext.runtimeProfileOverrideProfile = startupOverrideProfile;
+    appContext.runtimeStartupMode = runtimeStartupMode;
+    appContext.runtimeAuthoringPolicy = runtimeAuthoringPolicy;
+    appContext.runtimeBundleSummary = runnerState.runtimeBundleSummary;
+    appContext.runtimeAdditionalBundleIds = runnerState.runtimeAdditionalBundleIds;
+    appContext.runtimeBundleOverrides = runnerState.runtimeBundleOverrides;
+    appContext.runtimeSurfaceEntries = runnerState.runtimeSurfaceEntries;
+    appContext.runtimeHandlerSetDefinitions = runnerState.handlerSetDefinitions;
+    appContext.runtimePluginCatalog = runnerState.runtimePluginCatalog;
+    appContext.startupRunnerOwned = runner.startupOwned === true;
+    appContext.authoredRuntimePluginIds = runnerState.runtimePluginCatalog.authoredPluginIds;
+    appContext.startupRuntimePluginIds = runnerState.runtimePluginCatalog.startupPluginIds;
+    appContext.runtimePluginIds = runnerState.runtimePluginCatalog.operatorPluginIds;
+    appContext.operatorRuntimePluginIds = runnerState.runtimePluginCatalog.operatorPluginIds;
+    appContext.effectiveRuntimePluginIds = runnerState.runtimePluginCatalog.effectivePluginIds;
+    appContext.activeRuntimePluginIds = runnerState.runtimePluginCatalog.activePluginIds;
+    appContext.activeDispatchHandlers = runnerState.activeDispatchHandlers;
+    appContext.startupTelemetry = startupTelemetry;
+    appContext.resourceProbes = startupTelemetry.probeCollector ?? null;
+    appContext.materializedViews = createMaterializedViewRegistry({
+      world,
+      probeCollector: appContext.resourceProbes
     });
-    ensureRuntimeBuiltinsPhase.complete();
-  } catch (error) {
-    ensureRuntimeBuiltinsPhase.fail(error);
-    throw error;
-  }
-  const backendHost = serverRunner.backendHost;
-  const frontendHost = serverRunner.frontendHost;
-  if (!backendHost || !frontendHost) {
-    removeWorldProjectionContext();
-    world.emit({
-      process: "server.start.failed",
-      actor,
-      claims: [],
-      body: { serverRunner: serverRunner.id, backendHost, frontendHost, reason: "server runner host bindings incomplete" }
+    const verificationPolicy = resolveRunnerVerificationPolicy({
+      serverRunner: runner,
+      runtimeProfile: runnerState.profileState.effectiveRuntimeProfile,
+      runtimeConfig: appContext.runtimeConfig
     });
-    return { ok: false, reason: "server runner host bindings incomplete" };
-  }
-
-  const backendDefaults = defaultHostCapabilitiesForProfileImpl(activeRuntimeProfile, "backend", compositionOptions);
-  const frontendDefaults = defaultHostCapabilitiesForProfileImpl(activeRuntimeProfile, "frontend", compositionOptions);
-  for (const capability of backendDefaults) {
-    if (hostCapabilities(world, backendHost).has(capability)) continue;
-    ensureCapabilityDefinition(world, {
-      actor,
-      id: capability,
-      label: capability,
-      provenance: { source: "server.start.defaultHostCapabilities" }
+    appContext.verificationPolicy = verificationPolicy;
+    appContext.verificationPolicySource = verificationPolicy.source;
+    appContext.verificationPolicyDiagnostics = verificationPolicy.diagnostics ?? [];
+    appContext.verificationPersistence = null;
+    appContext.verificationPersistenceDiagnostics = [];
+    appContext.runtimeOperatorContract = runtimeOperatorContract ?? buildRuntimeOperatorContract({
+      startupMode: runtimeStartupMode,
+      layout: "runtime-root-only",
+      persistenceMode: "warm-compatibility",
+      runtimeRoot,
+      storage: appContext.storage,
+      notes: ["Runtime started without an explicit WORLD_HOME-derived operator contract, so diagnostics are reporting the active runtime-root view only."]
     });
-    installCapability(world, { actor, capability, target: backendHost, targetKind: "host" });
-  }
-  for (const capability of frontendDefaults) {
-    if (hostCapabilities(world, frontendHost).has(capability)) continue;
-    ensureCapabilityDefinition(world, {
-      actor,
-      id: capability,
-      label: capability,
-      provenance: { source: "server.start.defaultHostCapabilities" }
+    appContext.runtimeOperatorService = createRuntimeOperatorService({
+      world,
+      operatorContract: appContext.runtimeOperatorContract,
+      storage: appContext.storage
     });
-    installCapability(world, { actor, capability, target: frontendHost, targetKind: "host" });
-  }
-  const backendCaps = hostCapabilities(world, backendHost);
-  const frontendCaps = hostCapabilities(world, frontendHost);
-  const requiredBackend = startupRequiredHostCapabilitiesForProfileImpl(activeRuntimeProfile, "backend", compositionOptions);
-  const requiredFrontend = startupRequiredHostCapabilitiesForProfileImpl(activeRuntimeProfile, "frontend", compositionOptions);
-  const missingBackend = requiredBackend.filter(capability => !backendCaps.has(capability));
-  const missingFrontend = requiredFrontend.filter(capability => !frontendCaps.has(capability));
-  if (missingBackend.length || missingFrontend.length) {
-    removeWorldProjectionContext();
-    world.emit({
-      process: "server.start.failed",
-      actor,
-      claims: [],
-      body: { serverRunner: serverRunner.id, backendHost, frontendHost, missingBackend, missingFrontend }
-    });
-    return { ok: false, reason: "missing host capabilities" };
-  }
-
-  const runtimeConfig = resolveRuntimeConfig(serverRunner.runtimeConfig, env);
-  if (!runtimeConfig.ok) {
-    removeWorldProjectionContext();
-    world.emit({
-      process: "server.start.failed",
-      actor,
-      claims: [],
-      body: {
-        serverRunner: serverRunner.id,
-        reason: "runtime config unresolved",
-        runtimeConfig: runtimeConfig.fields,
-        runtimeConfigFailures: runtimeConfig.failures
+    appContext.handlerSet = runner.handlerSet ?? null;
+    appContext.bootstrapOnly = runner.bootstrapOnly === true;
+    appContext.devMode = activeDevMode === true;
+    appContext.appSnapshotManager = null;
+    appContext.appPreviewSessionManager = null;
+    appContext.appSnapshotManagerReady = null;
+    appContext.resolveRunnerRuntimeState = async runnerId => {
+      if (!runnerId) return null;
+      if (runnerId === runner.id) return runnerState;
+      const targetRunner = world.project(moduleProjectors.serverRunners).find(row => row.id === runnerId)
+        ?? (serverRunner.id === runnerId ? serverRunner : null);
+      return targetRunner ? buildRunnerState(targetRunner) : null;
+    };
+    return appContext;
+  };
+  const createRunnerAppContext = async (runner, runnerState, { failClosed = false } = {}) => {
+    if (!runnerState?.ok) {
+      if (failClosed) {
+        return { ok: false, reason: runnerState?.reason ?? "runtime state unresolved" };
       }
+      return createUnavailableRuntimeAppContextImpl({
+        world,
+        reason: runnerState?.reason ?? "runtime state unresolved",
+        identities: world.project(moduleProjectors.identityIndex).rows
+      });
+    }
+    const created = await createRuntimeAppContextForRunnerImpl({
+      world,
+      serverRunner: runner,
+      runtimeRoot,
+      appProject,
+      sendJson,
+      readJson,
+      handlerSetFactories: runnerState.handlerSetFactories,
+      runtimeContributions: runnerState.runtimeContributions,
+      projectionContext: runnerState.projectionContext,
+      resolveStorageConfig,
+      resolveRuntimeConfig,
+      env,
+      createRuntimeAppContext: createRuntimeAppContextImpl
     });
-    return { ok: false, reason: "runtime config unresolved" };
-  }
-
-  const appContext = await startupTelemetry.runPhase("runtime.appContext", () => createRuntimeAppContextForRunnerImpl({
-    world,
+    if (!created?.ok) {
+      if (failClosed) return created;
+      return createUnavailableRuntimeAppContextImpl({
+        world,
+        reason: created?.reason ?? "runtime app context unresolved",
+        identities: world.project(moduleProjectors.identityIndex).rows
+      });
+    }
+    return decorateAppContext(created, runner, runnerState);
+  };
+  const appContext = await startupTelemetry.runPhase("runtime.appContext", () => createRunnerAppContext(
     serverRunner,
-    runtimeRoot,
-    appProject,
-    sendJson,
-    readJson,
-    handlerSetFactories,
-    runtimeContributions,
-    projectionContext,
-    resolveStorageConfig,
-    resolveRuntimeConfig,
-    env,
-    createRuntimeAppContext: createRuntimeAppContextImpl
-  }), {
+    bootstrapRuntimeState,
+    { failClosed: true }
+  ), {
     label: "Create runtime app context"
   });
   if (!appContext.ok) {
-    removeWorldProjectionContext();
     world.emit({
       process: "server.start.failed",
       actor,
@@ -500,39 +782,10 @@ export async function startRuntimeServer(world, {
     });
     return { ok: false, reason: appContext.reason };
   }
-
-  appContext.requestedRuntimeProfile = runtimeProfile;
-  appContext.runtimeProfile = activeRuntimeProfile;
-  appContext.runtimeStartupMode = runtimeStartupMode;
-  appContext.runtimeAuthoringPolicy = createRuntimeAuthoringPolicy({
-    mode: runtimeAuthoringMode ?? defaultRuntimeAuthoringMode({ runtimeStartupMode })
+  runnerContextCache.set(serverRunner.id, {
+    witnessCount: currentWorldWitnessCount(),
+    context: appContext
   });
-  appContext.runtimeBundleSummary = resolvedRuntime;
-  appContext.runtimeAdditionalBundleIds = additionalBundleIds;
-  appContext.runtimeBundleOverrides = bundleOverrides;
-  appContext.runtimeSurfaceEntries = runtimeSurfaceEntries;
-  appContext.runtimePluginCatalog = effectiveRuntimePluginCatalog;
-  appContext.authoredRuntimePluginIds = effectiveRuntimePluginCatalog.authoredPluginIds;
-  appContext.runtimePluginIds = effectiveRuntimePluginCatalog.operatorPluginIds;
-  appContext.operatorRuntimePluginIds = effectiveRuntimePluginCatalog.operatorPluginIds;
-  appContext.effectiveRuntimePluginIds = effectiveRuntimePluginCatalog.effectivePluginIds;
-  appContext.activeRuntimePluginIds = effectiveRuntimePluginCatalog.activePluginIds;
-  appContext.startupTelemetry = startupTelemetry;
-  appContext.resourceProbes = startupTelemetry.probeCollector ?? null;
-  appContext.materializedViews = createMaterializedViewRegistry({
-    world,
-    probeCollector: appContext.resourceProbes
-  });
-  const verificationPolicy = resolveRunnerVerificationPolicy({
-    serverRunner,
-    runtimeProfile: activeRuntimeProfile,
-    runtimeConfig: appContext.runtimeConfig
-  });
-  appContext.verificationPolicy = verificationPolicy;
-  appContext.verificationPolicySource = verificationPolicy.source;
-  appContext.verificationPolicyDiagnostics = verificationPolicy.diagnostics ?? [];
-  appContext.verificationPersistence = null;
-  appContext.verificationPersistenceDiagnostics = [];
   const currentWitnessCount = () => typeof world?.witnessCount === "function"
     ? Number(world.witnessCount() || 0)
     : Number(world?.allWitnesses?.().length || 0);
@@ -556,25 +809,6 @@ export async function startRuntimeServer(world, {
     return context;
   };
   attachEventsStream(appContext);
-  appContext.runtimeOperatorContract = runtimeOperatorContract ?? buildRuntimeOperatorContract({
-    startupMode: runtimeStartupMode,
-    layout: "runtime-root-only",
-    persistenceMode: "warm-compatibility",
-    runtimeRoot,
-    storage: appContext.storage,
-    notes: ["Runtime started without an explicit WORLD_HOME-derived operator contract, so diagnostics are reporting the active runtime-root view only."]
-  });
-  appContext.runtimeOperatorService = createRuntimeOperatorService({
-    world,
-    operatorContract: appContext.runtimeOperatorContract,
-    storage: appContext.storage
-  });
-  appContext.handlerSet = serverRunner.handlerSet ?? null;
-  appContext.bootstrapOnly = serverRunner.bootstrapOnly === true;
-  appContext.devMode = activeDevMode === true;
-  appContext.appSnapshotManager = null;
-  appContext.appPreviewSessionManager = null;
-  appContext.appSnapshotManagerReady = null;
   const storage = appContext.storage;
 
   const sessionStore = new Map();
@@ -585,14 +819,15 @@ export async function startRuntimeServer(world, {
     sessionStore,
     logger,
     mcpInternalToken,
-    runtimeProfile: activeRuntimeProfile,
-    runtimeBundleSummary: resolvedRuntime,
-    runtimeSurfaceEntries,
-    handlerSetDefinitions,
-    runtimeContributions,
+    runtimeProfile: appContext.runtimeProfile,
+    runtimeBundleSummary: unionRuntimeBundleSummary,
+    runtimeSurfaceEntries: appContext.runtimeSurfaceEntries,
+    handlerSetDefinitions: unionHandlerSetDefinitions,
+    runtimeContributions: unionRuntimeContributions,
     runtimePluginRoot,
-    runtimePluginIds: effectiveRuntimePluginCatalog.operatorPluginIds,
-    authoredRuntimePluginIds: effectiveRuntimePluginCatalog.authoredPluginIds,
+    runtimePluginIds: appContext.runtimePluginIds,
+    startupRuntimePluginIds: appContext.startupRuntimePluginIds,
+    authoredRuntimePluginIds: appContext.authoredRuntimePluginIds,
     appSnapshotManager: appContext.appSnapshotManager ?? null,
     currentAppRenderWorld: () => appContext.appSnapshotManager?.getActiveSnapshot()?.world ?? world
   });
@@ -718,31 +953,34 @@ export async function startRuntimeServer(world, {
     mountedRoutesCache.set(routeWorld, { witnessCount, byRunner });
     return table;
   };
-  const runtimeResolver = createRuntimeResolverForServerImpl({
-    world,
+  const { runtimeContexts, resolveActiveRuntime } = createRuntimeContextResolverImpl({
     bootstrapRunner: serverRunner,
     bootstrapContext: appContext,
-    runtimeRoot,
-    appProject,
-    sendJson,
-    readJson,
-    handlerSetFactories,
-    runtimeContributions,
-    projectionContext,
-    resolveStorageConfig,
-    resolveRuntimeConfig,
-    env,
-    createRuntimeAppContext: createRuntimeAppContextImpl,
-    createUnavailableRuntimeAppContext: createUnavailableRuntimeAppContextImpl,
-    createRuntimeContextResolver: createRuntimeContextResolverImpl,
     resolveLiveRunner: requestHost => (
       typeof resolveRunnerForHost === "function"
         ? resolveRunnerForHost(world, requestHost ?? null)
         : resolveServerRunner(world, null)
-    )
+    ),
+    createContextForRunner: async liveRunner => {
+      const cacheVersion = currentWorldWitnessCount();
+      const cachedContext = runnerContextCache.get(liveRunner.id);
+      if (cachedContext && cachedContext.witnessCount === cacheVersion) return cachedContext.context;
+      const runnerState = await buildRunnerState(liveRunner);
+      const liveContext = await createRunnerAppContext(liveRunner, runnerState);
+      attachEventsStream(liveContext);
+      runnerContextCache.set(liveRunner.id, {
+        witnessCount: cacheVersion,
+        context: liveContext
+      });
+      return liveContext;
+    },
+    createUnavailableContext: reason => createUnavailableRuntimeAppContextImpl({
+      world,
+      reason,
+      identities: world.project(moduleProjectors.identityIndex).rows
+    })
   });
-  const { runtimeContexts, resolveActiveRuntime } = runtimeResolver;
-  const staticPluginFiles = runtimeContributions.staticAssetFiles ?? new Map();
+  const staticPluginFiles = unionRuntimeContributions.staticAssetFiles ?? new Map();
   const sseClients = new Set();
   const appStaticRoot = appContext.appRoot;
   const APP_STATIC_PREFIX = "/app-static/";
@@ -916,7 +1154,7 @@ export async function startRuntimeServer(world, {
       if (shouldServeBootstrapFallback({
         world,
         routeTable: mountedRouteTable,
-        runtimeBundleSummary: resolvedRuntime,
+        runtimeBundleSummary: activeAppContext?.runtimeBundleSummary ?? null,
         method: req.method || "GET",
         pathname: requestUrl.pathname
       })) {
@@ -930,25 +1168,67 @@ export async function startRuntimeServer(world, {
           requestActor: requestContext.actor,
           requestIdentity: requestContext.identity,
           requestSession: requestContext.session,
-          appContext: runtime.context
+          appContext: activeAppContext
         });
         return;
       }
 
       if (!matched) {
-        const genericEndpoint = matchGenericEndpoint(req.method || "GET", requestUrl.pathname, activeRuntimeProfile, compositionOptions);
-        if (genericEndpoint && genericEndpointGatedForRunner(genericEndpoint, runtime.runner.id)) {
+        if (await handleRetiredLegacyFrontendAuthoringEndpoint({
+          req,
+          res,
+          pathname: requestUrl.pathname,
+          appContext: activeAppContext
+        })) {
+          world.observe({
+            process: "backend.route.retired",
+            actor: backendHost,
+            claims: [],
+            body: {
+              path: requestUrl.pathname,
+              method: req.method || "GET",
+              reason: "legacy frontend authoring retired"
+            }
+          });
+          return;
+        }
+        const liveGenericEndpoint = matchGenericEndpoint(req.method || "GET", requestUrl.pathname, activeAppContext?.runtimeProfile ?? appContext.runtimeProfile, {
+          additionalBundleIds: activeAppContext?.runtimeAdditionalBundleIds ?? [],
+          bundleOverrides: activeAppContext?.runtimeBundleOverrides ?? bundleOverrides
+        });
+        const bootstrapGenericEndpoint = runtimeStartupMode === "bootstrap" && activeAppContext !== appContext
+          ? matchGenericEndpoint(req.method || "GET", requestUrl.pathname, appContext.runtimeProfile, {
+              additionalBundleIds: appContext.runtimeAdditionalBundleIds ?? [],
+              bundleOverrides: appContext.runtimeBundleOverrides ?? bundleOverrides
+            })
+          : null;
+        const genericEndpoint = liveGenericEndpoint ?? bootstrapGenericEndpoint;
+        const genericEndpointContext = (
+          liveGenericEndpoint
+          && (activeAppContext?.activeDispatchHandlers ?? new Set()).has(liveGenericEndpoint.handler)
+        )
+          ? activeAppContext
+          : (
+              bootstrapGenericEndpoint
+              && (appContext?.activeDispatchHandlers ?? new Set()).has(bootstrapGenericEndpoint.handler)
+            )
+            ? appContext
+            : activeAppContext;
+        const selectedGenericEndpoint = genericEndpointContext === appContext && bootstrapGenericEndpoint
+          ? bootstrapGenericEndpoint
+          : genericEndpoint;
+        if (false) {
           // Endpoint belongs to a plugin bundle this host does not activate — behave as not-mounted.
           await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
           return;
         }
-        if (genericEndpoint) {
+        if (selectedGenericEndpoint) {
           const routeHandlers = {
             ...genericHandlers,
-            ...(runtime.context.handlers ?? {})
+            ...(genericEndpointContext?.handlers ?? {})
           };
-          const handler = routeHandlers[genericEndpoint.handler];
-          if (!activeDispatchHandlers.has(genericEndpoint.handler) || typeof handler !== "function") {
+          const handler = routeHandlers[selectedGenericEndpoint.handler];
+          if (!(genericEndpointContext?.activeDispatchHandlers ?? new Set()).has(selectedGenericEndpoint.handler) || typeof handler !== "function") {
             await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
             return;
           }
@@ -958,11 +1238,11 @@ export async function startRuntimeServer(world, {
             requestId,
             requestUrl,
             route: null,
-            params: { ...(genericEndpoint.params ?? {}) },
+            params: { ...(selectedGenericEndpoint.params ?? {}) },
             requestActor: requestContext.actor,
             requestIdentity: requestContext.identity,
             requestSession: requestContext.session,
-            appContext: activeAppContext
+            appContext: genericEndpointContext
           });
           return;
         }
@@ -973,12 +1253,29 @@ export async function startRuntimeServer(world, {
         return;
       }
       matchedRoute = matched.route;
-      if (!activeDispatchHandlers.has(matched.route.handler)) {
+      const routeWorld = activeAppContext?.appSnapshotManager?.getActiveSnapshot()?.world ?? world;
+      if (await handleRetiredLegacyFrontendRoute({ req, res, route: matched.route, routeWorld, appContext: activeAppContext })) {
+        world.observe({
+          process: "backend.route.retired",
+          actor: backendHost,
+          claims: [],
+          body: { route: matched.route.id, method: matched.route.method, path: matched.route.path, handler: matched.route.handler, reason: "legacy frontend retired" }
+        });
+        return;
+      }
+      if (!(activeAppContext?.activeDispatchHandlers ?? new Set()).has(matched.route.handler)) {
         world.observe({
           process: "backend.route.failed",
           actor: backendHost,
           claims: [],
-          body: { route: matched.route.id, method: matched.route.method, path: matched.route.path, handler: matched.route.handler, reason: "handler unavailable in runtime profile", runtimeProfile }
+          body: {
+            route: matched.route.id,
+            method: matched.route.method,
+            path: matched.route.path,
+            handler: matched.route.handler,
+            reason: "handler unavailable in runtime profile",
+            runtimeProfile: activeAppContext?.runtimeProfile ?? null
+          }
         });
         await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
         return;
@@ -998,7 +1295,6 @@ export async function startRuntimeServer(world, {
         sendJson(res, 500, { error: "route handler not configured", route: matched.route.id });
         return;
       }
-      const routeWorld = activeAppContext?.appSnapshotManager?.getActiveSnapshot()?.world ?? world;
       const accessDecision = evaluateRouteAccess(routeWorld, matched.route, requestContext);
       if (!accessDecision.ok) {
         if (matched.route.handler === "page.surface") {
@@ -1159,8 +1455,8 @@ export async function startRuntimeServer(world, {
         serverRunner,
         appProject,
         runtimeRoot,
-        runtimeOperatorContract,
-        runtimeProfile: activeRuntimeProfile
+        runtimeOperatorContract: appContext.runtimeOperatorContract,
+        runtimeProfile: appContext.runtimeProfile
       });
       if (serverClosing) {
         try {
@@ -1200,7 +1496,7 @@ export async function startRuntimeServer(world, {
       async () => {
         const appSnapshotManager = await AppSnapshotManagerClass.create({
           appProject,
-          runtimeProfile: activeRuntimeProfile,
+          runtimeProfile: appContext.runtimeProfile,
           runtimePluginIds: configuredRuntimePluginIds,
           env,
           devMode: activeDevMode === true,
@@ -1253,8 +1549,8 @@ export async function startRuntimeServer(world, {
   return {
     ok: true,
     url,
-    runtimeBundleSummary: resolvedRuntime,
-    runtimePluginCatalog: effectiveRuntimePluginCatalog,
+    runtimeBundleSummary: appContext.runtimeBundleSummary,
+    runtimePluginCatalog: appContext.runtimePluginCatalog,
     runtimeContext: appContext,
     getStartupTelemetry: () => startupTelemetry.snapshot(),
     subscribeStartupTelemetry: listener => startupTelemetry.subscribe?.(listener) ?? (() => {}),
@@ -1275,7 +1571,12 @@ export async function startRuntimeServer(world, {
           closer?.();
         } catch {}
       }
-      removeWorldProjectionContext();
+      while (projectionContextRemovers.length) {
+        const removeProjectionContext = projectionContextRemovers.pop();
+        try {
+          removeProjectionContext?.();
+        } catch {}
+      }
       server.closeAllConnections?.();
       return new Promise(resolve => server.close(resolve));
     }

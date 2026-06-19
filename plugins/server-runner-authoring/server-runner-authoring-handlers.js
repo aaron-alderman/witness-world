@@ -1,7 +1,9 @@
 import {
   requestBootstrapServerRunnerDefine,
+  requestBootstrapServerRunnerRuntimeProfileSet,
   requestBootstrapRuntimePluginInstall,
   requestBootstrapRuntimePluginRemove,
+  requestBootstrapRuntimePluginReconcile,
   resolveRuntimePluginServerRunnerInput
 } from "./server-runner-processes.js";
 import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
@@ -22,6 +24,17 @@ function runtimePluginProposalId({ actor, process, serverRunner, plugin }) {
   ].join(".");
 }
 
+function runtimePluginReconcileProposalId({ actor, serverRunner, plugin, actionId }) {
+  return [
+    "proposal",
+    "runtimePlugin.reconcile",
+    proposalPart(actor, "actor"),
+    proposalPart(serverRunner, "serverRunner"),
+    proposalPart(plugin, "plugin"),
+    proposalPart(actionId, "action")
+  ].join(".");
+}
+
 function serverRunnerProposalId({ actor, context, id }) {
   return [
     "proposal",
@@ -29,6 +42,16 @@ function serverRunnerProposalId({ actor, context, id }) {
     proposalPart(actor, "actor"),
     proposalPart(context, "context"),
     proposalPart(id, "serverRunner")
+  ].join(".");
+}
+
+function serverRunnerRuntimeProfileProposalId({ actor, serverRunner, runtimeProfile }) {
+  return [
+    "proposal",
+    "serverRunner.runtimeProfile.set",
+    proposalPart(actor, "actor"),
+    proposalPart(serverRunner, "serverRunner"),
+    proposalPart(runtimeProfile, "runtimeProfile")
   ].join(".");
 }
 
@@ -213,6 +236,89 @@ export function createServerRunnerAuthoringBundleHandlers({
       });
     },
 
+    "runtimePlugin.reconcile": async ({ req, res, requestActor, appContext }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const proposalId = trimmedStringOrEmpty(body?.proposalId || body?.id);
+      const proposalReason = trimmedStringOrEmpty(body?.reason);
+      const mutationBody = omitProposalMetadata(body);
+      const resolvedServerRunner = resolveRuntimePluginServerRunnerInput(world, body, {
+        label: "server runner"
+      });
+      if (!resolvedServerRunner.ok) {
+        sendJson(res, 400, { error: resolvedServerRunner.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedServerRunner.target);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestBootstrapProposalCreate(world, {
+            actor: gate.actor,
+            backendHost,
+            body: {
+              id: proposalId || runtimePluginReconcileProposalId({
+                actor: gate.actor,
+                serverRunner: resolvedServerRunner.target,
+                plugin: mutationBody?.plugin,
+                actionId: mutationBody?.actionId
+              }),
+              targetProcess: "runtimePlugin.reconcile",
+              targetKind: "serverRunner",
+              targetId: resolvedServerRunner.target,
+              bodyJson: JSON.stringify(mutationBody ?? {}),
+              reason: proposalReason || "Repair a runtime plugin install through witnessed proposal"
+            }
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: "Proposed runtime plugin repair for review."
+          });
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const pluginCatalog = await getRuntimePluginCatalog({
+        activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
+        serverRunnerId: resolvedServerRunner.target ?? null
+      });
+      const result = requestBootstrapRuntimePluginReconcile(world, {
+        actor: gate.actor,
+        backendHost,
+        body: { ...mutationBody, serverRunner: resolvedServerRunner.target, serverRunnerRef: null },
+        pluginCatalog
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, {
+          error: result.error,
+          witness: result.witness,
+          currentReview: result.currentReview ?? null
+        });
+        return;
+      }
+      sendJson(res, result.status, {
+        action: result.action,
+        reviewBefore: result.reviewBefore,
+        reviewAfter: result.reviewAfter,
+        compositionBefore: result.compositionBefore,
+        compositionAfter: result.compositionAfter,
+        runtimePluginInstall: result.runtimePluginInstall,
+        runtimePluginInstalls: result.runtimePluginInstalls,
+        witness: result.witness
+      });
+    },
+
     "serverRunner.create": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
@@ -267,6 +373,76 @@ export function createServerRunnerAuthoringBundleHandlers({
         return;
       }
       sendJson(res, result.status, { serverRunner: result.serverRunner, witness: result.witness });
+    },
+
+    "serverRunner.runtimeProfile.set": async ({ req, res, params, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const targetServerRunner = typeof params?.id === "string" && params.id.trim()
+        ? params.id.trim()
+        : body?.serverRunner;
+      const auth = ensureTargetAuthority(gate.actor, targetServerRunner);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestBootstrapProposalCreate(world, {
+            actor: gate.actor,
+            backendHost,
+            body: {
+              id: serverRunnerRuntimeProfileProposalId({
+                actor: gate.actor,
+                serverRunner: targetServerRunner,
+                runtimeProfile: body?.runtimeProfile
+              }),
+              targetProcess: "serverRunner.runtimeProfile.set",
+              targetKind: "serverRunner",
+              targetId: targetServerRunner,
+              bodyJson: JSON.stringify({
+                ...(body ?? {}),
+                serverRunner: targetServerRunner,
+                serverRunnerRef: null
+              }),
+              reason: "Set a shared server runner runtime profile through witnessed proposal"
+            }
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: "Proposed server runner runtime-profile update for review."
+          });
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapServerRunnerRuntimeProfileSet(world, {
+        actor: gate.actor,
+        backendHost,
+        body: {
+          ...(body ?? {}),
+          serverRunner: targetServerRunner,
+          serverRunnerRef: null
+        }
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, {
+        serverRunner: result.serverRunner,
+        profileBefore: result.profileBefore,
+        profileAfter: result.profileAfter,
+        witness: result.witness
+      });
     }
   };
 }

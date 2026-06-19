@@ -8,6 +8,7 @@ import { createWorld } from "../../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../../src/host.js";
 import { applyWitnessDocsWithRuntimePlugins, applyWitnessToml } from "../../src/dsl.js";
 import { applyDesire } from "../../src/desire/index.js";
+import { applyLegacyFrontendUplift } from "../../src/frontend-legacy-uplift.js";
 import { startBlankRuntime } from "../../src/runtime-local-launcher.js";
 
 const silentLogger = {
@@ -31,7 +32,8 @@ export async function startUiServer({
   extraWitnessToml = "",
   logger = silentLogger,
   runtimeProfile = "full",
-  devMode = true
+  devMode = true,
+  upliftLegacyFrontend = false
 } = {}) {
   const world = createWorld();
   const runtimeRoot = await tempRuntimeRoot();
@@ -44,6 +46,9 @@ export async function startUiServer({
   const runtimeDeclarationRegistry = appProject.runtimePluginRegistries?.runtimeDeclarationRegistry ?? null;
   for (const desire of appProject.authoredDesireDocs) applyDesire(world, desire, { runtimeDeclarationRegistry });
   if (extraWitnessToml.trim()) applyWitnessToml(world, extraWitnessToml);
+  if (upliftLegacyFrontend === true) {
+    applyLegacyFrontendUplift(world, { actor: "adam", backendHost: "backendHost" });
+  }
 
   const server = await startServer(world, {
     actor: "adam",
@@ -80,7 +85,8 @@ export async function startUiDemoServer({
     serverRunnerId: "demo_server",
     extraWitnessToml,
     logger,
-    runtimeProfile
+    runtimeProfile,
+    upliftLegacyFrontend: true
   });
 }
 

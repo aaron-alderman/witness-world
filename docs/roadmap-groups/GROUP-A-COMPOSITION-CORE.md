@@ -330,8 +330,9 @@ Acceptance:
 Current proof:
 
 - remaining widget and app-composition CRUD lanes now route unauthorized signed-in actors toward real proposals through the shared authoring seams in `plugins/authoring-core/authoring-core-handlers.js` and `plugins/program-authoring/program-authoring-handlers.js`, with `plugins/authoring-core/authoring-core.test.js` covering widget plus route and serve proposal fallback and `plugins/program-authoring/program-authoring.test.js` covering backend-program version activate and rollback proposal fallback plus approved execution through shared helpers
-- legacy frontend retirement no longer depends on privileged `page.home` host behavior: `src/frontend-legacy-migration.js` and `src/legacy-frontend-bridge.js` now define deterministic preview and apply helpers that re-home legacy widget and frontend-program routes onto canonical `page.surface` surfaces with explicit `compat.legacy-widget-program` capability refs and inspectable legacy props instead of hidden route-local JS semantics
-- `plugins/authoring-core/authoring-core-processes.js`, `plugins/authoring-core/authoring-core-handlers.js`, `plugins/authoring-core/authoring-core-proposal-targets.js`, `plugins/proposals/proposal-executor.js`, `src/runtime-governance.js`, `plugins/bootstrap/bootstrap-read-models.js`, `plugins/bootstrap/bootstrap-live-state.js`, `plugins/mcp/mcp-tools.js`, and `src/runtime-core-handlers.js` now expose the governed `frontend.migrateLegacy` write path, `POST /api/frontend-migrations/legacy`, readable `frontendLegacyMigration` state, active compatibility-bridge ledger rows, and one shared render bridge for both migrated `page.surface` routes and the remaining `page.home` shim; `test/frontend-legacy-migration.test.js`, `test/runtime-core-legacy-frontend.test.js`, `plugins/authoring-core/authoring-core.test.js`, `plugins/bootstrap/bootstrap-read-models.test.js`, `plugins/mcp/mcp.test.js`, and `test/runtime-governance.test.js` prove preview, rewrite, idempotence, proposal fallback, constrained reads, and render-path parity end to end
+- legacy app-serving frontend is now retired instead of bridge-hosted: `src/runtime-bundle-handlers.js`, `src/runtime-server.js`, `src/runtime-routing.js`, `src/runtime-core-handlers.js`, `plugins/authoring-core/runtime.js`, `plugins/mcp/mcp-tools.js`, `plugins/bootstrap/bootstrap-read-models.js`, and `src/runtime-authoring-policy.js` now remove runnable `page.home` / `compat.legacy-widget-program` serving, remove `frontendLegacyMigration`, return explicit `410` retirement responses for retired legacy routes, and expose only `frontendLegacyUplift` retirement diagnostics plus native uplift as the governed path forward
+- constrained/bootstrap/operator truth now matches that retirement: `page.home` is absent from core runtime handler catalogs and bootstrap route-authoring guidance, compatibility-bridge ledgers no longer claim legacy frontend bridge activity, maintained starter/bootstrap app creation now authors a native `page.surface` todo flow directly instead of seeding legacy app material plus post-seed uplift, and the focused proof suite (`test/frontend-legacy-uplift.test.js`, `plugins/authoring-core/authoring-core.test.js`, `plugins/bootstrap/bootstrap-read-models.test.js`, `plugins/mcp/mcp.test.js`, `test/runtime-routing.test.js`, `test/runtime-governance.test.js`, and `test/runtime-authoring-policy.test.js`) covers retirement status, proposal fallback, constrained reads, and native uplift end to end
+- public legacy frontend authoring is now retired alongside serving: `plugins/program-authoring/runtime.js`, `plugins/program-authoring/program-authoring-handlers.js`, `src/runtime-governance.js`, `src/runtime-authoring-policy.js`, `src/runtime-server.js`, `plugins/bootstrap/bootstrap-page-main.wtoml`, `plugins/bootstrap/bootstrap-state-list-render.js`, and `plugins/starter/*` now remove constrained/operator `frontendProgram.create` and `frontendStep.create`, return explicit `410` retirement truth from `/api/frontend-programs` and `/api/frontend-steps`, keep bootstrap focused on native noun inventory plus `frontendLegacyUplift` diagnostics, and keep legacy widget/program/step records only as inspect or uplift-analysis inputs instead of a live app-authoring lane
 - widget version operations are no longer review-only folklore in product surfaces: `plugins/inspect/runtime.js` now proposes `widgetVersion.activate` and `widgetVersion.rollback` through the same proposal lane, while `test/bootstrap-host.test.js`, `test/host.test.js`, `plugins/inspect/inspect.test.js`, and `test/ui.live-inspector.test.js` prove read-only shared widget version changes create real proposals and apply only after authorized approval
 - remaining canvas and asset shared mutations now follow the same rule, with `plugins/assets/handlers.js` returning proposals for unauthorized asset attach and detach requests and shared canvas proposal targets executing through `plugins/proposals/proposal-executor.js`; `test/canvas-host.test.js` and `test/runtime-authoring-services.test.js` prove proposal fallback and approved execution for asset attachment, scoped perspective creation, canvas thing mutation, batch mutation, duplicate or removeMany, and place operations
 - runtime-plugin and MCP mutation surfaces now stay parallel to direct execution under the governed authoring path in `plugins/server-runner-authoring/*` and `plugins/mcp-authoring/*`, with `plugins/server-runner-authoring/server-runner-authoring.test.js`, `plugins/mcp-authoring/mcp-authoring.test.js`, `test/runtime-authoring-services.test.js`, `test/bootstrap-host.test.js`, and `test/ui.bootstrap.test.js` proving unauthorized actors receive proposals for `runtimePlugin.install`, `runtimePlugin.remove`, `mcpServer.create`, `mcpTool.install`, and `mcpTool.remove`, and that approved proposals execute through the shared bootstrap proposal executor instead of a separate write path
@@ -542,9 +543,11 @@ The canonical frontend floor on `page.surface` now includes:
 
 Current proof status:
 
-- legacy route re-homing onto canonical `page.surface` is live through
-  `frontendLegacyMigration`
-- native subset uplift off `compat.legacy-widget-program` is live through
+- legacy app-serving routes are now retired instead of bridge-served; requests
+  to `page.home` or `page.surface` routes backed by
+  `compat.legacy-widget-program` now fail with explicit retirement truth until
+  `frontendLegacyUplift` succeeds
+- native subset uplift off retired legacy route state is live through
   `frontendLegacyUplift`
 - collection repeat authoring, route-authored preload policies, and canonical
   query-state bindings are in the constrained public lane
@@ -552,9 +555,13 @@ Current proof status:
   longer counts as an acceptable authored-native target
 - bootstrap and embedded authored flows no longer depend on named page-local
   `witness:*` host-event bridges as the supported runtime lane
-- the compatibility bridge ledger remains the honest inspection surface for any
-  surviving legacy frontend bridge usage; host-event bridge usage should remain
-  at zero after this tranche
+- `frontendLegacyUplift.retirementStatus`, `pending[]`, `blocked[]`, and
+  `retiredRoutes[]` are now the honest inspection surfaces for remaining
+  unservable legacy frontend routes
+- maintained starter/bootstrap app creation now emits native `surface`,
+  `process`, `projection`, `collection`, `boundary`, `policy`, and
+  `page.surface` route material directly instead of seeding a legacy app and
+  uplifting it as a post-step
 
 ## Primary Source Map
 

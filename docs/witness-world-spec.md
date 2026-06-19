@@ -154,8 +154,6 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
     - `DELETE /api/capability-installs`
     - `/api/identities`
     - `/api/identities/:id`
-    - `/api/frontend-programs`
-    - `/api/frontend-steps`
     - `/api/routes`
     - `/api/serve-mounts`
     - `/api/server-runners`
@@ -168,6 +166,11 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
     - `/api/private-notes`
     - `/api/todos`
     - `/api/todos/:id`
+
+Legacy app-serving frontend writes are no longer part of the constrained or
+bootstrap authoring surface. `widget`, `frontendProgram`, and `frontendStep`
+records remain inspect/history inputs only, and legacy routes must uplift onto
+canonical `page.surface` authoring before they can serve again.
     - `/api/widgets`
     - `/api/widget-versions/:soul/activate`
     - `/api/widget-versions/:soul/rollback`

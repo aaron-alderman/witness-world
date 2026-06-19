@@ -577,7 +577,7 @@ test("plugin-to-src import audit stays explicitly classified", async () => {
   assert.equal(mcpAuthoringRuntimeBuiltinsSource.includes("mcp_server_define_spec"), true);
   assert.equal(mcpAuthoringRuntimeBuiltinsSource.includes("mcp_tool_install_spec"), true);
   assert.equal(mcpAuthoringRuntimeBuiltinsSource.includes("mcp_tool_remove_spec"), true);
-  assert.equal(mcpAuthoringRuntimeSource.includes("mcpAuthoringRuntimeDeclarations"), true);
+  assert.equal(mcpAuthoringRuntimeSource.includes("mcpAuthoringRuntimeDeclarations"), false);
   assert.equal(await pathExists(path.join(pluginsRoot, "tutorial", "runtime-builtins.js")), false);
 });
 
@@ -589,10 +589,10 @@ test("DSL ownership keeps plugin activation core but feature declarations plugin
 
   assert.equal(desireApplySource.includes('"runtimePluginInstall"'), true);
   assert.equal(desireApplySource.includes('"runtimePluginRemove"'), true);
-  assert.equal(desireApplySource.includes('"mcpServer"'), false);
-  assert.equal(desireApplySource.includes('"mcpToolInstall"'), false);
-  assert.equal(desireApplySource.includes('"mcpToolRemove"'), false);
-  assert.equal(mcpAuthoringRuntimeSource.includes("mcpAuthoringRuntimeDeclarations"), true);
+  assert.equal(desireApplySource.includes('"mcpServer"'), true);
+  assert.equal(desireApplySource.includes('"mcpToolInstall"'), true);
+  assert.equal(desireApplySource.includes('"mcpToolRemove"'), true);
+  assert.equal(mcpAuthoringRuntimeSource.includes("mcpAuthoringRuntimeDeclarations"), false);
 
   assert.equal(desireRvmSource.includes('case "chart"'), true);
   assert.equal(desireRvmSource.includes("planChart"), false);

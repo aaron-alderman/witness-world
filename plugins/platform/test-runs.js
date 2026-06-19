@@ -11,6 +11,7 @@ import {
   resolveRunnerVerificationPolicy,
   resolveVerificationGatePolicy
 } from "../../src/runtime-verification-policy.js";
+import { PLATFORM_VERIFICATION_PROVIDERS } from "./verification-providers.js";
 
 const pluginDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(pluginDir, "..", "..");
@@ -74,6 +75,14 @@ export function resolvePlatformTestEnvironment(gate, {
   return "local-node";
 }
 
+function booleanOrDefault(value, fallback) {
+  if (value === true || value === false) return value;
+  const normalized = optionalText(value)?.toLowerCase() ?? "";
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return fallback;
+}
+
 export function inferPlatformTestExecutionClass(gate, {
   candidateSnapshotId = null,
   executionClass = null
@@ -94,6 +103,117 @@ function hashBuffer(buffer) {
 
 function hashJson(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function verificationProviderIdForGate(gate = {}) {
+  return optionalText(gate?.providerId) ?? (optionalText(gate?.command) ? "verification.command" : null);
+}
+
+function effectiveSafetyClassForGate(gate = {}, provider = null, executionClass = null) {
+  const authored = optionalText(gate?.safetyClass);
+  const providerDefault = optionalText(provider?.defaultSafetyClass);
+  const raw = authored ?? providerDefault ?? "unsafe";
+  if (String(executionClass || "") !== "in_process") return "unsafe";
+  return raw === "safe" ? "safe" : "unsafe";
+}
+
+function normalizeArtifactRows(runId, rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((row, index) => ({
+    ...row,
+    id: optionalText(row?.id) ?? `testArtifact:${runId}:provider:${index + 1}`
+  }));
+}
+
+function normalizeSuiteRows(runId, rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((row, index) => ({
+    ...row,
+    id: optionalText(row?.id) ?? `testSuite:${runId}:provider:${index + 1}`
+  }));
+}
+
+function normalizeCaseRows(runId, rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((row, index) => ({
+    ...row,
+    id: optionalText(row?.id) ?? `testCase:${runId}:provider:${index + 1}`
+  }));
+}
+
+function cloneCachedArtifactRows({
+  runId,
+  resultId,
+  gateId,
+  branchId = null,
+  changeSetId = null,
+  candidateSnapshotId = null,
+  producedAt = null,
+  artifacts = []
+} = {}) {
+  return (Array.isArray(artifacts) ? artifacts : []).map((artifact, index) => ({
+    ...artifact,
+    id: `testArtifact:${runId}:cached:${index + 1}`,
+    runId,
+    resultId,
+    gateId,
+    branchId,
+    changeSetId,
+    candidateSnapshotId,
+    producedAt: producedAt ?? artifact?.producedAt ?? null
+  }));
+}
+
+function cloneCachedSuiteRows({
+  runId,
+  resultId,
+  gateId,
+  branchId = null,
+  changeSetId = null,
+  candidateSnapshotId = null,
+  producedAt = null,
+  suites = []
+} = {}) {
+  const suiteIdMap = new Map();
+  const cloned = (Array.isArray(suites) ? suites : []).map((suite, index) => {
+    const nextId = `testSuite:${runId}:cached:${index + 1}`;
+    const originalId = optionalText(suite?.id);
+    if (originalId) suiteIdMap.set(originalId, nextId);
+    return {
+      ...suite,
+      id: nextId,
+      runId,
+      resultId,
+      gateId,
+      branchId,
+      changeSetId,
+      candidateSnapshotId,
+      producedAt: producedAt ?? suite?.producedAt ?? null
+    };
+  });
+  return { suites: cloned, suiteIdMap };
+}
+
+function cloneCachedCaseRows({
+  runId,
+  resultId,
+  gateId,
+  branchId = null,
+  changeSetId = null,
+  candidateSnapshotId = null,
+  producedAt = null,
+  suiteIdMap = new Map(),
+  cases = []
+} = {}) {
+  return (Array.isArray(cases) ? cases : []).map((testCase, index) => ({
+    ...testCase,
+    id: `testCase:${runId}:cached:${index + 1}`,
+    suiteId: suiteIdMap.get(String(testCase?.suiteId || "")) ?? (testCase?.suiteId ? String(testCase.suiteId) : null),
+    runId,
+    resultId,
+    gateId,
+    branchId,
+    changeSetId,
+    candidateSnapshotId,
+    producedAt: producedAt ?? testCase?.producedAt ?? null
+  }));
 }
 
 const PLATFORM_TEST_DEPENDENCY_GRAPH_SCHEMA_VERSION = "platform-test-gate-graph/v1";
@@ -467,6 +587,206 @@ export function buildPlatformRuntimeCompositionFingerprint({
   });
 }
 
+async function runInProcessVerificationProvider(provider, context, timeoutMs) {
+  const startedAt = nowIso();
+  const startedMs = Date.now();
+  const abortController = new AbortController();
+  let timedOut = false;
+  let providerResult = null;
+  try {
+    providerResult = await new Promise((resolve, reject) => {
+      const timer = timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            abortController.abort(new Error("verification provider timed out"));
+            reject(new Error("verification provider timed out"));
+          }, timeoutMs)
+        : null;
+      Promise.resolve(provider.run({
+        ...context,
+        signal: abortController.signal
+      }))
+        .then(result => {
+          if (timer) clearTimeout(timer);
+          resolve(result);
+        })
+        .catch(error => {
+          if (timer) clearTimeout(timer);
+          reject(error);
+        });
+      timer?.unref?.();
+    });
+  } catch (error) {
+    return {
+      execution: {
+        startedAt,
+        finishedAt: nowIso(),
+        durationMs: Math.max(0, Date.now() - startedMs),
+        exitCode: null,
+        signal: null,
+        status: timedOut
+          ? "timed_out"
+          : (error?.name === "AssertionError" ? "failed" : "error"),
+        stdout: "",
+        stderr: "",
+        timedOut,
+        error: error instanceof Error ? error.message : "verification provider failed"
+      },
+      cleanupStatus: "not_run",
+      cleanupSummary: timedOut
+        ? "Provider timed out before cleanup could complete."
+        : "Provider failed before cleanup completed.",
+      timeoutKind: timedOut ? "provider_timeout" : null,
+      artifacts: [],
+      suites: [],
+      cases: [],
+      providerResult: null
+    };
+  }
+  const baseExecution = providerResult?.execution && typeof providerResult.execution === "object"
+    ? providerResult.execution
+    : {};
+  let cleanupStatus = "not_required";
+  let cleanupSummary = "No cleanup work was required.";
+  let cleanupArtifacts = [];
+  try {
+    if (typeof provider.cleanup === "function") {
+      const cleanup = await provider.cleanup({
+        ...context,
+        signal: abortController.signal
+      }, providerResult);
+      cleanupStatus = cleanup?.status ? String(cleanup.status) : "passed";
+      cleanupSummary = optionalText(cleanup?.summary) ?? "Cleanup completed.";
+      cleanupArtifacts = normalizeArtifactRows(context.runId, cleanup?.artifacts);
+    }
+  } catch (error) {
+    cleanupStatus = "failed";
+    cleanupSummary = error instanceof Error ? error.message : "cleanup failed";
+  }
+  const status = cleanupStatus === "failed"
+    ? "error"
+    : String(baseExecution.status || "passed");
+  return {
+    execution: {
+      startedAt,
+      finishedAt: nowIso(),
+      durationMs: Math.max(0, Date.now() - startedMs),
+      exitCode: typeof baseExecution.exitCode === "number" ? baseExecution.exitCode : (status === "passed" ? 0 : null),
+      signal: baseExecution.signal ? String(baseExecution.signal) : null,
+      status,
+      stdout: String(baseExecution.stdout || ""),
+      stderr: String(baseExecution.stderr || ""),
+      timedOut: baseExecution.timedOut === true,
+      error: cleanupStatus === "failed"
+        ? cleanupSummary
+        : (baseExecution.error ? String(baseExecution.error) : null)
+    },
+    cleanupStatus,
+    cleanupSummary,
+    timeoutKind: baseExecution.timedOut === true ? "provider_timeout" : null,
+    artifacts: [
+      ...normalizeArtifactRows(context.runId, providerResult?.artifacts),
+      ...cleanupArtifacts
+    ],
+    suites: normalizeSuiteRows(context.runId, providerResult?.suites),
+    cases: normalizeCaseRows(context.runId, providerResult?.cases),
+    providerResult
+  };
+}
+
+async function runVerificationProvider({
+  provider,
+  providerId,
+  gate,
+  workspace,
+  runCommand,
+  timeoutMs,
+  executionClass,
+  safetyClass,
+  runtimeProfile = null,
+  serverRunnerId = null,
+  branchId = null,
+  changeSetId = null,
+  candidateSnapshotId = null,
+  verificationPersistence = null,
+  appContext = null,
+  runId
+}) {
+  const input = gate?.verificationInput && typeof gate.verificationInput === "object"
+    ? structuredClone(gate.verificationInput)
+    : {};
+  const context = {
+    runId,
+    gate,
+    input,
+    workspace,
+    timeoutMs,
+    executionClass,
+    safetyClass,
+    runtimeProfile: optionalText(runtimeProfile),
+    serverRunnerId: optionalText(serverRunnerId),
+    branchId: optionalText(branchId),
+    changeSetId: optionalText(changeSetId),
+    candidateSnapshotId: optionalText(candidateSnapshotId),
+    verificationPersistence,
+    appContext,
+    executeCommand: command => runCommand({
+      command,
+      timeoutMs,
+      cwd: workspace.cwd
+    })
+  };
+  if (String(executionClass || "") === "in_process") {
+    return runInProcessVerificationProvider(provider, context, timeoutMs);
+  }
+  let providerResult;
+  try {
+    providerResult = await provider.run(context);
+  } catch (error) {
+    return {
+      execution: {
+        startedAt: nowIso(),
+        finishedAt: nowIso(),
+        durationMs: 0,
+        exitCode: null,
+        signal: null,
+        status: "error",
+        stdout: "",
+        stderr: "",
+        timedOut: false,
+        error: error instanceof Error ? error.message : `${providerId} failed`
+      },
+      cleanupStatus: "not_run",
+      cleanupSummary: "Provider failed before cleanup completed.",
+      timeoutKind: null,
+      artifacts: [],
+      suites: [],
+      cases: [],
+      providerResult: null
+    };
+  }
+  return {
+    execution: providerResult?.execution && typeof providerResult.execution === "object"
+      ? providerResult.execution
+      : {
+          status: "error",
+          exitCode: null,
+          signal: null,
+          stdout: "",
+          stderr: "",
+          timedOut: false,
+          error: `${providerId} did not return an execution result`
+        },
+    cleanupStatus: "not_required",
+    cleanupSummary: "No cleanup work was required.",
+    timeoutKind: providerResult?.execution?.timedOut === true ? "command_timeout" : null,
+    artifacts: normalizeArtifactRows(runId, providerResult?.artifacts),
+    suites: normalizeSuiteRows(runId, providerResult?.suites),
+    cases: normalizeCaseRows(runId, providerResult?.cases),
+    providerResult
+  };
+}
+
 export function buildPlatformVerificationPolicyFingerprint({
   appContext = null,
   gate = null,
@@ -494,10 +814,17 @@ export function buildPlatformVerificationPolicyFingerprint({
     runtimeProfile: optionalText(runtimeProfile ?? appContext?.runtimeProfile),
     policySource: optionalText(appContext?.verificationPolicySource ?? appContext?.verificationPolicy?.source),
     gateId: optionalText(gate?.id),
+    providerId: optionalText(gate?.providerId ?? verification?.providerId),
+    safetyClass: optionalText(gate?.safetyClass ?? verification?.safetyClass),
+    invoke: gate?.invoke === false ? false : true,
+    verifierInputFingerprint: gate?.verificationInput && typeof gate.verificationInput === "object"
+      ? hashJson(gate.verificationInput)
+      : null,
     enabled: resolvedPolicy?.enabled ?? null,
     startup: resolvedPolicy?.startup ?? null,
     watch: resolvedPolicy?.watch ?? null,
     onChangeSet: resolvedPolicy?.onChangeSet ?? null,
+    startupSettleMs: resolvedPolicy?.startupSettleMs ?? null,
     priority: resolvedPolicy?.priority ?? null,
     maxConcurrency: resolvedPolicy?.maxConcurrency ?? null,
     cpuBudget: resolvedPolicy?.cpuBudget ?? null,
@@ -653,6 +980,13 @@ function emitPlatformTestRunStart(world, {
       cacheIdentity: cacheIdentity && typeof cacheIdentity === "object" ? { ...cacheIdentity } : null,
       cacheStatus: String(cacheStatus || "miss"),
       cacheHit: cacheHit && typeof cacheHit === "object" ? { ...cacheHit } : null,
+      providerId: optionalText(verification?.providerId),
+      safetyClass: optionalText(verification?.safetyClass),
+      cleanupStatus: optionalText(verification?.cleanupStatus),
+      cleanupSummary: optionalText(verification?.cleanupSummary),
+      timeoutKind: optionalText(verification?.timeoutKind),
+      triggerKind: optionalText(verification?.triggerKind),
+      workspaceMode: optionalText(verification?.workspaceMode) ?? optionalText(environmentInputs?.workspaceMode),
       serverRunnerId: serverRunnerId ? String(serverRunnerId) : null,
       verification: verification && typeof verification === "object" ? { ...verification } : null,
       actor,
@@ -668,6 +1002,9 @@ function emitPlatformTestRunFinish(world, {
   actor,
   run,
   execution,
+  artifacts = [],
+  suites = [],
+  cases = [],
   branchId = null,
   changeSetId = null,
   candidateSnapshotId = null,
@@ -705,6 +1042,13 @@ function emitPlatformTestRunFinish(world, {
     cacheIdentity: cacheIdentity && typeof cacheIdentity === "object" ? { ...cacheIdentity } : null,
     cacheStatus: String(cacheStatus || "miss"),
     cacheHit: cacheHit && typeof cacheHit === "object" ? { ...cacheHit } : null,
+    providerId: optionalText(verification?.providerId),
+    safetyClass: optionalText(verification?.safetyClass),
+    cleanupStatus: optionalText(verification?.cleanupStatus),
+    cleanupSummary: optionalText(verification?.cleanupSummary),
+    timeoutKind: optionalText(verification?.timeoutKind),
+    triggerKind: optionalText(verification?.triggerKind),
+    workspaceMode: optionalText(verification?.workspaceMode) ?? optionalText(environmentInputs?.workspaceMode),
     serverRunnerId: serverRunnerId ? String(serverRunnerId) : null,
     verification: verification && typeof verification === "object" ? { ...verification } : null,
     producedAt: execution.finishedAt
@@ -734,6 +1078,13 @@ function emitPlatformTestRunFinish(world, {
       cacheIdentity: cacheIdentity && typeof cacheIdentity === "object" ? { ...cacheIdentity } : null,
       cacheStatus: String(cacheStatus || "miss"),
       cacheHit: cacheHit && typeof cacheHit === "object" ? { ...cacheHit } : null,
+      providerId: optionalText(verification?.providerId),
+      safetyClass: optionalText(verification?.safetyClass),
+      cleanupStatus: optionalText(verification?.cleanupStatus),
+      cleanupSummary: optionalText(verification?.cleanupSummary),
+      timeoutKind: optionalText(verification?.timeoutKind),
+      triggerKind: optionalText(verification?.triggerKind),
+      workspaceMode: optionalText(verification?.workspaceMode) ?? optionalText(environmentInputs?.workspaceMode),
       serverRunnerId: serverRunnerId ? String(serverRunnerId) : null,
       verification: verification && typeof verification === "object" ? { ...verification } : null,
       actor,
@@ -749,7 +1100,10 @@ function emitPlatformTestRunFinish(world, {
       stderr: execution.stderr,
       timedOut: execution.timedOut === true,
       error: execution.error ?? null,
-      results: [result]
+      results: [result],
+      artifacts: Array.isArray(artifacts) ? artifacts.map(row => ({ ...row })) : [],
+      suites: Array.isArray(suites) ? suites.map(row => ({ ...row })) : [],
+      cases: Array.isArray(cases) ? cases.map(row => ({ ...row })) : []
     }
   });
 }
@@ -883,13 +1237,45 @@ export async function runPlatformTestGate(world, {
     candidateSnapshotId: normalizedCandidateSnapshotId,
     executionClass
   });
+  const providerId = verificationProviderIdForGate(gate);
+  const provider = providerId
+    ? ((appContext?.verificationProviders?.[providerId] ?? PLATFORM_VERIFICATION_PROVIDERS[providerId]) ?? null)
+    : null;
+  const effectiveSafetyClass = effectiveSafetyClassForGate(gate, provider, effectiveExecutionClass);
   const effectiveVerification = verification && typeof verification === "object"
     ? {
         ...verification,
+        providerId,
+        safetyClass: verification.safetyClass ?? effectiveSafetyClass,
         executionClass: verification.executionClass ?? effectiveExecutionClass,
         requiresCleanWorkspace: verification.requiresCleanWorkspace ?? requiresCleanWorkspace
       }
-    : { executionClass: effectiveExecutionClass, requiresCleanWorkspace };
+    : {
+        providerId,
+        safetyClass: effectiveSafetyClass,
+        executionClass: effectiveExecutionClass,
+        requiresCleanWorkspace
+      };
+  if (!providerId) return { ok: false, status: 400, error: "verification provider is required for this gate" };
+  if (!provider) return { ok: false, status: 400, error: `verification provider not found: ${providerId}` };
+  if (
+    Array.isArray(provider.supportedExecutionClasses)
+    && provider.supportedExecutionClasses.length
+    && !provider.supportedExecutionClasses.includes(String(effectiveExecutionClass || ""))
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: `${providerId} does not support executionClass=${effectiveExecutionClass}`
+    };
+  }
+  if (String(effectiveExecutionClass || "") === "in_process" && effectiveSafetyClass !== "safe") {
+    return {
+      ok: false,
+      status: 400,
+      error: "executionClass=in_process requires safetyClass=safe"
+    };
+  }
   const environment = resolvePlatformTestEnvironment(gate, {
     candidateSnapshotId: normalizedCandidateSnapshotId,
     executionClass: effectiveExecutionClass,
@@ -967,27 +1353,92 @@ export async function runPlatformTestGate(world, {
     cacheStatus,
     cacheHit,
     serverRunnerId,
-    verification: effectiveVerification
+    verification: {
+      ...effectiveVerification,
+      workspaceMode: workspaceDescriptor.workspaceMode
+    }
   });
+  let providerArtifacts = [];
+  let providerSuites = [];
+  let providerCases = [];
+  let cleanupStatus = reusableResult?.cleanupStatus ?? null;
+  let cleanupSummary = reusableResult?.cleanupSummary ?? null;
+  let timeoutKind = reusableResult?.timeoutKind ?? null;
   const execution = reusableResult
-    ? cachedExecutionFromResult(reusableResult)
-    : await (async () => {
-        if (workspaceDescriptor.workspaceMode !== "isolated-temp-workspace") {
-          return runCommand({
-            command: gate.command,
-            timeoutMs: effectiveTimeoutMs,
-            cwd: repoRoot
+    ? await (async () => {
+        const cachedBundle = await readPlatformTestRun(world, reusableResult.runId, { verificationPersistence });
+        if (cachedBundle.ok) {
+          const resultId = `testResult:${runId}:1`;
+          providerArtifacts = cloneCachedArtifactRows({
+            runId,
+            resultId,
+            gateId: String(gate.id),
+            branchId: normalizedBranchId,
+            changeSetId: normalizedChangeSetId,
+            candidateSnapshotId: normalizedCandidateSnapshotId,
+            producedAt: reusableResult.producedAt ?? null,
+            artifacts: cachedBundle.testArtifacts
+          });
+          const clonedSuites = cloneCachedSuiteRows({
+            runId,
+            resultId,
+            gateId: String(gate.id),
+            branchId: normalizedBranchId,
+            changeSetId: normalizedChangeSetId,
+            candidateSnapshotId: normalizedCandidateSnapshotId,
+            producedAt: reusableResult.producedAt ?? null,
+            suites: cachedBundle.testSuites
+          });
+          providerSuites = clonedSuites.suites;
+          providerCases = cloneCachedCaseRows({
+            runId,
+            resultId,
+            gateId: String(gate.id),
+            branchId: normalizedBranchId,
+            changeSetId: normalizedChangeSetId,
+            candidateSnapshotId: normalizedCandidateSnapshotId,
+            producedAt: reusableResult.producedAt ?? null,
+            suiteIdMap: clonedSuites.suiteIdMap,
+            cases: cachedBundle.testCases
           });
         }
-        const workspace = await materializePlatformTestWorkspace({
-          overlayFiles: workspaceDescriptor.overlayFiles
-        });
+        return cachedExecutionFromResult(reusableResult);
+      })()
+    : await (async () => {
+        const workspace = workspaceDescriptor.workspaceMode !== "isolated-temp-workspace"
+          ? {
+              cwd: repoRoot,
+              async cleanup() {}
+            }
+          : await materializePlatformTestWorkspace({
+              overlayFiles: workspaceDescriptor.overlayFiles
+            });
         try {
-          return await runCommand({
-            command: gate.command,
+          const providerRun = await runVerificationProvider({
+            provider,
+            providerId,
+            gate,
+            workspace,
+            runCommand,
             timeoutMs: effectiveTimeoutMs,
-            cwd: workspace.cwd
+            executionClass: effectiveExecutionClass,
+            safetyClass: effectiveSafetyClass,
+            runtimeProfile,
+            serverRunnerId,
+            branchId: normalizedBranchId,
+            changeSetId: normalizedChangeSetId,
+            candidateSnapshotId: normalizedCandidateSnapshotId,
+            verificationPersistence,
+            appContext,
+            runId
           });
+          providerArtifacts = providerRun.artifacts ?? [];
+          providerSuites = providerRun.suites ?? [];
+          providerCases = providerRun.cases ?? [];
+          cleanupStatus = providerRun.cleanupStatus ?? null;
+          cleanupSummary = providerRun.cleanupSummary ?? null;
+          timeoutKind = providerRun.timeoutKind ?? null;
+          return providerRun.execution;
         } finally {
           await workspace.cleanup();
         }
@@ -1006,6 +1457,9 @@ export async function runPlatformTestGate(world, {
       protectedObjects: Array.isArray(gate.protectedObjects) ? gate.protectedObjects.map(String) : []
     },
     execution,
+    artifacts: providerArtifacts,
+    suites: providerSuites,
+    cases: providerCases,
     branchId: normalizedBranchId,
     changeSetId: normalizedChangeSetId,
     candidateSnapshotId: normalizedCandidateSnapshotId,
@@ -1017,7 +1471,13 @@ export async function runPlatformTestGate(world, {
     cacheStatus,
     cacheHit,
     serverRunnerId,
-    verification: effectiveVerification
+    verification: {
+      ...effectiveVerification,
+      cleanupStatus,
+      cleanupSummary,
+      timeoutKind,
+      workspaceMode: workspaceDescriptor.workspaceMode
+    }
   });
   const readback = await readPlatformTestRun(world, runId, { verificationPersistence });
   await verificationPersistence?.persistTestRunBundle?.({

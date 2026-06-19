@@ -83,27 +83,24 @@ test("bootstrap app authoring submit request builder preserves create-form paylo
     buildBootstrapAppAuthoringSubmitRequest({
       detail: { family: "route" },
       data: {
-        id: "home_route",
-        path: "/",
-        handler: "page.home",
-        page: "home",
-        backendProgramSoul: "",
+        id: "world_route",
+        path: "/world",
+        handler: "page.world",
+        page: "world",
         rootWidget: "page_root",
         rootWidgetRef: "landingPage",
-        frontendProgramRef: "landingProgram",
         liveProjection: true
       }
     }),
     {
       url: "/api/routes",
       body: {
-        id: "home_route",
-        path: "/",
-        handler: "page.home",
-        page: "home",
+        id: "world_route",
+        path: "/world",
+        handler: "page.world",
+        page: "world",
         rootWidget: "page_root",
         rootWidgetRef: "landingPage",
-        frontendProgramRef: "landingProgram",
         liveProjection: true
       }
     }
@@ -149,16 +146,19 @@ test("bootstrap app authoring submit helper posts, resets, and refreshes on succ
 
   const ok = await runBootstrapAppAuthoringSubmit({
     detail: {
-      family: "step",
-      formId: "step-form",
-      statusId: "step-status"
+      family: "route",
+      formId: "route-form",
+      statusId: "route-status"
     },
     contractsByFamily: bootstrapAppAuthoringSubmitContractsByFamily,
     readFormData: () => ({
-      program: "landing_program",
-      event: "load",
-      op: "setText",
-      order: "0"
+      id: "surface_route",
+      path: "/surface",
+      handler: "page.surface",
+      rootSurface: "landing_surface",
+      routeStateProcess: "ShellNavigation",
+      routeStateStateRef: "activeRoute",
+      liveProjection: false
     }),
     postJson: async (url, body) => {
       calls.push({ url, body });
@@ -172,16 +172,21 @@ test("bootstrap app authoring submit helper posts, resets, and refreshes on succ
 
   assert.equal(ok, true);
   assert.deepEqual(calls, [{
-    url: "/api/frontend-steps",
+    url: "/api/routes",
     body: {
-      program: "landing_program",
-      event: "load",
-      op: "setText",
-      order: 0
+      id: "surface_route",
+      path: "/surface",
+      handler: "page.surface",
+      rootSurface: "landing_surface",
+      routeState: {
+        process: "ShellNavigation",
+        stateRef: "activeRoute"
+      },
+      liveProjection: false
     }
   }]);
-  assert.deepEqual(statuses, [{ id: "step-status", text: "Saved." }]);
-  assert.deepEqual(resets, ["step-form"]);
+  assert.deepEqual(statuses, [{ id: "route-status", text: "Saved." }]);
+  assert.deepEqual(resets, ["route-form"]);
   assert.equal(refreshed, 1);
 });
 
@@ -218,15 +223,25 @@ test("bootstrap app authoring submit helper reports errors without reset or refr
 
 test("bootstrap app authoring submit bridge binds one documented event family", () => {
   const events = [];
+  const forms = new Map([
+    ["context-form", { addEventListener(name, handler) { events.push([name, handler]); } }],
+    ["perspective-form", { addEventListener(name, handler) { events.push([name, handler]); } }],
+    ["widget-form", { addEventListener(name, handler) { events.push([name, handler]); } }],
+    ["route-form", { addEventListener(name, handler) { events.push([name, handler]); } }],
+    ["serve-form", { addEventListener(name, handler) { events.push([name, handler]); } }],
+    ["runner-form", { addEventListener(name, handler) { events.push([name, handler]); } }]
+  ]);
   const target = {
-    addEventListener(name, handler) {
-      events.push([name, handler]);
+    document: {
+      getElementById(id) {
+        return forms.get(id) || null;
+      }
     }
   };
 
   const registered = bindBootstrapAppAuthoringSubmit({ target });
-  assert.equal(events.length, 1);
-  assert.equal(events[0][0], "witness:bootstrap-app-authoring-submit");
+  assert.equal(events.length, 6);
+  assert.equal(events.every(([name]) => name === "submit"), true);
   assert.equal(typeof registered, "function");
 
   const factory = renderBootstrapAppAuthoringSubmitFactory();

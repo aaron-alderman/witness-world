@@ -1,5 +1,10 @@
 import { relation } from "./kernel.js";
 import {
+  MIGRATION_STATUS,
+  migrationStatusFromActivationStatus,
+  migrationStatusFromTransitionStrategy
+} from "./migration-status.js";
+import {
   activeWidgetVersions,
   activateWidgetVersion,
   stableJson,
@@ -10,12 +15,7 @@ import {
   widgetVersions
 } from "./widgets.js";
 
-export const WIDGET_EVOLUTION_MIGRATION_STATUS = Object.freeze({
-  compatible: "compatible",
-  migrate: "migrate",
-  forkRequired: "forkRequired",
-  blocked: "blocked"
-});
+export const WIDGET_EVOLUTION_MIGRATION_STATUS = MIGRATION_STATUS;
 
 export const SUPPORTED_WIDGET_REPLACE_FIELDS = Object.freeze([
   "text",
@@ -112,29 +112,11 @@ export function isKnownWidgetKind(kind) {
 }
 
 export function widgetVersionMigrationStatus(status = "") {
-  switch (String(status || "")) {
-    case "activated":
-      return WIDGET_EVOLUTION_MIGRATION_STATUS.compatible;
-    case "migrated":
-      return WIDGET_EVOLUTION_MIGRATION_STATUS.migrate;
-    case "forkRequired":
-      return WIDGET_EVOLUTION_MIGRATION_STATUS.forkRequired;
-    default:
-      return WIDGET_EVOLUTION_MIGRATION_STATUS.blocked;
-  }
+  return migrationStatusFromActivationStatus(status);
 }
 
 export function widgetVersionMigrationStatusFromStrategy(strategy = "") {
-  switch (String(strategy || "")) {
-    case "compatible":
-      return WIDGET_EVOLUTION_MIGRATION_STATUS.compatible;
-    case "migrate":
-      return WIDGET_EVOLUTION_MIGRATION_STATUS.migrate;
-    case "fork":
-      return WIDGET_EVOLUTION_MIGRATION_STATUS.forkRequired;
-    default:
-      return WIDGET_EVOLUTION_MIGRATION_STATUS.blocked;
-  }
+  return migrationStatusFromTransitionStrategy(strategy);
 }
 
 export function widgetReplacementPropsFromInput(currentProps = {}, input = {}) {

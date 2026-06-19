@@ -21,7 +21,11 @@ import { PLATFORM_RELEASE_CHANNEL_ROWS } from "./git-ship.js";
 import { platformProposalTemplates } from "./platform-proposals.js";
 import { PLATFORM_TELEMETRY_THRESHOLD_ROWS } from "./projections.js";
 import { renderPlatformConsoleCss } from "./platform-style.js";
-import { buildFlakeScoreByGate } from "./test-gate-catalog.js";
+import {
+  buildFlakeScoreByGate,
+  buildProjectedCoverageEdges,
+  resolveEffectivePlatformTestGates
+} from "./test-gate-catalog.js";
 
 export const PLATFORM_LIFECYCLES = Object.freeze([
   "author",
@@ -40,23 +44,28 @@ const PLATFORM_DEFAULT_BUILD_REQUIREMENTS = Object.freeze({
   folders: true,
   knowledgeRelations: true,
   testInventory: true,
-  pluginManifests: true
+  pluginManifests: true,
+  gitBoundary: false
 });
 const PLATFORM_OVERVIEW_SUMMARY_REQUIREMENTS = Object.freeze({
   docs: false,
   folders: false,
   knowledgeRelations: false,
   testInventory: false,
-  pluginManifests: true
+  pluginManifests: true,
+  gitBoundary: false
 });
 const PLATFORM_SLICE_REQUIREMENTS = Object.freeze({
   overview: PLATFORM_DEFAULT_BUILD_REQUIREMENTS,
   change: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
   verification: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false }),
-  telemetry: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false }),
+  artifacts: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  sessions: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  telemetry: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false, pluginManifests: false }),
   defects: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false }),
-  pushes: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
-  ships: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  security: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  pushes: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false, gitBoundary: true }),
+  ships: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false, gitBoundary: true }),
   knowledgeDocs: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, folders: false, testInventory: false }),
   knowledgeFolders: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, knowledgeRelations: false, testInventory: false }),
   knowledgeRoadmap: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, folders: false, testInventory: false }),
@@ -75,6 +84,14 @@ let markdownDocInventoryCache = null;
 let knowledgeRelationsCache = null;
 let folderMetasCache = null;
 let testFileInventoryCache = null;
+const platformInventoryPathCache = new Map();
+const PLATFORM_REQUEST_MEMO = Symbol("platformRequestMemo");
+
+function optionalText(value) {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  return trimmed || null;
+}
 
 const CONTROL_DOCS = new Map([
   ["docs/CAPABILITIES.md", ["author", "steward"]],
@@ -150,7 +167,8 @@ function normalizePlatformBuildRequirements(requirements = null) {
     folders: requirements.folders !== false,
     knowledgeRelations: requirements.knowledgeRelations !== false,
     testInventory: requirements.testInventory !== false,
-    pluginManifests: requirements.pluginManifests !== false
+    pluginManifests: requirements.pluginManifests !== false,
+    gitBoundary: requirements.gitBoundary === true
   };
 }
 
@@ -317,6 +335,164 @@ async function sourceTokenForRelativePaths(relativePaths = []) {
   return parts.join("|");
 }
 
+function requestMemoMap(appContext = null) {
+  if (!appContext) return null;
+  if (!Object.prototype.hasOwnProperty.call(appContext, PLATFORM_REQUEST_MEMO)) {
+    Object.defineProperty(appContext, PLATFORM_REQUEST_MEMO, {
+      value: new Map(),
+      configurable: true,
+      enumerable: false,
+      writable: false
+    });
+  }
+  return appContext[PLATFORM_REQUEST_MEMO];
+}
+
+function readPlatformRequestMemo(appContext, key, factory) {
+  const memo = requestMemoMap(appContext);
+  if (!memo) return Promise.resolve().then(factory);
+  if (memo.has(key)) return memo.get(key);
+  const task = Promise.resolve().then(factory);
+  memo.set(key, task);
+  return task;
+}
+
+function inventoryDirectoryPaths(relativePaths = [], rootRelativePaths = []) {
+  const out = new Set(
+    (Array.isArray(rootRelativePaths) ? rootRelativePaths : [])
+      .map(slash)
+      .filter(Boolean)
+  );
+  for (const relativePath of Array.isArray(relativePaths) ? relativePaths : []) {
+    let current = path.posix.dirname(slash(relativePath));
+    while (current && current !== "." && !out.has(current)) {
+      out.add(current);
+      current = path.posix.dirname(current);
+    }
+  }
+  return [...out].sort((left, right) => left.localeCompare(right));
+}
+
+async function directoryTokenForRelativePaths(relativePaths = [], rootRelativePaths = []) {
+  return sourceTokenForRelativePaths(inventoryDirectoryPaths(relativePaths, rootRelativePaths));
+}
+
+function inventoryPathState(kind) {
+  const key = String(kind || "");
+  if (!platformInventoryPathCache.has(key)) {
+    platformInventoryPathCache.set(key, {
+      relativePaths: null,
+      directoryPaths: null,
+      directoryToken: null,
+      contentToken: null,
+      lastScanMode: "cold"
+    });
+  }
+  return platformInventoryPathCache.get(key);
+}
+
+const PLATFORM_DEPENDENCY_INVENTORIES = Object.freeze({
+  docs: Object.freeze({
+    rootRelativePaths: ["docs"],
+    async scanRelativePaths() {
+      const docsRoot = path.join(repoRoot, "docs");
+      const files = await listFiles(docsRoot, file => file.endsWith(".md"));
+      return files
+        .map(file => slash(path.relative(repoRoot, file)))
+        .sort((left, right) => left.localeCompare(right));
+    }
+  }),
+  folders: Object.freeze({
+    rootRelativePaths: ["."],
+    async scanRelativePaths() {
+      const folderMetaFiles = await listFiles(repoRoot, file => file.endsWith("this.folder.wtoml"));
+      return folderMetaFiles
+        .map(absPath => slash(path.relative(repoRoot, absPath)))
+        .sort((left, right) => left.localeCompare(right));
+    }
+  }),
+  knowledgeRelations: Object.freeze({
+    rootRelativePaths: ["docs/intent"],
+    async scanRelativePaths() {
+      return ["docs/intent/knowledge-relations.wtoml"];
+    }
+  }),
+  testInventory: Object.freeze({
+    rootRelativePaths: ["test", "plugins"],
+    async scanRelativePaths() {
+      const testFiles = await listFiles(path.join(repoRoot, "test"), file => file.endsWith(".test.js"));
+      const pluginTestFiles = await listFiles(path.join(repoRoot, "plugins"), file => file.endsWith(".test.js"));
+      return [...testFiles, ...pluginTestFiles]
+        .map(file => slash(path.relative(repoRoot, file)))
+        .sort((left, right) => left.localeCompare(right));
+    }
+  }),
+  pluginManifests: Object.freeze({
+    rootRelativePaths: ["store/seeds", "plugins"],
+    async scanRelativePaths() {
+      const catalogPath = "store/seeds/first-party-plugin-catalog.json";
+      const catalog = await readJson(catalogPath, { packages: [] });
+      return unique([
+        catalogPath,
+        ...(catalog.packages ?? []).map(row => row?.directory ? `plugins/${row.directory}/plugin.json` : null)
+      ]).sort((left, right) => left.localeCompare(right));
+    }
+  })
+});
+
+async function platformInventoryRelativePaths(kind) {
+  const spec = PLATFORM_DEPENDENCY_INVENTORIES[String(kind || "")];
+  if (!spec) return [];
+  const state = inventoryPathState(kind);
+  if (!state.relativePaths) {
+    state.relativePaths = await spec.scanRelativePaths();
+    state.directoryPaths = inventoryDirectoryPaths(state.relativePaths, spec.rootRelativePaths);
+    state.directoryToken = await sourceTokenForRelativePaths(state.directoryPaths);
+    state.contentToken = await sourceTokenForRelativePaths(state.relativePaths);
+    state.lastScanMode = "initial-scan";
+    return state.relativePaths;
+  }
+  const currentDirectoryToken = await sourceTokenForRelativePaths(state.directoryPaths ?? spec.rootRelativePaths);
+  if (currentDirectoryToken !== state.directoryToken) {
+    state.relativePaths = await spec.scanRelativePaths();
+    state.directoryPaths = inventoryDirectoryPaths(state.relativePaths, spec.rootRelativePaths);
+    state.directoryToken = await sourceTokenForRelativePaths(state.directoryPaths);
+    state.contentToken = await sourceTokenForRelativePaths(state.relativePaths);
+    state.lastScanMode = "rescanned";
+  } else {
+    state.lastScanMode = "cached-paths";
+  }
+  return state.relativePaths;
+}
+
+async function platformInventoryTokenSnapshot(kind) {
+  const spec = PLATFORM_DEPENDENCY_INVENTORIES[String(kind || "")];
+  if (!spec) {
+    return {
+      token: "",
+      detail: {
+        kind: String(kind || ""),
+        strategy: "fallback",
+        scanMode: "unsupported",
+        pathCount: 0
+      }
+    };
+  }
+  const state = inventoryPathState(kind);
+  const relativePaths = await platformInventoryRelativePaths(kind);
+  const token = await sourceTokenForRelativePaths(relativePaths);
+  state.contentToken = token;
+  return {
+    token,
+    detail: {
+      kind: String(kind || ""),
+      strategy: "incremental-path-stats",
+      scanMode: state.lastScanMode || "cached-paths",
+      pathCount: relativePaths.length
+    }
+  };
+}
+
 async function readCachedPluginManifest(relativePath) {
   const token = await sourceTokenForRelativePaths([relativePath]);
   const cached = pluginManifestCache.get(relativePath);
@@ -327,8 +503,8 @@ async function readCachedPluginManifest(relativePath) {
 }
 
 async function loadMarkdownDocInventory() {
-  const docPaths = await listMarkdownDocs();
-  const token = await sourceTokenForRelativePaths(docPaths);
+  const docPaths = await platformInventoryRelativePaths("docs");
+  const { token } = await platformInventoryTokenSnapshot("docs");
   if (markdownDocInventoryCache?.token === token) return markdownDocInventoryCache.value;
   const docs = await Promise.all(docPaths.map(async docPath => {
     const source = await readText(docPath, "");
@@ -351,12 +527,8 @@ async function loadMarkdownDocInventory() {
 }
 
 async function loadTestFileInventory() {
-  const testFiles = await listFiles(path.join(repoRoot, "test"), file => file.endsWith(".test.js"));
-  const pluginTestFiles = await listFiles(path.join(repoRoot, "plugins"), file => file.endsWith(".test.js"));
-  const relativePaths = [...testFiles, ...pluginTestFiles]
-    .map(file => slash(path.relative(repoRoot, file)))
-    .sort((left, right) => left.localeCompare(right));
-  const token = await sourceTokenForRelativePaths(relativePaths);
+  const relativePaths = await platformInventoryRelativePaths("testInventory");
+  const { token } = await platformInventoryTokenSnapshot("testInventory");
   if (testFileInventoryCache?.token === token) return testFileInventoryCache.value;
   const rows = await Promise.all(relativePaths.map(async relativePath => ({
     relativePath,
@@ -364,6 +536,26 @@ async function loadTestFileInventory() {
   })));
   testFileInventoryCache = { token, value: rows };
   return rows;
+}
+
+async function markdownDocInventoryToken() {
+  return (await platformInventoryTokenSnapshot("docs")).token;
+}
+
+async function testFileInventoryToken() {
+  return (await platformInventoryTokenSnapshot("testInventory")).token;
+}
+
+async function knowledgeRelationsToken() {
+  return (await platformInventoryTokenSnapshot("knowledgeRelations")).token;
+}
+
+async function folderMetaToken() {
+  return (await platformInventoryTokenSnapshot("folders")).token;
+}
+
+async function pluginManifestInventoryToken() {
+  return (await platformInventoryTokenSnapshot("pluginManifests")).token;
 }
 
 function lifecycleForPlugin(id, manifest = {}) {
@@ -873,6 +1065,10 @@ function platformObjectKindForId(targetId, nodes) {
   if (value.startsWith("epic:")) return "epic";
   if (value.startsWith("feature:")) return "feature";
   if (value.startsWith("branch:")) return "branch";
+  if (value.startsWith("session:") || value.startsWith("session.")) return "session";
+  if (value.startsWith("execution:")) return "execution";
+  if (value.startsWith("sessionTag:")) return "sessionTag";
+  if (value.startsWith("executionArtifact:")) return "executionArtifact";
   if (value.startsWith("proposal:")) return "proposal";
   if (value.startsWith("intent:")) return "intent";
   if (value.startsWith("folder:")) return "folder";
@@ -1724,11 +1920,7 @@ function parseMarkdownSections(docPath, source) {
 }
 
 async function listMarkdownDocs() {
-  const docsRoot = path.join(repoRoot, "docs");
-  const files = await listFiles(docsRoot, file => file.endsWith(".md"));
-  return files
-    .map(file => slash(path.relative(repoRoot, file)))
-    .sort((left, right) => left.localeCompare(right));
+  return platformInventoryRelativePaths("docs");
 }
 
 function gateRunnerForPath(relativePath) {
@@ -2139,6 +2331,351 @@ function summarizeTestRedGreenScope({
     pendingGateIds,
     latestActivityAt,
     gateStates
+  };
+}
+
+function rowScopeMatches(row = null, {
+  serverRunnerId = null,
+  runtimeProfile = null
+} = {}) {
+  if (!row) return false;
+  const expectedRunnerId = optionalText(serverRunnerId);
+  const expectedRuntimeProfile = optionalText(runtimeProfile);
+  const rowRunnerId = optionalText(row.serverRunnerId);
+  const rowRuntimeProfile = optionalText(row.runtimeProfile);
+  if (expectedRunnerId && rowRunnerId && rowRunnerId !== expectedRunnerId) return false;
+  if (expectedRuntimeProfile && rowRuntimeProfile && rowRuntimeProfile !== expectedRuntimeProfile) return false;
+  return true;
+}
+
+function requirementActivityAt(row = null) {
+  return String(
+    row?.producedAt
+    || row?.finishedAt
+    || row?.startedAt
+    || row?.enqueuedAt
+    || row?.createdAt
+    || ""
+  );
+}
+
+function compareRequirementActivity(left, right) {
+  const leftActivityAt = requirementActivityAt(left);
+  const rightActivityAt = requirementActivityAt(right);
+  if (leftActivityAt && rightActivityAt && leftActivityAt !== rightActivityAt) {
+    return leftActivityAt.localeCompare(rightActivityAt);
+  }
+  return compareTestActivityRows(left, right);
+}
+
+function verificationRequirementMatchesTarget(row = null, {
+  gateId = null,
+  changeSetId = null,
+  candidateSnapshotId = null,
+  executionClass = null,
+  serverRunnerId = null,
+  runtimeProfile = null
+} = {}) {
+  if (!row || String(row?.gateId || "") !== String(gateId || "")) return false;
+  if (!rowScopeMatches(row, { serverRunnerId, runtimeProfile })) return false;
+  if (String(executionClass || "") === "candidate_snapshot") {
+    return String(row?.candidateSnapshotId || "") === String(candidateSnapshotId || "");
+  }
+  return String(row?.changeSetId || "") === String(changeSetId || "");
+}
+
+function latestRow(rows = []) {
+  return [...(Array.isArray(rows) ? rows : [])]
+    .sort((left, right) => compareRequirementActivity(right, left))[0] ?? null;
+}
+
+function verificationRequirementSummaryStatus(requirements = []) {
+  const blockingRows = (Array.isArray(requirements) ? requirements : []).filter(row => row.blocking === true);
+  if (!blockingRows.length) return "unknown";
+  if (blockingRows.some(row => row.status === "running")) return "running";
+  if (blockingRows.some(row => ["failed", "stale", "missing"].includes(String(row.status || "")))) return "blocked";
+  if (blockingRows.every(row => row.status === "satisfied")) return "ready";
+  return "unknown";
+}
+
+function buildVerificationRequirements({
+  changeSets = [],
+  candidateSnapshots = [],
+  testGates = [],
+  verificationPolicies = [],
+  selectedTestGatesByChangeSet = Object.create(null),
+  verificationFreshness = [],
+  verificationInvalidations = [],
+  verificationQueue = [],
+  verificationExecutions = [],
+  testRuns = [],
+  testReports = [],
+  verificationPolicy = null
+} = {}) {
+  const gateById = Object.fromEntries((Array.isArray(testGates) ? testGates : []).map(row => [String(row.id || ""), row]));
+  const explicitPolicyByGateId = new Map();
+  for (const row of Array.isArray(verificationPolicies) ? verificationPolicies : []) {
+    const gateId = optionalText(row?.gateId);
+    if (!gateId) continue;
+    explicitPolicyByGateId.set(gateId, row);
+  }
+  const serverRunnerId = optionalText(
+    verificationPolicy?.serverRunnerId
+    ?? verificationPolicies.find(row => optionalText(row?.serverRunnerId))?.serverRunnerId
+  );
+  const runtimeProfile = optionalText(
+    verificationPolicy?.runtimeProfile
+    ?? verificationPolicies.find(row => optionalText(row?.runtimeProfile))?.runtimeProfile
+  );
+  const reportByRunIdAndKind = new Map();
+  for (const report of Array.isArray(testReports) ? testReports : []) {
+    const runId = optionalText(report?.runId);
+    const reportKind = optionalText(report?.reportKind);
+    if (!runId || !reportKind) continue;
+    reportByRunIdAndKind.set(`${runId}\u0000${reportKind}`, report);
+  }
+  const targets = [
+    ...(Array.isArray(changeSets) ? changeSets : []).map(changeSet => ({
+      targetKind: "changeSet",
+      targetId: String(changeSet.id || ""),
+      changeSetId: String(changeSet.id || ""),
+      candidateSnapshotId: null,
+      branchId: changeSet.branchId ? String(changeSet.branchId) : null,
+      producedAt: changeSet.validatedAt ?? changeSet.updatedAt ?? changeSet.createdAt ?? null
+    })),
+    ...(Array.isArray(candidateSnapshots) ? candidateSnapshots : []).map(snapshot => ({
+      targetKind: "candidateSnapshot",
+      targetId: String(snapshot.id || ""),
+      changeSetId: String(snapshot.changeSetId || ""),
+      candidateSnapshotId: String(snapshot.id || ""),
+      branchId: snapshot.branchId ? String(snapshot.branchId) : null,
+      producedAt: snapshot.createdAt ?? null
+    }))
+  ].filter(target => target.targetId && target.changeSetId);
+  const requirementRows = [];
+  const summaryRows = [];
+  for (const target of targets) {
+    const selectedGateIds = [...(selectedTestGatesByChangeSet?.[target.changeSetId] ?? [])];
+    const rows = selectedGateIds.map(gateId => {
+      const gate = gateById[String(gateId || "")] ?? null;
+      const explicitPolicy = explicitPolicyByGateId.get(String(gateId || "")) ?? null;
+      const enabled = explicitPolicy?.enabled ?? (verificationPolicy?.enabled !== false);
+      const onChangeSet = explicitPolicy?.onChangeSet ?? (verificationPolicy?.defaults?.onChangeSet ?? true);
+      const executionClass = optionalText(explicitPolicy?.executionClass ?? gate?.executionClass) ?? "child_process";
+      const matchingRuns = (Array.isArray(testRuns) ? testRuns : [])
+        .filter(run => verificationRequirementMatchesTarget(run, {
+          gateId,
+          changeSetId: target.changeSetId,
+          candidateSnapshotId: target.candidateSnapshotId,
+          executionClass,
+          serverRunnerId,
+          runtimeProfile
+        }))
+        .sort((left, right) => compareRequirementActivity(right, left));
+      const latestMatchingRun = matchingRuns[0] ?? null;
+      const latestPassedRun = matchingRuns.find(run => String(run?.status || "") === "passed") ?? null;
+      const freshness = latestRow((Array.isArray(verificationFreshness) ? verificationFreshness : []).filter(row =>
+        String(row?.gateId || "") === String(gateId || "")
+        && rowScopeMatches(row, { serverRunnerId, runtimeProfile })
+      ));
+      const invalidations = (Array.isArray(verificationInvalidations) ? verificationInvalidations : [])
+        .filter(row =>
+          String(row?.gateId || "") === String(gateId || "")
+          && rowScopeMatches(row, { serverRunnerId, runtimeProfile })
+        )
+        .sort((left, right) => compareRequirementActivity(right, left));
+      const latestInvalidation = invalidations[0] ?? null;
+      const queueEntries = (Array.isArray(verificationQueue) ? verificationQueue : [])
+        .filter(row =>
+          ["queued", "running"].includes(String(row?.status || ""))
+          && verificationRequirementMatchesTarget(row, {
+            gateId,
+            changeSetId: target.changeSetId,
+            candidateSnapshotId: target.candidateSnapshotId,
+            executionClass,
+            serverRunnerId,
+            runtimeProfile
+          })
+        )
+        .sort((left, right) => compareRequirementActivity(right, left));
+      const executionEntries = (Array.isArray(verificationExecutions) ? verificationExecutions : [])
+        .filter(row =>
+          ["queued", "running"].includes(String(row?.status || ""))
+          && verificationRequirementMatchesTarget(row, {
+            gateId,
+            changeSetId: target.changeSetId,
+            candidateSnapshotId: target.candidateSnapshotId,
+            executionClass,
+            serverRunnerId,
+            runtimeProfile
+          })
+        )
+        .sort((left, right) => compareRequirementActivity(right, left));
+      const activeRun = matchingRuns.find(run => String(run?.status || "") === "running") ?? null;
+      const inFlight = queueEntries[0] ?? executionEntries[0] ?? activeRun ?? null;
+      const latestRegression = latestMatchingRun
+        ? (reportByRunIdAndKind.get(`${latestMatchingRun.id}\u0000regression`) ?? null)
+        : null;
+      const freshLatestRun = freshness
+        && freshness.status === "fresh"
+        && [freshness.latestRunId, freshness.latestPassedRunId].some(value => String(value || "") === String(latestMatchingRun?.id || ""));
+      let status = "missing";
+      if (inFlight) {
+        status = "running";
+      } else if (!latestMatchingRun) {
+        status = "missing";
+      } else if (["failed", "error", "timed_out"].includes(String(latestMatchingRun.status || ""))) {
+        status = "failed";
+      } else if (freshLatestRun && String(latestMatchingRun.status || "") === "passed") {
+        status = "satisfied";
+      } else {
+        status = "stale";
+      }
+      const latestActivity = latestRow([
+        latestMatchingRun,
+        latestPassedRun,
+        inFlight,
+        freshness,
+        latestInvalidation,
+        { producedAt: target.producedAt, id: target.targetId }
+      ].filter(Boolean));
+      const changedPaths = unique([
+        ...((freshness?.changedPaths ?? []).map(String)),
+        ...((latestInvalidation?.changedPaths ?? []).map(String))
+      ]);
+      const targetIds = unique([
+        ...((freshness?.targetIds ?? []).map(String)),
+        ...((latestInvalidation?.targetIds ?? []).map(String)),
+        ...((gate?.protectedObjects ?? []).map(String))
+      ]);
+      let reasonKinds = [];
+      let reasonSummary = "";
+      if (status === "running") {
+        reasonSummary = "Verification is currently queued or running for this target.";
+      } else if (status === "failed") {
+        reasonSummary = latestMatchingRun?.summary || latestMatchingRun?.error || "The latest relevant verification run failed.";
+      } else if (status === "missing") {
+        reasonKinds = ["missing_evidence"];
+        reasonSummary = "No matching verification evidence exists yet for this target.";
+      } else if (status === "stale") {
+        reasonKinds = unique([
+          ...((freshness?.reasonKinds ?? []).map(String)),
+          ...invalidations.map(row => String(row.reasonKind || "")).filter(Boolean)
+        ]);
+        reasonSummary = freshness?.reasonSummary || latestInvalidation?.reasonSummary || "Verification evidence exists but is no longer fresh for this target.";
+      } else {
+        reasonKinds = unique((freshness?.reasonKinds ?? []).map(String));
+        reasonSummary = freshness?.reasonSummary || "Fresh passing verification evidence is available for this target.";
+      }
+      return {
+        id: `verificationRequirement:${target.targetKind}:${target.targetId}:${gateId}`,
+        targetKind: target.targetKind,
+        targetId: target.targetId,
+        changeSetId: target.changeSetId,
+        candidateSnapshotId: target.candidateSnapshotId,
+        gateId: String(gateId || ""),
+        gateTitle: String(gate?.title || gateId || ""),
+        serverRunnerId,
+        runtimeProfile,
+        executionClass,
+        blocking: enabled !== false && onChangeSet === true,
+        status,
+        latestRunId: latestMatchingRun?.id ?? inFlight?.runId ?? inFlight?.id ?? null,
+        latestPassedRunId: latestPassedRun?.id ?? null,
+        freshnessStatus: freshness?.status ?? "missing",
+        reasonKinds,
+        reasonSummary,
+        regressionStatus: latestRegression?.status ?? "unknown",
+        changedPaths,
+        targetIds,
+        producedAt: requirementActivityAt(latestActivity) || target.producedAt || null
+      };
+    });
+    requirementRows.push(...rows);
+    const blockingRows = rows.filter(row => row.blocking === true);
+    const latestRunAt = rows
+      .map(row => String(row.producedAt || ""))
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right))
+      .at(-1) ?? null;
+    const summaryStatus = verificationRequirementSummaryStatus(rows);
+    const totalGateCount = rows.length;
+    const satisfiedCount = rows.filter(row => row.status === "satisfied").length;
+    const failedCount = rows.filter(row => row.status === "failed").length;
+    const staleCount = rows.filter(row => row.status === "stale").length;
+    const missingCount = rows.filter(row => row.status === "missing").length;
+    const runningCount = rows.filter(row => row.status === "running").length;
+    const summaryParts = [];
+    if (!totalGateCount) summaryParts.push("No selected verification gates.");
+    else {
+      summaryParts.push(`${totalGateCount} gate${totalGateCount === 1 ? "" : "s"} selected`);
+      if (satisfiedCount) summaryParts.push(`${satisfiedCount} satisfied`);
+      if (failedCount) summaryParts.push(`${failedCount} failed`);
+      if (staleCount) summaryParts.push(`${staleCount} stale`);
+      if (missingCount) summaryParts.push(`${missingCount} missing`);
+      if (runningCount) summaryParts.push(`${runningCount} running`);
+    }
+    summaryRows.push({
+      id: `verificationRequirementSummary:${target.targetKind}:${target.targetId}`,
+      targetKind: target.targetKind,
+      targetId: target.targetId,
+      changeSetId: target.changeSetId,
+      candidateSnapshotId: target.candidateSnapshotId,
+      serverRunnerId,
+      runtimeProfile,
+      blockingStatus: summaryStatus,
+      totalGateCount,
+      blockingGateCount: blockingRows.length,
+      satisfiedCount,
+      failedCount,
+      staleCount,
+      missingCount,
+      runningCount,
+      latestRunAt,
+      summary: summaryParts.join(", "),
+      producedAt: latestRunAt ?? target.producedAt ?? null
+    });
+  }
+  return {
+    verificationRequirements: requirementRows.sort((left, right) =>
+      String(left.targetKind || "").localeCompare(String(right.targetKind || ""))
+      || String(left.targetId || "").localeCompare(String(right.targetId || ""))
+      || String(left.gateId || "").localeCompare(String(right.gateId || ""))
+    ),
+    verificationRequirementSummaries: summaryRows.sort((left, right) =>
+      String(left.targetKind || "").localeCompare(String(right.targetKind || ""))
+      || String(left.targetId || "").localeCompare(String(right.targetId || ""))
+    )
+  };
+}
+
+export function selectVerificationRequirementState(model, {
+  changeSetId = null,
+  candidateSnapshotId = null,
+  preferCandidateSnapshot = true
+} = {}) {
+  const normalizedChangeSetId = optionalText(changeSetId);
+  const normalizedCandidateSnapshotId = optionalText(candidateSnapshotId);
+  const requirements = (model?.verificationRequirements ?? []).filter(row =>
+    (normalizedChangeSetId && String(row?.changeSetId || "") === normalizedChangeSetId)
+    || (normalizedCandidateSnapshotId && String(row?.candidateSnapshotId || "") === normalizedCandidateSnapshotId)
+  );
+  const summaries = model?.verificationRequirementSummaries ?? [];
+  const preferredSummary = preferCandidateSnapshot && normalizedCandidateSnapshotId
+    ? (summaries.find(row =>
+        row.targetKind === "candidateSnapshot"
+        && String(row?.targetId || "") === normalizedCandidateSnapshotId
+      ) ?? null)
+    : null;
+  const fallbackSummary = normalizedChangeSetId
+    ? (summaries.find(row =>
+        row.targetKind === "changeSet"
+        && String(row?.targetId || "") === normalizedChangeSetId
+      ) ?? null)
+    : null;
+  return {
+    verificationRequirements: requirements,
+    verificationRequirementSummary: preferredSummary ?? fallbackSummary ?? null
   };
 }
 
@@ -2802,7 +3339,7 @@ export function parseRoadmapTasks(docPath, source) {
 
 async function loadKnowledgeRelationsWtoml() {
   const relPath = "docs/intent/knowledge-relations.wtoml";
-  const token = await sourceTokenForRelativePaths([relPath]);
+  const { token } = await platformInventoryTokenSnapshot("knowledgeRelations");
   if (knowledgeRelationsCache?.token === token) return knowledgeRelationsCache.value;
   const source = await readText(relPath, "");
   if (!source.trim()) {
@@ -2843,9 +3380,8 @@ async function loadKnowledgeRelationsWtoml() {
 }
 
 async function loadFolderMetas() {
-  const folderMetaFiles = await listFiles(repoRoot, file => file.endsWith("this.folder.wtoml"));
-  const relativePaths = folderMetaFiles.map(absPath => slash(path.relative(repoRoot, absPath)));
-  const token = await sourceTokenForRelativePaths(relativePaths);
+  const relativePaths = await platformInventoryRelativePaths("folders");
+  const { token } = await platformInventoryTokenSnapshot("folders");
   if (folderMetasCache?.token === token) return folderMetasCache.value;
 
   const entities = [];
@@ -2939,17 +3475,369 @@ function platformTargetNodeId(kind, id) {
   return `${kind || "target"}:${id}`;
 }
 
+function latestTestResultsProjectionFromProject(project, testResults = []) {
+  const projectedLatestTestResults = projectValue(project, moduleProjectors.latestTestResultsByGate, null);
+  const latestTestResultRows = mergeRowsById(
+    Array.isArray(projectedLatestTestResults?.rows)
+      ? projectedLatestTestResults.rows
+      : Object.values(projectedLatestTestResults?.byGate ?? {}),
+    testResults
+  );
+  const latestTestResultsByGate = Object.create(null);
+  for (const [gateId, row] of Object.entries(projectedLatestTestResults?.byGate ?? {})) {
+    if (!gateId || !row) continue;
+    latestTestResultsByGate[gateId] = row;
+  }
+  for (const row of latestTestResultRows) {
+    const gateId = String(row?.gateId || "");
+    if (!gateId) continue;
+    const existing = latestTestResultsByGate[gateId];
+    if (!existing || String(existing.producedAt || "") <= String(row?.producedAt || "")) {
+      latestTestResultsByGate[gateId] = row;
+    }
+  }
+  return {
+    rows: latestTestResultRows,
+    byGate: Object.fromEntries(Object.entries(latestTestResultsByGate))
+  };
+}
+
+function branchAndChangeSetRowsFromProject(project) {
+  const baseProposals = projectRows(project, moduleProjectors.proposals);
+  const rawChangeSets = projectRows(project, moduleProjectors.changeSets);
+  const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
+  const editsByChangeSet = Object.create(null);
+  for (const edit of changeSetEdits) pushByKey(editsByChangeSet, edit.changeSetId, edit);
+  const changeSets = rawChangeSets.map(row => ({
+    ...row,
+    ...platformChangeSetInsights(row, {
+      edits: editsByChangeSet[row.id] ?? []
+    })
+  }));
+  const changeSetsByBranch = Object.create(null);
+  for (const changeSet of changeSets) pushByKey(changeSetsByBranch, changeSet.branchId, changeSet);
+  const branches = projectRows(project, moduleProjectors.branches).map(branch => ({
+    ...branch,
+    ...platformBranchInsights(branch, {
+      changeSets: changeSetsByBranch[branch.id] ?? [],
+      edits: (changeSetsByBranch[branch.id] ?? []).flatMap(changeSet => editsByChangeSet[changeSet.id] ?? []),
+      proposals: baseProposals
+    })
+  }));
+  return {
+    baseProposals,
+    changeSets,
+    branches
+  };
+}
+
+function verificationDurableRows(appContext = null, project = null) {
+  const durableVerificationRows = appContext?.verificationPersistence?.readModelRows?.() ?? {};
+  const testRuns = mergeRowsById(durableVerificationRows.testRuns ?? [], projectRows(project, moduleProjectors.testRuns));
+  const testResults = mergeRowsById(durableVerificationRows.testResults ?? [], projectRows(project, moduleProjectors.testResults));
+  const artifacts = mergeRowsById(durableVerificationRows.artifacts ?? [], projectRows(project, moduleProjectors.artifacts));
+  return {
+    durableVerificationRows,
+    testRuns,
+    testResults,
+    artifacts
+  };
+}
+
+function platformRequirementsMemoKey(requirements = null) {
+  const normalized = normalizePlatformBuildRequirements(requirements);
+  return [
+    normalized.docs ? "docs" : "",
+    normalized.folders ? "folders" : "",
+    normalized.knowledgeRelations ? "knowledgeRelations" : "",
+    normalized.testInventory ? "testInventory" : "",
+    normalized.pluginManifests ? "pluginManifests" : "",
+    normalized.gitBoundary ? "gitBoundary" : ""
+  ].join("|");
+}
+
+function defaultPlatformDependencyService() {
+  return {
+    async readInventoryTokenSnapshot(requirements = null) {
+      const platformRequirements = normalizePlatformBuildRequirements(requirements);
+      const tokens = {};
+      const details = {};
+      if (platformRequirements.docs) {
+        const snapshot = await platformInventoryTokenSnapshot("docs");
+        tokens.docs = snapshot.token;
+        details.docs = snapshot.detail;
+      }
+      if (platformRequirements.folders) {
+        const snapshot = await platformInventoryTokenSnapshot("folders");
+        tokens.folders = snapshot.token;
+        details.folders = snapshot.detail;
+      }
+      if (platformRequirements.knowledgeRelations) {
+        const snapshot = await platformInventoryTokenSnapshot("knowledgeRelations");
+        tokens.knowledgeRelations = snapshot.token;
+        details.knowledgeRelations = snapshot.detail;
+      }
+      if (platformRequirements.testInventory) {
+        const snapshot = await platformInventoryTokenSnapshot("testInventory");
+        tokens.testInventory = snapshot.token;
+        details.testInventory = snapshot.detail;
+      }
+      if (platformRequirements.pluginManifests) {
+        const snapshot = await platformInventoryTokenSnapshot("pluginManifests");
+        tokens.pluginManifests = snapshot.token;
+        details.pluginManifests = snapshot.detail;
+      }
+      return { tokens, details };
+    },
+    async readGitBoundaryState({ repoRoot: repoRootOverride = null } = {}) {
+      return readGitBoundaryState({
+        repoRoot: repoRootOverride ?? repoRoot
+      });
+    },
+    readGitBoundaryTokenSnapshotFromState(state = {}) {
+      const remotes = (state.remotes ?? [])
+        .map(row => `${row.name || ""}:${row.remoteUrl || ""}:${row.provider || ""}`)
+        .sort((left, right) => left.localeCompare(right));
+      const refs = (state.refs ?? [])
+        .map(row => `${row.refName || ""}:${row.objectId || ""}:${row.upstream || ""}:${row.symref || ""}`)
+        .sort((left, right) => left.localeCompare(right));
+      return {
+        token: [
+          state.currentBranchName || "",
+          remotes.join("|"),
+          refs.join("|")
+        ].join("||"),
+        detail: {
+          kind: "gitBoundary",
+          strategy: "ttl-cache",
+          remoteCount: Number(state.remotes?.length || 0),
+          refCount: Number(state.refs?.length || 0)
+        }
+      };
+    },
+    async readGitBoundaryToken({ repoRoot: repoRootOverride = null } = {}) {
+      const state = await this.readGitBoundaryState({
+        repoRoot: repoRootOverride ?? repoRoot
+      });
+      return this.readGitBoundaryTokenSnapshotFromState(state);
+    }
+  };
+}
+
+function platformDependencyService(appContext = null) {
+  return appContext?.platformDependencyService ?? defaultPlatformDependencyService();
+}
+
+export async function readPlatformInventoryTokenSnapshot(requirements = null, {
+  appContext = null
+} = {}) {
+  const normalized = normalizePlatformBuildRequirements(requirements);
+  if (
+    !normalized.docs
+    && !normalized.folders
+    && !normalized.knowledgeRelations
+    && !normalized.testInventory
+    && !normalized.pluginManifests
+  ) {
+    return { tokens: {}, details: {} };
+  }
+  return readPlatformRequestMemo(
+    appContext,
+    `platform.inventoryTokens:${platformRequirementsMemoKey(requirements)}`,
+    () => platformDependencyService(appContext).readInventoryTokenSnapshot(normalized)
+  );
+}
+
+export async function readPlatformInventoryTokens(requirements = null, {
+  appContext = null
+} = {}) {
+  return (await readPlatformInventoryTokenSnapshot(requirements, { appContext })).tokens;
+}
+
+export function currentPlatformRuntimeRevision(appContext = null) {
+  const snapshot = appContext?.requestSnapshot ?? appContext?.appSnapshotManager?.getActiveSnapshot?.() ?? null;
+  return Number(snapshot?.appRevision || appContext?.requestAppRevision || appContext?.appSnapshotManager?.appRevision || 0);
+}
+
+export async function readPlatformGitBoundaryState({
+  repoRoot: repoRootOverride = null,
+  appContext = null
+} = {}) {
+  const resolvedRepoRoot = repoRootOverride ?? repoRoot;
+  return readPlatformRequestMemo(
+    appContext,
+    `platform.gitBoundaryState:${slash(resolvedRepoRoot)}`,
+    () => platformDependencyService(appContext).readGitBoundaryState({ repoRoot: resolvedRepoRoot })
+  );
+}
+
+export async function readPlatformGitBoundaryTokenSnapshot({
+  repoRoot: repoRootOverride = null,
+  appContext = null
+} = {}) {
+  const resolvedRepoRoot = repoRootOverride ?? repoRoot;
+  const state = await readPlatformGitBoundaryState({
+    repoRoot: resolvedRepoRoot,
+    appContext
+  });
+  return readPlatformRequestMemo(
+    appContext,
+    `platform.gitBoundaryToken:${slash(resolvedRepoRoot)}`,
+    () => {
+      const service = platformDependencyService(appContext);
+      if (typeof service.readGitBoundaryTokenSnapshotFromState === "function") {
+        return service.readGitBoundaryTokenSnapshotFromState(state, { repoRoot: resolvedRepoRoot });
+      }
+      if (typeof service.readGitBoundaryToken === "function") {
+        return service.readGitBoundaryToken({ repoRoot: resolvedRepoRoot });
+      }
+      return defaultPlatformDependencyService().readGitBoundaryTokenSnapshotFromState(state, {
+        repoRoot: resolvedRepoRoot
+      });
+    }
+  );
+}
+
+export async function readPlatformGitBoundaryToken({
+  repoRoot: repoRootOverride = null,
+  appContext = null
+} = {}) {
+  return (await readPlatformGitBoundaryTokenSnapshot({
+    repoRoot: repoRootOverride,
+    appContext
+  })).token;
+}
+
+export function buildPlatformVerificationView({
+  appContext = null,
+  project = null
+} = {}) {
+  const { durableVerificationRows, testRuns, testResults } = verificationDurableRows(appContext, project);
+  const verificationFreshness = mergeRowsById(durableVerificationRows.verificationFreshness ?? [], projectRows(project, moduleProjectors.verificationFreshness));
+  const verificationInvalidations = mergeRowsById(durableVerificationRows.verificationInvalidations ?? [], projectRows(project, moduleProjectors.verificationInvalidations));
+  const verificationQueue = mergeRowsById(durableVerificationRows.verificationQueue ?? [], projectRows(project, moduleProjectors.verificationQueue));
+  const verificationExecutions = mergeRowsById(durableVerificationRows.verificationExecutions ?? [], projectRows(project, moduleProjectors.verificationExecutions));
+  const flakeScoresByGate = buildFlakeScoreByGate(testResults);
+  const latestTestResultsProjection = latestTestResultsProjectionFromProject(project, testResults);
+  const effectiveTestGates = resolveEffectivePlatformTestGates({
+    projectedTestGates: projectRows(project, moduleProjectors.testGates),
+    verificationPolicy: appContext?.verificationPolicy ?? null,
+    appRoot: appContext?.appRoot ?? repoRoot,
+    latestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
+    flakeScoresByGate
+  });
+  const { changeSets, branches } = branchAndChangeSetRowsFromProject(project);
+  const defects = projectRows(project, moduleProjectors.defects);
+  const defectObservations = projectRows(project, moduleProjectors.defectObservations);
+  const defectClusters = buildDefectClusterRows(defects, defectObservations, branches);
+  const testGateProjection = buildTestGateRows(
+    new Map(),
+    new Map(),
+    branches,
+    changeSets,
+    latestTestResultsProjection.byGate ?? Object.create(null),
+    defectClusters,
+    Object.create(null),
+    effectiveTestGates.length ? effectiveTestGates : null,
+    flakeScoresByGate
+  );
+  return {
+    testGates: testGateProjection.rows,
+    selectedTestGatesByBranch: testGateProjection.selectedByBranch,
+    selectedTestGatesByChangeSet: testGateProjection.selectedByChangeSet,
+    verificationFreshness,
+    verificationInvalidations,
+    verificationQueue,
+    verificationExecutions,
+    latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
+    testRuns,
+    testResults
+  };
+}
+
+export function buildPlatformShipView({
+  appContext = null,
+  project = null
+} = {}) {
+  const { testRuns, testResults } = verificationDurableRows(appContext, project);
+  const flakeScoresByGate = buildFlakeScoreByGate(testResults);
+  const latestTestResultsProjection = latestTestResultsProjectionFromProject(project, testResults);
+  const { baseProposals, changeSets, branches } = branchAndChangeSetRowsFromProject(project);
+  const pushRecords = projectRows(project, moduleProjectors.pushRecords);
+  const shipRecords = projectRows(project, moduleProjectors.shipRecords);
+  const performanceRegressions = projectRows(project, moduleProjectors.performanceRegressions);
+  const defects = projectRows(project, moduleProjectors.defects);
+  const defectObservations = projectRows(project, moduleProjectors.defectObservations);
+  const defectClusters = buildDefectClusterRows(defects, defectObservations, branches);
+  const effectiveTestGates = resolveEffectivePlatformTestGates({
+    projectedTestGates: projectRows(project, moduleProjectors.testGates),
+    verificationPolicy: appContext?.verificationPolicy ?? null,
+    appRoot: appContext?.appRoot ?? repoRoot,
+    latestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
+    flakeScoresByGate
+  });
+  const proposals = [
+    ...baseProposals.map(row => ({ ...row })),
+    ...buildDerivedDefectProposals(defects, baseProposals)
+      .filter(row => !baseProposals.some(existing => String(existing.id || "") === String(row.id || "")))
+  ];
+  const testGateProjection = buildTestGateRows(
+    new Map(),
+    new Map(),
+    branches,
+    changeSets,
+    latestTestResultsProjection.byGate ?? Object.create(null),
+    defectClusters,
+    Object.create(null),
+    effectiveTestGates.length ? effectiveTestGates : null,
+    flakeScoresByGate
+  );
+  const branchTestRedGreen = branches
+    .map(branch => summarizeTestRedGreenScope({
+      scopeType: "branch",
+      scopeId: branch.id,
+      title: branch.title || branch.id,
+      selectedGateIds: testGateProjection.selectedByBranch[branch.id] ?? [],
+      testGateRows: testGateProjection.rows,
+      testRuns,
+      testResults
+    }))
+    .sort((left, right) => String(left.branchId || "").localeCompare(String(right.branchId || "")));
+  const branchTestRedGreenById = Object.fromEntries(branchTestRedGreen.map(row => [String(row.branchId || ""), row]));
+  return {
+    branches: branches.map(row => ({
+      ...row,
+      testRedGreen: branchTestRedGreenById[String(row.id || "")] ?? null
+    })),
+    branchTestRedGreen,
+    changeSets,
+    pushRecords,
+    shipRecords,
+    proposals,
+    performanceRegressions,
+    defects,
+    selectedTestGatesByChangeSet: testGateProjection.selectedByChangeSet,
+    testGates: testGateProjection.rows,
+    latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null)
+  };
+}
+
 export async function buildPlatformSlice({
   sliceKey = "overview",
   appContext = null,
   diagnostics = null,
-  project = null
+  project = null,
+  modelView = null
 } = {}) {
+  const requirements = requirementsForPlatformRequest({
+    sliceKey,
+    modelView
+  });
   return buildPlatformModel({
     appContext,
     diagnostics,
     project,
-    requirements: requirementsForPlatformSlice(sliceKey)
+    requirements
   });
 }
 
@@ -2957,17 +3845,24 @@ export async function buildPlatformModel({
   appContext = null,
   diagnostics = null,
   project = null,
-  requirements = null
+  requirements = null,
+  includeGitBoundary = null
 } = {}) {
   const platformRequirements = normalizePlatformBuildRequirements(requirements);
+  const needsGitBoundary = includeGitBoundary == null
+    ? platformRequirements.gitBoundary === true
+    : includeGitBoundary === true;
   const nodes = new Map();
   const edges = new Map();
   const [catalog, profilesSeed, gitBoundaryState] = await Promise.all([
     readJson("store/seeds/first-party-plugin-catalog.json", { packages: [], bundles: [] }),
     readJson("store/seeds/runtime-profiles.json", { profiles: {} }),
-    readGitBoundaryState({
-      repoRoot: appContext?.platformGit?.repoRoot ?? repoRoot
-    })
+    needsGitBoundary
+      ? readPlatformGitBoundaryState({
+          repoRoot: appContext?.platformGit?.repoRoot ?? repoRoot,
+          appContext
+        })
+      : Promise.resolve({ remotes: [], refs: [], currentBranchName: null })
   ]);
   const pluginPackages = catalog.packages ?? [];
   const bundleRows = catalog.bundles ?? [];
@@ -3024,6 +3919,12 @@ export async function buildPlatformModel({
   const telemetrySamples = projectRows(project, moduleProjectors.telemetrySamples);
   const telemetryWindows = projectRows(project, moduleProjectors.telemetryWindows);
   const performanceRegressions = projectRows(project, moduleProjectors.performanceRegressions);
+  const authorityPolicies = projectRows(project, moduleProjectors.authorityPolicies);
+  const authorityDecisions = projectRows(project, moduleProjectors.authorityDecisions);
+  const sessions = projectRows(project, moduleProjectors.sessions);
+  const executions = projectRows(project, moduleProjectors.executions);
+  const sessionTags = projectRows(project, moduleProjectors.sessionTags);
+  const executionArtifacts = projectRows(project, moduleProjectors.executionArtifacts);
   const defects = projectRows(project, moduleProjectors.defects);
   const defectObservations = projectRows(project, moduleProjectors.defectObservations);
   const proposals = [
@@ -3034,6 +3935,7 @@ export async function buildPlatformModel({
   const durableVerificationRows = appContext?.verificationPersistence?.readModelRows?.() ?? {};
   const testRuns = mergeRowsById(durableVerificationRows.testRuns ?? [], projectRows(project, moduleProjectors.testRuns));
   const testResults = mergeRowsById(durableVerificationRows.testResults ?? [], projectRows(project, moduleProjectors.testResults));
+  const artifacts = mergeRowsById(durableVerificationRows.artifacts ?? [], projectRows(project, moduleProjectors.artifacts));
   const testArtifacts = mergeRowsById(durableVerificationRows.testArtifacts ?? [], projectRows(project, moduleProjectors.testArtifacts));
   const testSuites = mergeRowsById(durableVerificationRows.testSuites ?? [], projectRows(project, moduleProjectors.testSuites));
   const testCases = mergeRowsById(durableVerificationRows.testCases ?? [], projectRows(project, moduleProjectors.testCases));
@@ -3043,8 +3945,6 @@ export async function buildPlatformModel({
   const verificationInvalidations = mergeRowsById(durableVerificationRows.verificationInvalidations ?? [], projectRows(project, moduleProjectors.verificationInvalidations));
   const verificationQueue = mergeRowsById(durableVerificationRows.verificationQueue ?? [], projectRows(project, moduleProjectors.verificationQueue));
   const verificationExecutions = mergeRowsById(durableVerificationRows.verificationExecutions ?? [], projectRows(project, moduleProjectors.verificationExecutions));
-  const projectedTestGates = projectRows(project, moduleProjectors.testGates);
-  const projectedCoverageEdges = projectRows(project, moduleProjectors.coverageEdges);
   const flakeScoresByGate = buildFlakeScoreByGate(testResults);
   const projectedLatestTestResults = projectValue(project, moduleProjectors.latestTestResultsByGate, null);
   const latestTestResultRows = mergeRowsById(
@@ -3070,6 +3970,13 @@ export async function buildPlatformModel({
     rows: latestTestResultRows,
     byGate: Object.fromEntries(Object.entries(latestTestResultsByGate))
   };
+  const effectiveTestGates = resolveEffectivePlatformTestGates({
+    projectedTestGates: projectRows(project, moduleProjectors.testGates),
+    verificationPolicy: appContext?.verificationPolicy ?? null,
+    appRoot: appContext?.appRoot ?? repoRoot,
+    latestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
+    flakeScoresByGate
+  });
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
   const testMonitorDiagnostics = normalizeVerificationDiagnostics(diagnostics?.testMonitor ?? null);
@@ -3099,9 +4006,14 @@ export async function buildPlatformModel({
   const parsedDocs = [];
 
   for (const row of pluginPackages) {
+    const manifestPath = `plugins/${row.directory}/plugin.json`;
     const manifest = platformRequirements.pluginManifests
-      ? await readCachedPluginManifest(`plugins/${row.directory}/plugin.json`)
-      : await readJson(`plugins/${row.directory}/plugin.json`, {});
+      ? await readCachedPluginManifest(manifestPath)
+      : {
+          id: row.id ?? null,
+          displayName: row.displayName ?? row.label ?? row.id ?? null,
+          description: row.description ?? null
+        };
     const id = row.id || manifest.id;
     const status = activePlugins.has(id) ? "active" : (effectivePlugins.has(id) ? "effective" : "inactive");
     addNode(nodes, {
@@ -3111,7 +4023,7 @@ export async function buildPlatformModel({
       lifecycle: lifecycleForPlugin(id, manifest),
       owner: id,
       status,
-      source: `plugins/${row.directory}/plugin.json`
+      source: manifestPath
     });
   }
 
@@ -3164,6 +4076,105 @@ export async function buildPlatformModel({
       status: governanceCommand.governanceMode,
       source: "governance-ledger"
     });
+  }
+
+  for (const authorityPolicy of authorityPolicies) {
+    addNode(nodes, {
+      id: authorityPolicy.id,
+      kind: "authorityPolicy",
+      title: authorityPolicy.title || authorityPolicy.policyKey || authorityPolicy.id,
+      lifecycle: ["steward", "verify"],
+      owner: "plugin.platform",
+      status: authorityPolicy.requiredAuthority || authorityPolicy.accessClass || "active",
+      source: authorityPolicy.source || "platform-policy"
+    });
+  }
+
+  for (const authorityDecision of authorityDecisions) {
+    addNode(nodes, {
+      id: authorityDecision.id,
+      kind: "authorityDecision",
+      title: authorityDecision.action || authorityDecision.handlerId || authorityDecision.id,
+      lifecycle: ["observe", "verify", "steward"],
+      owner: authorityDecision.effectiveActor || authorityDecision.authenticatedActor || "plugin.platform",
+      status: authorityDecision.decision || "deny",
+      source: authorityDecision.requestPath || authorityDecision.routeId || "platform-policy"
+    });
+    if (authorityDecision.policyId) addEdge(edges, authorityDecision.id, "evaluatedBy", authorityDecision.policyId, "platform-policy");
+    if (authorityDecision.handlerId) addEdge(edges, authorityDecision.id, "dispatchesTo", `handler:${authorityDecision.handlerId}`, "platform-policy");
+    if (authorityDecision.routeId) addEdge(edges, authorityDecision.id, "targets", authorityDecision.routeId, "platform-policy");
+    if (authorityDecision.targetObjectId) addEdge(edges, authorityDecision.id, "targets", authorityDecision.targetObjectId, "platform-policy");
+    if (authorityDecision.assumptionGrantId) addEdge(edges, authorityDecision.id, "authorizedBy", authorityDecision.assumptionGrantId, "platform-policy");
+  }
+
+  for (const session of sessions) {
+    addNode(nodes, {
+      id: session.id,
+      kind: "session",
+      title: session.title || session.id,
+      lifecycle: ["observe", "steward"],
+      owner: session.effectiveActor || session.authenticatedActor || "plugin.platform",
+      status: session.status || "active",
+      source: "platform-session"
+    });
+    for (const executionId of session.executionIds ?? []) addEdge(edges, session.id, "contains", executionId, "platform-session");
+    for (const decisionId of session.authorityDecisionIds ?? []) addEdge(edges, session.id, "audits", decisionId, "platform-session");
+    for (const targetObjectId of session.targetObjectIds ?? []) addEdge(edges, session.id, "targets", targetObjectId, "platform-session");
+  }
+
+  for (const execution of executions) {
+    addNode(nodes, {
+      id: execution.id,
+      kind: "execution",
+      title: execution.title || execution.id,
+      lifecycle: ["observe", "verify", "steward"],
+      owner: execution.effectiveActor || execution.actor || "plugin.platform",
+      status: execution.status || "completed",
+      source: execution.sourceProcess || "platform-session"
+    });
+    addEdge(edges, execution.sessionId, "contains", execution.id, "platform-session");
+    if (execution.routeId) addEdge(edges, execution.id, "targets", execution.routeId, "platform-session");
+    if (execution.handlerId) addEdge(edges, execution.id, "dispatchesTo", `handler:${execution.handlerId}`, "platform-session");
+    if (execution.branchId) addEdge(edges, execution.id, "targets", `branch:${execution.branchId}`, "platform-session");
+    if (execution.changeSetId) addEdge(edges, execution.id, "targets", `changeSet:${execution.changeSetId}`, "platform-session");
+    if (execution.candidateSnapshotId) addEdge(edges, execution.id, "targets", execution.candidateSnapshotId, "platform-session");
+    if (execution.pushRecordId) addEdge(edges, execution.id, "targets", execution.pushRecordId, "platform-session");
+    if (execution.shipRecordId) addEdge(edges, execution.id, "targets", execution.shipRecordId, "platform-session");
+    if (execution.gateId) addEdge(edges, execution.id, "targets", execution.gateId, "platform-session");
+    if (execution.testRunId) addEdge(edges, execution.id, "targets", execution.testRunId, "platform-session");
+    if (execution.authorityDecisionId) addEdge(edges, execution.id, "audits", execution.authorityDecisionId, "platform-session");
+  }
+
+  for (const sessionTag of sessionTags) {
+    addNode(nodes, {
+      id: sessionTag.id,
+      kind: "sessionTag",
+      title: sessionTag.title || sessionTag.value || sessionTag.id,
+      lifecycle: ["observe", "steward"],
+      owner: sessionTag.sessionId || "plugin.platform",
+      status: sessionTag.tagKind || "tag",
+      source: "platform-session"
+    });
+    addEdge(edges, sessionTag.sessionId, "tags", sessionTag.id, "platform-session");
+    if (sessionTag.tagKind === "branch") addEdge(edges, sessionTag.id, "targets", `branch:${sessionTag.value}`, "platform-session");
+    if (sessionTag.tagKind === "changeSet") addEdge(edges, sessionTag.id, "targets", `changeSet:${sessionTag.value}`, "platform-session");
+    if (sessionTag.tagKind === "gate") addEdge(edges, sessionTag.id, "targets", sessionTag.value, "platform-session");
+    if (sessionTag.tagKind === "route") addEdge(edges, sessionTag.id, "targets", sessionTag.value, "platform-session");
+    if (sessionTag.tagKind === "target") addEdge(edges, sessionTag.id, "targets", sessionTag.value, "platform-session");
+  }
+
+  for (const executionArtifact of executionArtifacts) {
+    addNode(nodes, {
+      id: executionArtifact.id,
+      kind: "executionArtifact",
+      title: executionArtifact.title || executionArtifact.artifactId || executionArtifact.id,
+      lifecycle: ["observe", "verify", "steward"],
+      owner: executionArtifact.executionId || "plugin.platform",
+      status: executionArtifact.status || "observed",
+      source: "platform-session"
+    });
+    addEdge(edges, executionArtifact.executionId, "produces", executionArtifact.id, "platform-session");
+    if (executionArtifact.artifactId) addEdge(edges, executionArtifact.id, "targets", executionArtifact.artifactId, "platform-session");
   }
 
   for (const semanticsRow of mutableSurfaceSemantics) {
@@ -3219,40 +4230,42 @@ export async function buildPlatformModel({
     for (const bundle of profile.coreBundles) addEdge(edges, `profile:${profile.id}`, "activates", bundle, "profile");
   }
 
-  addNode(nodes, {
-    id: PLATFORM_GIT_BOUNDARY_ID,
-    kind: "boundary",
-    title: "Git Boundary",
-    lifecycle: ["transform", "ship", "steward"],
-    owner: "plugin.platform",
-    status: "known",
-    source: "platform-git"
-  });
-  if (nodes.has("plugin.platform")) addEdge(edges, "plugin.platform", "uses", PLATFORM_GIT_BOUNDARY_ID, "platform-git");
-  for (const remote of gitBoundaryState.remotes ?? []) {
+  if (needsGitBoundary) {
     addNode(nodes, {
-      id: remote.id,
-      kind: "gitRemote",
-      title: remote.name,
-      lifecycle: ["observe", "ship", "steward"],
+      id: PLATFORM_GIT_BOUNDARY_ID,
+      kind: "boundary",
+      title: "Git Boundary",
+      lifecycle: ["transform", "ship", "steward"],
       owner: "plugin.platform",
-      status: remote.provider || "generic",
-      source: remote.remoteUrl || "platform-git"
+      status: "known",
+      source: "platform-git"
     });
-    addEdge(edges, PLATFORM_GIT_BOUNDARY_ID, "observes", remote.id, "platform-git");
-  }
-  for (const ref of gitBoundaryState.refs ?? []) {
-    addNode(nodes, {
-      id: ref.id,
-      kind: "gitRef",
-      title: ref.shortName || ref.refName,
-      lifecycle: ["observe", "ship", "steward"],
-      owner: ref.remoteName || "plugin.platform",
-      status: ref.scope || "ref",
-      source: ref.refName || "platform-git"
-    });
-    addEdge(edges, PLATFORM_GIT_BOUNDARY_ID, "observes", ref.id, "platform-git");
-    if (ref.remoteName) addEdge(edges, `gitRemote:${ref.remoteName}`, "tracks", ref.id, "platform-git");
+    if (nodes.has("plugin.platform")) addEdge(edges, "plugin.platform", "uses", PLATFORM_GIT_BOUNDARY_ID, "platform-git");
+    for (const remote of gitBoundaryState.remotes ?? []) {
+      addNode(nodes, {
+        id: remote.id,
+        kind: "gitRemote",
+        title: remote.name,
+        lifecycle: ["observe", "ship", "steward"],
+        owner: "plugin.platform",
+        status: remote.provider || "generic",
+        source: remote.remoteUrl || "platform-git"
+      });
+      addEdge(edges, PLATFORM_GIT_BOUNDARY_ID, "observes", remote.id, "platform-git");
+    }
+    for (const ref of gitBoundaryState.refs ?? []) {
+      addNode(nodes, {
+        id: ref.id,
+        kind: "gitRef",
+        title: ref.shortName || ref.refName,
+        lifecycle: ["observe", "ship", "steward"],
+        owner: ref.remoteName || "plugin.platform",
+        status: ref.scope || "ref",
+        source: ref.refName || "platform-git"
+      });
+      addEdge(edges, PLATFORM_GIT_BOUNDARY_ID, "observes", ref.id, "platform-git");
+      if (ref.remoteName) addEdge(edges, `gitRemote:${ref.remoteName}`, "tracks", ref.id, "platform-git");
+    }
   }
 
   addTelemetryMetricNodes(nodes);
@@ -4083,7 +5096,7 @@ export async function buildPlatformModel({
     latestTestResultsProjection.byGate ?? Object.create(null),
     defectClusters,
     bundleIdsByPlugin,
-    projectedTestGates.length ? projectedTestGates : null,
+    effectiveTestGates.length ? effectiveTestGates : null,
     flakeScoresByGate
   );
   const branchTestRedGreen = branches
@@ -4108,6 +5121,23 @@ export async function buildPlatformModel({
       testResults
     }))
     .sort((left, right) => String(left.changeSetId || "").localeCompare(String(right.changeSetId || "")));
+  const {
+    verificationRequirements,
+    verificationRequirementSummaries
+  } = buildVerificationRequirements({
+    changeSets,
+    candidateSnapshots,
+    testGates: testGateProjection.rows,
+    verificationPolicies,
+    selectedTestGatesByChangeSet: testGateProjection.selectedByChangeSet,
+    verificationFreshness,
+    verificationInvalidations,
+    verificationQueue,
+    verificationExecutions,
+    testRuns,
+    testReports,
+    verificationPolicy: appContext?.verificationPolicy ?? null
+  });
   const branchTestRedGreenById = Object.fromEntries(branchTestRedGreen.map(row => [String(row.branchId || ""), row]));
   const changeSetTestRedGreenById = Object.fromEntries(changeSetTestRedGreen.map(row => [String(row.changeSetId || ""), row]));
   const enrichedBranches = branches.map(row => ({
@@ -4118,15 +5148,34 @@ export async function buildPlatformModel({
     ...row,
     testRedGreen: changeSetTestRedGreenById[String(row.id || "")] ?? null
   }));
-  const coverageEdges = projectedCoverageEdges.length
-    ? projectedCoverageEdges.map(row => ({
-        ...row,
-        targetLabel: row.coverageKind === "protectedObject"
-          ? platformModelTargetTitle(row.targetId, nodes)
-          : (row.targetLabel || row.sourceDependency || row.targetId)
-      }))
-    : buildCoverageEdgeRows(testGateProjection.rows, nodes);
+  const coverageEdges = buildProjectedCoverageEdges(testGateProjection.rows).map(row => ({
+    ...row,
+    targetLabel: row.coverageKind === "protectedObject"
+      ? platformModelTargetTitle(row.targetId, nodes)
+      : (row.targetLabel || row.sourceDependency || row.targetId)
+  }));
   addTestGateTelemetryEdges(nodes, edges, testGateProjection.rows);
+  for (const artifact of artifacts) {
+    addNode(nodes, {
+      id: artifact.id,
+      kind: "artifact",
+      title: artifact.title || artifact.fileName || artifact.id,
+      lifecycle: ["observe", "verify", "steward"],
+      owner: "plugin.platform",
+      status: "captured",
+      source: artifact.contentRef || artifact.producerId || "verification"
+    });
+    if (artifact.testRunId) addEdge(edges, artifact.testRunId, "produces", artifact.id, "verification");
+    if (artifact.resultId) addEdge(edges, artifact.resultId, "produces", artifact.id, "verification");
+    if (artifact.artifactSourceId) addEdge(edges, artifact.id, "tracks", artifact.artifactSourceId, "verification");
+    if (artifact.executionId) addEdge(edges, artifact.executionId, "produces", artifact.id, "verification");
+    if (artifact.sessionId) addEdge(edges, artifact.sessionId, "contains", artifact.id, "verification");
+    if (artifact.branchId) addEdge(edges, artifact.id, "targets", platformTargetNodeId("branch", artifact.branchId), "verification");
+    if (artifact.changeSetId) addEdge(edges, artifact.id, "targets", platformTargetNodeId("changeSet", artifact.changeSetId), "verification");
+    if (artifact.candidateSnapshotId) addEdge(edges, artifact.id, "targets", artifact.candidateSnapshotId, "verification");
+    if (artifact.gateId) addEdge(edges, artifact.id, "targets", artifact.gateId, "verification");
+    if (artifact.proposalId) addEdge(edges, artifact.id, "targets", platformTargetNodeId("proposal", artifact.proposalId), "verification");
+  }
   addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts, testSuites, testCases, testReports);
   for (const coverageEdge of coverageEdges) {
     addNode(nodes, {
@@ -4333,6 +5382,13 @@ export async function buildPlatformModel({
     telemetrySamples: telemetrySamples.map(row => ({ ...row })),
     telemetryWindows: telemetryWindows.map(row => ({ ...row })),
     performanceRegressions: performanceRegressions.map(row => ({ ...row })),
+    authorityPolicies: authorityPolicies.map(row => ({ ...row })),
+    authorityDecisions: authorityDecisions.map(row => ({ ...row })),
+    sessions: sessions.map(row => ({ ...row })),
+    executions: executions.map(row => ({ ...row })),
+    sessionTags: sessionTags.map(row => ({ ...row })),
+    executionArtifacts: executionArtifacts.map(row => ({ ...row })),
+    artifacts: artifacts.map(row => ({ ...row })),
     gitRemotes: (gitBoundaryState.remotes ?? []).map(row => ({ ...row })),
     gitRefs: (gitBoundaryState.refs ?? []).map(row => ({ ...row })),
     pushRecords: pushRecords.map(row => ({ ...row })),
@@ -4352,6 +5408,8 @@ export async function buildPlatformModel({
     verificationInvalidations: verificationInvalidations.map(row => ({ ...row })),
     verificationQueue: verificationQueue.map(row => ({ ...row })),
     verificationExecutions: verificationExecutions.map(row => ({ ...row })),
+    verificationRequirements: verificationRequirements.map(row => ({ ...row })),
+    verificationRequirementSummaries: verificationRequirementSummaries.map(row => ({ ...row })),
     latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
     branchTestRedGreen,
     changeSetTestRedGreen,
@@ -4409,6 +5467,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       changeSets: model.changeSets,
       changeSetEdits: model.changeSetEdits,
       candidateSnapshots: model.candidateSnapshots,
+      verificationRequirements: model.verificationRequirements,
+      verificationRequirementSummaries: model.verificationRequirementSummaries,
       pushRecords: model.pushRecords,
       shipRecords: model.shipRecords,
       proposals: model.proposals,
@@ -4421,6 +5481,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       branchBoard: model.branchBoard,
       branches: model.branches,
       changeSets: model.changeSets,
+      verificationRequirements: model.verificationRequirements,
+      verificationRequirementSummaries: model.verificationRequirementSummaries,
       proposals: model.proposals,
       pushRecords: model.pushRecords,
       shipRecords: model.shipRecords,
@@ -4444,6 +5506,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       changeSets: model.changeSets,
       changeSetEdits: model.changeSetEdits,
       candidateSnapshots: model.candidateSnapshots,
+      verificationRequirements: model.verificationRequirements,
+      verificationRequirementSummaries: model.verificationRequirementSummaries,
       summaries: model.summaries
     };
   }
@@ -4467,6 +5531,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       verificationInvalidations: model.verificationInvalidations,
       verificationQueue: model.verificationQueue,
       verificationExecutions: model.verificationExecutions,
+      verificationRequirements: model.verificationRequirements,
+      verificationRequirementSummaries: model.verificationRequirementSummaries,
       runtimeRevisions: model.runtimeRevisions,
       activeRuntimeRevision: model.activeRuntimeRevision,
       candidateSnapshots: model.candidateSnapshots,
@@ -4487,6 +5553,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       testReports: model.testReports,
       verificationFreshness: model.verificationFreshness,
       verificationQueue: model.verificationQueue,
+      verificationRequirements: model.verificationRequirements,
+      verificationRequirementSummaries: model.verificationRequirementSummaries,
       branchTestRedGreen: model.branchTestRedGreen,
       changeSetTestRedGreen: model.changeSetTestRedGreen,
       latestTestResultsByGate: model.latestTestResultsByGate,
@@ -4506,6 +5574,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       verificationInvalidations: model.verificationInvalidations,
       verificationQueue: model.verificationQueue,
       verificationExecutions: model.verificationExecutions,
+      verificationRequirements: model.verificationRequirements,
+      verificationRequirementSummaries: model.verificationRequirementSummaries,
       latestTestResultsByGate: model.latestTestResultsByGate,
       activeRuntimeRevision: model.activeRuntimeRevision,
       testMonitorDiagnostics: model.testMonitorDiagnostics,
@@ -4523,6 +5593,8 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       testReports: model.testReports,
       verificationFreshness: model.verificationFreshness,
       verificationInvalidations: model.verificationInvalidations,
+      verificationRequirements: model.verificationRequirements,
+      verificationRequirementSummaries: model.verificationRequirementSummaries,
       summaries: model.summaries
     };
   }
@@ -4531,11 +5603,194 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       runtimeRevisions: model.runtimeRevisions,
       activeRuntimeRevision: model.activeRuntimeRevision,
       candidateSnapshots: model.candidateSnapshots,
+      verificationRequirements: model.verificationRequirements,
+      verificationRequirementSummaries: model.verificationRequirementSummaries,
       snapshotBuilds: model.snapshotBuilds,
       snapshotBuildErrors: model.snapshotBuildErrors,
       snapshotDiagnostics: model.snapshotDiagnostics,
       testMonitorDiagnostics: model.testMonitorDiagnostics,
       verificationPersistence: model.verificationPersistence,
+      summaries: model.summaries
+    };
+  }
+  if (view === "sessions") {
+    const allSessions = model.sessions ?? [];
+    const allExecutions = model.executions ?? [];
+    const allSessionTags = model.sessionTags ?? [];
+    const allExecutionArtifacts = model.executionArtifacts ?? [];
+    const allDecisions = model.authorityDecisions ?? [];
+    const sessions = id
+      ? allSessions.filter(row =>
+        row.id === id
+        || row.effectiveActor === id
+        || row.authenticatedActor === id
+        || (row.branchIds ?? []).includes(id)
+        || (row.changeSetIds ?? []).includes(id)
+        || (row.pushRecordIds ?? []).includes(id)
+        || (row.shipRecordIds ?? []).includes(id)
+        || (row.testRunIds ?? []).includes(id)
+        || (row.executionIds ?? []).includes(id)
+        || (row.authorityDecisionIds ?? []).includes(id)
+        || (row.targetObjectIds ?? []).includes(id)
+      )
+      : allSessions;
+    const sessionIds = new Set(sessions.map(row => String(row.id || "")));
+    const executions = id
+      ? allExecutions.filter(row =>
+        row.id === id
+        || sessionIds.has(String(row.sessionId || ""))
+        || row.routeId === id
+        || row.handlerId === id
+        || row.view === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.candidateSnapshotId === id
+        || row.pushRecordId === id
+        || row.shipRecordId === id
+        || row.testRunId === id
+        || row.gateId === id
+        || row.authorityDecisionId === id
+        || (row.targetObjectIds ?? []).includes(id)
+      )
+      : allExecutions.filter(row => sessionIds.has(String(row.sessionId || "")));
+    const executionIds = new Set(executions.map(row => String(row.id || "")));
+    const sessionTags = id
+      ? allSessionTags.filter(row =>
+        row.id === id
+        || sessionIds.has(String(row.sessionId || ""))
+        || row.value === id
+        || (row.executionIds ?? []).includes(id)
+      )
+      : allSessionTags.filter(row => sessionIds.has(String(row.sessionId || "")));
+    const executionArtifacts = id
+      ? allExecutionArtifacts.filter(row =>
+        row.id === id
+        || executionIds.has(String(row.executionId || ""))
+        || sessionIds.has(String(row.sessionId || ""))
+        || row.artifactId === id
+      )
+      : allExecutionArtifacts.filter(row => sessionIds.has(String(row.sessionId || "")));
+    const decisionIds = new Set([
+      ...sessions.flatMap(row => row.authorityDecisionIds ?? []),
+      ...executions.map(row => String(row.authorityDecisionId || "")).filter(Boolean),
+      ...executionArtifacts
+        .filter(row => row.artifactKind === "authorityDecision")
+        .map(row => String(row.artifactId || ""))
+    ]);
+    const authorityDecisions = id
+      ? allDecisions.filter(row => row.id === id || sessionIds.has(String(row.sessionId || "")) || decisionIds.has(String(row.id || "")))
+      : allDecisions.filter(row => sessionIds.has(String(row.sessionId || "")) || decisionIds.has(String(row.id || "")));
+    const branchIds = new Set([
+      ...sessions.flatMap(row => row.branchIds ?? []),
+      ...executions.map(row => String(row.branchId || "")).filter(Boolean)
+    ]);
+    const changeSetIds = new Set([
+      ...sessions.flatMap(row => row.changeSetIds ?? []),
+      ...executions.map(row => String(row.changeSetId || "")).filter(Boolean)
+    ]);
+    const proposalIds = new Set(
+      allSessionTags
+        .filter(row => sessionIds.has(String(row.sessionId || "")) && row.tagKind === "target" && String(row.value || "").startsWith("proposal:"))
+        .map(row => String(row.value || ""))
+    );
+    const testRunIds = new Set([
+      ...sessions.flatMap(row => row.testRunIds ?? []),
+      ...executions.map(row => String(row.testRunId || "")).filter(Boolean)
+    ]);
+    const pushRecordIds = new Set([
+      ...sessions.flatMap(row => row.pushRecordIds ?? []),
+      ...executions.map(row => String(row.pushRecordId || "")).filter(Boolean)
+    ]);
+    const shipRecordIds = new Set([
+      ...sessions.flatMap(row => row.shipRecordIds ?? []),
+      ...executions.map(row => String(row.shipRecordId || "")).filter(Boolean)
+    ]);
+    return {
+      sessions,
+      executions,
+      sessionTags,
+      executionArtifacts,
+      authorityDecisions,
+      branches: id
+        ? (model.branches ?? []).filter(row => row.id === id || branchIds.has(String(row.id || "")))
+        : (model.branches ?? []).filter(row => branchIds.has(String(row.id || ""))),
+      changeSets: id
+        ? (model.changeSets ?? []).filter(row => row.id === id || changeSetIds.has(String(row.id || "")) || branchIds.has(String(row.branchId || "")))
+        : (model.changeSets ?? []).filter(row => changeSetIds.has(String(row.id || ""))),
+      proposals: id
+        ? (model.proposals ?? []).filter(row => row.id === id || `proposal:${row.id}` === id || proposalIds.has(`proposal:${String(row.id || "")}`))
+        : (model.proposals ?? []).filter(row => proposalIds.has(`proposal:${String(row.id || "")}`)),
+      testRuns: id
+        ? (model.testRuns ?? []).filter(row => row.id === id || testRunIds.has(String(row.id || "")))
+        : (model.testRuns ?? []).filter(row => testRunIds.has(String(row.id || ""))),
+      pushRecords: id
+        ? (model.pushRecords ?? []).filter(row => row.id === id || pushRecordIds.has(String(row.id || "")))
+        : (model.pushRecords ?? []).filter(row => pushRecordIds.has(String(row.id || ""))),
+      shipRecords: id
+        ? (model.shipRecords ?? []).filter(row => row.id === id || shipRecordIds.has(String(row.id || "")))
+        : (model.shipRecords ?? []).filter(row => shipRecordIds.has(String(row.id || ""))),
+      summaries: model.summaries
+    };
+  }
+  if (view === "artifacts") {
+    const allArtifacts = model.artifacts ?? [];
+    const artifacts = id
+      ? allArtifacts.filter(row =>
+        row.id === id
+        || row.artifactSourceId === id
+        || row.producerId === id
+        || row.testRunId === id
+        || row.runId === id
+        || row.resultId === id
+        || row.gateId === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.candidateSnapshotId === id
+        || row.sessionId === id
+        || row.executionId === id
+        || row.proposalId === id
+      )
+      : allArtifacts;
+    const artifactIds = new Set(artifacts.map(row => String(row.id || "")));
+    const artifactSourceIds = new Set(artifacts.map(row => String(row.artifactSourceId || "")).filter(Boolean));
+    const sessionIds = new Set(artifacts.map(row => String(row.sessionId || "")).filter(Boolean));
+    const executionIds = new Set(artifacts.map(row => String(row.executionId || "")).filter(Boolean));
+    const branchIds = new Set(artifacts.map(row => String(row.branchId || "")).filter(Boolean));
+    const changeSetIds = new Set(artifacts.map(row => String(row.changeSetId || "")).filter(Boolean));
+    const proposalIds = new Set(artifacts.map(row => String(row.proposalId || "")).filter(Boolean));
+    const runIds = new Set(artifacts.map(row => String(row.testRunId || row.runId || "")).filter(Boolean));
+    const resultIds = new Set(artifacts.map(row => String(row.resultId || "")).filter(Boolean));
+    const gateIds = new Set(artifacts.map(row => String(row.gateId || "")).filter(Boolean));
+    const candidateSnapshotIds = new Set(artifacts.map(row => String(row.candidateSnapshotId || "")).filter(Boolean));
+    return {
+      artifacts,
+      sessions: id
+        ? (model.sessions ?? []).filter(row => row.id === id || sessionIds.has(String(row.id || "")) || (row.executionIds ?? []).includes(id))
+        : (model.sessions ?? []).filter(row => sessionIds.has(String(row.id || ""))),
+      executions: id
+        ? (model.executions ?? []).filter(row => row.id === id || executionIds.has(String(row.id || "")) || sessionIds.has(String(row.sessionId || "")))
+        : (model.executions ?? []).filter(row => executionIds.has(String(row.id || ""))),
+      branches: id
+        ? (model.branches ?? []).filter(row => row.id === id || branchIds.has(String(row.id || "")))
+        : (model.branches ?? []).filter(row => branchIds.has(String(row.id || ""))),
+      changeSets: id
+        ? (model.changeSets ?? []).filter(row => row.id === id || changeSetIds.has(String(row.id || "")) || branchIds.has(String(row.branchId || "")))
+        : (model.changeSets ?? []).filter(row => changeSetIds.has(String(row.id || ""))),
+      proposals: id
+        ? (model.proposals ?? []).filter(row => row.id === id || `proposal:${row.id}` === id || proposalIds.has(String(row.id || "")) || proposalIds.has(`proposal:${String(row.id || "")}`))
+        : (model.proposals ?? []).filter(row => proposalIds.has(String(row.id || "")) || proposalIds.has(`proposal:${String(row.id || "")}`)),
+      testRuns: id
+        ? (model.testRuns ?? []).filter(row => row.id === id || runIds.has(String(row.id || "")) || gateIds.has(String(row.gateId || "")))
+        : (model.testRuns ?? []).filter(row => runIds.has(String(row.id || ""))),
+      testResults: id
+        ? (model.testResults ?? []).filter(row => row.id === id || resultIds.has(String(row.id || "")) || runIds.has(String(row.runId || "")))
+        : (model.testResults ?? []).filter(row => resultIds.has(String(row.id || ""))),
+      testReports: id
+        ? (model.testReports ?? []).filter(row => row.id === id || runIds.has(String(row.runId || "")) || gateIds.has(String(row.gateId || "")) || (row.artifactIds ?? []).some(candidate => artifactSourceIds.has(String(candidate || ""))))
+        : (model.testReports ?? []).filter(row => runIds.has(String(row.runId || "")) || (row.artifactIds ?? []).some(candidate => artifactSourceIds.has(String(candidate || "")))),
+      candidateSnapshots: id
+        ? (model.candidateSnapshots ?? []).filter(row => row.id === id || candidateSnapshotIds.has(String(row.id || "")) || changeSetIds.has(String(row.changeSetId || "")))
+        : (model.candidateSnapshots ?? []).filter(row => candidateSnapshotIds.has(String(row.id || ""))),
       summaries: model.summaries
     };
   }
@@ -5130,6 +6385,94 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       branches,
       changeSets,
       testGates,
+      summaries: model.summaries
+    };
+  }
+  if (view === "security") {
+    const allPolicies = model.authorityPolicies ?? [];
+    const allDecisions = model.authorityDecisions ?? [];
+    const matchesSecurityPolicy = row =>
+      row.id === id
+      || row.policyKey === id
+      || row.requiredAuthority === id
+      || row.accessClass === id
+      || row.sensitivity === id;
+    const authorityPolicies = id ? allPolicies.filter(matchesSecurityPolicy) : allPolicies;
+    const authorityDecisions = id
+      ? allDecisions.filter(row =>
+        row.id === id
+        || row.policyId === id
+        || row.requiredAuthority === id
+        || row.handlerId === id
+        || row.routeId === id
+        || row.requestPath === id
+        || row.view === id
+        || row.targetObjectId === id
+        || row.authenticatedActor === id
+        || row.effectiveActor === id
+        || row.assumptionGrantId === id
+        || row.decision === id
+      )
+      : allDecisions;
+    const policyIds = new Set([
+      ...authorityPolicies.map(row => String(row.id || "")),
+      ...authorityDecisions.map(row => String(row.policyId || ""))
+    ].filter(Boolean));
+    const targetIds = new Set(authorityDecisions.map(row => String(row.targetObjectId || "")).filter(Boolean));
+    const proposalIds = new Set([...targetIds].filter(targetId => String(targetId).startsWith("proposal:")));
+    const branchIds = new Set([...targetIds]
+      .filter(targetId => String(targetId).startsWith("branch:"))
+      .map(targetId => String(targetId).slice("branch:".length)));
+    const changeSetIds = new Set([...targetIds]
+      .filter(targetId => String(targetId).startsWith("changeSet:"))
+      .map(targetId => String(targetId).slice("changeSet:".length)));
+    const pushRecordIds = new Set([...targetIds].filter(targetId => String(targetId).startsWith("pushRecord:")));
+    const shipRecordIds = new Set([...targetIds].filter(targetId => String(targetId).startsWith("shipRecord:")));
+    const governanceRoutes = id
+      ? (model.governanceRoutes ?? []).filter(row =>
+        row.id === id
+        || row.routeId === id
+        || row.handler === id
+        || authorityDecisions.some(decision => decision.routeId === row.routeId || decision.handlerId === row.handler)
+      )
+      : (model.governanceRoutes ?? []);
+    const proposals = id
+      ? (model.proposals ?? []).filter(row =>
+        `proposal:${row.id}` === id
+        || row.id === id
+        || row.targetId === id
+        || proposalIds.has(`proposal:${String(row.id || "")}`)
+      )
+      : (model.proposals ?? []).filter(row =>
+        proposalIds.has(`proposal:${String(row.id || "")}`)
+        || targetIds.has(String(row.targetId || ""))
+      );
+    return {
+      authorityPolicies: id
+        ? allPolicies.filter(row => policyIds.has(String(row.id || "")) || matchesSecurityPolicy(row))
+        : authorityPolicies,
+      authorityDecisions,
+      governanceRoutes,
+      proposalTargetGovernance: id
+        ? (model.proposalTargetGovernance ?? []).filter(row =>
+          row.id === id
+          || row.targetProcess === id
+          || proposals.some(proposal => String(proposal.targetProcess || "") === String(row.targetProcess || ""))
+        )
+        : (model.proposalTargetGovernance ?? []),
+      proposals,
+      branches: id
+        ? (model.branches ?? []).filter(row => row.id === id || branchIds.has(String(row.id || "")))
+        : (model.branches ?? []).filter(row => branchIds.has(String(row.id || ""))),
+      changeSets: id
+        ? (model.changeSets ?? []).filter(row => row.id === id || changeSetIds.has(String(row.id || "")))
+        : (model.changeSets ?? []).filter(row => changeSetIds.has(String(row.id || ""))),
+      pushRecords: id
+        ? (model.pushRecords ?? []).filter(row => row.id === id || pushRecordIds.has(String(row.id || "")))
+        : (model.pushRecords ?? []).filter(row => pushRecordIds.has(String(row.id || ""))),
+      shipRecords: id
+        ? (model.shipRecords ?? []).filter(row => row.id === id || shipRecordIds.has(String(row.id || "")))
+        : (model.shipRecords ?? []).filter(row => shipRecordIds.has(String(row.id || ""))),
       summaries: model.summaries
     };
   }

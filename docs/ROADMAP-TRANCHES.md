@@ -315,6 +315,7 @@ Turn the platform into something locally ownable, remotely automatable, and expl
 - startup-local plugin activation plus runner-authored install intent
 - bootstrap runtime-plugin install/remove/proposal flows
 - runtime-plugin review/detail/composition-preview reads
+- runtime-plugin reconcile/repair flows with shared-authority proposal fallback
 - authored `mcpServer` and `mcpToolInstall` with stdio + HTTP transport
 - first MCP tool catalog over real witnessed seams
 - first desktop ownership shell
@@ -325,7 +326,6 @@ Turn the platform into something locally ownable, remotely automatable, and expl
 
 - clearer product-facing explanation of profile-gated surface absence
 - broader desktop-native ownership without forking the product personality
-- runtime-plugin reconcile/repair flows
 - broader ecosystem/store/update protocol with real trust/review channels
 - convergence of blank-world bootstrap and maintained-demo runtime composition story
 - continued removal of remaining demo compatibility seams

@@ -340,6 +340,12 @@ export function renderBootstrapTutorialControllerFactory() {
         if (!current) return false;
         const check = current.completeWhen || {};
         const authored = state.bootstrapState || {};
+        const hasRows = (rows, ids = []) => (Array.isArray(ids) ? ids : []).every(id =>
+          Array.isArray(rows) && rows.some(row => row?.id === id)
+        );
+        const hasServedRoutes = (rows, pairs = []) => (Array.isArray(pairs) ? pairs : []).every(pair =>
+          Array.isArray(rows) && rows.some(row => row?.id === pair.route && row?.serverRunner === pair.serverRunner)
+        );
         switch (check.kind) {
           case "identityExists":
             return (authored.identities || []).some(row => row.id === check.id);
@@ -357,6 +363,17 @@ export function renderBootstrapTutorialControllerFactory() {
             return (authored.routes || []).some(row => row.id === check.id);
           case "serveExists":
             return (authored.servedRoutes || []).some(row => row.id === check.route && row.serverRunner === check.serverRunner);
+          case "authoredRowsExist":
+            return hasRows(authored.collections, check.collections)
+              && hasRows(authored.types, check.types)
+              && hasRows(authored.processes, check.processes)
+              && hasRows(authored.messages, check.messages)
+              && hasRows(authored.projections, check.projections)
+              && hasRows(authored.boundaries, check.boundaries)
+              && hasRows(authored.policies, check.policies)
+              && hasRows(authored.surfaces, check.surfaces)
+              && hasRows(authored.routes, check.routes)
+              && hasServedRoutes(authored.servedRoutes, check.servedRoutes);
           case "appRouteReady":
             return state.model?.appReady === true;
           case "manualAdvance":
@@ -428,6 +445,12 @@ export function renderBootstrapTutorialControllerFactory() {
         await sleep(20);
         submitter.click();
       };
+      const clickTutorialTarget = async target => {
+        if (!target?.click) throw new Error("Tutorial target is not clickable.");
+        flashAutoClick(target);
+        await sleep(20);
+        target.click();
+      };
       const autoCompleteCurrentChapter = async () => {
         const startingStep = tutorialStep();
         const chapterId = startingStep?.chapterId;
@@ -439,14 +462,17 @@ export function renderBootstrapTutorialControllerFactory() {
             await advanceTutorial();
             continue;
           }
-          if (!current.target || !current.payload) throw new Error("Step " + current.id + " cannot be auto-completed.");
+          if (!current.target) throw new Error("Step " + current.id + " cannot be auto-completed.");
           const target = byTarget(current.target);
           if (!target) throw new Error("Missing tutorial target for " + current.id + ".");
-          fillForm(target, current.payload);
-          await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false, replayScopeKey: null });
+          const payload = current.payload && typeof current.payload === "object" ? current.payload : {};
+          fillForm(target, payload);
+          await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: payload, hidden: false, replayScopeKey: null });
           renderTutorialOverlay();
           await sleep(40);
-          await submitTutorialForm(target);
+          const form = target?.matches?.("form") ? target : target?.closest?.("form") || target?.querySelector?.("form");
+          if (form) await submitTutorialForm(target);
+          else await clickTutorialTarget(target);
           const previousStepId = current.id;
           await waitFor(async () => {
             if ((state.tutorialProgress?.stepId !== previousStepId) || Boolean(state.tutorialProgress?.completedAt)) return true;
@@ -669,6 +695,11 @@ export function renderBootstrapTutorialControllerFactory() {
               return;
             }
             setStatus("tutorial-status", "Prefilled the real control. Use it to continue.");
+            return;
+          }
+          if (target && typeof target.click === "function") {
+            setStatus("tutorial-status", "Triggering the real control...");
+            await clickTutorialTarget(target);
             return;
           }
           setStatus("tutorial-status", "Use the highlighted control to continue.");

@@ -108,6 +108,32 @@ function widgetGuidanceTarget(widget) {
   return "";
 }
 
+function surfaceGuidanceTarget(surface) {
+  if (typeof surface?.guidanceTarget === "string" && surface.guidanceTarget.trim()) return surface.guidanceTarget.trim();
+  if (typeof surface?.tutorialTarget === "string" && surface.tutorialTarget.trim()) return surface.tutorialTarget.trim();
+  if (typeof surface?.props?.dataGuidanceTarget === "string" && surface.props.dataGuidanceTarget.trim()) return surface.props.dataGuidanceTarget.trim();
+  if (typeof surface?.props?.dataTutorialTarget === "string" && surface.props.dataTutorialTarget.trim()) return surface.props.dataTutorialTarget.trim();
+  return "";
+}
+
+function guidanceScopeLabelFromSurface(surface) {
+  if (!surface || typeof surface !== "object") return "";
+  const props = surface.props && typeof surface.props === "object" ? surface.props : {};
+  const candidates = [
+    props.title,
+    props.label,
+    props.text,
+    props.placeholder,
+    surface.id && humanizeIdentifier(surface.id),
+    surface.surfaceKind && humanizeIdentifier(surface.surfaceKind)
+  ];
+  for (const candidate of candidates) {
+    const label = plainGuidanceLabel(candidate);
+    if (label) return label;
+  }
+  return surface.id ? humanizeIdentifier(surface.id) : "";
+}
+
 export function guidanceScopeAnchorsFromWidgets(page, widgets = []) {
   const normalizedPage = typeof page === "string" ? page.trim() : "";
   if (!normalizedPage) return [];
@@ -127,6 +153,26 @@ export function guidanceScopeAnchorsFromWidgets(page, widgets = []) {
     if (!row?.id || !target) continue;
     const label = guidanceScopeLabelFromWidget(row, childrenByParent) || row.id;
     const isSection = row.kind === "Box" || row.kind === "Section" || row.kind === "Form";
+    anchors.push(guidanceScopeAnchor(
+      isSection
+        ? guidanceSectionScopeRecord(normalizedPage, row.id, label)
+        : guidanceWidgetScopeRecord(normalizedPage, row.id, label),
+      target
+    ));
+  }
+  return anchors;
+}
+
+export function guidanceScopeAnchorsFromSurfaces(page, surfaces = []) {
+  const normalizedPage = typeof page === "string" ? page.trim() : "";
+  if (!normalizedPage) return [];
+  const rows = Array.isArray(surfaces) ? surfaces : [];
+  const anchors = [];
+  for (const row of rows) {
+    const target = surfaceGuidanceTarget(row);
+    if (!row?.id || !target) continue;
+    const label = guidanceScopeLabelFromSurface(row) || row.id;
+    const isSection = row.surfaceKind === "generic" || row.surfaceKind === "app-root";
     anchors.push(guidanceScopeAnchor(
       isSection
         ? guidanceSectionScopeRecord(normalizedPage, row.id, label)

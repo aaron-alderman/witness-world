@@ -1,9 +1,5 @@
 import { relation } from "./kernel.js";
 import {
-  widgetDefinitions,
-  frontendProgramsProjection
-} from "./widgets.js";
-import {
   APP_PREVIEW_SESSIONS_PATH,
   APP_REVISION_EVENTS_PATH,
   BACKEND_REVISION_EVENTS_PATH,
@@ -20,14 +16,9 @@ import {
   SUPPORTED_BACKEND_OPS,
   activeBackendProgramDefinition
 } from "./backend-programs.js";
-import { renderInactiveRuntimeWidgetPage } from "./runtime-page-fallbacks.js";
 import { normalizePathname, readSurfaceMapFromWorld } from "./runtime-surface-shell.js";
 import { renderSurfacePage } from "./runtime-surface-page.js";
-import { createGuidanceBundleHandlers, guidanceConfigForSession } from "./runtime-guidance.js";
-import {
-  legacyFrontendBridgeConfigFromRoute,
-  legacyFrontendBridgeConfigFromSurface
-} from "./legacy-frontend-bridge.js";
+import { createGuidanceBundleHandlers } from "./runtime-guidance.js";
 import {
   AUTHORING_MODE_MCP_ONLY,
   blockedDirectMutationResponse,
@@ -46,6 +37,11 @@ import {
   describeMountedRouteOwnership
 } from "./runtime-ownership.js";
 import { describeMountedRouteGovernance } from "./runtime-governance.js";
+import {
+  currentPreviewManager,
+  previewAwareAppContext,
+  resolvePreviewSessionRequest
+} from "./runtime-preview.js";
 
 function escapeScriptBody(source) {
   return String(source ?? "").replaceAll("</script", "<\\/script");
@@ -180,28 +176,6 @@ function sourceryMutedForContext(rules = [], {
   return false;
 }
 
-function widgetPageGuidanceSurface(world, {
-  route = null,
-  rootWidget = null,
-  frontendProgramId = null,
-  guidancePage = null
-} = {}) {
-  const witnesses = world.allWitnesses();
-  const routeRows = new Map(moduleProjectors.routes(witnesses).map(row => [row.id, row]));
-  const widgetRows = new Map(widgetDefinitions(witnesses).map(row => [row.id, row]));
-  const programRows = new Map(frontendProgramsProjection(witnesses).map(row => [row.id, row]));
-  const routeRow = route?.id ? routeRows.get(route.id) ?? route : route;
-  const programRow = frontendProgramId ? programRows.get(frontendProgramId) ?? null : null;
-  const widgetRow = rootWidget ? widgetRows.get(rootWidget) ?? null : null;
-  return {
-    page: typeof guidancePage === "string" && guidancePage.trim() ? guidancePage.trim() : null,
-    context: programRow?.context ?? widgetRow?.context ?? routeRow?.context ?? null,
-    routeId: routeRow?.id ?? route?.id ?? null,
-    rootWidgetId: widgetRow?.id ?? rootWidget ?? null,
-    frontendProgramId: programRow?.id ?? frontendProgramId ?? null
-  };
-}
-
 export function createCoreRuntimeBundleHandlers({
   world,
   backendHost,
@@ -248,15 +222,7 @@ export function createCoreRuntimeBundleHandlers({
   const witnessesSince = index => typeof world?.witnessesSince === "function"
     ? world.witnessesSince(index)
     : world?.allWitnesses?.().slice(index) ?? [];
-  const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget, appContext }) => renderInactiveRuntimeWidgetPage({ rootWidget, appContext }));
-  const projectPagePresentationThemeHook = coreHooks.projectPagePresentationTheme
-    ?? coreHooks.projectEdenPageTheme
-    ?? (() => null);
   const sessionOpenResponsePayloadHook = coreHooks.sessionOpenResponsePayload
-    ?? (() => null);
-  const guidanceConfigForSessionHook = coreHooks.guidanceConfigForSession
-    ?? coreHooks.appGuidanceConfigForSession
-    ?? coreHooks.appTutorialConfigForSession
     ?? (() => null);
   const guidanceHandlers = createGuidanceBundleHandlers({
     sendJson,
@@ -327,66 +293,6 @@ export function createCoreRuntimeBundleHandlers({
         effectiveActor: requestActor,
         authorityMode: "direct"
       });
-  const renderLegacyFrontendCompatibilityHtml = ({
-    renderWorld = world,
-    route = null,
-    requestSession = null,
-    appContext = null,
-    bridgeConfig = null,
-    rootSurfaceId = null
-  } = {}) => {
-    const rootWidget = bridgeConfig?.rootWidget ?? null;
-    if (!rootWidget) return null;
-    const authority = normalizedRequestAuthority({ requestSession });
-    const pageTheme = projectPagePresentationThemeHook(requestVisibleWitnesses(authority.effectiveActor ?? null, appContext), {
-      actor: authority.effectiveActor ?? null,
-      pageId: rootWidget
-    });
-    const frontendProgramId = bridgeConfig?.frontendProgram ?? null;
-    const guidanceSurface = widgetPageGuidanceSurface(renderWorld, {
-      route,
-      rootWidget,
-      frontendProgramId,
-      guidancePage: "app"
-    });
-    const guidance = guidanceConfigForSession({
-      requestSession,
-      tutorialProgressFor,
-      guidanceProgressFor,
-      runtimeContributions,
-      surface: guidanceSurface
-    });
-    const compatibilityTutorial = guidance ?? guidanceConfigForSessionHook({
-      requestSession,
-      tutorialProgressFor,
-      guidanceProgressFor,
-      surface: guidanceSurface
-    });
-    return renderWidgetPageHook(renderWorld, {
-      actor: frontendHost,
-      rootWidget,
-      appContext,
-      frontendProgram: frontendProgramId,
-      appConfig: {
-        actors: requestActors(appContext),
-        page: bridgeConfig?.page ?? "home",
-        excludeWidgetRoles: Array.isArray(bridgeConfig?.excludeWidgetRoles) ? bridgeConfig.excludeWidgetRoles : ["world-graph-body"],
-        pageChrome: pageTheme,
-        liveProjection: bridgeConfig?.liveProjection !== false,
-        runtimeSurfaces: appContext.runtimeSurfaceEntries ?? [],
-        browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
-          .map(definition => typeof definition?.id === "string" ? definition.id : "")
-          .filter(Boolean),
-        surfaceContext: guidanceSurface.context,
-        surfaceRouteId: guidanceSurface.routeId,
-        surfaceRootWidgetId: guidanceSurface.rootWidgetId,
-        surfaceProgramId: guidanceSurface.frontendProgramId,
-        ...(rootSurfaceId ? { surfaceCompatibilityRootSurfaceId: rootSurfaceId } : {}),
-        guidance,
-        tutorial: compatibilityTutorial
-      }
-    });
-  };
   const authorityGrantReadShape = grantRow => {
     if (!grantRow) return null;
     const identityIndex = currentIdentityIndex();
@@ -476,7 +382,6 @@ export function createCoreRuntimeBundleHandlers({
   const appRenderWorld = appContext => appContext?.appSnapshotManager?.getActiveSnapshot()?.world
     ?? (typeof currentAppRenderWorld === "function" ? currentAppRenderWorld() : null)
     ?? world;
-  const currentPreviewManager = appContext => appContext?.appPreviewSessionManager ?? null;
   const resolvePreviewManager = async appContext => {
     const existingManager = currentPreviewManager(appContext);
     if (existingManager) return existingManager;
@@ -584,8 +489,28 @@ export function createCoreRuntimeBundleHandlers({
     requestSession,
     appContext
   }) => {
+    const previewRequest = resolvePreviewSessionRequest({ appContext, requestUrl });
+    if (!previewRequest.ok && previewRequest.reason === "stale") {
+      sendJson(res, 409, {
+        error: previewRequest.session?.invalidReason || "preview no longer matches the active snapshot",
+        previewSession: previewRequest.session ?? null
+      });
+      return;
+    }
+    const requestWorld = previewRequest.ok
+      ? previewRequest.world
+      : world;
+    const requestAppContext = previewRequest.ok
+      ? previewAwareAppContext(appContext, requestWorld)
+      : appContext;
+    const requestWitnessCount = () => typeof requestWorld?.witnessCount === "function"
+      ? Number(requestWorld.witnessCount() || 0)
+      : Number(requestWorld?.allWitnesses?.().length || 0);
+    const requestWitnessesSince = index => typeof requestWorld?.witnessesSince === "function"
+      ? requestWorld.witnessesSince(index)
+      : requestWorld.allWitnesses().slice(Number(index || 0));
     const soul = route?.params?.backendProgramSoul ?? null;
-    const program = soul ? activeBackendProgramDefinition(world.allWitnesses(), soul) : null;
+    const program = soul ? activeBackendProgramDefinition(requestWorld.allWitnesses(), soul) : null;
     if (!program) {
       sendJson(res, 404, { error: "active backend program not configured", backendProgramSoul: soul });
       return;
@@ -612,7 +537,7 @@ export function createCoreRuntimeBundleHandlers({
     };
     const scopeFor = extra => ({ state, event: state.event || {}, ...extra });
     const responseState = { sent: false };
-    const recordTrace = (process, body = {}) => world.observe({
+    const recordTrace = (process, body = {}) => requestWorld.observe({
       process,
       actor: requestActor || backendHost,
       claims: [],
@@ -649,18 +574,21 @@ export function createCoreRuntimeBundleHandlers({
         const requestBody = Object.prototype.hasOwnProperty.call(params, "body")
           ? params.body
           : (typeof params.from === "string" && params.from.trim() ? readPath(stateRef, params.from.trim()) : null);
-        const witnessCountBefore = witnessCount();
+        const witnessCountBefore = requestWitnessCount();
         const result = await invokeRouteHandler({
           handler,
           method: typeof params.method === "string" && params.method.trim() ? params.method.trim().toUpperCase() : "POST",
           path: requestPath,
-          query: params.query && typeof params.query === "object" ? params.query : {},
+          query: {
+            ...(params.query && typeof params.query === "object" ? params.query : {}),
+            ...(previewRequest.previewSessionId ? { previewSessionId: previewRequest.previewSessionId } : {})
+          },
           params: params.params && typeof params.params === "object" ? params.params : {},
           body: requestBody,
           requestActor,
           requestIdentity,
           requestSession,
-          appContext,
+          appContext: requestAppContext,
           route: {
             id: `${route?.id || "backend-program-route"}:${handler}`,
             path: requestPath,
@@ -668,9 +596,9 @@ export function createCoreRuntimeBundleHandlers({
             params: params.params && typeof params.params === "object" ? params.params : {}
           }
         });
-        const emittedWitnesses = witnessesSince(witnessCountBefore);
+        const emittedWitnesses = requestWitnessesSince(witnessCountBefore);
         const failedWitnesses = emittedWitnesses.filter(witness => witness.process.endsWith(".failed") || witness.process.endsWith(".blocked"));
-        world.observe({
+        requestWorld.observe({
           process: "backend.request.finish",
           actor: requestActor || backendHost,
           claims: [],
@@ -702,9 +630,9 @@ export function createCoreRuntimeBundleHandlers({
         const requestBody = Object.prototype.hasOwnProperty.call(params, "body")
           ? params.body
           : (typeof params.from === "string" && params.from.trim() ? readPath(stateRef, params.from.trim()) : null);
-        const witnessCountBefore = witnessCount();
+        const witnessCountBefore = requestWitnessCount();
         const normalizedResult = normalizeBackendProcessRequestResult(processId, await handler({
-          world,
+          world: requestWorld,
           backendHost,
           frontendHost,
           process: processId,
@@ -714,11 +642,11 @@ export function createCoreRuntimeBundleHandlers({
           requestIdentity,
           requestSession,
           route,
-          appContext
+          appContext: requestAppContext
         }));
-        const emittedWitnesses = witnessesSince(witnessCountBefore);
+        const emittedWitnesses = requestWitnessesSince(witnessCountBefore);
         const failedWitnesses = emittedWitnesses.filter(witness => witness.process.endsWith(".failed") || witness.process.endsWith(".blocked"));
-        world.observe({
+        requestWorld.observe({
           process: "backend.request.finish",
           actor: requestActor || backendHost,
           claims: [],
@@ -757,12 +685,12 @@ export function createCoreRuntimeBundleHandlers({
         if (!Object.prototype.hasOwnProperty.call(projectionOptions, "requestActor")) projectionOptions.requestActor = requestActor ?? null;
         if (!Object.prototype.hasOwnProperty.call(projectionOptions, "requestIdentity")) projectionOptions.requestIdentity = requestIdentity ?? null;
         if (!Object.prototype.hasOwnProperty.call(projectionOptions, "requestSession")) projectionOptions.requestSession = requestSession ?? null;
-        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "appContext")) projectionOptions.appContext = appContext ?? null;
-        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "observations")) projectionOptions.observations = world.allObservations();
+        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "appContext")) projectionOptions.appContext = requestAppContext ?? null;
+        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "observations")) projectionOptions.observations = requestWorld.allObservations();
         const requestId = `${runId}:${step.id}:${projectorName}`;
         try {
-          const value = world.project(projector, projectionOptions);
-          world.observe({
+          const value = requestWorld.project(projector, projectionOptions);
+          requestWorld.observe({
             process: "backend.request.finish",
             actor: requestActor || backendHost,
             claims: [],
@@ -784,7 +712,7 @@ export function createCoreRuntimeBundleHandlers({
           writePath(stateRef, into, value);
           return;
         } catch (error) {
-          world.observe({
+          requestWorld.observe({
             process: "backend.request.finish",
             actor: requestActor || backendHost,
             claims: [],
@@ -812,7 +740,7 @@ export function createCoreRuntimeBundleHandlers({
           ? params.actor.trim()
           : (requestActor || backendHost);
         const body = params.body && typeof params.body === "object" ? params.body : {};
-        const witness = world.emit({
+        const witness = requestWorld.emit({
           process,
           actor,
           claims: normalizeWitnessClaims(params.claims),
@@ -1199,55 +1127,6 @@ export function createCoreRuntimeBundleHandlers({
       await executeBackendProgramRoute(args);
     },
 
-    "page.home": async ({ res, route, requestUrl, appContext, requestSession }) => {
-      const bridge = legacyFrontendBridgeConfigFromRoute(route);
-      if (!bridge?.rootWidget) {
-        sendJson(res, 404, { error: "page not configured", route: route.id });
-        return;
-      }
-      const previewSessionId = requestUrl?.searchParams?.get("previewSessionId")?.trim() || null;
-      const previewManager = previewSessionId ? await resolvePreviewManager(appContext) : currentPreviewManager(appContext);
-      const previewResolution = previewSessionId && previewManager
-        ? previewManager.resolveRenderSession(previewSessionId)
-        : null;
-      if (previewResolution && !previewResolution.ok && previewResolution.reason === "stale") {
-        send(
-          res,
-          409,
-          "text/html",
-          renderPreviewSessionStatePage({
-            title: "Preview Stale",
-            heading: "Preview no longer matches the active snapshot",
-            detail: previewResolution.session?.invalidReason || "The active app snapshot changed while the preview session was open.",
-            currentPath: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/")
-          }),
-          devHtmlHeaders(appContext)
-        );
-        return;
-      }
-      world.observe({
-        process: "frontend.render",
-        actor: frontendHost,
-        claims: [relation(frontendHost, "rendered", route.serves || bridge.rootWidget)],
-        body: { route: route.path }
-      });
-      let responseHtml = renderLegacyFrontendCompatibilityHtml({
-        renderWorld: previewResolution?.ok ? previewResolution.world : world,
-        route,
-        requestSession,
-        appContext,
-        bridgeConfig: bridge
-      });
-      if (previewResolution?.ok) {
-        responseHtml = injectPreviewSessionClient(responseHtml, {
-          previewSessionId,
-          previewRevision: previewResolution.session?.previewRevision ?? 0,
-          debugSessionId: requestUrl?.searchParams?.get("debugSessionId")?.trim() || null
-        });
-      }
-      send(res, 200, "text/html", maybeInjectDevClient(responseHtml, appContext), devHtmlHeaders(appContext));
-      },
-
     "page.surface": async ({ res, route, requestUrl, requestSession, appContext }) => {
       const rootSurfaceId = route?.params?.rootSurface ?? null;
       const pageStatus = Number(route?.params?.responseStatus ?? 200) || 200;
@@ -1256,11 +1135,8 @@ export function createCoreRuntimeBundleHandlers({
         return;
       }
       const previewSessionId = requestUrl?.searchParams?.get("previewSessionId")?.trim() || null;
-      const previewManager = previewSessionId ? await resolvePreviewManager(appContext) : currentPreviewManager(appContext);
-      const previewResolution = previewSessionId && previewManager
-        ? previewManager.resolveRenderSession(previewSessionId)
-        : null;
-      if (previewResolution && !previewResolution.ok && previewResolution.reason === "stale") {
+      const previewResolution = resolvePreviewSessionRequest({ appContext, requestUrl });
+      if (!previewResolution.ok && previewResolution.reason === "stale") {
         send(
           res,
           409,
@@ -1275,52 +1151,9 @@ export function createCoreRuntimeBundleHandlers({
         );
         return;
       }
-      const renderWorld = previewResolution?.ok
+      const renderWorld = previewResolution.ok
         ? previewResolution.world
         : appRenderWorld(appContext);
-      const bridgeSurface = readSurfaceMapFromWorld(renderWorld).get(rootSurfaceId) ?? null;
-      const legacyBridge = legacyFrontendBridgeConfigFromSurface(bridgeSurface);
-      if (legacyBridge) {
-        let responseHtml = renderLegacyFrontendCompatibilityHtml({
-          renderWorld,
-          route,
-          requestSession,
-          appContext,
-          bridgeConfig: legacyBridge,
-          rootSurfaceId
-        });
-        if (!responseHtml) {
-          sendJson(res, 404, { error: "surface page not found", rootSurface: rootSurfaceId });
-          return;
-        }
-        if (previewResolution?.ok) {
-          responseHtml = injectPreviewSessionClient(responseHtml, {
-            previewSessionId,
-            previewRevision: previewResolution.session?.previewRevision ?? 0,
-            debugSessionId: requestUrl?.searchParams?.get("debugSessionId")?.trim() || null
-          });
-        }
-        const companionConfig = companionConfigForSurfaceRequest({
-          rootSurfaceId,
-          route,
-          requestUrl,
-          requestSession,
-          appContext,
-          previewSession: previewResolution?.session ?? null
-        });
-        if (companionConfig) {
-          responseHtml = injectRuntimeWindowValue(responseHtml, "__engentusDebugConfig", companionConfig);
-          responseHtml = injectRuntimeWindowValue(responseHtml, "__sourceryCompanionEnabled", companionConfig.sourceryVisible !== false);
-        }
-        world.observe({
-          process: "frontend.render",
-          actor: frontendHost,
-          claims: [relation(frontendHost, "rendered", route?.serves || rootSurfaceId)],
-          body: { route: requestUrl?.pathname ?? route?.path ?? "/", rootSurface: rootSurfaceId, compatibilityBridge: true }
-        });
-        send(res, pageStatus, "text/html", maybeInjectDevClient(responseHtml, appContext), devHtmlHeaders(appContext));
-        return;
-      }
       const html = renderSurfacePage(renderWorld, {
         rootSurfaceId,
         requestPathname: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/"),
@@ -1348,7 +1181,7 @@ export function createCoreRuntimeBundleHandlers({
         return;
       }
       let responseHtml = html;
-      if (previewResolution?.ok) {
+      if (previewResolution.ok) {
         responseHtml = injectPreviewSessionClient(responseHtml, {
           previewSessionId,
           previewRevision: previewResolution.session?.previewRevision ?? 0,
@@ -1361,7 +1194,7 @@ export function createCoreRuntimeBundleHandlers({
         requestUrl,
         requestSession,
         appContext,
-        previewSession: previewResolution?.session ?? null
+        previewSession: previewResolution.session ?? null
       });
       if (companionConfig) {
         responseHtml = injectRuntimeWindowValue(responseHtml, "__engentusDebugConfig", companionConfig);
@@ -1654,14 +1487,22 @@ export function createCoreRuntimeBundleHandlers({
     },
 
     "runtime.diagnostics.read": async ({ res, appContext }) => {
+      const runnerState = appContext?.serverRunnerId && typeof appContext?.resolveRunnerRuntimeState === "function"
+        ? await appContext.resolveRunnerRuntimeState(appContext.serverRunnerId)
+        : null;
       const pluginCatalog = appContext?.runtimePluginCatalog ?? await getRuntimePluginCatalog({
-        activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
+        activeProfile: runnerState?.profileState?.effectiveRuntimeProfile ?? appContext?.runtimeProfile ?? runtimeProfile,
         serverRunnerId: appContext?.serverRunnerId ?? null
       });
+      const activeHandlerSetDefinitions = appContext?.runtimeHandlerSetDefinitions ?? handlerSetDefinitions;
       const operatorState = await appContext?.runtimeOperatorService?.state?.();
       const diagnostics = buildRuntimeDiagnosticsForProfile({
         requestedProfile: appContext?.requestedRuntimeProfile ?? requestedRuntimeProfile ?? runtimeProfile,
         profileName: appContext?.runtimeProfile ?? runtimeProfile,
+        authoredRuntimeProfile: appContext?.authoredRuntimeProfile ?? null,
+        effectiveRuntimeProfileSource: appContext?.effectiveRuntimeProfileSource ?? null,
+        runtimeProfileOverrideActive: appContext?.runtimeProfileOverrideActive === true,
+        runtimeProfileOverrideProfile: appContext?.runtimeProfileOverrideProfile ?? null,
         additionalBundleIds: appContext?.runtimeAdditionalBundleIds ?? pluginCatalog.addedBundleIds,
         bundleOverrides: appContext?.runtimeBundleOverrides ?? {},
         startupRunner: {
@@ -1669,17 +1510,19 @@ export function createCoreRuntimeBundleHandlers({
           backendHost,
           frontendHost,
           handlerSet: appContext?.handlerSet ?? null,
-          bootstrapOnly: appContext?.bootstrapOnly === true
+          bootstrapOnly: appContext?.bootstrapOnly === true,
+          startupOwned: appContext?.startupRunnerOwned === true
         },
         startupMode: appContext?.runtimeStartupMode ?? "serve",
         installedHostCapabilities: {
           backend: [...currentBackendCapabilities()],
           frontend: [...currentFrontendCapabilities()]
         },
-        handlerSetDefinitions,
+        handlerSetDefinitions: activeHandlerSetDefinitions,
         operatorContract: appContext?.runtimeOperatorContract ?? null,
         operatorState,
         pluginCatalogSummary: pluginCatalog.summary,
+        startupPluginIds: pluginCatalog.startupPluginIds,
         authoredPluginIds: pluginCatalog.authoredPluginIds,
         operatorPluginIds: pluginCatalog.operatorPluginIds,
         effectivePluginIds: pluginCatalog.effectivePluginIds,
@@ -1696,7 +1539,7 @@ export function createCoreRuntimeBundleHandlers({
           const ownership = describeMountedRouteOwnership({
             route,
             handlerMetadataById: diagnostics.handlerMetadata ?? {},
-            handlerSetDefinitions,
+            handlerSetDefinitions: activeHandlerSetDefinitions,
             handlerSetProviders: appContext?.runtimeContributions?.handlerSetProviders ?? {}
           });
           const governance = describeMountedRouteGovernance({
@@ -1768,9 +1611,13 @@ export function createCoreRuntimeBundleHandlers({
         sendJson(res, 404, { error: "server runner not found", serverRunner: serverRunnerId || null });
         return;
       }
+      const runnerState = typeof appContext?.resolveRunnerRuntimeState === "function"
+        ? await appContext.resolveRunnerRuntimeState(serverRunnerId)
+        : null;
       const review = await getRuntimePluginReviews({
-        activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
+        activeProfile: runnerState?.profileState?.effectiveRuntimeProfile ?? appContext?.runtimeProfile ?? runtimeProfile,
         serverRunnerId,
+        authoredPluginIds: runnerState?.runtimePluginCatalog?.authoredPluginIds ?? null,
         pluginId
       });
       world.observe({

@@ -809,6 +809,8 @@ Current molecules:
 - authored `serverRunner` plugin installs through witnessed `runtimePlugin.install` / `runtimePlugin.remove`, with direct-route proposal fallback, proposal parity, and additive operator overlay
 - bootstrap runtime-plugin install/remove/proposal forms plus runner-scoped availability rows that show authored installability, missing dependencies, and metadata-only packages without pretending CLI/env overlays are durable world state
 - runtime-owned review reads plus bootstrap plugin detail panels that preview authored runner composition, no-op installs, reverse dependencies, and declared-vs-resolved plugin contributions before mutation
+- runner-scoped `runtimePlugin.reconcile` repair actions for broken or stale authored install intent, including direct success when runner authority allows, `202` proposal fallback when it does not, and top-level repair witnesses that record the lowered cleanup/install work
+- bootstrap runtime-plugin review detail panels that expose actionable `Reconcile And Repair` controls for broken installs, missing authored intent cleanup, and dependency repair through the same governed server-runner authority path
 - runtime composition reads that expose requested, eligible, active, rejected, resolved-bundle, and resolved-runtime-contribution state for local plugin packages
 - the maintained demo example now uses authored runner installs for `plugin.authoring`, `plugin.inspect`, `plugin.canvas`, and `plugin.demo`, and served demo entrypoints run on `minimal` so plugin composition is proven in the actual project path rather than only in abstract runtime tests
 
@@ -818,7 +820,6 @@ Still missing:
 - update lifecycle
 - broader store-grade trust/review/report surfaces beyond the shipped local runtime-plugin review/detail and composition-preview reads
 - richer version compatibility semantics
-- runner-scoped reconcile and repair flows for broken authored runtime-plugin installs
 - finishing the migration of remaining bootstrap/tutorial and demo compatibility seams onto the same explicit runtime-composition story
 - executable plugin loader boundaries beyond the current bundle-bridge-only activation path
 
@@ -879,7 +880,8 @@ The current capability slice is real, but a few parts are still bridge-quality r
 - Activated plugin packages still do not execute package-local providers, load local JS, register runtime routes directly, or auto-install capabilities into the world model.
 - Authored runtime-plugin installs persist runner intent, but they still resolve only to pre-registered internal bundles; they are not yet a third-party executable loader or a remote store install lifecycle.
 - The maintained demo now proves authored plugin composition on `minimal`, but it still relies on one explicit compatibility seam: `handlerSet = "demo"` currently causes startup to add `bundle-demo`.
-- Blank-world bootstrap/tutorial startup still follows a separate runtime path from the pluginized maintained demo, so the project does not yet have one fully unified runtime-composition story across both entry modes.
+- Blank-world bootstrap/tutorial startup now uses the same narrowed `minimal` baseline plus an explicit startup-default plugin set (`plugin.authoring`, `plugin.starter`, `plugin.tutorial`) as a first-class startup-owned composition story.
+  Bootstrap still remains operator/runtime-owned until authored app-boundary takeover, so the runtime story is now explicit rather than synthetic, but it is not yet authored `serverRunner` intent.
 - None of those caveats make the capability slice fake.
   They mean the current slice still mixes real first-class behavior with compatibility bridges, narrow placement semantics, projection-backed cataloging, and an explicit bundle-bridge-only local plugin boundary.
 
@@ -955,7 +957,7 @@ Why it accelerates:
 Current molecules:
 
 - authored concept definitions on the Todo tutorial itself
-- per-step concept tags for identity, session, runtime wiring, widget structure, frontend programs, routes/mounts, app boundary, witnessed app state, and perspective-bound data
+- per-step concept tags for identity, session, runtime wiring, native `page.surface` hosting, authored process/message flow, route-backed boundaries, collection-backed UI state, and inspect/world operating surfaces
 - progressive concept reveal derived from real tutorial progress rather than hidden inference
 - concept explanation surfaces on both bootstrap and live-app tutorial UI
 

@@ -12,8 +12,6 @@ import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
 import { executeProgramAuthoringProposalTarget } from "./program-proposal-targets.js";
 
 const PROGRAM_HANDLER_IDS = [
-  "frontendProgram.create",
-  "frontendStep.create",
   "backendProgram.create",
   "backendProgramVersion.create",
   "backendStep.create",
@@ -39,8 +37,8 @@ test("program-authoring plugin owns program authoring routes and handlers", asyn
   assert.equal(manifest.runtime.entry, "./runtime.js");
   assert.equal(bundleId, "bundle-program-authoring");
   assert.deepEqual(handlerCatalog.dispatchHandlers, PROGRAM_HANDLER_IDS);
-  assert.equal(routes.some(route => route.path === "/api/frontend-programs" && route.handler === "frontendProgram.create"), true);
-  assert.equal(routes.some(route => route.path === "/api/frontend-steps" && route.handler === "frontendStep.create"), true);
+  assert.equal(routes.some(route => route.path === "/api/frontend-programs"), false);
+  assert.equal(routes.some(route => route.path === "/api/frontend-steps"), false);
   assert.equal(routes.some(route => route.path === "/api/backend-programs" && route.handler === "backendProgram.create"), true);
   assert.equal(routes.some(route => route.path === "/api/backend-program-versions" && route.handler === "backendProgramVersion.create"), true);
   assert.equal(routes.some(route => route.path === "/api/backend-steps" && route.handler === "backendStep.create"), true);
@@ -169,16 +167,6 @@ test("program authoring handlers create proposals instead of dead-end 403s for g
     supportedBackendOps: []
   });
 
-  await handlers["frontendProgram.create"]({
-    req: { body: { id: "landing", context: "ctx.shared", rootWidget: "page_root" } },
-    res: {},
-    requestActor: "callan"
-  });
-  await handlers["frontendStep.create"]({
-    req: { body: { program: "landing", event: "load", op: "widget.render" } },
-    res: {},
-    requestActor: "callan"
-  });
   await handlers["backendProgram.create"]({
     req: { body: { soul: "todo.todos.list", label: "Todo", context: "ctx.shared" } },
     res: {},
@@ -203,7 +191,7 @@ test("program authoring handlers create proposals instead of dead-end 403s for g
   });
 
   assert.equal(sent.some(entry => entry.kind === "gate"), false);
-  assert.deepEqual(sent.map(entry => entry.status), [202, 202, 202, 202, 202, 202]);
+  assert.deepEqual(sent.map(entry => entry.status), [202, 202, 202, 202]);
   assert.deepEqual(
     sent.map(entry => ({
       targetProcess: entry.body.proposal.targetProcess,
@@ -211,8 +199,6 @@ test("program authoring handlers create proposals instead of dead-end 403s for g
       targetId: entry.body.proposal.targetId
     })),
     [
-      { targetProcess: "frontendProgram.define", targetKind: "context", targetId: "ctx.shared" },
-      { targetProcess: "frontendStep.define", targetKind: "frontendProgram", targetId: "landing" },
       { targetProcess: "backendProgram.define", targetKind: "context", targetId: "ctx.shared" },
       { targetProcess: "backendStep.define", targetKind: "backendProgramVersion", targetId: "todo.todos.list.v1" },
       { targetProcess: "backendProgramVersion.activate", targetKind: "backendProgram", targetId: "todo.todos.list" },

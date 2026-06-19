@@ -49,6 +49,7 @@ export function createGenericRouteHandlers({
   runtimeContributions = null,
   runtimePluginRoot = resolveRuntimePluginRoot(),
   runtimePluginIds = [],
+  startupRuntimePluginIds = [],
   authoredRuntimePluginIds = [],
   appSnapshotManager = null,
   currentAppRenderWorld = null
@@ -69,6 +70,7 @@ export function createGenericRouteHandlers({
     runtimeContributions,
     runtimePluginRoot,
     runtimePluginIds,
+    startupRuntimePluginIds,
     authoredRuntimePluginIds,
     appSnapshotManager,
     currentAppRenderWorld,

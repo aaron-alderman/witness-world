@@ -31,6 +31,48 @@ function ensureArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function canonicalArtifactIdForTestArtifact(id) {
+  const raw = optionalText(id);
+  if (!raw) return null;
+  if (raw.startsWith("artifact:")) return raw;
+  if (raw.startsWith("testArtifact:")) return `artifact:${raw.slice("testArtifact:".length)}`;
+  return `artifact:${raw}`;
+}
+
+function normalizeArtifactPreview(row = {}) {
+  return optionalText(row.preview) ?? normalizePreview(row.content ?? "");
+}
+
+function buildCanonicalArtifactRow(row = {}) {
+  const id = canonicalArtifactIdForTestArtifact(row.artifactId ?? row.id);
+  if (!id) return null;
+  return {
+    id,
+    title: optionalText(row.title) ?? id,
+    artifactKind: optionalText(row.artifactKind) ?? "artifact",
+    producerKind: optionalText(row.producerKind) ?? "testRun",
+    producerId: optionalText(row.producerId) ?? optionalText(row.runId),
+    contentType: optionalText(row.contentType) ?? "text/plain",
+    sizeBytes: typeof row.sizeBytes === "number" ? row.sizeBytes : null,
+    contentRef: optionalText(row.contentRef),
+    contentUrl: `/api/platform-artifacts/${encodeURIComponent(id)}/content`,
+    preview: normalizeArtifactPreview(row),
+    producedAt: row.producedAt ?? null,
+    fileName: optionalText(row.fileName),
+    sessionId: optionalText(row.sessionId),
+    executionId: optionalText(row.executionId),
+    branchId: optionalText(row.branchId),
+    changeSetId: optionalText(row.changeSetId),
+    candidateSnapshotId: optionalText(row.candidateSnapshotId),
+    proposalId: optionalText(row.proposalId),
+    testRunId: optionalText(row.testRunId) ?? optionalText(row.runId),
+    runId: optionalText(row.runId),
+    resultId: optionalText(row.resultId),
+    gateId: optionalText(row.gateId),
+    artifactSourceId: optionalText(row.id)
+  };
+}
+
 function backendDocsById(appProject = null) {
   const rows = new Map();
   for (const doc of appProject?.allDocs ?? []) {
@@ -181,6 +223,10 @@ function setupDatabase(database) {
       id text primary key,
       row_json text not null
     );
+    create table if not exists artifacts (
+      id text primary key,
+      row_json text not null
+    );
     create table if not exists test_artifacts (
       id text primary key,
       row_json text not null
@@ -233,6 +279,7 @@ export async function createRuntimeVerificationPersistence({
   const upsertExecutions = upsertStatement(database, "verification_executions");
   const upsertRuns = upsertStatement(database, "test_runs");
   const upsertResults = upsertStatement(database, "test_results");
+  const upsertCanonicalArtifacts = upsertStatement(database, "artifacts");
   const upsertArtifacts = upsertStatement(database, "test_artifacts");
   const upsertSuites = upsertStatement(database, "test_suites");
   const upsertCases = upsertStatement(database, "test_cases");
@@ -245,6 +292,7 @@ export async function createRuntimeVerificationPersistence({
   const readExecutionRows = readRowsStatement(database, "verification_executions");
   const readRunRows = readRowsStatement(database, "test_runs");
   const readResultRows = readRowsStatement(database, "test_results");
+  const readCanonicalArtifactRows = readRowsStatement(database, "artifacts");
   const readArtifactRows = readRowsStatement(database, "test_artifacts");
   const readSuiteRows = readRowsStatement(database, "test_suites");
   const readCaseRows = readRowsStatement(database, "test_cases");
@@ -264,22 +312,46 @@ export async function createRuntimeVerificationPersistence({
 
   async function persistArtifactRow(row) {
     const content = optionalText(row?.content);
+    const canonicalArtifactId = canonicalArtifactIdForTestArtifact(row?.artifactId ?? row?.id);
     if (content == null) {
-      upsertArtifacts.run(String(row.id), stableJson(row));
-      return row;
+      const canonicalRow = buildCanonicalArtifactRow(row);
+      if (canonicalRow?.id) upsertCanonicalArtifacts.run(String(canonicalRow.id), stableJson(canonicalRow));
+      upsertArtifacts.run(String(row.id), stableJson({
+        ...row,
+        artifactId: canonicalArtifactId ?? row?.artifactId ?? null
+      }));
+      return {
+        artifact: canonicalRow,
+        testArtifact: {
+          ...row,
+          artifactId: canonicalArtifactId ?? row?.artifactId ?? null
+        }
+      };
     }
-    const artifactPath = artifactFilePathFor(row.id);
+    const contentKey = canonicalArtifactId ?? String(row.id);
+    const artifactPath = artifactFilePathFor(contentKey);
     await ensureDirectory(path.dirname(artifactPath));
     await fs.writeFile(artifactPath, content, "utf8");
+    const canonicalRow = buildCanonicalArtifactRow({
+      ...row,
+      artifactId: canonicalArtifactId ?? row?.artifactId ?? null,
+      contentRef: artifactPath,
+      preview: normalizePreview(content)
+    });
     const durableRow = {
       ...row,
+      artifactId: canonicalArtifactId ?? row?.artifactId ?? null,
       content: undefined,
       contentRef: artifactPath,
       contentUrl: `/api/platform-test-artifacts/${encodeURIComponent(String(row.id))}/content`,
       preview: normalizePreview(content)
     };
+    if (canonicalRow?.id) upsertCanonicalArtifacts.run(String(canonicalRow.id), stableJson(canonicalRow));
     upsertArtifacts.run(String(row.id), stableJson(durableRow));
-    return durableRow;
+    return {
+      artifact: canonicalRow,
+      testArtifact: durableRow
+    };
   }
 
   function rowsFrom(statement) {
@@ -376,6 +448,13 @@ export async function createRuntimeVerificationPersistence({
         verificationExecutions: rowsFrom(readExecutionRows),
         testRuns: rowsFrom(readRunRows),
         testResults: rowsFrom(readResultRows),
+        artifacts: (() => {
+          const canonicalRows = rowsFrom(readCanonicalArtifactRows);
+          if (canonicalRows.length) return canonicalRows;
+          return rowsFrom(readArtifactRows)
+            .map(row => buildCanonicalArtifactRow(row))
+            .filter(Boolean);
+        })(),
         testArtifacts: rowsFrom(readArtifactRows),
         testSuites: rowsFrom(readSuiteRows),
         testCases: rowsFrom(readCaseRows),
@@ -387,9 +466,24 @@ export async function createRuntimeVerificationPersistence({
       const row = parseJson(json, null);
       return row?.latestResult ?? null;
     },
-    async readArtifactContent(artifactId) {
-      const rows = rowsFrom(readArtifactRows);
-      const artifact = rows.find(row => String(row?.id || "") === String(artifactId || "")) ?? null;
+    async readArtifactContent(artifactId, { compatibility = "canonical" } = {}) {
+      const canonicalRows = rowsFrom(readCanonicalArtifactRows);
+      const testArtifactRows = rowsFrom(readArtifactRows);
+      const requestedId = String(artifactId || "");
+      const artifact = compatibility === "testArtifact"
+        ? (
+          testArtifactRows.find(row => String(row?.id || "") === requestedId)
+          ?? testArtifactRows.find(row => String(row?.artifactId || "") === requestedId)
+          ?? null
+        )
+        : (
+          canonicalRows.find(row => String(row?.id || "") === requestedId)
+          ?? testArtifactRows.find(row => String(row?.id || "") === requestedId)
+          ?? testArtifactRows.find(row => String(row?.artifactId || "") === requestedId)
+          ?? (requestedId.startsWith("artifact:")
+            ? testArtifactRows.find(row => canonicalArtifactIdForTestArtifact(row?.id) === requestedId)
+            : null)
+        );
       if (!artifact?.contentRef) return { ok: false, status: 404, error: "artifact content not found" };
       try {
         const content = await fs.readFile(String(artifact.contentRef), "utf8");

@@ -15,8 +15,13 @@ test("platform model reads do not await automatic rollback proposal synthesis an
   const responses = [];
   const handlers = createPlatformHandlers({
     world: {
+      emit(entry) {
+        observed.push(entry);
+        return entry;
+      },
       observe(entry) {
         observed.push(entry);
+        return entry;
       }
     },
     backendHost: "backendHost",
@@ -65,7 +70,7 @@ test("platform model reads do not await automatic rollback proposal synthesis an
   assert.equal(ensureCalls, 1);
   assert.equal(responses.length, 2);
   assert.equal(responses.every(response => response.status === 200), true);
-  assert.equal(observed.every(entry => entry.process === "backend.readPlatformModel"), true);
+  assert.equal(observed.filter(entry => entry.process === "backend.readPlatformModel").length, 2);
 });
 
 test("platform model reads use authored materialized platform slices when available", async () => {

@@ -44,6 +44,42 @@ test("tutorial progress runtime advances queued app steps through the shared lif
   ]);
 });
 
+test("tutorial progress runtime aligns the bootstrap open-app handoff onto the first live app step exactly once", async () => {
+  const tutorial = {
+    steps: [
+      { id: "native:create-app", chapterId: "native-app", page: "bootstrap" },
+      { id: "open-app", chapterId: "verify", page: "bootstrap" },
+      { id: "app:intro", chapterId: "use-app", page: "app", completeWhen: { kind: "manualAdvance" } },
+      { id: "app:create-todo", chapterId: "use-app", page: "app" }
+    ]
+  };
+  let progress = { stepId: "open-app", chapterId: "verify", hidden: false, completedAt: null };
+  const saved = [];
+
+  const runtime = createTutorialProgressRuntime({
+    tutorial,
+    getProgress: () => progress,
+    setProgress: value => {
+      progress = value;
+    },
+    currentStep: () => tutorial.steps.find(step => step.id === progress?.stepId) || null,
+    currentStepIndex: () => tutorial.steps.findIndex(step => step.id === progress?.stepId),
+    tutorialReplayStepIdFn: () => null,
+    saveProgress: async next => {
+      progress = next;
+      saved.push(next.stepId);
+    },
+    render: () => {},
+    isComplete: async () => false
+  });
+
+  await runtime.alignProgressToAppPage();
+  await runtime.requestMaybeAdvance();
+
+  assert.equal(progress.stepId, "app:intro");
+  assert.deepEqual(saved, ["app:intro"]);
+});
+
 test("tutorial progress runtime clears replay on matching interaction and boots through the shared sequence", async () => {
   let progress = { stepId: "step-1", replayScopeKey: "section:todo" };
   const target = {

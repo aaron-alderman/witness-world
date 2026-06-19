@@ -521,7 +521,7 @@ export function renderBootstrapTutorialStateFactory() {
           } else if (!state.session?.authenticated) {
             add("sign-in", "Sign In To Keep Editing", "Identities already exist, so bootstrap writes now go through the normal session path.", "Show Session Form", { kind: "focusTarget", target: "session-form" });
           } else if (!appReady) {
-            add("starter-shortcut", "Use The Fast Path Or Keep Building", "The starter shortcut uses the same authored structures as the tutorial. You can inspect or trigger it directly.", "Show Starter Control", { kind: "focusTarget", target: "create-todo-starter" });
+            add("starter-shortcut", "Use The Native Starter", "The maintained starter now authors the same canonical page.surface nouns that the tutorial is teaching. You can inspect or trigger that control directly.", "Show Starter Control", { kind: "focusTarget", target: "create-todo-starter" });
           } else {
             add("open-live-app", "Open The Live App", "A served home route exists now, so the next truthful move is to use the app boundary itself.", "Open App", { kind: "openApp" });
           }
@@ -572,7 +572,7 @@ export function renderBootstrapTutorialStateFactory() {
           add("show-disabled-scopes", "Show Disabled Sourcery Scopes", "Review the currently disabled guidance scopes and recover them from the real surface list below.", "Show Disabled Scopes", { kind: "focusDisabledScopes" });
         }
         if (!appReady && state.session?.authenticated) {
-          add("starter-shortcut", "Inspect The Fast Path", "If you want a denser path, the starter shortcut remains available and uses the same underlying structures.", "Show Starter Control", { kind: "focusTarget", target: "create-todo-starter" });
+          add("starter-shortcut", "Inspect The Native Starter", "If you want the denser path, the starter control remains available and authors the same underlying native frontend nouns.", "Show Starter Control", { kind: "focusTarget", target: "create-todo-starter" });
         }
         return suggestions.slice(0, 2);
       };

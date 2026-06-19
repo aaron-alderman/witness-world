@@ -103,6 +103,13 @@ export function buildBootstrapRuntimePluginReviewView({
   }
 
   const preview = row.installed ? row.removePreview : row.installPreview;
+  const actionSummary = action => {
+    const state = action.available === true ? "available" : "blocked";
+    const blocked = (action.blockedReasons || []).length
+      ? " Blocked by: " + action.blockedReasons.join("; ") + "."
+      : "";
+    return `${action.label} [${action.severity || "medium"}] ${state}. ${action.description || ""}${blocked}`.trim();
+  };
   const previewDelta = preview?.delta ? [
     { addedBundleIds: preview.delta.addedBundleIds, removedBundleIds: preview.delta.removedBundleIds },
     { addedCapabilityIds: preview.delta.addedCapabilityIds, removedCapabilityIds: preview.delta.removedCapabilityIds },
@@ -179,7 +186,17 @@ export function buildBootstrapRuntimePluginReviewView({
     },
     {
       title: "Reconcile And Repair",
-      codes: (row.reconcileActions || []).map(formatRuntimePluginValue)
+      codes: (row.reconcileActions || []).map(actionSummary),
+      actions: (row.reconcileActions || []).map(action => ({
+        label: action.label,
+        disabled: action.available !== true,
+        title: action.description || "",
+        dataset: {
+          runtimePluginReviewActionId: action.id,
+          runtimePluginReviewActionLabel: action.label,
+          runtimePluginReviewTargetPluginId: action.targetPluginId || row.plugin
+        }
+      }))
     },
     {
       title: "Current Runner Composition",

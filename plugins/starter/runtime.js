@@ -1,15 +1,20 @@
 import { todoStarterBlueprint } from "./starter-blueprints.js";
+import { createStarterBundleHandlers } from "./starter-apply.js";
 
 export const bundleId = "bundle-starter";
 
 export const handlerCatalog = Object.freeze({
   authorableHandlers: Object.freeze([]),
   pageHandlers: Object.freeze([]),
-  dispatchHandlers: Object.freeze([]),
+  dispatchHandlers: Object.freeze([
+    "starter.todo.apply"
+  ]),
   handlerMetadata: Object.freeze({})
 });
 
-export const routes = Object.freeze([]);
+export const routes = Object.freeze([
+  Object.freeze({ kind: "exact", method: "POST", path: "/api/bootstrap-starters/todo", handler: "starter.todo.apply", params: {} })
+]);
 export const surfaces = Object.freeze([]);
 
 export const providers = Object.freeze([
@@ -24,8 +29,8 @@ export const providers = Object.freeze([
   }
 ]);
 
-export function createHandlers() {
-  return {};
+export function createHandlers(deps) {
+  return createStarterBundleHandlers(deps);
 }
 
 export default {

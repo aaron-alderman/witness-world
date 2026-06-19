@@ -53,6 +53,7 @@ export function bindBootstrapHostActions({
       (action.startsWith("desktop-") ? setDesktopStatus : setBootstrapStatus)(error.message);
     }
   };
+  resolvedTarget?.addEventListener?.("witness:bootstrap-host-action", run);
   for (const [selector, action] of [
     ["[data-action=\"openBootstrapAppHome\"]", "open-app"],
     ["[data-action=\"openBootstrapDesktopWorld\"]", "desktop-open-world"],
