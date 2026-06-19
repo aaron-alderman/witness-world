@@ -1157,6 +1157,8 @@ test("runtime diagnostics endpoint exposes truthful minimal composition", async 
     assert.equal(body.composition.activePluginSource, "core-profile-only");
     assert.equal(body.composition.usesAuthoredServerRunner, true);
     assert.equal(body.composition.usesAuthoredRuntimePluginInstalls, false);
+    assert.equal(body.startup?.listenReadyAtMs != null, true);
+    assert.equal(Array.isArray(body.startup?.phases), true);
     assert.equal(body.mountedRoutes.find(route => route.id === "home_route")?.ownerClass, "generic-host");
     assert.deepEqual(body.mountedRoutes.find(route => route.id === "home_route")?.ownerChain, [
       {

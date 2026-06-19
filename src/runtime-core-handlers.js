@@ -1197,6 +1197,7 @@ export function createCoreRuntimeBundleHandlers({
           };
         });
       diagnostics.appSnapshot = appContext?.appSnapshotManager?.diagnostics?.() ?? null;
+      diagnostics.startup = appContext?.startupTelemetry?.snapshot?.() ?? null;
       world.observe({
         process: "runtime.diagnostics.read",
         actor: backendHost,

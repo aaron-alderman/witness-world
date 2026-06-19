@@ -36,7 +36,8 @@ export async function startServer(world, {
   runtimePluginIds = null,
   runtimeStartupMode = "serve",
   runtimeOperatorContract = null,
-  devMode = null
+  devMode = null,
+  startupTelemetry = null
 }) {
   const selectedRuntimeProfile = runtimeProfile ?? (
     runtimeStartupMode === "bootstrap"
@@ -56,7 +57,8 @@ export async function startServer(world, {
     runtimePluginIds,
     runtimeStartupMode,
     runtimeOperatorContract,
-    devMode: devMode ?? (runtimeStartupMode === "serve" && appProject != null)
+    devMode: devMode ?? (runtimeStartupMode === "serve" && appProject != null),
+    startupTelemetry
   }, {
     createGenericRouteHandlers,
     hostCapabilities,

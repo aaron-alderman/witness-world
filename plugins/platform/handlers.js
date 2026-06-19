@@ -20,8 +20,8 @@ import {
   stagePlatformChangeSetEdits,
   validatePlatformChangeSet
 } from "./change-sets.js";
-import { buildPlatformModel, filterPlatformModel } from "./platform-model.js";
-import { renderPlatformPage } from "./platform-page.js";
+import { buildPlatformSlice, filterPlatformModel } from "./platform-model.js";
+import { renderPlatformPageFragment, renderPlatformShellPage, resolvePlatformLocation } from "./platform-page.js";
 import { buildPlatformProposalCreateBody } from "./platform-proposals.js";
 import { readPlatformTestRun, runPlatformTestCommand, runPlatformTestGate } from "./test-runs.js";
 
@@ -129,8 +129,9 @@ async function refreshSnapshotAfterPlatformApply(snapshotManager, appliedFiles =
   }
 }
 
-async function platformModelFor(appContext) {
-  return buildPlatformModel({
+async function platformModelFor(appContext, sliceKey = "overview") {
+  return buildPlatformSlice({
+    sliceKey,
     appContext,
     diagnostics: diagnosticsFromPlatformAppContext(appContext),
     project: appContext?.project ?? null
@@ -161,19 +162,19 @@ export function createPlatformHandlers({
   };
   return {
     "platform.model.read": async ({ res, requestUrl, requestActor, appContext }) => {
-      const model = await platformModelFor(appContext);
-      const view = requestUrl?.searchParams?.get("view") || "model";
-      const id = requestUrl?.searchParams?.get("id") || null;
-      const context = requestUrl?.searchParams?.get("context") || null;
-      const name = requestUrl?.searchParams?.get("name") || null;
-      const target = requestUrl?.searchParams?.get("target") || null;
+      const location = resolvePlatformLocation(requestUrl);
+      const model = await platformModelFor(appContext, location.section.sliceKey);
       world.observe({
         process: "backend.readPlatformModel",
         actor: requestActor || backendHost,
         claims: [relation(backendHost, "projected", "platformModel")],
-        body: { view, nodes: model.nodes.length, gaps: model.gaps.length }
+        body: { area: location.ctx.area, section: location.ctx.section, nodes: model.nodes.length, gaps: model.gaps.length }
       });
-      sendJson(res, 200, filterPlatformModel(model, view, id, { context, name, target }));
+      sendJson(res, 200, filterPlatformModel(model, location.section.modelView, location.ctx.id, {
+        context: location.ctx.context,
+        name: location.ctx.name,
+        target: location.ctx.target
+      }));
     },
 
     "platform.gaps.read": async ({ res, requestActor, appContext }) => {
@@ -185,6 +186,18 @@ export function createPlatformHandlers({
         body: { gaps: model.gaps.length }
       });
       sendJson(res, 200, { gaps: model.gaps, summaries: model.summaries });
+    },
+
+    "platform.page.read": async ({ res, requestActor, requestUrl, appContext }) => {
+      const location = resolvePlatformLocation(requestUrl);
+      const model = await platformModelFor(appContext, location.section.sliceKey);
+      world.observe({
+        process: "frontend.renderPlatformPageFragment",
+        actor: requestActor || frontendHost,
+        claims: [relation(frontendHost, "rendered", "platformConsoleFragment")],
+        body: { area: location.ctx.area, section: location.ctx.section, nodes: model.nodes.length, gaps: model.gaps.length }
+      });
+      send(res, 200, "text/html; charset=utf-8", renderPlatformPageFragment(model, { requestUrl }));
     },
 
     "platform.branch.list": async ({ res }) => {
@@ -689,15 +702,14 @@ export function createPlatformHandlers({
     },
 
     "page.platform": async ({ res, requestActor, requestUrl, appContext }) => {
-      const model = await platformModelFor(appContext);
-      const view = requestUrl?.searchParams?.get("view") || "overview";
+      const location = resolvePlatformLocation(requestUrl);
       world.observe({
-        process: "frontend.renderPlatformPage",
+        process: "frontend.renderPlatformShellPage",
         actor: requestActor || frontendHost,
-        claims: [relation(frontendHost, "rendered", "platformConsole")],
-        body: { view, nodes: model.nodes.length, gaps: model.gaps.length }
+        claims: [relation(frontendHost, "rendered", "platformConsoleShell")],
+        body: { area: location.ctx.area, section: location.ctx.section }
       });
-      send(res, 200, "text/html; charset=utf-8", renderPlatformPage(model, { requestUrl }));
+      send(res, 200, "text/html; charset=utf-8", renderPlatformShellPage({ requestUrl }));
     }
   };
 }

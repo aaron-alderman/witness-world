@@ -9,6 +9,7 @@ import {
   resolveRuntimeProfileStrict
 } from "./runtime-bundles.js";
 import { resolveRuntimeOperatorPaths } from "./runtime-operator-contract.js";
+import { createStartupTelemetry } from "./startup-telemetry.js";
 
 export function resolveCliRuntimeProfile({ runtimeProfile, explicit }) {
   if (!explicit) return resolveRuntimeProfile(runtimeProfile);
@@ -59,7 +60,8 @@ export async function startBlankRuntime({
   createWorldImpl = createWorld,
   declareBackendHostImpl = declareBackendHost,
   declareFrontendHostImpl = declareFrontendHost,
-  startServerImpl = startServer
+  startServerImpl = startServer,
+  startupTelemetry = createStartupTelemetry({ mode: startupMode })
 } = {}) {
   const requestedRuntimeProfile = runtimeProfile ?? (
     startupMode === "bootstrap"
@@ -70,15 +72,19 @@ export async function startBlankRuntime({
     runtimeProfile: requestedRuntimeProfile,
     explicit: runtimeProfileExplicit
   });
-  const operatorContract = await resolveRuntimeOperatorPathsImpl({
+  const operatorContract = await startupTelemetry.runPhase("operator.paths", () => resolveRuntimeOperatorPathsImpl({
     startupMode,
     cwd,
     env: {
       ...env,
       ...(worldHome ? { WORLD_HOME: worldHome } : {})
     }
+  }), {
+    label: "Resolve operator paths"
   });
-  await ensureWorldHomeLayoutImpl(operatorContract);
+  await startupTelemetry.runPhase("operator.layout", () => ensureWorldHomeLayoutImpl(operatorContract), {
+    label: "Ensure world-home layout"
+  });
   const witnessLogPath = operatorContract.canonicalTruth.witnessLogPath;
   const observationLogPath = operatorContract.canonicalTruth.observationLogPath;
   const world = createWorldImpl({
@@ -108,7 +114,7 @@ export async function startBlankRuntime({
     ? ["plugin.authoring"]
     : [];
 
-  const server = await startServerImpl(world, {
+  const server = await startupTelemetry.runPhase("server.start", () => startServerImpl(world, {
     actor,
     port,
     runtimeRoot: operatorContract.directories.runtimeRoot,
@@ -117,7 +123,10 @@ export async function startBlankRuntime({
       ? explicitRuntimePlugins
       : (defaultBootstrapRuntimePluginIds.length ? defaultBootstrapRuntimePluginIds : null),
     runtimeStartupMode: startupMode,
-    runtimeOperatorContract: operatorContract
+    runtimeOperatorContract: operatorContract,
+    startupTelemetry
+  }), {
+    label: "Start runtime server"
   });
 
   return {
@@ -127,6 +136,7 @@ export async function startBlankRuntime({
     runtimeProfile: runtimeProfileInfo.id,
     runtimeProfileInfo,
     witnessLogPath,
-    observationLogPath
+    observationLogPath,
+    startupTelemetry
   };
 }

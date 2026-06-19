@@ -40,6 +40,7 @@ function surfaceEntry({
 
 export const routes = Object.freeze([
   exactRoute("GET", "/platform", "page.platform"),
+  exactRoute("GET", "/api/platform-page", "platform.page.read"),
   exactRoute("GET", "/api/platform-model", "platform.model.read"),
   exactRoute("GET", "/api/platform-gaps", "platform.gaps.read"),
   exactRoute("GET", "/api/platform-branches", "platform.branch.list"),

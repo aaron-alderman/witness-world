@@ -597,10 +597,7 @@ view MillChargeMetrics {
 }
 
 view MillChargeCanvasWrap {
-  kind chart-host
-  capabilities {
-    chart.render
-  }
+  kind viewer
   prop domId = "mill-canvas-wrap"
   children {
     MillChargeCrossSection
@@ -629,6 +626,9 @@ view EngentusMillChargeApp {
   kind app-shell
   class engentus-mill-charge
   process EngentusShellNavigation
+  capabilities {
+    chart.render
+  }
   prop domId = "view-mill"
   prop documentTitle = "Mill Charge Motion"
   prop routeKey = "mill-charge"
