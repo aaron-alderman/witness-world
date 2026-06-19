@@ -1,0 +1,14 @@
+{
+  "id": "plugin.hearth",
+  "version": "0.0.1",
+  "displayName": "Hearth",
+  "description": "Hearth chore projections — a chore-scoped read model over the witness log.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-hearth"
+  ],
+  "contributes": {}
+}

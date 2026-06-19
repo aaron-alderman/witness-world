@@ -1,0 +1,244 @@
+# Hearth — chores, authored on the real witness runtime.
+#
+# add  -> witness.emit a chore.add witness (body: text). Its identity IS the
+#         witness's own kernel-minted id; the actor field records who added it.
+# list -> project.read over hearth.choreList (keys on each chore.add witness id).
+# No bespoke server, no handler-set leaf, no invented id: fully authored DESIRE.
+
+[app]
+id = "hearth_app"
+imports = ["../_lib/common.wtoml"]
+spawn = ["backend", "frontend"]
+
+[[serverRunner]]
+actor = "aaron"
+id = "hearth_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+default = true
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "hearth_server"
+plugin = "plugin.inspect"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "hearth_server"
+plugin = "plugin.hearth"
+
+# ── chores.add : authored witness emission ──────────────────────────────────
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "hearth.chores.add"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "hearth.chores.add"
+version = "hearth.chores.add.v1"
+index = 0
+
+[[backendStep]]
+actor = "aaron"
+version = "hearth.chores.add.v1"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "draft" }
+
+[[backendStep]]
+actor = "aaron"
+version = "hearth.chores.add.v1"
+event = "request"
+op = "witness.emit"
+order = 1
+params = { process = "chore.add", into = "added", body = { text = "${state.draft.text}" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "hearth.chores.add.v1"
+event = "request"
+op = "response.json"
+order = 2
+params = { from = "added" }
+
+# ── chores.list : authored projection read ──────────────────────────────────
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "hearth.chores.list"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "hearth.chores.list"
+version = "hearth.chores.list.v1"
+index = 0
+
+[[backendStep]]
+actor = "aaron"
+version = "hearth.chores.list.v1"
+event = "request"
+op = "project.read"
+order = 0
+params = { projector = "hearth.choreList", into = "choreResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "hearth.chores.list.v1"
+event = "request"
+op = "response.json"
+order = 1
+params = { from = "choreResponse" }
+
+# ── activate the authored versions ──────────────────────────────────────────
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "hearth.chores.add"
+version = "hearth.chores.add.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "hearth.chores.list"
+version = "hearth.chores.list.v1"
+
+# ── routes + serve ──────────────────────────────────────────────────────────
+[[route]]
+actor = "aaron"
+id = "chores_create_route"
+method = "POST"
+path = "/api/chores"
+serves = "choreStore"
+handler = "backendProgram.run"
+backendProgramSoul = "hearth.chores.add"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "hearth_server"
+route = "chores_create_route"
+
+[[route]]
+actor = "aaron"
+id = "chores_list_route"
+method = "GET"
+path = "/api/chores"
+serves = "choreStore"
+handler = "backendProgram.run"
+backendProgramSoul = "hearth.chores.list"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "hearth_server"
+route = "chores_list_route"
+
+# ── the page (read-only list) ───────────────────────────────────────────────
+[[route]]
+actor = "aaron"
+id = "hearth_home_route"
+method = "GET"
+path = "/"
+serves = "hearthApp"
+handler = "page.home"
+params = { rootWidget = "hearth_app_widget", frontendProgram = "hearth_frontend_program", page = "home" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "hearth_server"
+route = "hearth_home_route"
+
+# ── frontend widgets + program (read-only for now) ──────────────────────────
+[[defaults]]
+context = "frontend"
+program = "hearth_frontend_program"
+
+[[page]]
+id = "hearth_app_widget"
+children = ["hearth_title", "hearth_form", "hearth_list"]
+title = "Hearth"
+
+[[heading]]
+id = "hearth_title"
+text = "Hearth"
+level = 1
+
+[[form]]
+id = "hearth_form"
+children = ["hearth_input", "hearth_add_button"]
+role = "chore-form"
+
+[[input]]
+id = "hearth_input"
+name = "text"
+placeholder = "New chore"
+
+[[button]]
+id = "hearth_add_button"
+text = "Add"
+type = "submit"
+
+[[box]]
+id = "hearth_list"
+role = "chore-list"
+
+[[box]]
+id = "hearth_item_template"
+template = true
+children = ["hearth_item_text"]
+class = "chore-row"
+
+[[text]]
+id = "hearth_item_text"
+template = true
+text = "${item.text}"
+class = "chore-text"
+
+[[frontendProgram]]
+id = "hearth_frontend_program"
+rootWidget = "hearth_app_widget"
+
+[[step]]
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/chores"
+into = "choreResponse"
+
+[[step]]
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "hearth_list"
+from = "choreResponse.chores"
+template = "hearth_item_template"
+
+# add: submit -> read the field -> POST -> clear -> re-run load (refresh)
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:hearth_form"
+widget = "hearth_form"
+into = "draftChore"
+
+[[step]]
+order = 1
+op = "postJson"
+on = "submit:hearth_form"
+url = "/api/chores"
+method = "POST"
+from = "draftChore"
+pick = ["text"]
+into = "createdChore"
+
+[[step]]
+order = 2
+op = "clearForm"
+on = "submit:hearth_form"
+widget = "hearth_form"
+
+[[step]]
+order = 3
+op = "run"
+on = "submit:hearth_form"
+event = "load"
