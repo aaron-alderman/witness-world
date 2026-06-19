@@ -1,0 +1,14 @@
+{
+  "id": "plugin.tilth-net",
+  "version": "0.1.0",
+  "displayName": "Tilth-Net Plugin Runtime",
+  "description": "In-world half of the private network: witnessed versioned canonical state (git, but better).",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-tilth-net"
+  ],
+  "contributes": {}
+}

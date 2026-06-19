@@ -1,0 +1,20 @@
+import desire/v3-alpha
+
+// Reconciliation — the one genuinely pipeline-shaped piece of tilth-net.
+//
+// Everything else in this app is witnessed (.wtoml + thing/relation): each
+// doc.put appends a version as an append-only fact, and they UNION instead of
+// merging. This model is the dataflow that folds that version stream into the
+// canonical head.
+//
+// `versions` is injected at eval time — a runtime list of
+//   { versionId, actor, at, content }
+// and `pick_head` is the irreducible JS leaf (latest by `at`, tie-broken by
+// versionId). rvm's native reducers are a fixed statistical set over numeric
+// axes; selecting a record by a comparison is the leaf-kernel seam, so the
+// comparison lives in JS while this model is the authored declaration of the
+// dataflow. The JS projection executes it via evaluateModel().
+model CanonicalHead {
+  param versions = 0
+  derive headId = pick_head(versions)
+}

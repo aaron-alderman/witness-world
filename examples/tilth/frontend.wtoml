@@ -1,0 +1,118 @@
+# Tilth frontend: the browser app. A list of imported conversation sessions,
+# each with a button to mark it DESIRE-related. Renders at / via page.home.
+
+[[defaults]]
+context = "frontend"
+program = "tilth_program"
+
+[[page]]
+id = "tilth_page"
+children = ["tilth_title", "tilth_status", "tilth_list"]
+title = "Tilth — Conversations"
+
+[[heading]]
+id = "tilth_title"
+text = "Conversations"
+level = 1
+
+[[text]]
+id = "tilth_status"
+text = ""
+class = "status"
+role = "app-status"
+
+[[box]]
+id = "tilth_list"
+role = "session-list"
+class = "surface-list"
+
+[[frontendProgram]]
+id = "tilth_program"
+rootWidget = "tilth_page"
+
+# --- row template -----------------------------------------------------------
+[[box]]
+id = "session_item_template"
+template = true
+children = ["session_item_title", "session_item_meta", "session_item_preview", "session_item_desire_button"]
+class = "${item.desire ? 'surface-card session-card desire' : 'surface-card session-card'}"
+
+[[heading]]
+id = "session_item_title"
+template = true
+text = "${item.title || item.id}"
+level = 3
+class = "session-title"
+
+[[text]]
+id = "session_item_meta"
+template = true
+text = "${item.project} · ${item.msgCount} msgs · origin ${item.origin || '—'}${item.desire ? ' · marked by ' + (item.markedBy || '—') : ''}"
+class = "surface-status"
+
+[[text]]
+id = "session_item_preview"
+template = true
+text = "${item.preview || ''}"
+class = "surface-lede session-preview"
+
+[[button]]
+id = "session_item_desire_button"
+template = true
+text = "${item.desire ? 'DESIRE ✓' : 'Mark DESIRE'}"
+type = "button"
+action = "markDesire"
+data-id = "${item.id}"
+
+# --- load -------------------------------------------------------------------
+[[step]]
+order = 0
+op = "setText"
+on = "load"
+widget = "tilth_status"
+text = "Loading..."
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "load"
+url = "/api/sessions"
+into = "sessionsResponse"
+
+[[step]]
+order = 2
+op = "renderCollection"
+on = "load"
+widget = "tilth_list"
+from = "sessionsResponse.sessions"
+template = "session_item_template"
+
+[[step]]
+order = 3
+op = "setText"
+on = "load"
+widget = "tilth_status"
+text = "${state.sessionsResponse && state.sessionsResponse.sessions ? state.sessionsResponse.sessions.length + ' conversations' : 'No conversations yet'}"
+
+# --- click: mark a session DESIRE-related -----------------------------------
+[[step]]
+order = 0
+op = "setText"
+on = "click:markDesire"
+widget = "tilth_status"
+text = "Marking..."
+
+[[step]]
+order = 1
+op = "postJson"
+on = "click:markDesire"
+url = "/api/sessions/${event.id}/desire"
+method = "POST"
+body = {}
+into = "marked"
+
+[[step]]
+order = 2
+op = "run"
+on = "click:markDesire"
+event = "load"

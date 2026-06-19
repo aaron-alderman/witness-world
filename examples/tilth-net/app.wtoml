@@ -1,0 +1,4 @@
+[app]
+id = "tilth_net_app"
+imports = ["../_lib/common.wtoml", "./backend.wtoml", "./frontend.wtoml"]
+spawn = ["backend", "frontend"]

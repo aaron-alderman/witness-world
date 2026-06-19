@@ -1,0 +1,53 @@
+# tilth-net backend: the witnessed versioned-canonical-state world.
+
+[[defaults]]
+context = "backend"
+
+[[serverRunner]]
+id = "tilth_net_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+storage = {}
+default = true
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "tilth_net_server"
+plugin = "plugin.tilth-net"
+
+# Browser surface at /
+[[route]]
+id = "tilth_net_home_route"
+method = "GET"
+path = "/"
+serves = "tilthNetView"
+handler = "page.home"
+params = { rootWidget = "tilth_net_page", frontendProgram = "tilth_net_program", page = "home" }
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_home_route"
+
+# Docs projection (canonical heads + history) as JSON
+[[route]]
+id = "tilth_net_docs_read_route"
+method = "GET"
+path = "/api/docs"
+serves = "tilthNetDocs"
+handler = "docs.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_docs_read_route"
+
+# Put a new version (the browser form posts here; actor in body simulates a peer)
+[[route]]
+id = "tilth_net_doc_put_route"
+method = "POST"
+path = "/api/docs"
+serves = "tilthNetDocs"
+handler = "doc.put"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_doc_put_route"

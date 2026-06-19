@@ -36,7 +36,9 @@
     { "id": "plugin.chart-runtime", "directory": "chart-runtime", "order": 92 },
     { "id": "plugin.pipeline-runtime", "directory": "pipeline-runtime", "order": 93 },
     { "id": "plugin.platform", "directory": "platform", "order": 94 },
-    { "id": "plugin.notes-sidebar", "directory": "notes-sidebar", "order": 100 }
+    { "id": "plugin.notes-sidebar", "directory": "notes-sidebar", "order": 100 },
+    { "id": "plugin.tilth", "directory": "tilth", "order": 101 },
+    { "id": "plugin.tilth-net", "directory": "tilth-net", "order": 102 }
   ],
   "bundles": [
     {
@@ -230,6 +232,18 @@
       "plugin": "plugin.platform",
       "displayName": "Platform Self Model",
       "description": "Platform self-model, Platform Console, and platform-facing MCP read/proposal tools."
+    },
+    {
+      "id": "bundle-tilth",
+      "plugin": "plugin.tilth",
+      "displayName": "Tilth",
+      "description": "Witnessed conversation catalogue: import sessions and mark them DESIRE-related."
+    },
+    {
+      "id": "bundle-tilth-net",
+      "plugin": "plugin.tilth-net",
+      "displayName": "Tilth-Net",
+      "description": "In-world half of the private network: witnessed versioned canonical state."
     }
   ]
 }

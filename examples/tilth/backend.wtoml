@@ -1,0 +1,66 @@
+# Tilth backend: the witnessed world behind the browser app.
+# Routes wire HTTP paths to the plugin.tilth dispatch handlers.
+
+[[defaults]]
+context = "backend"
+
+[[serverRunner]]
+id = "tilth_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+storage = {}
+default = true
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "tilth_server"
+plugin = "plugin.tilth"
+
+# Browser surface at /
+[[route]]
+id = "tilth_home_route"
+method = "GET"
+path = "/"
+serves = "tilthView"
+handler = "page.home"
+params = { rootWidget = "tilth_page", frontendProgram = "tilth_program", page = "home" }
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_home_route"
+
+# Sessions projection (JSON the surface fetches)
+[[route]]
+id = "tilth_sessions_read_route"
+method = "GET"
+path = "/api/sessions"
+serves = "tilthSessions"
+handler = "sessions.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_sessions_read_route"
+
+# Import a session (the external tilth-claude-code-daemon POSTs JSON here)
+[[route]]
+id = "tilth_import_route"
+method = "POST"
+path = "/api/sessions"
+serves = "tilthSessions"
+handler = "session.import"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_import_route"
+
+# Mark a session DESIRE-related (the browser button POSTs here)
+[[route]]
+id = "tilth_mark_desire_route"
+method = "POST"
+path = "/api/sessions/:id/desire"
+serves = "tilthSessions"
+handler = "session.markDesire"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_mark_desire_route"

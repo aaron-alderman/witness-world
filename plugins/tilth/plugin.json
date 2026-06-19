@@ -1,0 +1,14 @@
+{
+  "id": "plugin.tilth",
+  "version": "0.1.0",
+  "displayName": "Tilth Plugin Runtime",
+  "description": "Witnessed conversation catalogue: import sessions and mark them DESIRE-related.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-tilth"
+  ],
+  "contributes": {}
+}

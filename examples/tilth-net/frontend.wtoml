@@ -1,0 +1,145 @@
+# tilth-net frontend: put versions of a doc (as different actors), watch them
+# union into one doc with a canonical head and a full history — no merge conflict.
+
+[[defaults]]
+context = "frontend"
+program = "tilth_net_program"
+
+[[page]]
+id = "tilth_net_page"
+children = ["tilth_net_title", "tilth_net_intro", "tilth_net_form", "tilth_net_status", "tilth_net_list"]
+title = "Tilth-Net — versioned canonical state"
+
+[[heading]]
+id = "tilth_net_title"
+text = "Canonical state"
+level = 1
+
+[[text]]
+id = "tilth_net_intro"
+text = "Put versions of a doc as different actors (e.g. callan, then aaron). They union into one doc — every version kept as a fact, a canonical head derived. No merge conflict."
+class = "surface-lede"
+
+[[form]]
+id = "tilth_net_form"
+children = ["doc_input", "content_input", "actor_input", "put_button"]
+role = "put-form"
+
+[[input]]
+id = "doc_input"
+name = "docId"
+placeholder = "doc id (e.g. notes.md)"
+
+[[input]]
+id = "content_input"
+name = "content"
+placeholder = "content for this version"
+
+[[input]]
+id = "actor_input"
+name = "actor"
+placeholder = "as who (callan / aaron)"
+
+[[button]]
+id = "put_button"
+text = "Put version"
+type = "submit"
+
+[[text]]
+id = "tilth_net_status"
+text = ""
+class = "surface-status"
+role = "app-status"
+
+[[box]]
+id = "tilth_net_list"
+role = "docs-list"
+class = "surface-list"
+
+[[frontendProgram]]
+id = "tilth_net_program"
+rootWidget = "tilth_net_page"
+
+# --- row template: one doc card ---------------------------------------------
+[[box]]
+id = "doc_item_template"
+template = true
+children = ["doc_item_title", "doc_item_head_meta", "doc_item_head_content", "doc_item_history"]
+class = "surface-card"
+
+[[heading]]
+id = "doc_item_title"
+template = true
+text = "${item.id}"
+level = 3
+
+[[text]]
+id = "doc_item_head_meta"
+template = true
+text = "head: ${item.headLabel} · by ${item.headActor} · ${item.versionCount} versions"
+class = "surface-status"
+
+[[text]]
+id = "doc_item_head_content"
+template = true
+text = "${item.headContent}"
+
+[[text]]
+id = "doc_item_history"
+template = true
+text = "history (union): ${item.historyText}"
+class = "surface-lede"
+
+# --- load -------------------------------------------------------------------
+[[step]]
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/docs"
+into = "docsResponse"
+
+[[step]]
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "tilth_net_list"
+from = "docsResponse.docs"
+template = "doc_item_template"
+
+[[step]]
+order = 2
+op = "setText"
+on = "load"
+widget = "tilth_net_status"
+text = "${state.docsResponse && state.docsResponse.docs ? state.docsResponse.docs.length + ' docs' : 'No docs yet'}"
+
+# --- submit: put a version --------------------------------------------------
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:tilth_net_form"
+widget = "tilth_net_form"
+into = "draftVersion"
+
+[[step]]
+order = 1
+op = "setText"
+on = "submit:tilth_net_form"
+widget = "tilth_net_status"
+text = "Putting version..."
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:tilth_net_form"
+url = "/api/docs"
+method = "POST"
+from = "draftVersion"
+pick = ["docId", "content", "actor"]
+into = "putResult"
+
+[[step]]
+order = 3
+op = "run"
+on = "submit:tilth_net_form"
+event = "load"
