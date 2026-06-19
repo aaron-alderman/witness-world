@@ -33,7 +33,7 @@ across the membrane via HTTP. The world only ever *witnesses* what it is told.
 
 ## The witnessed model
 
-Tenet (`/home/callan/projects/swell/repos/ai/repos/meta/witness-world--tilth/README.md`):
+Tenet (`https://github.com/aaron-alderman/witness-world/blob/tilth/README.md`):
 
 > Things and relations are inert. Processes attempt change. **Witnesses record
 > what happened.** Projections render meaning for a context.
@@ -93,7 +93,7 @@ projection preserves the DESIRE mark across it.
 ## Run
 
 From the repo root
-(`/home/callan/projects/swell/repos/ai/repos/meta/witness-world--tilth`):
+(the `witness-world--tilth` checkout):
 
 ```bash
 node src/cli.js serve examples/tilth --runtime-profile minimal \

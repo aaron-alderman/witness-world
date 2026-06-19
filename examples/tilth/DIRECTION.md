@@ -5,9 +5,9 @@ thinking is durable before it is built. Nothing here is implemented yet; it is
 the agreed shape and the open decisions. The companion build-as-it-stands is
 [`README.md`](./README.md); the end-to-end architecture (including the daemon's
 role) is in
-`/home/callan/projects/swell/repos/ai/repos/meta/tilth-claude-code-daemon/ARCHITECTURE.md`;
+`https://github.com/callanbright/tilth-claude-code-daemon/blob/main/ARCHITECTURE.md`;
 and the remote/shared layer this feeds — framed as a **private network** — is in
-`/home/callan/projects/swell/repos/ai/repos/meta/tilth-net/README.md`.
+`https://github.com/callanbright/tilth-net/blob/main/README.md`.
 
 ---
 
