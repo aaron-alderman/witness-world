@@ -9,12 +9,16 @@
 export const bundleId = "bundle-hearth";
 
 export function choreListReadModel(witnesses = []) {
-  // A chore's identity IS its birth witness: the kernel already minted a unique
-  // id for the chore.add witness, so we key on witness.id — nothing to invent.
-  // Append-only / ever-growing (log order); actor falls out of the witness too.
+  // A chore's identity IS its birth witness (the kernel-minted chore.add id).
+  // Completing is append-only: a chore.done witness names a chore's id. "Open"
+  // is the derived projection — adds minus dones — nothing is ever mutated.
+  const done = new Set();
+  for (const witness of witnesses) {
+    if (witness?.process === "chore.done" && witness.body?.id) done.add(witness.body.id);
+  }
   const chores = [];
   for (const witness of witnesses) {
-    if (witness?.process === "chore.add") {
+    if (witness?.process === "chore.add" && !done.has(witness.id)) {
       chores.push({ id: witness.id, text: witness.body?.text ?? "", addedBy: witness.actor ?? null });
     }
   }

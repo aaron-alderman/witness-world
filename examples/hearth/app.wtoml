@@ -93,6 +93,43 @@ op = "response.json"
 order = 1
 params = { from = "choreResponse" }
 
+# ── chores.done : completion is a witness, not a mutation ────────────────────
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "hearth.chores.done"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "hearth.chores.done"
+version = "hearth.chores.done.v1"
+index = 0
+
+[[backendStep]]
+actor = "aaron"
+version = "hearth.chores.done.v1"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "draft" }
+
+[[backendStep]]
+actor = "aaron"
+version = "hearth.chores.done.v1"
+event = "request"
+op = "witness.emit"
+order = 1
+params = { process = "chore.done", into = "done", body = { id = "${state.request.params.id}" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "hearth.chores.done.v1"
+event = "request"
+op = "response.json"
+order = 2
+params = { body = { ok = true } }
+
 # ── activate the authored versions ──────────────────────────────────────────
 [[activateBackendProgramVersion]]
 actor = "aaron"
@@ -103,6 +140,11 @@ version = "hearth.chores.add.v1"
 actor = "aaron"
 soul = "hearth.chores.list"
 version = "hearth.chores.list.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "hearth.chores.done"
+version = "hearth.chores.done.v1"
 
 # ── routes + serve ──────────────────────────────────────────────────────────
 [[route]]
@@ -132,6 +174,20 @@ backendProgramSoul = "hearth.chores.list"
 actor = "aaron"
 serverRunner = "hearth_server"
 route = "chores_list_route"
+
+[[route]]
+actor = "aaron"
+id = "chores_done_route"
+method = "PATCH"
+path = "/api/chores/:id"
+serves = "choreStore"
+handler = "backendProgram.run"
+backendProgramSoul = "hearth.chores.done"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "hearth_server"
+route = "chores_done_route"
 
 # ── the page (read-only list) ───────────────────────────────────────────────
 [[route]]
@@ -185,7 +241,7 @@ role = "chore-list"
 [[box]]
 id = "hearth_item_template"
 template = true
-children = ["hearth_item_text"]
+children = ["hearth_item_text", "hearth_item_done"]
 class = "chore-row"
 
 [[text]]
@@ -193,6 +249,14 @@ id = "hearth_item_text"
 template = true
 text = "${item.text}"
 class = "chore-text"
+
+[[button]]
+id = "hearth_item_done"
+template = true
+text = "Done"
+type = "button"
+action = "completeChore"
+data-id = "${item.id}"
 
 [[frontendProgram]]
 id = "hearth_frontend_program"
@@ -241,4 +305,19 @@ widget = "hearth_form"
 order = 3
 op = "run"
 on = "submit:hearth_form"
+event = "load"
+
+# done: click a row's Done -> append a chore.done witness -> re-run load (refresh)
+[[step]]
+order = 0
+op = "patchJson"
+on = "click:completeChore"
+url = "/api/chores/${event.id}"
+body = { done = "true" }
+into = "doneResult"
+
+[[step]]
+order = 1
+op = "run"
+on = "click:completeChore"
 event = "load"
