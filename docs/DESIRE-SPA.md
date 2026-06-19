@@ -101,9 +101,10 @@ Current truth:
 - it can project minimal authored static surface output
 - it can serve route-selected alternate authored surface output
 - it still exposes the blocked/reset host when no minimal authored payload can be projected
-- it does not claim canonical interactive execution
-- it does not yet claim route/state equivalence support
-- it does not yet claim `surface + process + projection` runtime support
+- it now claims canonical route/state equivalence support
+- it now claims canonical interactive execution through authored process rules
+- it now claims `surface + process` runtime support
+- it now claims `surface + projection` runtime support
 
 The next honest work does not begin from the old shell host. It begins from the
 clean floor proved by the canonical authoring pathway probe.
@@ -128,13 +129,9 @@ clean floor proved by the canonical authoring pathway probe.
 
 ### Still blocked
 
-- URL -> route-state synchronization on canonical `page.surface`
-- interaction -> route-state transitions on canonical `page.surface`
-- route-state -> URL synchronization on canonical `page.surface`
-- same-document surface refresh after route-state change
-- canonical interactive `page.surface` execution
-- faithful live Engentus shell behavior through the constrained pathway
 - Goodman, mill-charge, and mill-force live behavior on canonical seams
+- legacy `page.home` widget/frontend-program execution remains outside the
+  canonical constrained lane
 
 ### Newly proved
 
@@ -142,12 +139,19 @@ clean floor proved by the canonical authoring pathway probe.
   tree through the canonical authoring pathway probe
 - route-selected alternate authored `page.surface` output through the canonical
   authoring pathway probe
+- authored `surface + projection` consumption on canonical `page.surface`
+- URL -> route-state synchronization on canonical `page.surface`
+- interaction -> route-state transition on canonical `page.surface`
+- route-state -> URL synchronization on canonical `page.surface`
+- same-document surface refresh after route-state change
+- canonical interactive `page.surface` execution
+- faithful live Engentus shell behavior through the constrained pathway
 - route-local runtime transport for served `page.surface` output, so an active
   route no longer serializes the entire broad owning process closure by default
 
 ## Routing cluster
 
-The next canonical frontend unit is the routing cluster:
+The routing cluster is now proven on canonical seams:
 
 1. route-selected authored surface output
 2. URL -> route-state synchronization
@@ -155,7 +159,7 @@ The next canonical frontend unit is the routing cluster:
 4. route-state -> URL synchronization
 5. same-document surface refresh after route-state change
 
-For Engentus this is the shell prerequisite for:
+For Engentus this is now the shell substrate for:
 
 - login -> home
 - home -> Goodman
@@ -165,8 +169,9 @@ For Engentus this is the shell prerequisite for:
 - direct route entry into the authored shell state
 
 Route and shell state are two representations of the same authored problem.
-The constrained pathway must prove them together on canonical seams before
-Engentus shell flow can move honestly.
+The constrained pathway now proves them together on canonical seams, so the
+next honest gap is broader module behavior and legacy widget-program
+compatibility removal.
 
 ## Restart lane
 

@@ -61,17 +61,37 @@ view PlatformConsolePage {
   kind page
   class platform-console
   prop title = "Platform Console"
-  prop summary = "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, and model inspection."
+  prop summary = "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, model inspection, and supplemental governance/model seams."
   capabilities {
     platform.self
   }
   children {
     PlatformOverviewPage
     PlatformWorkflowPage
+    PlatformWorkflowBranchesPage
+    PlatformWorkflowChangeSetsPage
+    PlatformWorkflowProposalsPage
     PlatformVerificationPage
+    PlatformVerificationStatusPage
+    PlatformVerificationRunsPage
+    PlatformVerificationRuntimePage
     PlatformKnowledgePage
+    PlatformKnowledgeDocsPage
+    PlatformKnowledgeFoldersPage
+    PlatformKnowledgeRoadmapPage
     PlatformSignalsPage
+    PlatformSignalsGapsPage
+    PlatformSignalsCatalogPage
     PlatformModelPage
+    PlatformModelObjectsPage
+    PlatformModelProfilesPage
+    PlatformModelCoveragePage
+    PlatformBridgesPage
+    PlatformGovernancePage
+    PlatformSemanticsPage
+    PlatformPackageCoexistencePage
+    PlatformPackageConvergencePage
+    PlatformPackageApplyPreviewPage
   }
 }
 
@@ -79,10 +99,13 @@ view PlatformOverviewPage {
   kind page
   class platform-overview
   prop pageId = "overview"
+  prop modelView = "overview"
+  prop summaryCards = "Plugins=nodes@countKind:plugin|Bundles=nodes@countKind:bundle|Handlers=nodes@countKind:handler|Routes=nodes@countKind:route|Docs=docs@count|Change Sets=changeSets@count|Test Gates=testGates@count|Gaps=gaps@count"
   prop title = "Overview"
   prop summary = "Counts, authored surface ownership, lifecycle, and quick platform links."
   children {
     PlatformConsoleSummary
+    PlatformAuthoredSurfaceTree
     PlatformLifecycleBoard
     PlatformMap
     PlatformProfileComparison
@@ -93,11 +116,60 @@ view PlatformWorkflowPage {
   kind page
   class platform-workflow
   prop pageId = "workflow"
+  prop modelView = "workflowOverview"
+  prop summaryCards = "Branches=branches@count|Change Sets=changeSets@count|Open Proposals=proposals@countWhere:status=open|Candidate Snapshots=candidateSnapshots@count"
   prop title = "Workflow"
-  prop summary = "Branches, change sets, proposals, and authoring commands."
+  prop summary = "Workflow landing page for branch activity and links into narrower authored workflow pages."
   children {
     PlatformBranchBoard
-    PlatformWorkflowList
+  }
+}
+
+view PlatformWorkflowBranchesPage {
+  kind page
+  class platform-workflow
+  prop pageId = "workflowBranches"
+  prop modelView = "workflowBranches"
+  prop summaryCards = "Branches=branches@count|Draft=branches@countWhere:status=draft|Active=branches@countWhere:status=active|Candidate Snapshots=candidateSnapshots@count"
+  prop title = "Workflow Branches"
+  prop summary = "Branch lifecycle, linked change sets, and branch authoring."
+  children {
+    PlatformBranchBoard
+    PlatformWorkflowBranchesList
+    PlatformWorkflowDetail
+    PlatformBranchCreatePanel
+  }
+}
+
+view PlatformWorkflowChangeSetsPage {
+  kind page
+  class platform-workflow
+  prop pageId = "workflowChangeSets"
+  prop modelView = "workflowChangeSets"
+  prop summaryCards = "Change Sets=changeSets@count|Draft=changeSets@countWhere:status=draft|Validated=changeSets@countWhere:status=validated|Candidate Snapshots=candidateSnapshots@count"
+  prop title = "Workflow Change Sets"
+  prop summary = "Staged change sets, overlays, candidate snapshots, and change-set operations."
+  children {
+    PlatformWorkflowChangeSetsList
+    PlatformWorkflowDetail
+    PlatformChangeSetCreatePanel
+    PlatformChangeSetEditPanel
+    PlatformChangeSetValidatePanel
+    PlatformChangeSetApplyPanel
+    PlatformChangeSetLifecyclePanel
+  }
+}
+
+view PlatformWorkflowProposalsPage {
+  kind page
+  class platform-workflow
+  prop pageId = "workflowProposals"
+  prop modelView = "workflowProposals"
+  prop summaryCards = "Open Proposals=proposals@countWhere:status=open|Approved=proposals@countWhere:status=approved|Rejected=proposals@countWhere:status=rejected"
+  prop title = "Workflow Proposals"
+  prop summary = "Proposal intake, review, and proposal-linked workflow detail."
+  children {
+    PlatformWorkflowProposalsList
     PlatformWorkflowDetail
     PlatformProposalPanel
     PlatformProposalReviewList
@@ -108,11 +180,61 @@ view PlatformVerificationPage {
   kind page
   class platform-verification
   prop pageId = "verification"
+  prop modelView = "verificationOverview"
+  prop summaryCards = "Fresh=verificationFreshness@countWhere:status=fresh|Stale=verificationFreshness@countWhere:status=stale|Missing=verificationFreshness@countWhere:status=missing|Running=testRuns@countWhere:status=running|Regressed=testReports@countWhere:status=regressed|Queued=verificationQueue@count"
   prop title = "Verification"
-  prop summary = "Test gates, test runs, candidate snapshots, and runtime revisions."
+  prop summary = "Verification landing page for live health, red/green state, and links into narrower authored verification pages."
   children {
-    PlatformVerificationList
+    PlatformVerificationStatusBanner
+    PlatformVerificationStreams
+    PlatformBranchRedGreenList
+    PlatformChangeSetRedGreenList
+  }
+}
+
+view PlatformVerificationStatusPage {
+  kind page
+  class platform-verification
+  prop pageId = "verificationStatus"
+  prop modelView = "verificationStatus"
+  prop summaryCards = "Policies=verificationPolicies@count|Fresh=verificationFreshness@countWhere:status=fresh|Stale=verificationFreshness@countWhere:status=stale|Missing=verificationFreshness@countWhere:status=missing|Executions=verificationExecutions@count|Gates=testGates@count"
+  prop title = "Verification Status"
+  prop summary = "Policies, freshness, invalidations, queue state, and test-gate detail."
+  children {
+    PlatformVerificationStatusBanner
+    PlatformVerificationStatusList
     PlatformVerificationDetail
+  }
+}
+
+view PlatformVerificationRunsPage {
+  kind page
+  class platform-verification
+  prop pageId = "verificationRuns"
+  prop modelView = "verificationRuns"
+  prop summaryCards = "Runs=testRuns@count|Reports=testReports@count|Artifacts=testArtifacts@count|Suites=testSuites@count|Failed Cases=testCases@countWhere:status=failed|Errored Cases=testCases@countWhere:status=error"
+  prop title = "Verification Runs"
+  prop summary = "Test runs, authored reports, artifacts, suites, failures, and run execution commands."
+  children {
+    PlatformVerificationRunsList
+    PlatformVerificationDetail
+    PlatformTestRunPanel
+    PlatformSelectedTestRunPanel
+  }
+}
+
+view PlatformVerificationRuntimePage {
+  kind page
+  class platform-verification
+  prop pageId = "verificationRuntime"
+  prop modelView = "verificationRuntime"
+  prop summaryCards = "Runtime Revisions=runtimeRevisions@count|Candidate Snapshots=candidateSnapshots@count|Snapshot Builds=snapshotBuilds@count|Build Errors=snapshotBuildErrors@count"
+  prop title = "Verification Runtime"
+  prop summary = "Candidate snapshots, runtime revisions, snapshot builds, and runtime rebuild diagnostics."
+  children {
+    PlatformVerificationRuntimeList
+    PlatformVerificationDetail
+    PlatformVerificationStreams
   }
 }
 
@@ -120,11 +242,51 @@ view PlatformKnowledgePage {
   kind page
   class platform-knowledge
   prop pageId = "knowledge"
+  prop modelView = "knowledgeOverview"
+  prop summaryCards = "Governed Docs=docs@count|Folders=folders@count|Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
   prop title = "Knowledge"
-  prop summary = "Governed docs, roadmap tasks, epics, and features."
+  prop summary = "Knowledge landing page with links into narrower docs, folders (this.folder.wtoml), and roadmap views."
+}
+
+view PlatformKnowledgeDocsPage {
+  kind page
+  class platform-knowledge
+  prop pageId = "knowledgeDocs"
+  prop modelView = "knowledgeDocs"
+  prop summaryCards = "Governed Docs=docs@count|Fresh=docs@countWhere:freshness.status=fresh|Stale=docs@countWhere:freshness.status=stale|Tasks=docTasks@count"
+  prop title = "Knowledge Docs"
+  prop summary = "Governed documents, authored references, and document detail."
   children {
-    PlatformKnowledgeList
-    PlatformKnowledgeDetail
+    PlatformKnowledgeDocsList
+    PlatformKnowledgeDocsDetail
+  }
+}
+
+view PlatformKnowledgeFoldersPage {
+  kind page
+  class platform-knowledge
+  prop pageId = "knowledgeFolders"
+  prop modelView = "knowledgeFolders"
+  prop summaryCards = "Folders=folders@count"
+  prop title = "Knowledge Folders"
+  prop summary = "Folders with this.folder.wtoml metadata and their linked platform concepts."
+  children {
+    PlatformKnowledgeFoldersList
+    PlatformKnowledgeFoldersDetail
+  }
+}
+
+view PlatformKnowledgeRoadmapPage {
+  kind page
+  class platform-knowledge
+  prop pageId = "knowledgeRoadmap"
+  prop modelView = "knowledgeRoadmap"
+  prop summaryCards = "Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
+  prop title = "Knowledge Roadmap"
+  prop summary = "Roadmap tasks, epics, features, and linked platform work."
+  children {
+    PlatformKnowledgeRoadmapList
+    PlatformKnowledgeRoadmapDetail
   }
 }
 
@@ -132,12 +294,37 @@ view PlatformSignalsPage {
   kind page
   class platform-signals
   prop pageId = "signals"
+  prop modelView = "signalsOverview"
+  prop summaryCards = "Gaps=gaps@count|Telemetry Metrics=nodes@countKind:telemetryMetric|Defect Clusters=nodes@countKind:defectCluster|Boundaries=nodes@countKind:boundary"
   prop title = "Signals"
-  prop summary = "Gaps, telemetry, defect clusters, and boundary actors."
+  prop summary = "Signals landing page with links into narrower gap and signal-catalog views."
+}
+
+view PlatformSignalsGapsPage {
+  kind page
+  class platform-signals
+  prop pageId = "signalsGaps"
+  prop modelView = "signalsGaps"
+  prop summaryCards = "Gaps=gaps@count"
+  prop title = "Signals Gaps"
+  prop summary = "Gap inventory, selector drift, and gap detail."
   children {
     PlatformGapList
+    PlatformGapDetail
+  }
+}
+
+view PlatformSignalsCatalogPage {
+  kind page
+  class platform-signals
+  prop pageId = "signalsCatalog"
+  prop modelView = "signalsCatalog"
+  prop summaryCards = "Telemetry Metrics=nodes@countKind:telemetryMetric|Defect Clusters=nodes@countKind:defectCluster|Boundaries=nodes@countKind:boundary"
+  prop title = "Signals Catalog"
+  prop summary = "Telemetry metrics, defect clusters, boundaries, and linked signal-node detail."
+  children {
     PlatformSignalList
-    PlatformSignalDetail
+    PlatformSignalCatalogDetail
   }
 }
 
@@ -145,22 +332,315 @@ view PlatformModelPage {
   kind page
   class platform-model
   prop pageId = "model"
+  prop modelView = "modelOverview"
+  prop summaryCards = "Platform Objects=nodes@count|Relationships=edges@count|Profiles=profiles@count|Coverage Edges=coverageEdges@count"
   prop title = "Model"
-  prop summary = "Platform objects, relationships, runtime profiles, and dependency evidence."
+  prop summary = "Model landing page with links into narrower objects, profiles, and coverage views."
+}
+
+view PlatformModelObjectsPage {
+  kind page
+  class platform-model
+  prop pageId = "modelObjects"
+  prop modelView = "modelObjects"
+  prop summaryCards = "Platform Objects=nodes@count|Relationships=edges@count"
+  prop title = "Model Objects"
+  prop summary = "Platform objects, their properties, and linked relationships."
   children {
     PlatformModelList
     PlatformModelDetail
   }
 }
 
+view PlatformModelProfilesPage {
+  kind page
+  class platform-model
+  prop pageId = "modelProfiles"
+  prop modelView = "modelProfiles"
+  prop summaryCards = "Profiles=profiles@count"
+  prop title = "Model Profiles"
+  prop summary = "Runtime profile exposure and composition evidence."
+  children {
+    PlatformProfileComparison
+  }
+}
+
+view PlatformModelCoveragePage {
+  kind page
+  class platform-model
+  prop pageId = "modelCoverage"
+  prop modelView = "modelCoverage"
+  prop summaryCards = "Coverage Edges=coverageEdges@count"
+  prop title = "Model Coverage"
+  prop summary = "Coverage edges between gates and protected platform targets."
+  children {
+    PlatformCoverageMatrix
+  }
+}
+
+view PlatformBridgesPage {
+  kind page
+  class platform-model
+  prop pageId = "bridges"
+  prop modelView = "bridges"
+  prop summaryCards = "Bridges=compatibilityBridges@count"
+  prop supplementalPageSource = "bridges"
+  prop title = "Bridges"
+  prop summary = "Compatibility bridge inventory for remaining convenience seams."
+  children {
+    PlatformBridgesList
+    PlatformBridgesDetail
+  }
+}
+
+view PlatformGovernancePage {
+  kind page
+  class platform-model
+  prop pageId = "governance"
+  prop modelView = "governance"
+  prop summaryCards = "Routes=governanceRoutes@count|Proposal Targets=proposalTargetGovernance@count"
+  prop supplementalPageSource = "governance"
+  prop title = "Governance"
+  prop summary = "Route and proposal-target governance coverage for mutating platform seams."
+  children {
+    PlatformGovernanceList
+    PlatformGovernanceDetail
+  }
+}
+
+view PlatformSemanticsPage {
+  kind page
+  class platform-model
+  prop pageId = "semantics"
+  prop modelView = "semantics"
+  prop summaryCards = "Mutable Surfaces=mutableSurfaceSemantics@count"
+  prop supplementalPageSource = "semantics"
+  prop title = "Semantics"
+  prop summary = "Personal, shared, and mixed mutable-surface semantics contract rows."
+  children {
+    PlatformSemanticsList
+    PlatformSemanticsDetail
+  }
+}
+
+view PlatformPackageCoexistencePage {
+  kind page
+  class platform-model
+  prop pageId = "packageCoexistence"
+  prop modelView = "packageCoexistence"
+  prop summaryCards = "Packages=packageCoexistence@count"
+  prop supplementalPageSource = "packageCoexistence"
+  prop title = "Package Coexistence"
+  prop summary = "Divergent package revision lines and namespace selections."
+  children {
+    PlatformPackageCoexistenceList
+    PlatformPackageCoexistenceDetail
+  }
+}
+
+view PlatformPackageConvergencePage {
+  kind page
+  class platform-model
+  prop pageId = "packageConvergence"
+  prop modelView = "packageConvergence"
+  prop summaryCards = "Packages=packageConvergence@count"
+  prop supplementalPageSource = "packageConvergence"
+  prop title = "Package Convergence"
+  prop summary = "Transformer contracts, convergence patches, and remaining authored glue."
+  children {
+    PlatformPackageConvergenceList
+    PlatformPackageConvergenceDetail
+  }
+}
+
+view PlatformPackageApplyPreviewPage {
+  kind page
+  class platform-model
+  prop pageId = "packageApplyPreview"
+  prop modelView = "packageApplyPreview"
+  prop summaryCards = "Revisions=packageApplyPreviews@count"
+  prop supplementalPageSource = "packageApplyPreview"
+  prop title = "Package Apply Preview"
+  prop summary = "Revision-scoped apply impact, emitted bundle summary, and convergence truth."
+  children {
+    PlatformPackageApplyPreviewList
+    PlatformPackageApplyPreviewDetail
+  }
+}
+
+view PlatformBridgesList {
+  kind table
+  class platform-model-list
+  prop title = "Bridge Inventory"
+  prop summary = "Compatibility bridge inventory for remaining convenience seams."
+  prop listSource = "bridges"
+  prop columns = "Bridge|Class|Owner|Status|Surfaces"
+  prop rowFields = "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value"
+  prop emptyState = "No compatibility bridges."
+  prop pageSize = "20"
+}
+
+view PlatformBridgesDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Bridge Detail"
+  prop summary = "Selected bridge properties and long-tail fields."
+  prop detailSource = "bridges"
+  prop detailCardTitle = "Bridge Detail"
+  prop primaryFields = "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value|Sample Targets=sampleTargets@value"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary"
+  prop emptyTitle = "Bridge Detail"
+  prop emptyState = "No compatibility bridge selected."
+}
+
+view PlatformGovernanceList {
+  kind table
+  class platform-model-list
+  prop title = "Governance Rows"
+  prop summary = "Route and proposal-target governance coverage for mutating platform seams."
+  prop listSource = "governance"
+  prop columns = "Kind|Object|Mode|Authority|Scope"
+  prop rowFields = "Kind=pageKind|Object=objectLink@concept|Mode=governanceMode|Authority=authorityMechanism|Scope=scopeValue@value"
+  prop emptyState = "No governance rows."
+  prop pageSize = "20"
+}
+
+view PlatformGovernanceDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Governance Object Detail"
+  prop summary = "Selected governance object properties and long-tail fields."
+  prop detailSource = "governance"
+  prop detailCardTitle = "Governance Object Detail"
+  prop primaryFields = "Object=objectLink@concept|Kind=pageKind|Mode=governanceMode|Authority=authorityMechanism|Workflow=workflowRole|Operation=operationSemantics"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|objectLink|scopeValue"
+  prop emptyTitle = "Governance Object Detail"
+  prop emptyState = "No governance object selected."
+}
+
+view PlatformSemanticsList {
+  kind table
+  class platform-model-list
+  prop title = "Mutable Surface Semantics"
+  prop summary = "Personal, shared, and mixed mutable-surface semantics contract rows."
+  prop listSource = "semantics"
+  prop columns = "Surface|Sharing|State Class|Authority|Visibility"
+  prop rowFields = "Surface=surfaceLink@concept|Sharing=sharingClass|State Class=stateClass|Authority=authorityRule|Visibility=visibilityRule"
+  prop emptyState = "No mutable-surface semantics rows."
+  prop pageSize = "20"
+}
+
+view PlatformSemanticsDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Mutable Surface Detail"
+  prop summary = "Selected mutable-surface properties and long-tail fields."
+  prop detailSource = "semantics"
+  prop detailCardTitle = "Mutable Surface Detail"
+  prop primaryFields = "Surface=surfaceLink@concept|Sharing=sharingClass|State Class=stateClass|Authority=authorityRule|Visibility=visibilityRule|Mutation Mode=mutationMode"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|surfaceLink"
+  prop emptyTitle = "Mutable Surface Detail"
+  prop emptyState = "No mutable surface selected."
+}
+
+view PlatformPackageCoexistenceList {
+  kind table
+  class platform-model-list
+  prop title = "Package Coexistence Rows"
+  prop summary = "Divergent package revision lines and namespace selections."
+  prop listSource = "packageCoexistence"
+  prop columns = "Package|Mode|Selected Revisions|Namespaces"
+  prop rowFields = "Package=packageLink@concept|Mode=coexistenceMode|Selected Revisions=selectedRevisionIds@value|Namespaces=namespaceSelectionIds@value"
+  prop emptyState = "No package coexistence rows."
+  prop pageSize = "20"
+}
+
+view PlatformPackageCoexistenceDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Package Coexistence Detail"
+  prop summary = "Selected package coexistence properties and long-tail fields."
+  prop detailSource = "packageCoexistence"
+  prop detailCardTitle = "Package Coexistence Detail"
+  prop primaryFields = "Package=packageLink@concept|Mode=coexistenceMode|Selected Revisions=selectedRevisionIds@value|Revision Lines=revisionIds@value"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|packageLink|namespaceSelectionIds"
+  prop emptyTitle = "Package Coexistence Detail"
+  prop emptyState = "No package coexistence row selected."
+}
+
+view PlatformPackageConvergenceList {
+  kind table
+  class platform-model-list
+  prop title = "Package Convergence Rows"
+  prop summary = "Transformer contracts, convergence patches, and remaining authored glue."
+  prop listSource = "packageConvergence"
+  prop columns = "Package|Status|Transformers|Patches|Glue"
+  prop rowFields = "Package=packageLink@concept|Status=status|Transformers=transformerIds@value|Patches=convergencePatchIds@value|Glue=remainingGlueMessages@value"
+  prop emptyState = "No package convergence rows."
+  prop pageSize = "20"
+}
+
+view PlatformPackageConvergenceDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Package Convergence Detail"
+  prop summary = "Selected package convergence properties and long-tail fields."
+  prop detailSource = "packageConvergence"
+  prop detailCardTitle = "Package Convergence Detail"
+  prop primaryFields = "Package=packageLink@concept|Status=status|Transformers=transformerIds@value|Convergence Patches=convergencePatchIds@value|Explanation=explanation"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|packageLink|remainingGlueMessages"
+  prop emptyTitle = "Package Convergence Detail"
+  prop emptyState = "No package convergence row selected."
+}
+
+view PlatformPackageApplyPreviewList {
+  kind table
+  class platform-model-list
+  prop title = "Package Apply Preview Rows"
+  prop summary = "Revision-scoped apply impact, emitted bundle summary, and convergence truth."
+  prop listSource = "packageApplyPreview"
+  prop columns = "Revision|Status|Files|Transformers|Glue"
+  prop rowFields = "Revision=revisionLink@concept|Status=status|Files=bundleFileCount|Transformers=relatedTransformerIds@value|Glue=remainingGlueMessages@value"
+  prop emptyState = "No package apply preview rows."
+  prop pageSize = "20"
+}
+
+view PlatformPackageApplyPreviewDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Package Apply Preview Detail"
+  prop summary = "Selected revision apply preview properties and long-tail fields."
+  prop detailSource = "packageApplyPreview"
+  prop detailCardTitle = "Package Apply Preview Detail"
+  prop primaryFields = "Package=packageLink@concept|Revision=revisionLink@concept|Status=status|Bundle Hash=bundleHash|Explanation=explanation"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|packageLink|revisionLink|bundle|coexistence|convergence|selectedRevision|selectedNamespaces|manifestPluginConflicts|relatedTransformers|relatedConvergencePatches|remainingGlue"
+  prop emptyTitle = "Package Apply Preview Detail"
+  prop emptyState = "No package apply preview row selected."
+}
+
 view PlatformConsoleSummary {
   kind region
   class platform-summary
   prop title = "Platform Summary"
+  prop summaryPageId = "overview"
   prop summary = "Snapshot counts for the current platform model."
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformAuthoredSurfaceTree {
+  kind region
+  class platform-surface-tree
+  prop title = "Authored Surface Tree"
+  prop summary = "Inspectable page and section ownership compiled from the authored console RVM."
+  prop surfaceFields = "View=pageId||name|Kind=surfaceKind|Class=className|Process=processRoute|Projection=projectionRoutesText|Summary=summary|Sections=sectionTitles"
 }
 
 view PlatformLifecycleBoard {
@@ -168,6 +648,15 @@ view PlatformLifecycleBoard {
   class platform-board
   prop title = "Lifecycle Board"
   prop summary = "Lifecycle-oriented chips sourced from the platform model."
+  prop boardSource = "lifecycleBoard"
+  prop laneTitlePath = "title"
+  prop laneMetaFields = "Count=countLabel"
+  prop laneItemsPath = "nodes"
+  prop itemTitlePath = "titleLink"
+  prop itemTitleMode = "concept"
+  prop itemFields = "Kind=kind"
+  prop itemLimit = "14"
+  prop itemEmptyState = "No platform objects in this lifecycle lane."
   projections {
     PlatformModelRead
   }
@@ -178,6 +667,15 @@ view PlatformBranchBoard {
   class platform-board
   prop title = "Branch Board"
   prop summary = "Lifecycle lanes for branch-backed work."
+  prop boardSource = "branchBoard"
+  prop laneTitlePath = "title"
+  prop laneMetaFields = "Count=countLabel"
+  prop laneItemsPath = "branches"
+  prop itemTitlePath = "titleLink"
+  prop itemTitleMode = "concept"
+  prop itemFields = "Status=status|Activity=activitySummary|Latest Candidate Snapshot=latestCandidateSnapshotId@concept"
+  prop itemLimit = "14"
+  prop itemEmptyState = "No branches in this lifecycle lane."
   projections {
     PlatformModelRead
   }
@@ -188,6 +686,13 @@ view PlatformMap {
   class platform-map
   prop title = "Platform Map"
   prop summary = "Primary platform objects projected from the live model."
+  prop listSource = "platformMapRows"
+  prop columns = "Kind|Resource|Lifecycle|Status|Source"
+  prop rowFields = "Kind=kind|Resource=id@concept|Lifecycle=lifecycleText|Status=status|Source=source"
+  prop sortOptions = "kind=kind|resource=id|lifecycle=lifecycleText|status=status|source=source"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No platform objects."
+  prop pageSize = "12"
   projections {
     PlatformModelRead
   }
@@ -198,6 +703,64 @@ view PlatformWorkflowList {
   class platform-workflow-list
   prop title = "Workflow Items"
   prop summary = "Paginated list of branches, change sets, and proposals."
+  prop listSource = "workflowItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No workflow rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformWorkflowBranchesList {
+  kind table
+  class platform-workflow-list
+  prop title = "Branches"
+  prop summary = "Paginated list of projected branches."
+  prop listSource = "workflowItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No branches."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformWorkflowChangeSetsList {
+  kind table
+  class platform-workflow-list
+  prop title = "Change Sets"
+  prop summary = "Paginated list of projected change sets."
+  prop listSource = "workflowItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No change sets."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformWorkflowProposalsList {
+  kind table
+  class platform-workflow-list
+  prop title = "Proposals"
+  prop summary = "Paginated list of projected workflow proposals."
+  prop listSource = "workflowItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No proposals."
+  prop pageSize = "20"
   projections {
     PlatformModelRead
   }
@@ -208,9 +771,204 @@ view PlatformWorkflowDetail {
   class platform-workflow-detail
   prop title = "Workflow Detail"
   prop summary = "Properties and linked resources for the selected workflow item."
+  prop detailSource = "workflow"
+  prop detailSelectionSources = "branches|changeSets|proposals"
+  prop branchIdPrefixes = "branch:"
+  prop changeSetIdPrefixes = "changeSet:|changeset."
+  prop proposalIdPrefixes = "proposal:"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No workflow rows are projected yet."
+  children {
+    PlatformWorkflowPrimaryPanel
+    PlatformWorkflowRelatedPanel
+    PlatformWorkflowSnapshotHistory
+    PlatformWorkflowEditHistory
+  }
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformWorkflowPrimaryPanel {
+  kind region
+  class platform-workflow-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "branch|changeSet|proposal"
+  prop title = "Primary Detail"
+  prop summary = "Selected workflow object properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop branchLongTailExcludedFields = "changeSetIds|affectedSystemSummaries|telemetryImpactSummaries"
+  prop branchCardTitle = "Branch Detail"
+  prop branchFields = "Branch=id@concept|Status=status|Title=title|Lane=lifecycleLane|Owner=owner|Parent=parentBranchId@concept|Epic=epic@concept|Feature=feature@concept|Defect=defect@concept|Runtime profile=runtimeProfile|Docs freshness=docsFreshness.status|Red / green=testRedGreen.status|Latest candidate=latestCandidateSnapshotId@concept|API resource=id@api"
+  prop changeSetLongTailExcludedFields = "changedPaths"
+  prop changeSetCardTitle = "Change Set Detail"
+  prop changeSetFields = "Change set=id@concept|Status=status|Title=title|Branch=branchId@concept|Owner=owner|Reason=reason|Edits=editCount|Red / green=testRedGreen.status|Latest candidate=latestCandidateSnapshotId@concept|API resource=id@api"
+  prop proposalCardTitle = "Proposal Detail"
+  prop proposalFields = "Proposal=id@concept|Status=status|Target process=targetProcess|Target=targetId@concept|Reason=reason|API resource=id@api"
+}
+
+view PlatformWorkflowRelatedPanel {
+  kind region
+  class platform-workflow-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "branch|changeSet|proposal"
+  prop title = "Related Resources"
+  prop summary = "Linked resources and supporting context for the selected workflow object."
+  prop cardItemLimit = "12"
+  prop branchLinkCards = "Change Sets=changeSetIds"
+  prop branchLinkCardEmptyStates = "Change Sets=No change sets linked to this branch."
+  prop branchTextCards = "Affected Systems=affectedSystemSummaries@label|Telemetry Impacts=telemetryImpactSummaries@label"
+  prop branchTextCardEmptyStates = "Affected Systems=No affected system summaries.|Telemetry Impacts=No telemetry impact summaries."
+  prop changeSetLinkCards = "Changed Paths=changedPaths"
+  prop changeSetLinkCardEmptyStates = "Changed Paths=No changed paths staged for this change set."
+  prop proposalLinkCards = "Target Resource=targetId"
+  prop proposalLinkCardEmptyStates = "Target Resource=No linked target resource."
+}
+
+view PlatformWorkflowSnapshotHistory {
+  kind table
+  class platform-workflow-snapshots
+  prop detailPanelRole = "snapshotHistory"
+  prop detailKinds = "branch|changeSet"
+  prop title = "Candidate Snapshots"
+  prop summary = "Candidate snapshot history for the selected workflow object when available."
+  prop columns = "Status|Snapshot|Revision|Change Set|Errors"
+  prop rowFields = "Status=status|Snapshot=id@concept|Revision=revision|Change Set=changeSetId@concept|Errors=errorCount"
+  prop emptyState = "No candidate snapshots for this branch."
+  prop changeSetEmptyState = "No candidate snapshots for this change set."
+  prop rowLimit = "12"
+}
+
+view PlatformWorkflowEditHistory {
+  kind table
+  class platform-workflow-edits
+  prop detailPanelRole = "editHistory"
+  prop detailKinds = "changeSet"
+  prop title = "Staged Edits"
+  prop summary = "Staged overlay edits for the selected change set when available."
+  prop columns = "Path|Language|Previous Hash|Next Hash"
+  prop rowFields = "Path=path|Language=sourceLanguage|Previous Hash=previousHashShort|Next Hash=nextHashShort"
+  prop emptyState = "No staged edits."
+  prop rowLimit = "20"
+}
+
+view PlatformBranchCreatePanel {
+  kind form
+  class platform-branch-create-panel
+  prop title = "Create Branch"
+  prop summary = "Create a branch from the shared platform mutation lane."
+  prop formId = "platform-branch-create-form"
+  prop clientAction = "branch.create"
+  prop statusId = "branch-create-status"
+  prop submitLabel = "Create Branch"
+  prop formFields = "Branch id=id@text|Title=title@text|Parent branch=parentBranchId@text|Epic=epic@text|Feature=feature@text|Defect=defect@text"
+  prop submitPath = "/api/platform-branches"
+  prop submitBodyFields = "id=id@nullable|title=title@nullable|parentBranchId=parentBranchId@nullable|epic=epic@nullable|feature=feature@nullable|defect=defect@nullable"
+  prop successMessage = "Branch created."
+  prop errorMessage = "Branch creation failed."
+  prop fieldDefaults = "id=branch:{generatedId}|title=Platform branch"
+  prop fieldPlaceholders = "parentBranchId=Optional parent branch id|epic=Optional epic tag|feature=Optional feature tag|defect=Optional defect tag"
+}
+
+view PlatformChangeSetCreatePanel {
+  kind form
+  class platform-change-set-create-panel
+  prop title = "Create Change Set"
+  prop summary = "Create a staged change set attached to a branch."
+  prop formId = "platform-change-set-create-form"
+  prop clientAction = "changeSet.create"
+  prop statusId = "change-set-create-status"
+  prop submitLabel = "Create Change Set"
+  prop formFields = "Change set id=id@text|Branch id=branchId@text|Title=title@text|Reason=reason@text"
+  prop submitPath = "/api/platform-change-sets"
+  prop submitBodyFields = "id=id@nullable|branchId=branchId@nullable|title=title@nullable|reason=reason@nullable"
+  prop successMessage = "Change set created."
+  prop errorMessage = "Change set creation failed."
+  prop fieldDefaults = "id=changeSet:{generatedId}|branchId=branch:platform-console|title=Platform console change|reason=Stage platform console edits"
+}
+
+view PlatformChangeSetEditPanel {
+  kind form
+  class platform-change-set-edit-panel
+  prop title = "Stage Edit"
+  prop summary = "Stage an authored source edit into the selected change set."
+  prop formId = "platform-change-set-edit-form"
+  prop clientAction = "changeSet.edit"
+  prop statusId = "change-set-edit-status"
+  prop submitLabel = "Stage Edit"
+  prop formFields = "Change set=changeSetId@select:changeSetOptions|Path=path@text|Content=content@textarea"
+  prop submitPath = "/api/platform-change-sets/{changeSetId}/edits"
+  prop submitBodyFields = "edits[0].path=path@value|edits[0].content=content@value"
+  prop requiredFieldMessages = "changeSetId=Select a change set first."
+  prop successMessage = "Edit staged."
+  prop errorMessage = "Edit staging failed."
+  prop changeSetOptionsSource = "changeSets"
+  prop changeSetOptionsValuePath = "id"
+  prop changeSetOptionsLabelPath = "id"
+  prop fieldDefaults = "path=plugins/platform/platform-console.rvm"
+  prop fieldRows = "content=8"
+}
+
+view PlatformChangeSetValidatePanel {
+  kind form
+  class platform-change-set-validate-panel
+  prop title = "Validate Change Set"
+  prop summary = "Validate the selected change set without mutating the active runtime."
+  prop formId = "platform-change-set-validate-form"
+  prop clientAction = "changeSet.validate"
+  prop statusId = "change-set-validate-status"
+  prop submitLabel = "Validate Change Set"
+  prop formFields = "Change set=changeSetId@select:changeSetOptions"
+  prop submitPath = "/api/platform-change-sets/{changeSetId}/validate"
+  prop requiredFieldMessages = "changeSetId=Select a change set first."
+  prop successMessageTemplate = "Change set {candidateSnapshot.status}."
+  prop errorMessage = "Validation failed."
+  prop changeSetOptionsSource = "changeSets"
+  prop changeSetOptionsValuePath = "id"
+  prop changeSetOptionsLabelPath = "id"
+}
+
+view PlatformChangeSetApplyPanel {
+  kind form
+  class platform-change-set-apply-panel
+  prop title = "Apply Change Set"
+  prop summary = "Apply a validated change set through the shared platform handler lane."
+  prop formId = "platform-change-set-apply-form"
+  prop clientAction = "changeSet.apply"
+  prop statusId = "change-set-apply-status"
+  prop submitLabel = "Apply Change Set"
+  prop formFields = "Change set=changeSetId@select:changeSetOptions"
+  prop submitPath = "/api/platform-change-sets/{changeSetId}/apply"
+  prop requiredFieldMessages = "changeSetId=Select a change set first."
+  prop successMessage = "Change set applied."
+  prop errorMessage = "Apply failed."
+  prop changeSetOptionsSource = "changeSets"
+  prop changeSetOptionsValuePath = "id"
+  prop changeSetOptionsLabelPath = "id"
+}
+
+view PlatformChangeSetLifecyclePanel {
+  kind form
+  class platform-change-set-lifecycle-panel
+  prop title = "Change Set Lifecycle"
+  prop summary = "Reject or abandon a change set through the shared platform handler lane."
+  prop formId = "platform-change-set-lifecycle-form"
+  prop clientAction = "changeSet.lifecycle"
+  prop statusId = "change-set-lifecycle-status"
+  prop submitLabel = "Update Change Set"
+  prop formFields = "Change set=changeSetId@select:changeSetOptions|Action=action@select:lifecycleActions|Reason=reason@text"
+  prop submitPath = "/api/platform-change-sets/{changeSetId}/{action}"
+  prop submitBodyFields = "reason=reason@nullable"
+  prop requiredFieldMessages = "changeSetId=Select a change set first."
+  prop successMessageTemplate = "Change set {action}ed."
+  prop errorMessage = "Lifecycle update failed."
+  prop changeSetOptionsSource = "changeSets"
+  prop changeSetOptionsValuePath = "id"
+  prop changeSetOptionsLabelPath = "id"
+  prop lifecycleActionsOptions = "Reject=reject|Abandon=abandon"
+  prop fieldDefaults = "action=reject"
+  prop fieldPlaceholders = "reason=Optional lifecycle reason"
 }
 
 view PlatformProposalPanel {
@@ -219,6 +977,24 @@ view PlatformProposalPanel {
   process PlatformProposalCreate
   prop title = "Proposal Panel"
   prop summary = "Create guarded platform proposals through the shared mutation lane."
+  prop formId = "platform-proposal-form"
+  prop clientAction = "proposal.create"
+  prop statusId = "proposal-status"
+  prop submitLabel = "Create Proposal"
+  prop formFields = "Action=action@select:proposalActionOptions|Proposal id=id@text|Target kind override=targetKind@text|Target id override=targetId@text|Reason=reason@text|Body JSON=bodyJson@textarea"
+  prop submitPath = "/api/platform-proposals"
+  prop submitBodyFields = "id=id@nullable|action=action@nullable|targetKind=targetKind@nullable|targetId=targetId@nullable|body=bodyJson@json|reason=reason@nullable"
+  prop invalidFieldMessages = "bodyJson=Body JSON is invalid."
+  prop successMessage = "Proposal created."
+  prop errorMessage = "Proposal creation failed."
+  prop fieldSyncs = "bodyJson=action:data-sample-body@jsonPretty"
+  prop proposalActionOptionsSource = "proposalActions"
+  prop proposalActionOptionsValuePath = "action"
+  prop proposalActionOptionsLabelPath = "action"
+  prop proposalActionOptionsAttrFields = "data-sample-body=sampleBody@json"
+  prop fieldDefaults = "id=proposal.platform.{generatedId}|reason=Platform stewardship change|bodyJson={}"
+  prop fieldPlaceholders = "targetKind=derived from body|targetId=derived from body"
+  prop fieldRows = "bodyJson=8"
   projections {
     PlatformModelRead
   }
@@ -230,6 +1006,22 @@ view PlatformProposalReviewList {
   process PlatformProposalApprove
   prop title = "Review Proposals"
   prop summary = "Approve or reject open platform proposals."
+  prop formId = "platform-review-form"
+  prop clientAction = "proposal.review"
+  prop statusId = "review-status"
+  prop formFields = "Open proposal=id@select:openProposalOptions|Reject reason=reason@text"
+  prop submitPath = "/api/platform-proposals/{id}/{reviewAction}"
+  prop submitBodyFields = "reason=reason@nullable"
+  prop requiredFieldMessages = "id=No open proposal selected."
+  prop successMessageTemplate = "Proposal {proposal.status}."
+  prop errorMessage = "Review failed."
+  prop openProposalOptionsSource = "proposals"
+  prop openProposalOptionsValuePath = "id"
+  prop openProposalOptionsLabelPath = "id"
+  prop openProposalOptionsWhere = "status=open"
+  prop fieldPlaceholders = "reason=Only used when rejecting"
+  prop actionButtons = "Approve=approve|Reject=reject"
+  prop actionButtonName = "reviewAction"
   projections {
     PlatformModelRead
   }
@@ -240,6 +1032,64 @@ view PlatformVerificationList {
   class platform-verification-list
   prop title = "Verification Items"
   prop summary = "Paginated list of gates, runs, candidate snapshots, and runtime revisions."
+  prop listSource = "verificationItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No verification rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformVerificationStatusList {
+  kind table
+  class platform-verification-list
+  prop title = "Verification Status Items"
+  prop summary = "Paginated list of policies, freshness rows, invalidations, queue rows, executions, and gates."
+  prop listSource = "verificationItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No verification status rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformVerificationRunsList {
+  kind table
+  class platform-verification-list
+  prop title = "Verification Run Items"
+  prop summary = "Paginated list of projected test runs and their authored report resources."
+  prop listSource = "verificationItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No verification run rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformVerificationRuntimeList {
+  kind table
+  class platform-verification-list
+  prop title = "Verification Runtime Items"
+  prop summary = "Paginated list of candidate snapshots and runtime revision rows."
+  prop listSource = "verificationItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No verification runtime rows."
+  prop pageSize = "20"
   projections {
     PlatformModelRead
   }
@@ -250,9 +1100,307 @@ view PlatformVerificationDetail {
   class platform-verification-detail
   prop title = "Verification Detail"
   prop summary = "Properties and linked resources for the selected verification object."
+  prop detailSource = "verification"
+  prop detailSelectionSources = "verificationPolicies|verificationFreshness|verificationInvalidations|verificationQueue|verificationExecutions|testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots"
+  prop verificationPolicyIdPrefixes = "verificationPolicy:"
+  prop verificationFreshnessIdPrefixes = "verificationFreshness:"
+  prop verificationInvalidationIdPrefixes = "verificationInvalidation:"
+  prop verificationQueueIdPrefixes = "verificationQueue:"
+  prop verificationExecutionIdPrefixes = "verificationExecution:"
+  prop gateIdPrefixes = "gate:"
+  prop runtimeRevisionIdPrefixes = "runtimeRevision:|backendRevision:|frontendRevision:"
+  prop candidateSnapshotIdPrefixes = "candidateSnapshot:"
+  prop testRunIdPrefixes = "testRun:"
+  prop testReportIdPrefixes = "testReport:"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No verification rows are projected yet."
+  children {
+    PlatformVerificationPrimaryPanel
+    PlatformVerificationRelatedPanel
+    PlatformVerificationRunHistory
+    PlatformVerificationBuildHistory
+    PlatformVerificationBuildErrors
+    PlatformVerificationFreshnessSummary
+    PlatformVerificationInvalidationReasons
+    PlatformVerificationReportSummary
+    PlatformVerificationArtifactsReport
+    PlatformVerificationSuiteSummary
+    PlatformVerificationFailingCases
+    PlatformVerificationRegressionSummary
+  }
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformVerificationStatusBanner {
+  kind region
+  class platform-verification-status
+  prop title = "Live Verification Status"
+  prop summary = "Current verification health, active execution, and first-pass regression signals."
+  prop propertyRecordSource = "verificationStatus"
+  prop propertyCardTitle = "Current Verification State"
+  prop propertyFields = "Status=status|Summary=summary|Fresh gates=freshGateCount|Stale gates=staleGateCount|Missing gates=missingGateCount|Running runs=runningCount|Failing gates=failingGateCount|Regressed runs=regressedRunCount|Queued items=queueCount|Policy source=policySource|Persistence source=persistenceSource|Ledger backend=ledgerBackend|Artifact backend=artifactBackend|Cache backend=cacheBackend|Latest completed run=latestCompletedRunId@concept|Latest completion=latestCompletedAt|Active runtime revision=activeRuntimeRevision@concept"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformVerificationPrimaryPanel {
+  kind region
+  class platform-verification-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "verificationPolicy|verificationFreshness|verificationInvalidation|verificationExecution|gate|runtimeRevision|candidateSnapshot|testRun|testReport"
+  prop title = "Primary Detail"
+  prop summary = "Selected verification object properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop gateLongTailExcludedFields = "protectedObjects|selectedByBranches|selectedByChangeSets"
+  prop gateCardTitle = "Test Gate Detail"
+  prop gateFields = "Gate=id@concept|Runner=runner|Environment=environment|Timeout=timeoutMs|Cost=costEstimate|Command=command|Latest result=lastResult@statusExit|API resource=id@api"
+  prop runtimeRevisionLongTailExcludedFields = "candidateBranchCount"
+  prop runtimeRevisionCardTitle = "Runtime Revision Detail"
+  prop runtimeRevisionFields = "Revision=id@concept|Status=status|Trigger=trigger|Branch=branchId@concept|Change set=changeSetId@concept|Changed sources=changedSources@count|Build errors=buildErrorCount|API resource=id@api"
+  prop candidateSnapshotLongTailExcludedFields = "files|errors"
+  prop candidateSnapshotCardTitle = "Candidate Snapshot Detail"
+  prop candidateSnapshotFields = "Snapshot=id@concept|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Revision=revision|API resource=id@api"
+  prop verificationPolicyCardTitle = "Verification Policy Detail"
+  prop verificationPolicyFields = "Policy=id@concept|Status=status|Source=policySource|Gate=gateId@concept|Execution class=executionClass|Enabled=enabled|Startup=startup|Watch=watch|Change set=onChangeSet|Exclusive=exclusive|Clean workspace=requiresCleanWorkspace|Priority=priority|Timeout=timeoutMs"
+  prop verificationFreshnessCardTitle = "Verification Freshness"
+  prop verificationFreshnessFields = "Freshness=id@concept|Status=status|Gate=gateId@concept|Latest run=latestRunId@concept|Latest passed=latestPassedRunId@concept|Reasons=reasonKinds@value|Summary=reasonSummary|Blocking=blocking|Stale since=staleSince"
+  prop verificationInvalidationCardTitle = "Verification Invalidation"
+  prop verificationInvalidationFields = "Invalidation=id@concept|Gate=gateId@concept|Reason=reasonKind|Summary=reasonSummary|Previous run=previousRunId@concept|Paths=changedPaths@value|Targets=targetIds@value|Produced=producedAt"
+  prop verificationExecutionCardTitle = "Verification Execution Detail"
+  prop verificationExecutionFields = "Execution=id@concept|Status=status|Gate=gateId@concept|Run=runId@concept|Trigger=triggerKind|Execution class=executionClass|Exclusive=exclusive|Started=startedAt|Finished=finishedAt"
+  prop testRunCardTitle = "Test Run Detail"
+  prop testRunFields = "Run=id@concept|Status=status|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Cache=cacheStatus|Cache hit run=cacheHitRunId@concept|Freshness=freshnessAtReadStatus|Freshness summary=freshnessAtReadSummary|Invalidations=invalidationReasonKinds@value|Duration=durationMs|Exit=exitCode|API resource=id@api"
+}
+
+view PlatformVerificationRelatedPanel {
+  kind region
+  class platform-verification-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "verificationPolicy|gate|runtimeRevision|candidateSnapshot|testRun|testReport"
+  prop title = "Related Resources"
+  prop summary = "Linked verification resources, streams, and supporting context."
+  prop cardItemLimit = "12"
+  prop gateLinkCards = "Protected Objects=protectedObjects|Selected Branches=selectedByBranches|Selected Change Sets=selectedByChangeSets"
+  prop gateLinkCardEmptyStates = "Protected Objects=No protected objects linked to this gate.|Selected Branches=No branches currently select this gate.|Selected Change Sets=No change sets currently select this gate."
+  prop runtimeRevisionLinkCards = "Changed Sources=changedSources"
+  prop runtimeRevisionLinkCardEmptyStates = "Changed Sources=No changed sources recorded for this revision."
+  prop runtimeRevisionPropertyCardTitle = "Snapshot Diagnostics"
+  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Verification status=testMonitorDiagnostics.status|Queued sources=testMonitorDiagnostics.pendingSourceCount|Queued change sets=testMonitorDiagnostics.pendingChangeSetCount|Persistence source=verificationPersistence.source|Ledger backend=verificationPersistence.ledgerBackend.provider|Backend revision event stream=backendRevisionEventsHref@href"
+  prop candidateSnapshotTextCards = "Files=files@path|Errors=errors@errorMessage"
+  prop candidateSnapshotTextCardEmptyStates = "Files=No files captured in this candidate snapshot.|Errors=No build or validation errors."
+  prop verificationPersistenceCardTitle = "Verification Persistence"
+  prop verificationPersistenceFields = "Source=source|Root=verificationRoot|Ledger=ledgerBackendLabel|Artifacts=artifactBackendLabel|Cache=cacheBackendLabel|Diagnostics=diagnostics@count"
+  prop testRunPropertyCardTitle = "Verification Streams"
+  prop testRunPropertyFields = "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href"
+}
+
+view PlatformVerificationRunHistory {
+  kind table
+  class platform-verification-runs
+  prop detailPanelRole = "runHistory"
+  prop detailKinds = "gate|verificationFreshness|verificationInvalidation"
+  prop title = "Recent Test Runs"
+  prop summary = "Recent test-run history for the selected verification object when available."
+  prop columns = "Status|Run|Branch|Duration|Exit"
+  prop rowFields = "Status=status|Run=id@concept|Branch=branchId@concept|Duration=durationMs|Exit=exitCode"
+  prop emptyState = "No runs for this gate yet."
+  prop rowLimit = "12"
+}
+
+view PlatformVerificationFreshnessSummary {
+  kind region
+  class platform-verification-freshness
+  prop detailPanelRole = "freshnessSummary"
+  prop detailKinds = "gate|verificationFreshness|verificationInvalidation|testRun|testReport"
+  prop title = "Gate Freshness Summary"
+  prop summary = "Current durable freshness state for the selected gate or run."
+  prop propertyCardTitle = "Freshness"
+  prop propertyFields = "Freshness=id@concept|Status=status|Gate=gateId@concept|Latest run=latestRunId@concept|Latest passed=latestPassedRunId@concept|Reasons=reasonKinds@value|Summary=reasonSummary|Changed paths=changedPaths@value|Targets=targetIds@value|Blocking=blocking|Stale since=staleSince|Produced=producedAt"
+}
+
+view PlatformVerificationInvalidationReasons {
+  kind table
+  class platform-verification-invalidations
+  prop detailPanelRole = "invalidationReasons"
+  prop detailKinds = "gate|verificationFreshness|verificationInvalidation|testRun|testReport"
+  prop title = "Invalidation Reasons"
+  prop summary = "Durable invalidation history for the selected gate or run."
+  prop columns = "Reason|Summary|Changed Paths|Targets"
+  prop rowFields = "Reason=reasonKind|Summary=reasonSummary|Changed Paths=changedPaths@value|Targets=targetIds@value"
+  prop emptyState = "No invalidation reasons are recorded for this gate."
+  prop rowLimit = "20"
+}
+
+view PlatformVerificationBuildHistory {
+  kind table
+  class platform-verification-builds
+  prop detailPanelRole = "buildHistory"
+  prop detailKinds = "runtimeRevision"
+  prop title = "Snapshot Builds"
+  prop summary = "Snapshot build history for the selected runtime revision when available."
+  prop columns = "Status|Build|Candidate Snapshot|Branch|Errors"
+  prop rowFields = "Status=status|Build=id@concept|Candidate Snapshot=candidateSnapshotId@concept|Branch=branchId@concept|Errors=errorCount"
+  prop emptyState = "No snapshot builds for this revision."
+  prop rowLimit = "12"
+}
+
+view PlatformVerificationBuildErrors {
+  kind table
+  class platform-verification-build-errors
+  prop detailPanelRole = "buildErrors"
+  prop detailKinds = "runtimeRevision"
+  prop title = "Build Errors"
+  prop summary = "Build errors for the selected runtime revision when available."
+  prop columns = "Build|Path|Kind|Message"
+  prop rowFields = "Build=snapshotBuildId@concept|Path=path|Kind=kind|Message=message"
+  prop emptyState = "No build errors for this revision."
+  prop rowLimit = "12"
+}
+
+view PlatformVerificationReportSummary {
+  kind region
+  class platform-verification-report-summary
+  prop detailPanelRole = "reportSummary"
+  prop detailKinds = "testRun|testReport"
+  prop title = "Report Summary"
+  prop summary = "Derived run summary authored by RVM and populated from projected report rows."
+  prop propertyCardTitle = "Run Report Summary"
+  prop propertyFields = "Report=reportId@concept|Status=status|Summary=summary|Format=format|Suites=suiteCount|Cases=caseCount|Passed=passedCount|Failed=failedCount|Errors=errorCount|Skipped=skippedCount|Cached=cached|Produced=producedAt"
+}
+
+view PlatformVerificationArtifactsReport {
+  kind table
+  class platform-verification-artifacts
+  prop detailPanelRole = "artifacts"
+  prop detailKinds = "testRun|testReport"
+  prop title = "Artifacts and Report Streams"
+  prop summary = "Raw streams and structured TAP/JUnit report artifacts for the selected run."
+  prop columns = "Kind|Artifact|File|Content Type|Bytes"
+  prop rowFields = "Kind=artifactKind|Artifact=id@concept|File=fileName|Content Type=contentType|Bytes=sizeBytes"
+  prop emptyState = "No artifacts or report streams were captured for this run."
+  prop rowLimit = "12"
+}
+
+view PlatformVerificationSuiteSummary {
+  kind table
+  class platform-verification-suite-summary
+  prop detailPanelRole = "suiteSummary"
+  prop detailKinds = "testRun|testReport"
+  prop title = "Suite Summary"
+  prop summary = "Structured suite rows derived from the selected run."
+  prop columns = "Status|Suite|Total|Failed|Errors"
+  prop rowFields = "Status=status|Suite=id@concept|Total=total|Failed=failed|Errors=errors"
+  prop emptyState = "No structured suites were derived for this run."
+  prop rowLimit = "12"
+}
+
+view PlatformVerificationFailingCases {
+  kind table
+  class platform-verification-failing-cases
+  prop detailPanelRole = "failingCases"
+  prop detailKinds = "testRun|testReport"
+  prop title = "Failing Cases"
+  prop summary = "Failed or errored test cases for the selected run."
+  prop columns = "Status|Case|Suite|Class|Duration"
+  prop rowFields = "Status=status|Case=id@concept|Suite=suiteId@concept|Class=classname|Duration=durationMs"
+  prop emptyState = "No failing or error cases were derived for this run."
+  prop rowLimit = "20"
+}
+
+view PlatformVerificationRegressionSummary {
+  kind region
+  class platform-verification-regression-summary
+  prop detailPanelRole = "regressionSummary"
+  prop detailKinds = "testRun|testReport"
+  prop title = "Regression Summary"
+  prop summary = "Heuristic duration comparison against the latest non-cached passed baseline."
+  prop propertyCardTitle = "Timing Regression"
+  prop propertyFields = "Report=reportId@concept|Status=status|Summary=summary|Baseline run=baselineRunId@concept|Baseline duration=baselineDurationMs|Current duration=currentDurationMs|Delta ms=deltaMs|Delta=deltaPercent"
+}
+
+view PlatformVerificationStreams {
+  kind region
+  class platform-verification-streams
+  prop title = "Verification Streams"
+  prop summary = "Links to live test-run and backend-revision event streams."
+  prop propertyCardTitle = "Event Streams"
+  prop propertyFields = "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href"
+  prop propertyValues = "testRunEventsHref=/api/platform-test-runs/events|backendRevisionEventsHref=/api/runtime/backend-revisions/events"
+}
+
+view PlatformBranchRedGreenList {
+  kind table
+  class platform-branch-red-green
+  prop title = "Branch Red / Green"
+  prop summary = "Selected-gate status for branches."
+  prop listSource = "branchRedGreenRows"
+  prop columns = "Status|Branch|Selected|Passed|Failed|Summary"
+  prop rowFields = "Status=status|Branch=branchId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
+  prop sortOptions = "status=status|branch=branchId|selected=totalSelectedGates|passed=passedCount|failed=failedCount|summary=summary"
+  prop defaultSort = "branch:asc"
+  prop emptyState = "No branch red/green summaries."
+  prop pageSize = "12"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformChangeSetRedGreenList {
+  kind table
+  class platform-change-set-red-green
+  prop title = "Change Set Red / Green"
+  prop summary = "Selected-gate status for change sets."
+  prop listSource = "changeSetRedGreenRows"
+  prop columns = "Status|Change Set|Selected|Passed|Failed|Summary"
+  prop rowFields = "Status=status|Change Set=changeSetId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
+  prop sortOptions = "status=status|changeSet=changeSetId|selected=totalSelectedGates|passed=passedCount|failed=failedCount|summary=summary"
+  prop defaultSort = "changeSet:asc"
+  prop emptyState = "No change-set red/green summaries."
+  prop pageSize = "12"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformTestRunPanel {
+  kind form
+  class platform-test-run-panel
+  prop title = "Run Test Gate"
+  prop summary = "Run a single modeled verification gate."
+  prop formId = "platform-test-run-form"
+  prop clientAction = "testRun.single"
+  prop statusId = "test-run-status"
+  prop submitLabel = "Run Test Gate"
+  prop formFields = "Test gate=gateId@select:testGateOptions|Branch id=branchId@text|Change set id=changeSetId@text|Candidate snapshot id=candidateSnapshotId@text"
+  prop submitPath = "/api/platform-test-runs"
+  prop submitBodyFields = "gateId=gateId@nullable|branchId=branchId@nullable|changeSetId=changeSetId@nullable|candidateSnapshotId=candidateSnapshotId@nullable"
+  prop successMessageTemplate = "Test run finished: {latestResult.status||testRun.status||unknown}"
+  prop errorMessage = "Test run failed."
+  prop testGateOptionsSource = "testGates"
+  prop testGateOptionsValuePath = "id"
+  prop testGateOptionsLabelPath = "title||id"
+  prop fieldPlaceholders = "branchId=Optional branch id|changeSetId=Optional change set id|candidateSnapshotId=Optional candidate snapshot id"
+}
+
+view PlatformSelectedTestRunPanel {
+  kind form
+  class platform-selected-test-run-panel
+  prop title = "Run Selected Gates"
+  prop summary = "Run the selected verification gates for a branch, change set, or candidate snapshot."
+  prop formId = "platform-selected-test-run-form"
+  prop clientAction = "testRun.selected"
+  prop statusId = "selected-test-run-status"
+  prop submitLabel = "Run Selected Gates"
+  prop formFields = "Branch id=branchId@text|Change set id=changeSetId@text|Candidate snapshot id=candidateSnapshotId@text"
+  prop submitPath = "/api/platform-test-runs"
+  prop submitBodyFields = "branchId=branchId@nullable|changeSetId=changeSetId@nullable|candidateSnapshotId=candidateSnapshotId@nullable"
+  prop successMessageTemplate = "Selected gates finished: {summaries.passed}/{summaries.totalRuns} passed"
+  prop errorMessage = "Selected gate run failed."
+  prop fieldPlaceholders = "branchId=Optional branch id|changeSetId=Optional change set id|candidateSnapshotId=Optional candidate snapshot id"
 }
 
 view PlatformGapList {
@@ -260,8 +1408,32 @@ view PlatformGapList {
   class platform-gaps
   prop title = "Platform Gaps"
   prop summary = "Projected platform gaps and meta-defects."
+  prop listSource = "gapRows"
+  prop columns = "Severity|Kind|Target|Reason"
+  prop rowFields = "Severity=severity|Kind=kind|Target=target@concept|Reason=reason"
+  prop sortOptions = "severity=severity|kind=kind|target=target|reason=reason"
+  prop defaultSort = "severity:asc"
+  prop emptyState = "No gaps."
+  prop pageSize = "12"
   projections {
     PlatformGapsRead
+  }
+}
+
+view PlatformCoverageMatrix {
+  kind table
+  class platform-coverage-matrix
+  prop title = "Coverage Matrix"
+  prop summary = "Gate-to-target coverage rows for the current modeled platform."
+  prop listSource = "coverageRows"
+  prop columns = "Gate|Target|Kind"
+  prop rowFields = "Gate=gateId@concept|Target=targetId||targetLabel@concept|Kind=coverageKind"
+  prop sortOptions = "gate=gateId|target=targetId|kind=coverageKind"
+  prop defaultSort = "gate:asc"
+  prop emptyState = "No coverage edges."
+  prop pageSize = "12"
+  projections {
+    PlatformModelRead
   }
 }
 
@@ -270,19 +1442,98 @@ view PlatformSignalList {
   class platform-signal-list
   prop title = "Signals"
   prop summary = "Paginated list of gaps, telemetry metrics, defect clusters, and boundaries."
+  prop listSource = "signalItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No signal rows."
+  prop pageSize = "20"
   projections {
     PlatformModelRead
   }
 }
 
-view PlatformSignalDetail {
+view PlatformGapDetail {
   kind region
   class platform-signal-detail
-  prop title = "Signal Detail"
-  prop summary = "Properties and linked relationships for the selected signal."
+  prop title = "Gap Detail"
+  prop summary = "Properties and linked relationships for the selected gap."
+  prop detailSource = "signals"
+  prop detailSelectionSources = "gaps"
+  prop gapIdPrefixes = "gap."
+  prop emptyTitle = "Detail"
+  prop emptyState = "No gaps are projected yet."
+  children {
+    PlatformSignalPrimaryPanel
+    PlatformSignalRelatedPanel
+    PlatformSignalRelationships
+  }
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformSignalCatalogDetail {
+  kind region
+  class platform-signal-detail
+  prop title = "Signal Detail"
+  prop summary = "Properties and linked relationships for the selected signal node."
+  prop detailSource = "signals"
+  prop detailSelectionSources = "telemetryMetric|defectCluster|boundary"
+  prop signalNodeKinds = "telemetryMetric|defectCluster|boundary"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No signal nodes are projected yet."
+  children {
+    PlatformSignalPrimaryPanel
+    PlatformSignalRelationships
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformSignalPrimaryPanel {
+  kind region
+  class platform-signal-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "gap|signal"
+  prop title = "Primary Detail"
+  prop summary = "Selected signal properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop gapLongTailExcludedFields = "recommendedProposal|missingInGenerated|extraInGenerated"
+  prop gapCardTitle = "Gap Detail"
+  prop gapFields = "Gap=id|Severity=severity|Kind=kind|Target=target@concept|Reason=reason|API resource=id@api"
+  prop signalCardTitle = "Signal Detail"
+  prop signalFields = "Node=id@concept|Kind=kind|Status=status|Owner=owner|Source=source|Lifecycle=lifecycle|API resource=id@api"
+}
+
+view PlatformSignalRelatedPanel {
+  kind region
+  class platform-signal-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "gap"
+  prop title = "Related Resources"
+  prop summary = "Linked proposals, selector drift, and supporting signal context."
+  prop cardItemLimit = "12"
+  prop gapLinkCards = "Recommended Proposal=recommendedProposal"
+  prop gapLinkCardEmptyStates = "Recommended Proposal=No recommended proposal is attached to this gap."
+  prop gapTextCards = "Missing In Generated=missingInGenerated|Extra In Generated=extraInGenerated"
+  prop gapTextCardEmptyStates = "Missing In Generated=No missing selectors detected.|Extra In Generated=No extra selectors detected."
+}
+
+view PlatformSignalRelationships {
+  kind table
+  class platform-signal-relationships
+  prop detailPanelRole = "relationships"
+  prop detailKinds = "gap|signal"
+  prop title = "Related Relationships"
+  prop summary = "Linked graph relationships for the selected signal when available."
+  prop columns = "From|Relation|To"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
+  prop emptyState = "No related relationships."
+  prop rowLimit = "20"
 }
 
 view PlatformProfileComparison {
@@ -290,29 +1541,236 @@ view PlatformProfileComparison {
   class platform-profiles
   prop title = "Runtime Profiles"
   prop summary = "Profile exposure and plugin composition differences."
+  prop listSource = "profileComparisonRows"
+  prop columns = "Profile|Status|Runner|Composition|Plugins|Capabilities"
+  prop rowFields = "Profile=id|Status=status|Runner=runnerSummary|Composition=compositionSummary|Plugins=pluginCount|Capabilities=capabilityCount"
+  prop sortOptions = "profile=id|status=status|runner=runnerSummary|composition=compositionSummary|plugins=pluginCount|capabilities=capabilityCount"
+  prop defaultSort = "profile:asc"
+  prop emptyState = "No runtime profiles."
+  prop pageSize = "12"
   projections {
     PlatformModelRead
   }
 }
 
-view PlatformKnowledgeList {
+view PlatformKnowledgeDocsList {
   kind table
   class platform-knowledge-list
-  prop title = "Knowledge Items"
-  prop summary = "Paginated list of docs, roadmap tasks, epics, and features."
+  prop title = "Governed Docs"
+  prop summary = "Paginated list of governed documents."
+  prop listSource = "knowledgeItems"
+  prop columns = "Freshness|Document|Role|Summary"
+  prop rowFields = "Freshness=status|Document=id@concept|Role=scope@value|Summary=summary"
+  prop sortOptions = "freshness=status|document=title|role=scope|summary=summary"
+  prop defaultSort = "document:asc"
+  prop emptyState = "No governed docs."
+  prop pageSize = "12"
   projections {
     PlatformModelRead
   }
 }
 
-view PlatformKnowledgeDetail {
-  kind region
-  class platform-knowledge-detail
-  prop title = "Knowledge Detail"
-  prop summary = "Properties and linked resources for the selected knowledge object."
+view PlatformKnowledgeRoadmapList {
+  kind table
+  class platform-knowledge-list
+  prop title = "Roadmap Work"
+  prop summary = "Paginated list of roadmap tasks, epics, and features."
+  prop listSource = "knowledgeItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No roadmap work."
+  prop pageSize = "12"
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformKnowledgeFoldersList {
+  kind table
+  class platform-knowledge-list
+  prop title = "Folders"
+  prop summary = "Folders with this.folder.wtoml metadata (contains + links to docs/intents/code)."
+  prop listSource = "knowledgeItems"
+  prop columns = "Kind|Folder|Path|Summary"
+  prop rowFields = "Kind=pageKind|Folder=folderLink@concept|Path=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|folder=title|path=scope|summary=summary"
+  prop defaultSort = "folder:asc"
+  prop emptyState = "No folder metas."
+  prop pageSize = "12"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformKnowledgeDocsDetail {
+  kind region
+  class platform-knowledge-detail
+  prop title = "Knowledge Doc Detail"
+  prop summary = "Properties and linked resources for the selected governed document."
+  prop detailSource = "knowledge"
+  prop detailSelectionSources = "docs"
+  prop documentPathField = "path"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No governed docs are projected yet."
+  children {
+    PlatformKnowledgePrimaryPanel
+    PlatformKnowledgeRelatedPanel
+    PlatformKnowledgeSections
+    PlatformKnowledgeTasks
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformKnowledgeFoldersDetail {
+  kind region
+  class platform-knowledge-detail
+  prop title = "Knowledge Folder Detail"
+  prop summary = "Properties and linked resources for the selected folder when available."
+  prop detailSource = "knowledge"
+  prop detailSelectionSources = "folders"
+  prop documentPathField = "documentPath"
+  prop folderIdPrefixes = "folder:"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No folder metadata is projected yet."
+  children {
+    PlatformKnowledgePrimaryPanel
+    PlatformKnowledgeRelatedPanel
+  }
+}
+
+view PlatformKnowledgeRoadmapDetail {
+  kind region
+  class platform-knowledge-detail
+  prop title = "Knowledge Roadmap Detail"
+  prop summary = "Properties and linked resources for the selected roadmap object."
+  prop detailSource = "knowledge"
+  prop detailSelectionSources = "roadmapTasks|epics|features"
+  prop roadmapTaskIdPrefixes = "roadmapTask:"
+  prop roadmapTaskFallbackField = "doc"
+  prop epicIdPrefixes = "epic:"
+  prop featureIdPrefixes = "feature:"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No roadmap work is projected yet."
+  children {
+    PlatformKnowledgePrimaryPanel
+    PlatformKnowledgeRelatedPanel
+  }
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformKnowledgePrimaryPanel {
+  kind region
+  class platform-knowledge-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "document|roadmapTask|epic|feature|folder"
+  prop title = "Primary Detail"
+  prop summary = "Selected knowledge object properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop documentLongTailExcludedFields = "references"
+  prop documentCardTitle = "Document Detail"
+  prop documentFields = "Document=path@concept|Role=role|Owner=owner|Status=status|Freshness=freshness.status|Sections=sectionCount|Tasks=taskCount|API resource=path@api"
+  prop roadmapTaskLongTailExcludedFields = "targets|derivedSummary|evidence"
+  prop roadmapTaskCardTitle = "Roadmap Task Detail"
+  prop roadmapTaskFields = "Task=id@concept|Markdown status=status|Derived status=derivedStatus|Section=section|Document=doc@concept|Line=line|Evidence=derivedSummary||evidence.summary|API resource=id@api"
+  prop epicLongTailExcludedFields = "defectClusterIds"
+  prop epicCardTitle = "Epic Detail"
+  prop epicFields = "Epic=id@concept|Status=status|Roadmap=roadmapId@concept|Branches=branchIds@count|Features=featureIds@count|Verification gates=gateIds@count|Docs=docIds@count|API resource=id@api"
+  prop featureLongTailExcludedFields = "defectClusterIds"
+  prop featureCardTitle = "Feature Detail"
+  prop featureFields = "Feature=id@concept|Status=status|Epic=epicId@concept|Branches=branchIds@count|Verification gates=gateIds@count|Docs=docIds@count|API resource=id@api"
+  prop folderLongTailExcludedFields = "linkedConcepts"
+  prop folderCardTitle = "Folder Detail"
+  prop folderFields = "Folder=id@concept|Path=path|Facet=facet|Source=source|API resource=id@api"
+}
+
+view PlatformKnowledgeRelatedPanel {
+  kind region
+  class platform-knowledge-related
+  prop detailPanelRole = "related"
+  prop detailKinds = "document|roadmapTask|epic|feature|folder"
+  prop title = "Related Resources"
+  prop summary = "Linked platform resources and supporting context for the selected knowledge object."
+  prop cardItemLimit = "12"
+  children {
+    PlatformKnowledgeDocumentLinks
+    PlatformKnowledgeRoadmapTaskLinks
+    PlatformKnowledgeEpicLinks
+    PlatformKnowledgeFeatureLinks
+    PlatformKnowledgeFolderLinks
+  }
+}
+
+view PlatformKnowledgeDocumentLinks {
+  kind region
+  class platform-knowledge-document-links
+  prop detailKinds = "document"
+  prop linkCards = "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths|Authored Doc Links=references.authoredDocLinks@authoredLink|Authored Code Links=references.authoredCodeLinks@authoredLink"
+  prop linkCardEmptyStates = "Referenced Routes=No referenced routes in this document.|Referenced Plugins=No referenced plugins in this document.|Referenced Files=No referenced files in this document.|Authored Doc Links=No authored doc-to-doc links in the knowledge model.|Authored Code Links=No authored doc-to-code realizations in the knowledge model."
+}
+
+view PlatformKnowledgeRoadmapTaskLinks {
+  kind region
+  class platform-knowledge-roadmap-task-links
+  prop detailKinds = "roadmapTask"
+  prop linkCards = "Linked Targets=targets@targetId"
+  prop linkCardEmptyStates = "Linked Targets=No linked platform targets for this roadmap task."
+}
+
+view PlatformKnowledgeEpicLinks {
+  kind region
+  class platform-knowledge-epic-links
+  prop detailKinds = "epic"
+  prop linkCards = "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds"
+  prop linkCardEmptyStates = "Branches=No branches linked to this epic.|Features=No features linked to this epic.|Verification Gates=No verification gates linked to this epic.|Docs=No docs linked to this epic."
+}
+
+view PlatformKnowledgeFeatureLinks {
+  kind region
+  class platform-knowledge-feature-links
+  prop detailKinds = "feature"
+  prop linkCards = "Branches=branchIds|Verification Gates=gateIds|Docs=docIds"
+  prop linkCardEmptyStates = "Branches=No branches linked to this feature.|Verification Gates=No verification gates linked to this feature.|Docs=No docs linked to this feature."
+}
+
+view PlatformKnowledgeFolderLinks {
+  kind region
+  class platform-knowledge-folder-links
+  prop detailKinds = "folder"
+  prop linkCards = "Linked Concepts=linkedConcepts"
+  prop linkCardEmptyStates = "Linked Concepts=No linked concepts were projected for this folder."
+}
+
+view PlatformKnowledgeSections {
+  kind table
+  class platform-knowledge-sections
+  prop detailPanelRole = "sections"
+  prop detailKinds = "document"
+  prop title = "Sections"
+  prop summary = "Document sections for the selected governed document when available."
+  prop columns = "Title|Line|Depth"
+  prop rowFields = "Title=title|Line=line|Depth=depth"
+  prop emptyState = "No sections projected for this document."
+  prop rowLimit = "20"
+}
+
+view PlatformKnowledgeTasks {
+  kind table
+  class platform-knowledge-tasks
+  prop detailPanelRole = "tasks"
+  prop detailKinds = "document"
+  prop title = "Tasks"
+  prop summary = "Document tasks for the selected governed document when available."
+  prop columns = "Status|Task|Line|Section"
+  prop rowFields = "Status=status|Task=id@concept|Line=line|Section=section"
+  prop emptyState = "No tasks projected for this document."
+  prop rowLimit = "20"
 }
 
 view PlatformModelList {
@@ -320,6 +1778,13 @@ view PlatformModelList {
   class platform-model-list
   prop title = "Platform Map"
   prop summary = "Paginated list of modeled platform objects."
+  prop listSource = "modelItems"
+  prop columns = "Kind|Status|Resource|Source|Owner"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Source=scope|Owner=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|source=scope|owner=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No platform objects."
+  prop pageSize = "20"
   projections {
     PlatformModelRead
   }
@@ -330,7 +1795,41 @@ view PlatformModelDetail {
   class platform-model-detail
   prop title = "Platform Object Detail"
   prop summary = "Properties and linked relationships for the selected platform object."
+  prop detailSource = "model"
+  prop detailSelectionSources = "nodes"
+  prop emptyTitle = "Detail"
+  prop emptyState = "No platform objects are projected yet."
+  children {
+    PlatformModelPrimaryPanel
+    PlatformModelRelationships
+  }
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformModelPrimaryPanel {
+  kind region
+  class platform-model-primary
+  prop detailPanelRole = "primary"
+  prop detailKinds = "object"
+  prop title = "Primary Detail"
+  prop summary = "Selected platform object properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
+  prop longTailValueKinds = "string|number|boolean|scalarList"
+  prop objectCardTitle = "Platform Object Detail"
+  prop objectFields = "Object=id@concept|Kind=kind|Status=status|Owner=owner|Source=source|Lifecycle=lifecycle|API resource=id@api"
+}
+
+view PlatformModelRelationships {
+  kind table
+  class platform-model-relationships
+  prop detailPanelRole = "relationships"
+  prop detailKinds = "object"
+  prop title = "Relationships"
+  prop summary = "Linked graph relationships for the selected platform object when available."
+  prop columns = "From|Relation|To"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
+  prop emptyState = "No relationships for this object."
+  prop rowLimit = "20"
 }

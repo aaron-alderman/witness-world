@@ -99,6 +99,7 @@ text = ""
 [[form]]
 id = "bootstrap_perspective_form"
 domId = "perspective-form"
+guidanceTarget = "perspective-form"
 class = "surface-stack surface-mono"
 children = ["bootstrap_perspective_grid_primary", "bootstrap_perspective_grid_secondary", "bootstrap_perspective_actions"]
 
@@ -1233,7 +1234,7 @@ placeholder = "context name"
 [[box]]
 id = "bootstrap_route_grid_frontend_program"
 class = "surface-grid-2"
-children = ["bootstrap_route_frontend_program_field", "bootstrap_route_frontend_program_spacer"]
+children = ["bootstrap_route_frontend_program_field", "bootstrap_route_frontend_program_ref_field"]
 
 [[box]]
 id = "bootstrap_route_frontend_program_field"
@@ -1251,8 +1252,86 @@ name = "frontendProgram"
 guidanceTarget = "route-frontend-program"
 
 [[box]]
-id = "bootstrap_route_frontend_program_spacer"
+id = "bootstrap_route_frontend_program_ref_field"
 class = "surface-stack"
+children = ["bootstrap_route_frontend_program_ref_text", "bootstrap_route_frontend_program_ref_input"]
+
+[[text]]
+id = "bootstrap_route_frontend_program_ref_text"
+text = "Frontend Program Ref"
+
+[[input]]
+id = "bootstrap_route_frontend_program_ref_input"
+name = "frontendProgramRef"
+placeholder = "context name"
+
+[[box]]
+id = "bootstrap_route_grid_route_state_process"
+class = "surface-grid-2"
+children = ["bootstrap_route_state_process_field", "bootstrap_route_state_process_ref_field"]
+
+[[box]]
+id = "bootstrap_route_state_process_field"
+class = "surface-stack"
+children = ["bootstrap_route_state_process_text", "bootstrap_route_state_process_select"]
+
+[[text]]
+id = "bootstrap_route_state_process_text"
+text = "Route State Process"
+
+[[select]]
+id = "bootstrap_route_state_process_select"
+domId = "route-state-process"
+name = "routeStateProcess"
+guidanceTarget = "route-state-process"
+
+[[box]]
+id = "bootstrap_route_state_process_ref_field"
+class = "surface-stack"
+children = ["bootstrap_route_state_process_ref_text", "bootstrap_route_state_process_ref_input"]
+
+[[text]]
+id = "bootstrap_route_state_process_ref_text"
+text = "Route State Process Ref"
+
+[[input]]
+id = "bootstrap_route_state_process_ref_input"
+name = "routeStateProcessRef"
+placeholder = "context name"
+
+[[box]]
+id = "bootstrap_route_grid_route_state_state"
+class = "surface-grid-2"
+children = ["bootstrap_route_state_state_field", "bootstrap_route_state_state_ref_field"]
+
+[[box]]
+id = "bootstrap_route_state_state_field"
+class = "surface-stack"
+children = ["bootstrap_route_state_state_text", "bootstrap_route_state_state_select"]
+
+[[text]]
+id = "bootstrap_route_state_state_text"
+text = "Route State Value"
+
+[[select]]
+id = "bootstrap_route_state_state_select"
+domId = "route-state-state"
+name = "routeStateState"
+guidanceTarget = "route-state-state"
+
+[[box]]
+id = "bootstrap_route_state_state_ref_field"
+class = "surface-stack"
+children = ["bootstrap_route_state_state_ref_text", "bootstrap_route_state_state_ref_input"]
+
+[[text]]
+id = "bootstrap_route_state_state_ref_text"
+text = "Route State Value Ref"
+
+[[input]]
+id = "bootstrap_route_state_state_ref_input"
+name = "routeStateStateRef"
+placeholder = "context name"
 
 [[box]]
 id = "bootstrap_route_live_projection_field"

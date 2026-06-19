@@ -2,6 +2,18 @@ import {
   buildBlockedAuthoringHandoff,
   buildRuntimeAuthoringCapabilityMatrix
 } from "../../src/runtime-authoring-policy.js";
+import {
+  materializeCanonicalPackageBundleFromProject,
+  packageApplyPreviewRowsFromProject,
+  packageCoexistenceFromProject,
+  packageConvergenceFromProject
+} from "../../src/package-authorship-world.js";
+import {
+  legacyCapabilityCompatibilityModeFromProject,
+  previewLegacyCapabilityMigrationFromProject
+} from "../../src/capability-legacy-migration.js";
+import { contextNamingStateFromProject } from "../../src/context-naming-world.js";
+import { moduleProjectors } from "../../src/modules.js";
 import { PLATFORM_PROPOSAL_ACTIONS } from "../platform/platform-proposals.js";
 
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
@@ -137,9 +149,13 @@ const TOOL_DEFINITIONS = [
   {
     name: "world.read",
     title: "World Read",
-    description: "Read bootstrap state, witnesses, source, world graph, or process projections.",
+    description: "Read bootstrap state, witnesses, source, world graph, process projections, contextual naming state, authored package coexistence, or authoring capability state.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "authoringMatrix"] },
+      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "capabilityRevisionHistory", "authoringMatrix"] },
+      id: { type: "string" },
+      context: { type: "string" },
+      name: { type: "string" },
+      target: { type: "string" },
       offset: { type: "number" },
       runId: { type: "string" },
       replay: { type: "string" },
@@ -150,10 +166,15 @@ const TOOL_DEFINITIONS = [
     }, ["view"]),
     scope(args) {
       return scopeResult({
-        targets: args?.view === "processRun" && args?.runId ? [args.runId] : []
+        contexts: args?.view === "contextNaming" && args?.context ? [args.context] : [],
+        targets: args?.view === "processRun" && args?.runId
+          ? [args.runId]
+          : (args?.view === "contextNaming"
+              ? [args?.id, args?.target].filter(Boolean)
+              : ((args?.view === "packageCoexistence" || args?.view === "packageConvergence" || args?.view === "packageApplyPreview" || args?.view === "capabilityLegacyMigration" || args?.view === "capabilityRevisionHistory") && args?.id ? [args.id] : []))
       });
     },
-    async run({ args, callHandler }) {
+    async run({ args, callHandler, appContext }) {
       switch (args.view) {
         case "bootstrapModel":
           return runJsonHandler(callHandler, { handler: "bootstrap.model.read", method: "GET", path: "/api/bootstrap-model" });
@@ -194,10 +215,148 @@ const TOOL_DEFINITIONS = [
             path: "/api/source",
             query: { file: args.sourceFile || "" }
           });
+        case "contextNaming":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("contextNaming read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              contextNaming: contextNamingStateFromProject(appContext.project, {
+                id: args.id ?? null,
+                context: args.context ?? null,
+                name: args.name ?? null,
+                target: args.target ?? null
+              })
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null,
+              context: args.context ?? null,
+              name: args.name ?? null,
+              target: args.target ?? null
+            });
+          }
+        case "packageCoexistence":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("packageCoexistence read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              packageCoexistence: packageCoexistenceFromProject(appContext.project, {
+                id: args.id ?? null
+              })
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "packageConvergence":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("packageConvergence read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              packageConvergence: packageConvergenceFromProject(appContext.project, {
+                id: args.id ?? null
+              })
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "packageApplyPreview":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("packageApplyPreview read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              packageApplyPreview: packageApplyPreviewRowsFromProject(appContext.project, {
+                id: args.id ?? null
+              })
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "capabilityLegacyMigration":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("capabilityLegacyMigration read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              legacyCapabilityCompatibilityMode: legacyCapabilityCompatibilityModeFromProject(appContext.project),
+              legacyCapabilityMigration: previewLegacyCapabilityMigrationFromProject(appContext.project)
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "capabilityRevisionHistory":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("capabilityRevisionHistory read requires projected world access");
+          }
+          try {
+            const rows = appContext.project(moduleProjectors.capabilityRevisionHistory) ?? [];
+            return jsonToolResult({
+              capabilityRevisionHistory: args.id
+                ? rows.filter(row => row.capabilityId === args.id || row.witnessId === args.id)
+                : rows
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
         case "authoringMatrix":
           return readAuthoringMatrix(callHandler);
         default:
           return errorToolResult("unknown world.read view", { view: args.view });
+      }
+    }
+  },
+  {
+    name: "package.bundle",
+    title: "Package Bundle",
+    description: "Preview the canonical emitted bundle or authored apply impact for a package revision from current world state.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["preview", "previewApply"] },
+      revisionId: { type: "string" }
+    }, ["operation", "revisionId"]),
+    scope(args) {
+      return scopeResult({ targets: args?.revisionId ? [args.revisionId] : [] });
+    },
+    async run({ args, appContext }) {
+      if (args.operation !== "preview" && args.operation !== "previewApply") {
+        return errorToolResult("unknown package.bundle operation", { operation: args.operation });
+      }
+      if (typeof appContext?.project !== "function") {
+        return errorToolResult(`package.bundle ${args.operation} requires projected world access`);
+      }
+          try {
+            return jsonToolResult(
+              args.operation === "previewApply"
+                ? packageApplyPreviewRowsFromProject(appContext.project, {
+                  id: args.revisionId
+                })[0]
+                : materializeCanonicalPackageBundleFromProject(appContext.project, {
+                  revisionId: args.revisionId
+                })
+            );
+      } catch (error) {
+        return errorToolResult(error instanceof Error ? error.message : String(error), {
+          operation: args.operation,
+          revisionId: args.revisionId ?? null
+        });
       }
     }
   },
@@ -226,12 +385,22 @@ const TOOL_DEFINITIONS = [
           "type.create",
           "projection.create",
           "message.create",
+          "package.create",
+          "packageRevision.create",
+          "packageRevision.publish",
+          "packagePatch.create",
+          "packageNamespace.create",
+          "packageDependency.create",
+          "packageTransformer.create",
           "route.create",
           "serve.create",
           "serverRunner.create",
           "capability.create",
+          "capability.update",
           "capability.install",
           "capability.remove",
+          "capability.rollback",
+          "capability.migrateLegacy",
           "mcpServer.create",
           "mcpTool.install",
           "mcpTool.remove"
@@ -251,7 +420,20 @@ const TOOL_DEFINITIONS = [
         : (body && typeof body === "object" ? [body] : []);
       return scopeResult({
         contexts: docs.flatMap(doc => [doc.context, doc.parent, doc.homeContext]).filter(Boolean),
-        targets: docs.flatMap(doc => [doc.target, doc.server, doc.serverRunner, doc.id]).filter(Boolean)
+        targets: docs.flatMap(doc => [
+          doc.target,
+          doc.server,
+          doc.serverRunner,
+          doc.id,
+          doc.package,
+          doc.revision,
+          doc.sourcePackage,
+          doc.sourceRevision
+          ,
+          doc.targetRevision,
+          doc.sourceNamespace,
+          doc.targetNamespace
+        ]).filter(Boolean)
       });
     },
     async run({ args, callHandler }) {
@@ -297,6 +479,26 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "projection.create", method: "POST", path: "/api/projections", body });
         case "message.create":
           return runJsonHandler(callHandler, { handler: "message.create", method: "POST", path: "/api/messages", body });
+        case "package.create":
+          return runJsonHandler(callHandler, { handler: "package.create", method: "POST", path: "/api/packages", body });
+        case "packageRevision.create":
+          return runJsonHandler(callHandler, { handler: "packageRevision.create", method: "POST", path: "/api/package-revisions", body });
+        case "packageRevision.publish":
+          return runJsonHandler(callHandler, {
+            handler: "packageRevision.publish",
+            method: "POST",
+            path: `/api/package-revisions/${encodeURIComponent(body.id || "")}/publish`,
+            params: { id: body.id || "" },
+            body
+          });
+        case "packagePatch.create":
+          return runJsonHandler(callHandler, { handler: "packagePatch.create", method: "POST", path: "/api/package-patches", body });
+        case "packageNamespace.create":
+          return runJsonHandler(callHandler, { handler: "packageNamespace.create", method: "POST", path: "/api/package-namespaces", body });
+        case "packageDependency.create":
+          return runJsonHandler(callHandler, { handler: "packageDependency.create", method: "POST", path: "/api/package-dependencies", body });
+        case "packageTransformer.create":
+          return runJsonHandler(callHandler, { handler: "packageTransformer.create", method: "POST", path: "/api/package-transformers", body });
         case "widget.create":
         case "widget.update":
         case "frontendProgram.create":
@@ -310,10 +512,28 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "serverRunner.create", method: "POST", path: "/api/server-runners", body });
         case "capability.create":
           return runJsonHandler(callHandler, { handler: "capability.create", method: "POST", path: "/api/capabilities", body });
+        case "capability.update":
+          return runJsonHandler(callHandler, {
+            handler: "capability.update",
+            method: "PATCH",
+            path: `/api/capabilities/${encodeURIComponent(body.id || "")}`,
+            params: { id: body.id || "" },
+            body
+          });
         case "capability.install":
           return runJsonHandler(callHandler, { handler: "capability.install", method: "POST", path: "/api/capability-installs", body });
         case "capability.remove":
           return runJsonHandler(callHandler, { handler: "capability.remove", method: "DELETE", path: "/api/capability-installs", body });
+        case "capability.rollback":
+          return runJsonHandler(callHandler, {
+            handler: "capability.rollback",
+            method: "POST",
+            path: `/api/capabilities/${encodeURIComponent(body.id || "")}/rollback`,
+            params: { id: body.id || "" },
+            body
+          });
+        case "capability.migrateLegacy":
+          return runJsonHandler(callHandler, { handler: "capability.migrateLegacy", method: "POST", path: "/api/capability-migrations/legacy", body });
         case "mcpServer.create":
           return runJsonHandler(callHandler, { handler: "mcpServer.create", method: "POST", path: "/api/mcp-servers", body });
         case "mcpTool.install":
@@ -392,18 +612,27 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.read",
     title: "Platform Read",
-    description: "Read the platform self-model, gaps, docs, roadmap, telemetry, profiles, branches, change sets, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
+    description: "Read the platform self-model (including first-class docs with knowledge relations, and folders from this.folder.wtoml), gaps, docs, folders, roadmap, telemetry, profiles, compatibility bridges, mutable-surface semantics, governance, branches, change sets, package coexistence, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["model", "gaps", "docs", "roadmap", "telemetry", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals", "branches", "changeSets", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
-      id: { type: "string" }
+      view: { type: "string", enum: ["model", "gaps", "docs", "folders", "roadmap", "telemetry", "profiles", "plugin", "bundle", "capability", "mcp", "bridges", "semantics", "governance", "gates", "proposals", "branches", "changeSets", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityRevisionHistory", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
+      id: { type: "string" },
+      context: { type: "string" },
+      name: { type: "string" },
+      target: { type: "string" }
     }, ["view"]),
     scope(args) {
-      return scopeResult({ targets: args?.id ? [args.id] : [] });
+      return scopeResult({
+        contexts: args?.context ? [args.context] : [],
+        targets: [args?.id, args?.target].filter(Boolean)
+      });
     },
     async run({ args, callHandler }) {
       const query = {
         view: args.view || "model",
-        ...(args.id ? { id: args.id } : {})
+        ...(args.id ? { id: args.id } : {}),
+        ...(args.context ? { context: args.context } : {}),
+        ...(args.name ? { name: args.name } : {}),
+        ...(args.target ? { target: args.target } : {})
       };
       if (args.view === "gaps") {
         return runJsonHandler(callHandler, { handler: "platform.gaps.read", method: "GET", path: "/api/platform-gaps" });
@@ -419,30 +648,189 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.docs",
     title: "Platform Docs",
-    description: "Inspect governed platform docs, sections, tasks, and roadmap tasks through the shared platform handlers.",
+    description: "First-class access to governed platform docs (including intent docs and modeled knowledge relations). Supports list, read (structured + full when available), search, readFull (rich content), and getRelations (doc↔doc + doc↔code from knowledge model).",
     inputSchema: jsonSchemaObject({
-      operation: { type: "string", enum: ["list", "read"] },
-      id: { type: "string" }
+      operation: { type: "string", enum: ["list", "read", "search", "readFull", "getRelations"] },
+      id: { type: "string" },
+      query: { type: "string", description: "Search query for operation=search" },
+      includeRelations: { type: "boolean", description: "Include authored doc/code relations when true" }
     }),
     scope(args) {
       return scopeResult({ targets: args?.id ? [args.id] : [] });
     },
     async run({ args, callHandler }) {
       const operation = args.operation || "list";
-      if (operation !== "list" && operation !== "read") {
+      const validOps = ["list", "read", "search", "readFull", "getRelations"];
+      if (!validOps.includes(operation)) {
         return errorToolResult("unknown platform docs operation", { operation });
       }
-      const docId = operation === "read" ? (args.id || "") : (args.id || "");
-      if (operation === "read" && !docId) return errorToolResult("doc id is required", { operation });
+      const docId = (operation === "read" || operation === "readFull" || operation === "getRelations") ? (args.id || "") : (args.id || "");
+      if ((operation === "read" || operation === "readFull" || operation === "getRelations") && !docId) {
+        return errorToolResult("doc id is required for read/readFull/getRelations", { operation });
+      }
+      const query = {
+        view: "docs",
+        ...(docId ? { id: docId } : {}),
+        ...(args.query ? { q: args.query } : {}),
+        ...(args.includeRelations ? { includeRelations: "true" } : {})
+      };
+      // For search and getRelations we still route to the docs view but the backend/model
+      // (enriched with knowledge-relations.wtoml) will provide the data. getRelations can be
+      // implemented as a client-side extraction or future dedicated backend view.
+      return runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query
+      });
+    }
+  },
+  {
+    name: "platform.folder",
+    title: "Platform Folder",
+    description: "First-class access to folder metadata from this.folder.wtoml (contains, links to docs/intents/code). Supports list and read.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["list", "read", "pack"] },
+      id: { type: "string" },
+      maxRelations: { type: "number" }
+    }),
+    scope(args) {
+      return scopeResult({ targets: args?.id ? [args.id] : [] });
+    },
+    async run({ args, callHandler }) {
+      const operation = args.operation || "list";
+      if (!["list", "read", "pack"].includes(operation)) {
+        return errorToolResult("unknown platform folder operation", { operation });
+      }
+      const fid = (operation === "read" || operation === "pack") ? (args.id || "") : "";
+      if ((operation === "read" || operation === "pack") && !fid) return errorToolResult("folder id is required", { operation });
+      const query = {
+        view: operation === "pack" ? "model" : "folders",  // pack uses full model for rich relations
+        ...(fid ? { id: fid } : {}),
+        ...(args.maxRelations ? { maxRelations: args.maxRelations } : {})
+      };
+      const resp = await runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query
+      });
+      if (operation === "pack" && !resp.isError) {
+        // Build a simple rich pack from the model data (folders + related via knowledgeRelations etc.)
+        const data = typeof resp.structuredContent === 'object' ? resp.structuredContent : {};
+        const pack = {
+          packFor: fid,
+          folder: (data.folders || []).find(f => f.id === fid) || fid,
+          contains: (data.edges || []).filter(e => e.from === fid && e.rel === 'contains').map(e => e.to),
+          linkedDocs: (data.knowledgeRelations || []).filter(r => (r.from === fid || r.to === fid) && String(r.to || r.from).startsWith('doc:')).map(r => r.to || r.from),
+          linkedIntents: (data.knowledgeRelations || []).filter(r => (r.from === fid || r.to === fid) && String(r.to || r.from).startsWith('intent:')).map(r => r.to || r.from),
+          summary: `Rich folder pack for ${fid} with contains, linked docs and intents from the model.`
+        };
+        return jsonToolResult(pack);
+      }
+      return resp;
+    }
+  },
+  // First-class dedicated documentation tools (richer than thin proxies; consume
+  // the modeled knowledge relations, intent docs, and governed docs).
+  {
+    name: "docs.list",
+    title: "Docs List",
+    description: "List all governed platform docs (including intent knowledge docs) with their modeled relations and links.",
+    inputSchema: jsonSchemaObject({
+      includeRelations: { type: "boolean" }
+    }),
+    scope() { return scopeResult({}); },
+    async run({ args, callHandler }) {
       return runJsonHandler(callHandler, {
         handler: "platform.model.read",
         method: "GET",
         path: "/api/platform-model",
         query: {
           view: "docs",
-          ...(docId ? { id: docId } : {})
+          ...(args?.includeRelations ? { includeRelations: "true" } : {})
         }
       });
+    }
+  },
+  {
+    name: "docs.read",
+    title: "Docs Read",
+    description: "Read a specific document (governed or intent) with full structured content, sections, tasks, and explicit doc↔doc / doc↔code relations from the knowledge model.",
+    inputSchema: jsonSchemaObject({
+      id: { type: "string" },
+      includeRelations: { type: "boolean" }
+    }, ["id"]),
+    scope(args) {
+      return scopeResult({ targets: args?.id ? [args.id] : [] });
+    },
+    async run({ args, callHandler }) {
+      if (!args.id) return errorToolResult("id is required");
+      return runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query: {
+          view: "docs",
+          id: args.id,
+          ...(args.includeRelations ? { includeRelations: "true" } : {})
+        }
+      });
+    }
+  },
+  {
+    name: "docs.search",
+    title: "Docs Search",
+    description: "Search across governed docs, intent docs, and knowledge graph. Returns matching docs with relevance and linked code/docs from the authored relations.",
+    inputSchema: jsonSchemaObject({
+      query: { type: "string" },
+      facet: { type: "string" }
+    }, ["query"]),
+    scope() { return scopeResult({}); },
+    async run({ args, callHandler }) {
+      return runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query: {
+          view: "docs",
+          q: args.query,
+          ...(args.facet ? { facet: args.facet } : {})
+        }
+      });
+    }
+  },
+  {
+    name: "docs.pack",
+    title: "Docs Context Pack",
+    description: "First-class MCP context pack for a document: the full doc projection (with sections/tasks), plus explicit authored doc↔doc and doc↔code relations from the knowledge model (knowledge-relations.wtoml), linked intents, and recommended nearby items. Ideal for LLM co-development.",
+    inputSchema: jsonSchemaObject({
+      id: { type: "string" },
+      maxRelations: { type: "number", description: "Limit on relations to include (default 20)" }
+    }, ["id"]),
+    scope(args) {
+      return scopeResult({ targets: args?.id ? [args.id] : [] });
+    },
+    async run({ args, callHandler }) {
+      if (!args.id) return errorToolResult("id is required for docs.pack");
+      const maxR = Number(args.maxRelations || 20);
+      // Get the rich doc view (which now includes knowledgeRelations slice thanks to model)
+      const docResp = await runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query: { view: "docs", id: args.id, includeRelations: "true" }
+      });
+      if (docResp.isError) return docResp;
+      let pack = typeof docResp.structuredContent === 'object' ? { ...docResp.structuredContent } : { doc: docResp.structuredContent };
+      // Enrich with top-level knowledgeRelations if available (call model without view to get full if needed, but reuse)
+      // For now, the docs view projection includes a filtered knowledgeRelations when present.
+      if (pack.knowledgeRelations && Array.isArray(pack.knowledgeRelations)) {
+        pack.knowledgeRelations = pack.knowledgeRelations.slice(0, maxR);
+      }
+      pack.packId = `docPack:${args.id}`;
+      pack.summary = `Context pack for ${args.id} with ${pack.knowledgeRelations?.length || 0} modeled relations (doc/code links from authored WTOML).`;
+      return jsonToolResult(pack);
     }
   },
   {

@@ -102,6 +102,7 @@ function semanticWtomlShape(doc) {
         authority: values.authority ?? [],
         providerAdapters: values.providerAdapters ?? [],
         witnessContract: values.witnessContract ?? null,
+        compatibility: values.compatibility ?? null,
         placement: values.placement ?? [],
         context: values.context ?? null,
         owner: values.owner ?? null
@@ -272,6 +273,7 @@ function semanticWtomlShape(doc) {
         kind: "surface",
         name: values.id ?? null,
         identity: values.identity ?? null,
+        context: values.context ?? null,
         surfaceKind: values.surfaceKind ?? values.kind ?? null,
         className: values.className ?? values.class ?? null,
         children: values.children ?? [],

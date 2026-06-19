@@ -6,6 +6,12 @@ import {
 import { pipelineRvmForms } from "./desire-rvm.js";
 import { createPipelineCatalogFromAppProject } from "./catalog-runtime.js";
 import {
+  coordinatePipelineRuntimeStep,
+  createOrUpdatePipelineSchedule,
+  createPipelineCoordinatorRuntime,
+  createPipelineParentRunForSync
+} from "./coordinator-runtime.js";
+import {
   createPipelineProofProgramFromDesire,
   evaluateInputTransformSubject,
   evaluateOutputTransformSubject,
@@ -40,6 +46,11 @@ export const providers = Object.freeze([
     projectors: pipelineModuleProjectors
   }),
   Object.freeze({
+    id: "pipeline.orchestrator",
+    kind: "providerRuntimeFactory",
+    factory: deps => createPipelineCoordinatorRuntime(deps)
+  }),
+  Object.freeze({
     id: "pipeline.jobs",
     kind: "jobHandlerFactory",
     factory: deps => createBuiltinPipelineJobHandlers(deps)
@@ -55,8 +66,11 @@ export const desireExtensions = Object.freeze({
 });
 
 export {
+  coordinatePipelineRuntimeStep,
   createPipelineCatalogFromAppProject,
+  createOrUpdatePipelineSchedule,
   createPipelineExecutionPlanProgramFromDesire,
+  createPipelineParentRunForSync,
   createPipelineProofProgramFromDesire,
   evaluatePlannedInputTransform,
   evaluatePlannedOutputTransform,
@@ -85,8 +99,11 @@ export default {
   providers,
   desireExtensions,
   createHandlers,
+  coordinatePipelineRuntimeStep,
   createPipelineCatalogFromAppProject,
+  createOrUpdatePipelineSchedule,
   createPipelineExecutionPlanProgramFromDesire,
+  createPipelineParentRunForSync,
   createPipelineProofProgramFromDesire,
   evaluatePlannedInputTransform,
   evaluatePlannedOutputTransform,

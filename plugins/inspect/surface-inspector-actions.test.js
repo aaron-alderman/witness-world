@@ -27,6 +27,8 @@ test("surface inspector actions binder routes chrome, refresh, and navigation ac
   const refresh = createNode();
   const select = createNode();
   const world = createNode();
+  const worldSelect = createNode({ "data-surface-inspector-world-select": "home_route" });
+  const runtimeSelect = createNode({ "data-surface-inspector-runtime-select": "todo.todos.create" });
   const worldMode = createNode({ "data-surface-inspector-world-mode": "source" });
   const openProcess = createNode();
   const overlay = {
@@ -38,6 +40,8 @@ test("surface inspector actions binder routes chrome, refresh, and navigation ac
         case "[data-surface-inspector-refresh]": return [refresh];
         case "[data-surface-inspector-select]": return [select];
         case "[data-surface-inspector-world]": return [world];
+        case "[data-surface-inspector-world-select]": return [worldSelect];
+        case "[data-surface-inspector-runtime-select]": return [runtimeSelect];
         case "[data-surface-inspector-world-mode]": return [worldMode];
         case "[data-surface-inspector-open-process]": return [openProcess];
         default: return [];
@@ -68,6 +72,7 @@ test("surface inspector actions binder routes chrome, refresh, and navigation ac
     updateSurfaceInspectorUi: () => calls.push("update"),
     invalidateSurfaceInspectorGraph: () => calls.push("invalidate-graph"),
     invalidateSurfaceInspectorWidgets: () => calls.push("invalidate-widgets"),
+    invalidateSurfaceInspectorRuntimeDiagnostics: () => calls.push("invalidate-diagnostics"),
     selectSurfaceInspectorWidget: async (id, options) => calls.push(["select-widget", id, options.statusMessage]),
     worldSurfaceHref: ({ select, mode }) => mode ? `/world?select=${select}&mode=${mode}` : `/world?select=${select}`,
     selectedSurfaceInspectorProcessSelection: () => ({ program: "todo_frontend_program", event: "todo.submit" }),
@@ -87,6 +92,8 @@ test("surface inspector actions binder routes chrome, refresh, and navigation ac
   assert.equal(refreshEvent.prevented, true);
 
   world.listener("click")(clickEvent());
+  worldSelect.listener("click")(clickEvent());
+  runtimeSelect.listener("click")(clickEvent());
   worldMode.listener("click")(clickEvent());
   openProcess.listener("click")(clickEvent());
 
@@ -111,6 +118,8 @@ test("surface inspector actions binder routes chrome, refresh, and navigation ac
     "update",
     ["select-widget", "todo_form", "Inspector metadata refreshed for todo_form."],
     ["assign", "/world?select=todo_form"],
+    ["assign", "/world?select=home_route"],
+    ["assign", "/world?select=todo.todos.create"],
     ["assign", "/world?select=todo_form&mode=source"],
     ["assign", "/process?program=todo_frontend_program&event=todo.submit"],
     "update",

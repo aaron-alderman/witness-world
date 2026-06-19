@@ -22,9 +22,11 @@ test("proposal-adjacent submit contracts load from authored WTOML", async () => 
   const contracts = loadBootstrapProposalAdjacentSubmitContracts();
 
   assert.equal(source.includes('family = "runtime-plugin-install"'), true);
-  assert.equal(source.includes('url = "/api/proposals"'), true);
+  assert.equal(source.includes('url = "/api/runtime-plugin-installs"'), true);
+  assert.equal(source.includes('url = "/api/mcp-servers"'), true);
   assert.equal(source.includes('bodyBuilder = "mcpToolProposalBody"'), true);
   assert.equal(contracts["mcp-tool-install"].resolveServerRunner, true);
+  assert.equal(contracts["runtime-plugin-remove"].method, "DELETE");
   assert.equal(contracts["mcp-server"].bodyBuilder, "mcpServerProposalBody");
 });
 
@@ -49,7 +51,7 @@ test("proposal-adjacent submit body builder uses the documented contract routing
   );
 });
 
-test("proposal-adjacent submit request builder preserves the authored proposal endpoint", () => {
+test("proposal-adjacent submit request builder targets the authored shared mutation endpoint", () => {
   assert.deepEqual(
     buildBootstrapProposalAdjacentSubmitRequest({
       detail: {
@@ -65,7 +67,7 @@ test("proposal-adjacent submit request builder preserves the authored proposal e
       mcpServerProposalBodyFn: mcpServerProposalBody
     }),
     {
-      url: "/api/proposals",
+      url: "/api/mcp-servers",
       body: mcpServerProposalBody({
         id: "proposal.mcp.server.ops",
         serverId: "ops_mcp",
@@ -97,7 +99,7 @@ test("proposal-adjacent submit helper routes runtime plugin proposals and resets
     },
     contractsByFamily: bootstrapProposalAdjacentSubmitContractsByFamily,
     runtimePluginProposalBodyFn: runtimePluginProposalBody,
-    postJson: async (url, body) => { calls.push({ url, body }); },
+    postJson: async (url, body, method) => { calls.push({ url, body, method }); },
     setStatus: (id, text) => statuses.push({ id, text }),
     resetForm: formId => resets.push(formId),
     refresh: async () => { refreshed += 1; }
@@ -105,13 +107,14 @@ test("proposal-adjacent submit helper routes runtime plugin proposals and resets
 
   assert.equal(ok, true);
   assert.deepEqual(calls, [{
-    url: "/api/proposals",
+    url: "/api/runtime-plugin-installs",
     body: runtimePluginProposalBody({
       id: "proposal.runtime-plugin.install.canvas",
       serverRunner: "demo_server",
       plugin: "plugin.canvas",
       reason: "Need canvas"
-    }, "install")
+    }, "install"),
+    method: "POST"
   }]);
   assert.deepEqual(statuses, [{ id: "runtime-plugin-install-proposal-status", text: "Saved." }]);
   assert.deepEqual(resets, ["runtime-plugin-install-proposal-form"]);
@@ -136,7 +139,7 @@ test("proposal-adjacent submit helper resolves MCP tool runner before creating p
     },
     contractsByFamily: bootstrapProposalAdjacentSubmitContractsByFamily,
     mcpToolProposalBodyFn: mcpToolProposalBody,
-    postJson: async (url, body) => { calls.push({ url, body }); },
+    postJson: async (url, body, method) => { calls.push({ url, body, method }); },
     resolveServerRunner: server => server === "ops_mcp" ? "demo_server" : server,
     refresh: async () => {},
     setStatus: () => {},
@@ -144,7 +147,7 @@ test("proposal-adjacent submit helper resolves MCP tool runner before creating p
   });
 
   assert.deepEqual(calls, [{
-    url: "/api/proposals",
+    url: "/api/mcp-tool-installs",
     body: mcpToolProposalBody({
       id: "proposal.mcp.tool.install.ops",
       server: "ops_mcp",
@@ -154,7 +157,8 @@ test("proposal-adjacent submit helper resolves MCP tool runner before creating p
       scopeContextsJson: '["ctx.docs"]',
       scopeTargetsJson: '["ctx.docs:home"]',
       reason: "Need reads"
-    }, "install")
+    }, "install"),
+    method: "POST"
   }]);
 });
 
@@ -207,8 +211,8 @@ test("proposal-adjacent submit binder ignores unrelated sources and handles matc
         listeners.set(type, fn);
       }
     },
-    postJson: async (url, body) => {
-      created.push({ url, body });
+    postJson: async (url, body, method) => {
+      created.push({ url, body, method });
     },
     contractsByFamily: bootstrapProposalAdjacentSubmitContractsByFamily,
     refresh: async () => {
@@ -249,13 +253,14 @@ test("proposal-adjacent submit binder ignores unrelated sources and handles matc
 
   assert.equal(handled, true);
   assert.deepEqual(created, [{
-    url: "/api/proposals",
+    url: "/api/runtime-plugin-installs",
     body: runtimePluginProposalBody({
       id: "proposal.runtime-plugin.install.canvas",
       serverRunner: "demo_server",
       plugin: "plugin.canvas",
       reason: "Need canvas"
-    }, "install")
+    }, "install"),
+    method: "POST"
   }]);
   assert.deepEqual(statuses, [{ id: "runtime-plugin-install-proposal-status", text: "Saved." }]);
   assert.deepEqual(resets, ["runtime-plugin-install-proposal-form"]);

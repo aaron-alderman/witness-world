@@ -8,9 +8,10 @@ export function createRuntimeContextResolver({
   const runtimeContexts = new Map([[bootstrapRunner.id, bootstrapContext]]);
   const bootstrapRuntime = { runner: bootstrapRunner, context: bootstrapContext };
 
-  const resolveActiveRuntime = async () => {
-    if (!bootstrapRunner.bootstrapOnly) return bootstrapRuntime;
-    const resolvedRunner = resolveLiveRunner();
+  // requestHost (the raw Host header) selects the runner when multiple are defined. Single-app
+  // launches resolve back to the bootstrap runner, so behavior there is unchanged.
+  const resolveActiveRuntime = async (requestHost = null) => {
+    const resolvedRunner = resolveLiveRunner(requestHost);
     if (!resolvedRunner?.ok) return bootstrapRuntime;
     const liveRunner = resolvedRunner.runner;
     if (!liveRunner || liveRunner.id === bootstrapRunner.id) return bootstrapRuntime;

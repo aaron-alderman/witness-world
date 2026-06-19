@@ -1,10 +1,19 @@
 import { projectors, relation } from "../../src/kernel.js";
+import { applyLegacyCapabilityMigration } from "../../src/capability-legacy-migration.js";
 import {
   defineCapability,
   installCapability,
   removeCapability,
-  moduleProjectors
+  rollbackCapability,
+  moduleProjectors,
+  resolveCoveredContextualRef
+  ,
+  updateCapability
 } from "../../src/modules.js";
+import {
+  evaluateCapabilityCompatibility,
+  normalizeCapabilityCompatibility
+} from "../../src/capability-compatibility.js";
 import { processSpecFor, typeModelProjection, validateProcessInput } from "../../src/type-model.js";
 import { widgetDefinitions } from "../../src/widgets.js";
 
@@ -62,6 +71,159 @@ function normalizeJsonObject(parsed, field) {
   return { ok: true, value: parsed.value };
 }
 
+function compatibilityFailureMessage(report) {
+  const primary = report?.reasons?.[0];
+  switch (primary?.code) {
+    case "target-kind-incompatible":
+      return "capability placement incompatible with target";
+    case "target-missing":
+      return `${primary.targetKind || "capability"} target not found`;
+    case "target-invalid":
+      return primary.detail || "capability target invalid";
+    case "dependency-missing":
+      return "capability dependencies are not installed on target";
+    case "runtime-profile-incompatible":
+      return "capability runtime profile incompatible with target";
+    case "authority-assumptions-unmet":
+      return "capability authority assumptions are not met";
+    case "compatibility-target-kind-incompatible":
+      return "capability compatibility contract blocks this target kind";
+    default:
+      return "capability compatibility check failed";
+  }
+}
+
+function parseJsonArrayField(body, field, existingValue = []) {
+  if (body?.[field] === undefined) return { ok: true, value: Array.isArray(existingValue) ? [...existingValue] : [] };
+  return normalizeJsonArray(parseJsonField(body[field], field), field);
+}
+
+function parseJsonObjectField(body, field, existingValue = null) {
+  if (body?.[field] === undefined) {
+    return {
+      ok: true,
+      value: existingValue && typeof existingValue === "object"
+        ? structuredClone(existingValue)
+        : null
+    };
+  }
+  return normalizeJsonObject(parseJsonField(body[field], field), field);
+}
+
+function capabilityTargetFacts(world, target, targetKind) {
+  if (targetKind === "context") {
+    const context = world.project(moduleProjectors.contexts).find(row => row.id === target);
+    return {
+      targetExists: Boolean(context),
+      targetValidation: context ? { ok: true } : { ok: false, reason: "context target not found" }
+    };
+  }
+  if (targetKind === "serverRunner") {
+    const serverRunner = world.project(moduleProjectors.serverRunners).find(row => row.id === target);
+    return {
+      targetExists: Boolean(serverRunner),
+      targetValidation: serverRunner ? { ok: true } : { ok: false, reason: "server runner target not found" }
+    };
+  }
+  if (targetKind === "routePage") {
+    return {
+      targetExists: world.project(moduleProjectors.routes).some(row => row.id === target),
+      targetValidation: isRoutePageTarget(world, target)
+    };
+  }
+  return {
+    targetExists: world.project(projectors.things).has(target),
+    targetValidation: { ok: true }
+  };
+}
+
+function installedCapabilitiesForTarget(world, target, targetKind) {
+  return world.project(moduleProjectors.capabilityInstalls)
+    .filter(row => row.target === target && row.targetKind === targetKind)
+    .map(row => row.capability);
+}
+
+function validateCapabilityInstallsForDefinition(world, capability) {
+  const installs = world.project(moduleProjectors.capabilityInstalls)
+    .filter(row => row.capability === capability.id);
+  const blocking = [];
+  for (const install of installs) {
+    const facts = capabilityTargetFacts(world, install.target, install.targetKind);
+    const compatibility = evaluateCapabilityCompatibility(capability, {
+      target: install.target,
+      targetKind: install.targetKind,
+      targetExists: facts.targetExists,
+      targetValidation: facts.targetValidation,
+      installedCapabilities: installedCapabilitiesForTarget(world, install.target, install.targetKind)
+    });
+    if (!compatibility.compatible) {
+      blocking.push({
+        target: install.target,
+        targetKind: install.targetKind,
+        compatibility
+      });
+    }
+  }
+  return blocking;
+}
+
+function capabilityRevisionRows(world, capabilityId) {
+  return world.project(moduleProjectors.capabilityRevisionHistoryIndex).byCapability[capabilityId] ?? [];
+}
+
+function parseCapabilityDefinitionInput(world, body, existingCapability = null) {
+  const provenanceParsed = parseJsonObjectField(body, "provenanceJson", existingCapability?.provenance ?? null);
+  if (!provenanceParsed.ok) return provenanceParsed;
+  const dependsOnParsed = parseJsonArrayField(body, "dependsOnJson", existingCapability?.dependsOn ?? []);
+  if (!dependsOnParsed.ok) return dependsOnParsed;
+  const publicApiParsed = parseJsonArrayField(body, "publicApiJson", existingCapability?.publicApi ?? []);
+  if (!publicApiParsed.ok) return publicApiParsed;
+  const configParsed = parseJsonArrayField(body, "configJson", existingCapability?.config ?? []);
+  if (!configParsed.ok) return configParsed;
+  const internalsParsed = parseJsonArrayField(body, "internalsJson", existingCapability?.internals ?? []);
+  if (!internalsParsed.ok) return internalsParsed;
+  const authorityParsed = parseJsonArrayField(body, "authorityJson", existingCapability?.authority ?? []);
+  if (!authorityParsed.ok) return authorityParsed;
+  const compatibilityParsed = parseJsonObjectField(body, "compatibilityJson", existingCapability?.compatibility ?? null);
+  if (!compatibilityParsed.ok) return compatibilityParsed;
+  const placementParsed = parseJsonArrayField(body, "placementJson", existingCapability?.placement ?? []);
+  if (!placementParsed.ok) return placementParsed;
+
+  const dependsOn = dependsOnParsed.value.map(String).filter(Boolean);
+  const unknownDependencies = dependsOn.filter(id => id !== body?.id && !knownCapability(world, id));
+  if (unknownDependencies.length) {
+    return { ok: false, error: "unknown capability dependencies", details: { dependsOn: unknownDependencies } };
+  }
+
+  const placement = placementParsed.value.map(String).filter(Boolean);
+  const invalidPlacement = placement.filter(kind => !["context", "serverRunner", "routePage"].includes(kind));
+  if (invalidPlacement.length) {
+    return { ok: false, error: "unknown capability placement target", details: { placement: invalidPlacement } };
+  }
+
+  const id = String(body?.id ?? existingCapability?.id ?? "");
+  const label = body?.label ?? existingCapability?.label ?? id;
+  const version = body?.version ?? existingCapability?.version ?? null;
+  const context = body?.context ?? existingCapability?.context ?? null;
+  return {
+    ok: true,
+    capability: {
+      id,
+      label,
+      version: typeof version === "string" && version.trim() ? version.trim() : null,
+      provenance: provenanceParsed.value,
+      dependsOn,
+      publicApi: publicApiParsed.value,
+      config: configParsed.value,
+      internals: internalsParsed.value,
+      authority: authorityParsed.value,
+      compatibility: normalizeCapabilityCompatibility(compatibilityParsed.value),
+      placement,
+      context: typeof context === "string" && context.trim() ? context.trim() : null
+    }
+  };
+}
+
 function isRoutePageTarget(world, routeId) {
   const route = world.project(moduleProjectors.routes).find(row => row.id === routeId) ?? null;
   if (!route || typeof route.handler !== "string" || !route.handler.startsWith("page.")) {
@@ -79,6 +241,23 @@ function isRoutePageTarget(world, routeId) {
 function installExists(world, { capability, target, targetKind }) {
   return world.project(moduleProjectors.capabilityInstalls)
     .some(row => row.capability === capability && row.target === target && row.targetKind === targetKind);
+}
+
+export function resolveCapabilityTargetInput(world, body, {
+  contextField = "context",
+  idField = "target",
+  refField = "targetRef",
+  label = "capability target"
+} = {}) {
+  const resolved = resolveCoveredContextualRef(world.allWitnesses(), {
+    context: body?.[contextField] ?? null,
+    id: body?.[idField] ?? null,
+    ref: body?.[refField] ?? null,
+    label
+  });
+  if (!resolved.ok) return resolved;
+  if (!resolved.target) return { ok: false, error: `${label} is required` };
+  return resolved;
 }
 
 export function requestBootstrapCapabilityDefine(world, {
@@ -104,92 +283,24 @@ export function requestBootstrapCapabilityDefine(world, {
     });
     return { ok: false, status: 409, error: "capability id already exists", witness };
   }
-
-  const provenanceParsed = normalizeJsonObject(parseJsonField(body.provenanceJson, "provenanceJson"), "provenanceJson");
-  if (!provenanceParsed.ok) {
-    const witness = fail(world, { process: "capability.define.failed", actor: actor || backendHost, body: { reason: provenanceParsed.error } });
-    return { ok: false, status: 400, error: provenanceParsed.error, witness };
-  }
-  const dependsOnParsed = normalizeJsonArray(parseJsonField(body.dependsOnJson, "dependsOnJson"), "dependsOnJson");
-  if (!dependsOnParsed.ok) {
-    const witness = fail(world, { process: "capability.define.failed", actor: actor || backendHost, body: { reason: dependsOnParsed.error } });
-    return { ok: false, status: 400, error: dependsOnParsed.error, witness };
-  }
-  const publicApiParsed = normalizeJsonArray(parseJsonField(body.publicApiJson, "publicApiJson"), "publicApiJson");
-  if (!publicApiParsed.ok) {
-    const witness = fail(world, { process: "capability.define.failed", actor: actor || backendHost, body: { reason: publicApiParsed.error } });
-    return { ok: false, status: 400, error: publicApiParsed.error, witness };
-  }
-  const configParsed = normalizeJsonArray(parseJsonField(body.configJson, "configJson"), "configJson");
-  if (!configParsed.ok) {
-    const witness = fail(world, { process: "capability.define.failed", actor: actor || backendHost, body: { reason: configParsed.error } });
-    return { ok: false, status: 400, error: configParsed.error, witness };
-  }
-  const internalsParsed = normalizeJsonArray(parseJsonField(body.internalsJson, "internalsJson"), "internalsJson");
-  if (!internalsParsed.ok) {
-    const witness = fail(world, { process: "capability.define.failed", actor: actor || backendHost, body: { reason: internalsParsed.error } });
-    return { ok: false, status: 400, error: internalsParsed.error, witness };
-  }
-  const authorityParsed = normalizeJsonArray(parseJsonField(body.authorityJson, "authorityJson"), "authorityJson");
-  if (!authorityParsed.ok) {
-    const witness = fail(world, { process: "capability.define.failed", actor: actor || backendHost, body: { reason: authorityParsed.error } });
-    return { ok: false, status: 400, error: authorityParsed.error, witness };
-  }
-  const placementParsed = normalizeJsonArray(parseJsonField(body.placementJson, "placementJson"), "placementJson");
-  if (!placementParsed.ok) {
-    const witness = fail(world, { process: "capability.define.failed", actor: actor || backendHost, body: { reason: placementParsed.error } });
-    return { ok: false, status: 400, error: placementParsed.error, witness };
-  }
-
-  const dependsOn = dependsOnParsed.value.map(String).filter(Boolean);
-  const unknownDependencies = dependsOn.filter(id => !knownCapability(world, id));
-  if (unknownDependencies.length) {
+  const parsed = parseCapabilityDefinitionInput(world, body, null);
+  if (!parsed.ok) {
     const witness = fail(world, {
       process: "capability.define.failed",
       actor: actor || backendHost,
-      body: { reason: "unknown capability dependencies", dependsOn: unknownDependencies }
+      body: { reason: parsed.error, ...(parsed.details ?? {}) }
     });
-    return { ok: false, status: 400, error: "unknown capability dependencies", witness };
+    return { ok: false, status: 400, error: parsed.error, witness };
   }
-
-  const placement = placementParsed.value.map(String).filter(Boolean);
-  const invalidPlacement = placement.filter(kind => !["context", "serverRunner", "routePage"].includes(kind));
-  if (invalidPlacement.length) {
-    const witness = fail(world, {
-      process: "capability.define.failed",
-      actor: actor || backendHost,
-      body: { reason: "unknown capability placement target", placement: invalidPlacement }
-    });
-    return { ok: false, status: 400, error: "unknown capability placement target", witness };
-  }
+  const capabilityInput = parsed.capability;
 
   defineCapability(world, {
     actor: actor || backendHost,
-    id: input.id,
-    label: input.label,
-    version: input.version ?? null,
-    provenance: provenanceParsed.value,
-    dependsOn,
-    publicApi: publicApiParsed.value,
-    config: configParsed.value,
-    internals: internalsParsed.value,
-    authority: authorityParsed.value,
-    placement,
-    context: input.context ?? null,
+    ...capabilityInput,
     owner: actor || backendHost
   });
   const capability = knownCapability(world, input.id) ?? {
-    id: input.id,
-    label: input.label,
-    version: input.version ?? null,
-    provenance: provenanceParsed.value,
-    dependsOn,
-    publicApi: publicApiParsed.value,
-    config: configParsed.value,
-    internals: internalsParsed.value,
-    authority: authorityParsed.value,
-    placement,
-    context: input.context ?? null
+    ...capabilityInput
   };
   const witness = world.emit({
     process: "capability.define",
@@ -214,7 +325,21 @@ export function requestBootstrapCapabilityInstall(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const input = validated.value;
+  const resolvedTarget = resolveCapabilityTargetInput(world, validated.value, {
+    label: "capability install target"
+  });
+  if (!resolvedTarget.ok) {
+    const witness = fail(world, {
+      process: "capability.install.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedTarget.error }
+    });
+    return { ok: false, status: 400, error: resolvedTarget.error, witness };
+  }
+  const input = {
+    ...validated.value,
+    target: resolvedTarget.target
+  };
   const capability = knownCapability(world, input.capability);
   if (!capability) {
     const witness = fail(world, {
@@ -232,55 +357,44 @@ export function requestBootstrapCapabilityInstall(world, {
     });
     return { ok: false, status: 409, error: "capability already installed on target", witness };
   }
-  if (!capability.placement.includes(input.targetKind)) {
-    const witness = fail(world, {
-      process: "capability.install.failed",
-      actor: actor || backendHost,
-      body: { reason: "capability placement incompatible with target", capability: input.capability, targetKind: input.targetKind, placement: capability.placement }
-    });
-    return { ok: false, status: 400, error: "capability placement incompatible with target", witness };
-  }
 
+  let targetValidation = { ok: true };
+  let targetExists = true;
   if (input.targetKind === "context") {
     const context = world.project(moduleProjectors.contexts).find(row => row.id === input.target);
     if (!context) {
-      const witness = fail(world, {
-        process: "capability.install.failed",
-        actor: actor || backendHost,
-        body: { reason: "context target not found", target: input.target }
-      });
-      return { ok: false, status: 400, error: "context target not found", witness };
+      targetValidation = { ok: false, reason: "context target not found" };
+      targetExists = false;
     }
   } else if (input.targetKind === "serverRunner") {
     const serverRunner = world.project(moduleProjectors.serverRunners).find(row => row.id === input.target);
     if (!serverRunner) {
-      const witness = fail(world, {
-        process: "capability.install.failed",
-        actor: actor || backendHost,
-        body: { reason: "server runner target not found", target: input.target }
-      });
-      return { ok: false, status: 400, error: "server runner target not found", witness };
+      targetValidation = { ok: false, reason: "server runner target not found" };
+      targetExists = false;
     }
   } else if (input.targetKind === "routePage") {
-    const routePage = isRoutePageTarget(world, input.target);
-    if (!routePage.ok) {
-      const witness = fail(world, {
-        process: "capability.install.failed",
-        actor: actor || backendHost,
-        body: { reason: routePage.reason, target: input.target }
-      });
-      return { ok: false, status: 400, error: routePage.reason, witness };
-    }
+    targetValidation = isRoutePageTarget(world, input.target);
+    targetExists = world.project(moduleProjectors.routes).some(row => row.id === input.target);
   }
 
-  const missingDependencies = capability.dependsOn.filter(dep => !installExists(world, { capability: dep, target: input.target, targetKind: input.targetKind }));
-  if (missingDependencies.length) {
+  const installedCapabilities = world.project(moduleProjectors.capabilityInstalls)
+    .filter(row => row.target === input.target && row.targetKind === input.targetKind)
+    .map(row => row.capability);
+  const compatibility = evaluateCapabilityCompatibility(capability, {
+    target: input.target,
+    targetKind: input.targetKind,
+    targetExists,
+    targetValidation,
+    installedCapabilities
+  });
+  if (!compatibility.compatible) {
+    const error = compatibilityFailureMessage(compatibility);
     const witness = fail(world, {
       process: "capability.install.failed",
       actor: actor || backendHost,
-      body: { reason: "capability dependencies are not installed on target", capability: input.capability, target: input.target, targetKind: input.targetKind, dependsOn: missingDependencies }
+      body: { reason: error, capability: input.capability, target: input.target, targetKind: input.targetKind, compatibility }
     });
-    return { ok: false, status: 400, error: "capability dependencies are not installed on target", witness };
+    return { ok: false, status: 400, error, witness };
   }
 
   const installed = installCapability(world, {
@@ -317,7 +431,21 @@ export function requestBootstrapCapabilityRemove(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const input = validated.value;
+  const resolvedTarget = resolveCapabilityTargetInput(world, validated.value, {
+    label: "capability remove target"
+  });
+  if (!resolvedTarget.ok) {
+    const witness = fail(world, {
+      process: "capability.remove.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedTarget.error }
+    });
+    return { ok: false, status: 400, error: resolvedTarget.error, witness };
+  }
+  const input = {
+    ...validated.value,
+    target: resolvedTarget.target
+  };
   if (!installExists(world, input)) {
     const witness = fail(world, {
       process: "capability.remove.failed",
@@ -342,4 +470,175 @@ export function requestBootstrapCapabilityRemove(world, {
     body: { capability: input.capability, target: input.target, targetKind: input.targetKind }
   });
   return { ok: true, status: 200, capabilityInstall: input, witness };
+}
+
+export function requestBootstrapCapabilityUpdate(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "capability.update", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "capability.update.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const currentCapability = knownCapability(world, validated.value.id);
+  if (!currentCapability) {
+    const witness = fail(world, {
+      process: "capability.update.failed",
+      actor: actor || backendHost,
+      body: { reason: "capability not found", id: validated.value.id }
+    });
+    return { ok: false, status: 404, error: "capability not found", witness };
+  }
+  const parsed = parseCapabilityDefinitionInput(world, body, currentCapability);
+  if (!parsed.ok) {
+    const witness = fail(world, {
+      process: "capability.update.failed",
+      actor: actor || backendHost,
+      body: { reason: parsed.error, ...(parsed.details ?? {}) }
+    });
+    return { ok: false, status: 400, error: parsed.error, witness };
+  }
+  const blockingInstalls = validateCapabilityInstallsForDefinition(world, parsed.capability);
+  if (blockingInstalls.length) {
+    const witness = fail(world, {
+      process: "capability.update.failed",
+      actor: actor || backendHost,
+      body: {
+        reason: "capability update would invalidate existing installs",
+        capability: parsed.capability.id,
+        blockingInstalls
+      }
+    });
+    return { ok: false, status: 400, error: "capability update would invalidate existing installs", witness };
+  }
+
+  updateCapability(world, {
+    actor: actor || backendHost,
+    ...parsed.capability,
+    previousDefinition: currentCapability,
+    previousVersion: currentCapability.version ?? null
+  });
+  const capability = knownCapability(world, parsed.capability.id) ?? parsed.capability;
+  const witness = world.emit({
+    process: "capability.update",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", parsed.capability.id)],
+    body: {
+      capability,
+      previousVersion: currentCapability.version ?? null
+    }
+  });
+  return { ok: true, status: 200, capability, witness };
+}
+
+export function requestBootstrapCapabilityRollback(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "capability.rollback", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "capability.rollback.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const currentCapability = knownCapability(world, validated.value.id);
+  if (!currentCapability) {
+    const witness = fail(world, {
+      process: "capability.rollback.failed",
+      actor: actor || backendHost,
+      body: { reason: "capability not found", id: validated.value.id }
+    });
+    return { ok: false, status: 404, error: "capability not found", witness };
+  }
+  const history = capabilityRevisionRows(world, validated.value.id);
+  if (history.length < 2) {
+    const witness = fail(world, {
+      process: "capability.rollback.failed",
+      actor: actor || backendHost,
+      body: { reason: "no prior capability revision available", id: validated.value.id }
+    });
+    return { ok: false, status: 409, error: "no prior capability revision available", witness };
+  }
+  const requestedVersion = typeof validated.value.version === "string" && validated.value.version.trim()
+    ? validated.value.version.trim()
+    : null;
+  const priorRows = history.slice(0, -1);
+  const rollbackTarget = requestedVersion
+    ? [...priorRows].reverse().find(row => row.version === requestedVersion) ?? null
+    : (priorRows.at(-1) ?? null);
+  if (!rollbackTarget) {
+    const witness = fail(world, {
+      process: "capability.rollback.failed",
+      actor: actor || backendHost,
+      body: {
+        reason: "rollback target version not found in capability history",
+        id: validated.value.id,
+        version: requestedVersion
+      }
+    });
+    return { ok: false, status: 404, error: "rollback target version not found in capability history", witness };
+  }
+  const blockingInstalls = validateCapabilityInstallsForDefinition(world, rollbackTarget.definition);
+  if (blockingInstalls.length) {
+    const witness = fail(world, {
+      process: "capability.rollback.failed",
+      actor: actor || backendHost,
+      body: {
+        reason: "capability rollback would invalidate existing installs",
+        capability: rollbackTarget.capabilityId,
+        rollbackToVersion: rollbackTarget.version ?? null,
+        rollbackFromVersion: currentCapability.version ?? null,
+        blockingInstalls
+      }
+    });
+    return { ok: false, status: 400, error: "capability rollback would invalidate existing installs", witness };
+  }
+
+  rollbackCapability(world, {
+    actor: actor || backendHost,
+    ...rollbackTarget.definition,
+    previousDefinition: currentCapability,
+    previousVersion: currentCapability.version ?? null,
+    rollbackFromVersion: currentCapability.version ?? null
+  });
+  const capability = knownCapability(world, rollbackTarget.capabilityId) ?? rollbackTarget.definition;
+  const witness = world.emit({
+    process: "capability.rollback",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", rollbackTarget.capabilityId)],
+    body: {
+      capability,
+      rollbackToVersion: rollbackTarget.version ?? null,
+      rollbackFromVersion: currentCapability.version ?? null
+    }
+  });
+  return { ok: true, status: 200, capability, witness };
+}
+
+export function requestBootstrapCapabilityMigrateLegacy(world, {
+  actor,
+  backendHost
+}) {
+  const migrated = applyLegacyCapabilityMigration(world, {
+    actor: actor || backendHost
+  });
+  if (!migrated.ok) return migrated;
+  return {
+    ok: true,
+    status: 200,
+    actions: migrated.actions,
+    previewBefore: migrated.previewBefore,
+    previewAfter: migrated.previewAfter,
+    witness: migrated.witness
+  };
 }

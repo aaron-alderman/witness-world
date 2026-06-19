@@ -3,8 +3,10 @@ import {
   createProposal,
   approveProposal,
   rejectProposal,
-  moduleProjectors
+  moduleProjectors,
+  resolveCoveredContextualRef
 } from "../../src/modules.js";
+import { proposalTargetGovernanceEntry } from "../../src/runtime-governance.js";
 import { processSpecFor, typeModelProjection, validateProcessInput } from "../../src/type-model.js";
 
 function fail(world, { process, actor, body }) {
@@ -51,6 +53,20 @@ function normalizeJsonObject(parsed, field) {
   return { ok: true, value: parsed.value };
 }
 
+function resolveProposalTargetIdInput(world, body, {
+  contextField = "context",
+  idField = "targetId",
+  refField = "targetIdRef",
+  label = "proposal target"
+} = {}) {
+  return resolveCoveredContextualRef(world.allWitnesses(), {
+    context: body?.[contextField] ?? null,
+    id: body?.[idField] ?? null,
+    ref: body?.[refField] ?? null,
+    label
+  });
+}
+
 export function requestBootstrapProposalCreate(world, {
   actor,
   backendHost,
@@ -75,17 +91,36 @@ export function requestBootstrapProposalCreate(world, {
     });
     return { ok: false, status: 409, error: "proposal id already exists", witness };
   }
+  if (!proposalTargetGovernanceEntry(input.targetProcess)) {
+    const witness = fail(world, {
+      process: "proposal.create.failed",
+      actor: actor || backendHost,
+      body: { reason: "proposal target process not supported", targetProcess: input.targetProcess }
+    });
+    return { ok: false, status: 400, error: "proposal target process not supported", witness };
+  }
   const bodyParsed = normalizeJsonObject(parseJsonField(body.bodyJson, "bodyJson"), "bodyJson");
   if (!bodyParsed.ok) {
     const witness = fail(world, { process: "proposal.create.failed", actor: actor || backendHost, body: { reason: bodyParsed.error } });
     return { ok: false, status: 400, error: bodyParsed.error, witness };
+  }
+  const resolvedTarget = resolveProposalTargetIdInput(world, input, {
+    label: "proposal target"
+  });
+  if (!resolvedTarget.ok) {
+    const witness = fail(world, {
+      process: "proposal.create.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedTarget.error }
+    });
+    return { ok: false, status: 400, error: resolvedTarget.error, witness };
   }
   createProposal(world, {
     actor: actor || backendHost,
     id: input.id,
     targetProcess: input.targetProcess,
     targetKind: input.targetKind,
-    targetId: input.targetId ?? null,
+    targetId: resolvedTarget.target ?? null,
     body: bodyParsed.value ?? {},
     reason: input.reason ?? null,
     owner

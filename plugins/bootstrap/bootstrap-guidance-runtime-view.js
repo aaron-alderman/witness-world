@@ -11,6 +11,7 @@ export function buildBootstrapGuidanceRuntimeView({
   guidanceState = null,
   tutorialState = null,
   currentSuggestions = [],
+  scopeInventoryRows = [],
   currentSurfacePage = "bootstrap",
   guidanceStep = null,
   tutorialStep = () => null,
@@ -56,6 +57,14 @@ export function buildBootstrapGuidanceRuntimeView({
     currentConceptIds: readStepConcepts(currentStep).map(concept => concept.id),
     revealedConceptIds: readRevealedConcepts(activeProgress).map(concept => concept.id),
     suggestions: currentSuggestions.map(suggestion => ({ id: suggestion.id, title: suggestion.title, actionKind: suggestion.action?.kind || null })),
+    scopes: scopeInventoryRows.map(row => ({
+      type: row.type,
+      status: row.status,
+      scopeKey: row.scopeKey || null,
+      contextId: row.contextId || null,
+      page: row.page || null,
+      label: row.label || null
+    })),
     replayScopeKey: readReplayScopeKey(activeProgress),
     replayStepId: readReplayStepId(activeProgress),
     completedAt: activeProgress?.completedAt || null,

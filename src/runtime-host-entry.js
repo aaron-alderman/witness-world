@@ -6,6 +6,7 @@ import {
   declareFrontendHost as declareFrontendHostUtil,
   hostCapabilities,
   resolveServerRunner,
+  resolveRunnerForHost,
   resolveStartupRunner,
   resolveStorageConfig
 } from "./runtime-host-utils.js";
@@ -61,6 +62,7 @@ export async function startServer(world, {
     hostCapabilities,
     resolveRuntimeConfig: resolveRuntimeConfigUtil,
     resolveServerRunner,
+    resolveRunnerForHost,
     resolveStartupRunner,
     resolveStorageConfig
   });

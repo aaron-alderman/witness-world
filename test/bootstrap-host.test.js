@@ -4,6 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
+import { applyWitnessToml } from "../src/dsl.js";
+import { moduleProjectors } from "../src/modules.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { resolveRuntimeOperatorPaths } from "../src/runtime-operator-contract.js";
 import { defineWidgetVersion, defineWidgetVersionTransition, activateWidgetVersion } from "../src/widgets.js";
@@ -90,6 +92,9 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert(model.supportedHandlers.includes("page.home"));
     assert.equal(model.supportedHandlerMetadata["backendProgram.run"].routeKind, "backendProgram");
     assert(model.supportedBackendOps.includes("handler.invoke"));
+    assert(model.supportedBackendOps.includes("process.request"));
+    assert(model.supportedBackendOps.includes("project.read"));
+    assert(model.supportedBackendOps.includes("witness.emit"));
     assert(model.supportedFrontendOps.includes("renderCollection"));
     assert.equal(model.authoringPolicy.mode, "mcp_only");
     assert.equal(model.authoringPolicy.llmWritePath, "plugin.authoring");
@@ -100,6 +105,8 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.surface.status, "supported");
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.process.status, "supported");
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.frontendProgram.status, "legacy_only");
+    assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "runtimePlugin.install" && row.governanceMode === "proposal-fallback"), true);
+    assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "changeSet.apply" && row.governanceMode === "operator-only"), true);
     assert.deepEqual([...diagnostics.activeBundles.map(bundle => bundle.id)].sort(), [
       "bundle-authoring-core",
       "bundle-core-runtime",
@@ -113,6 +120,12 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
       "bundle-tutorial"
     ].sort());
     assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
+    assert.equal(diagnostics.composition.storyId, "synthetic-runner-profile-driven");
+    assert.equal(diagnostics.composition.activeRunnerSource, "synthetic-startup-runner");
+    assert.equal(diagnostics.composition.activePluginSource, "profile-or-operator-defaults");
+    assert.equal(diagnostics.composition.usesAuthoredServerRunner, false);
+    assert.equal(diagnostics.composition.usesAuthoredRuntimePluginInstalls, false);
+    assert.match(diagnostics.composition.explanation, /synthetic startup runner __bootstrap__/);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), false);
   } finally {
     await server.close();
@@ -132,6 +145,16 @@ test("bootstrap state exposes operator contract and artifact inventory for world
     assert.deepEqual(state.operator.inventory.exports, []);
     assert.deepEqual(state.operator.inventory.imports, []);
     assert.equal(state.operator.mutations.enabled, true);
+    assert.equal(state.governanceRoutes.some(row =>
+      row.handler === "widgets.create"
+        && row.governanceMode === "proposal-fallback"
+        && row.authorityMechanism === "bootstrap-context-or-target-authority"
+    ), true);
+    assert.equal(state.proposalTargetGovernance.some(row =>
+      row.targetProcess === "runtimePlugin.install"
+        && row.governanceMode === "proposal-fallback"
+        && row.bootstrapSelectable === true
+    ), true);
     assert.equal(Array.isArray(state.widgetVersions), true);
     assert.equal(Array.isArray(state.widgetVersionTransitions), true);
     assert.equal(Array.isArray(state.widgetVersionActivationHistory), true);
@@ -140,6 +163,177 @@ test("bootstrap state exposes operator contract and artifact inventory for world
   } finally {
     await server.close();
     await fs.rm(worldHome, { recursive: true, force: true });
+  }
+});
+
+test("bootstrap state exposes authored package nouns and coexistence projections through HTTP", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+status = "review"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.alpha:inspectA"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.beta:inspectB"
+context = "ctx.beta"
+name = "inspectB"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1-to-v2"
+package = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+sourceNamespace = "packageNamespace:ctx.alpha:inspectA"
+targetRevision = "packageRevision.plugin.inspect.v2"
+targetNamespace = "packageNamespace:ctx.beta:inspectB"
+strategy = "follow-up-revision"
+status = "active"
+remainingGlue = ["rename remaining runtimePlugin installs"]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+transformer = "packageTransformer.inspect.v1-to-v2"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "migrated" }
+
+[[packageDependency]]
+actor = "system"
+sourcePackage = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v2"
+targetKind = "capability"
+targetId = "dom.render"
+`);
+  declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost", runtimeProfile: "authoring" });
+  const server = await startServer(world, {
+    actor: "system",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeStartupMode: "bootstrap"
+  });
+  assert.equal(server.ok, true);
+  try {
+    const state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(state.packages.length, 1);
+    assert.equal(state.packageRevisions.length, 2);
+    assert.equal(state.packagePatches.length, 1);
+    assert.equal(state.packageNamespaces.length, 2);
+    assert.equal(state.packageDependencies.length, 1);
+    assert.equal(state.packageTransformers.length, 1);
+    assert.equal(state.packageCoexistence.length, 1);
+    assert.equal(state.packageCoexistence[0].coexistenceMode, "coexisting");
+    assert.equal(state.packageConvergence.length, 1);
+    assert.equal(state.packageConvergence[0].status, "glue-required");
+    const preview = state.packageApplyPreviews.find(row => row.revisionId === "packageRevision.plugin.inspect.v2");
+    assert.ok(preview);
+    assert.equal(preview.status, "glue-required");
+    assert.deepEqual(preview.relatedTransformerIds, ["packageTransformer.inspect.v1-to-v2"]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap model exposes authored package nouns as bindable HTTP composition targets", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.packages"
+
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "inspect" }
+
+[[packageNamespace]]
+actor = "system"
+id = "packageNamespace:ctx.packages:inspectLocal"
+context = "ctx.packages"
+name = "inspectLocal"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageDependency]]
+actor = "system"
+sourcePackage = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+targetKind = "capability"
+targetId = "dom.render"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1"
+package = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+targetRevision = "packageRevision.plugin.inspect.v1"
+`);
+  declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost", runtimeProfile: "authoring" });
+  const server = await startServer(world, {
+    actor: "system",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeStartupMode: "bootstrap"
+  });
+  assert.equal(server.ok, true);
+  try {
+    const model = await fetch(`${server.url}/api/bootstrap-model`).then(response => response.json());
+    assert.equal(model.contextBindableTargets.some(row => row.id === "package.plugin.inspect"), true);
+    assert.equal(model.contextBindableTargets.some(row => row.id === "packageRevision.plugin.inspect.v1"), true);
+    assert.equal(model.contextBindableTargets.some(row => String(row.id).startsWith("packagePatch:")), true);
+    assert.equal(model.contextBindableTargets.some(row => row.id === "packageNamespace:ctx.packages:inspectLocal" && row.context === "ctx.packages"), true);
+    assert.equal(model.contextBindableTargets.some(row => row.id === "packageDependency:packageRevision.plugin.inspect.v1:capability:dom.render"), true);
+    assert.equal(model.contextBindableTargets.some(row => row.id === "packageTransformer.inspect.v1"), true);
+  } finally {
+    await server.close();
   }
 });
 
@@ -205,6 +399,9 @@ test("operator restore and import replace live bootstrap truth and create safety
   const worldHome = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-restore-"));
   const { world, server, operatorContract } = await startBlankServerWithWorldHome(worldHome);
   try {
+    const runtimeSentinel = path.join(operatorContract.directories.runtimeRoot, "operator-sentinel.txt");
+    await fs.mkdir(path.dirname(runtimeSentinel), { recursive: true });
+    await fs.writeFile(runtimeSentinel, "keep-live-runtime", "utf8");
     const post = (pathname, body) => fetch(`${server.url}${pathname}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -238,15 +435,16 @@ test("operator restore and import replace live bootstrap truth and create safety
     });
     assert.equal(restored.status, 200);
     const restoreBody = await restored.json();
-    assert.ok(restoreBody.safetyBackup?.id);
-    state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
-    assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
-    assert.equal(state.widgets.some(row => row.id === "beta_page"), false);
-    assert.equal(world.allWitnesses().some(row => row.body?.id === "beta_page"), false);
+      assert.ok(restoreBody.safetyBackup?.id);
+      state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+      assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
+      assert.equal(state.widgets.some(row => row.id === "beta_page"), false);
+      assert.equal(world.allWitnesses().some(row => row.body?.id === "beta_page"), false);
+      assert.equal(await fs.readFile(runtimeSentinel, "utf8"), "keep-live-runtime");
 
-    assert.equal((await post("/api/widgets", widgetInput({ id: "gamma_page", kind: "Page", title: "Gamma", attach: false }))).status, 201);
-    state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
-    assert.equal(state.widgets.some(row => row.id === "gamma_page"), true);
+      assert.equal((await post("/api/widgets", widgetInput({ id: "gamma_page", kind: "Page", title: "Gamma", attach: false }))).status, 201);
+      state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+      assert.equal(state.widgets.some(row => row.id === "gamma_page"), true);
 
     const imported = await post("/api/operator/imports", {
       artifactId: importedArtifactId,
@@ -257,13 +455,14 @@ test("operator restore and import replace live bootstrap truth and create safety
     assert.ok(importBody.safetyBackup?.id);
     assert.equal(importBody.restartRequired, false);
 
-    state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
-    assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
-    assert.equal(state.widgets.some(row => row.id === "gamma_page"), false);
+      state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+      assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
+      assert.equal(state.widgets.some(row => row.id === "gamma_page"), false);
+      assert.equal(await fs.readFile(runtimeSentinel, "utf8"), "keep-live-runtime");
 
-    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
-    assert.equal(diagnostics.operator.mutations.enabled, true);
-    assert.equal(diagnostics.operator.artifacts.backups >= 2, true);
+      const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
+      assert.equal(diagnostics.operator.mutations.enabled, true);
+      assert.equal(diagnostics.operator.artifacts.backups >= 2, true);
     assert.equal(diagnostics.operator.recentActivity.some(entry => entry.process === "operator.import"), true);
   } finally {
     await server.close();
@@ -529,7 +728,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("canonical authoring pathway probe proves route-selected authored output and stops next at route-state synchronization", { timeout: 10000 }, async () => {
+test("canonical authoring pathway probe proves interactive authored page.surface routing", { timeout: 30000 }, async () => {
   const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
@@ -552,8 +751,8 @@ test("canonical authoring pathway probe proves route-selected authored output an
       assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
       assert.equal(result.pathwayProbe.routeSelectedSurfaceVisible, true);
       assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
-      assert.equal(result.pathwayProbe.firstBlockedRung, "urlToRouteState");
-      assert.equal(result.blockers.firstBlocked?.limitationType, "platform");
+      assert.equal(result.pathwayProbe.firstBlockedRung, null);
+      assert.equal(result.blockers.firstBlocked ?? null, null);
       assert.equal(result.stateChecks.rootSurfacePresent, true);
     } finally {
       await server.close();
@@ -710,6 +909,14 @@ test("bootstrap runtime plugin availability and authoring flows are exposed thro
     const model = await fetch(`${server.url}/api/bootstrap-model`).then(response => response.json());
     assert.equal(model.proposalTargetProcesses.includes("runtimePlugin.install"), true);
     assert.equal(model.proposalTargetProcesses.includes("runtimePlugin.remove"), true);
+    assert.equal(
+      model.proposalTargetGovernance.some(row =>
+        row.targetProcess === "runtimePlugin.install"
+        && row.governanceMode === "proposal-fallback"
+        && row.authorityMechanism === "bootstrap-target-authority"
+      ),
+      true
+    );
 
     assert.equal((await post("/api/server-runners", {
       id: "demo_server",
@@ -799,6 +1006,14 @@ test("bootstrap MCP authoring and grouped MCP state are exposed through the gene
     assert.equal(model.proposalTargetProcesses.includes("mcpServer.define"), true);
     assert.equal(model.proposalTargetProcesses.includes("mcpTool.install"), true);
     assert.equal(model.proposalTargetProcesses.includes("mcpTool.remove"), true);
+    assert.equal(
+      model.proposalTargetGovernance.some(row =>
+        row.targetProcess === "mcpServer.define"
+        && row.governanceMode === "proposal-fallback"
+        && row.authorityMechanism === "bootstrap-target-authority"
+      ),
+      true
+    );
     assert.equal(model.supportedMcpActingModes.includes("delegated"), true);
     assert.equal(model.supportedMcpActingModes.includes("service"), true);
     assert.equal(model.supportedMcpTools.some(row => row.name === "world.read"), true);
@@ -907,6 +1122,124 @@ test("bootstrap MCP authoring and grouped MCP state are exposed through the gene
 
     const afterRemove = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
     assert.equal(afterRemove.mcp.servers.find(row => row.id === "ops_mcp")?.tools.some(row => row.tool === "world.read"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("direct runtime-plugin and MCP authoring routes create proposals when target authority is missing", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await post("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+    await post("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie);
+
+    assert.equal((await post("/api/contexts", { id: "ctx.runtime", label: "Runtime" }, aaron.cookie)).status, 201);
+    assert.equal((await post("/api/server-runners", {
+      id: "shared_runner",
+      context: "ctx.runtime",
+      backendHost: "backendHost",
+      frontendHost: "frontendHost"
+    }, aaron.cookie)).status, 201);
+
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    const proposedPluginInstall = await post("/api/runtime-plugin-installs", {
+      serverRunner: "shared_runner",
+      plugin: "plugin.inspect",
+      id: "proposal.runtime-plugin.install.inspect",
+      reason: "Install inspect on the shared runner"
+    }, callan.cookie);
+    assert.equal(proposedPluginInstall.status, 202);
+    const proposedPluginInstallBody = await proposedPluginInstall.json();
+    assert.equal(proposedPluginInstallBody.proposal.targetProcess, "runtimePlugin.install");
+    assert.equal(proposedPluginInstallBody.proposal.id, "proposal.runtime-plugin.install.inspect");
+    assert.equal(proposedPluginInstallBody.proposal.reason, "Install inspect on the shared runner");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedPluginInstallBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    const proposedMcpServer = await post("/api/mcp-servers", {
+      proposalId: "proposal.mcp.server.shared",
+      id: "shared_mcp",
+      label: "Shared MCP",
+      serverRunner: "shared_runner",
+      transportsJson: JSON.stringify(["http"]),
+      reason: "Create a shared MCP server for runtime tooling"
+    }, callan.cookie);
+    assert.equal(proposedMcpServer.status, 202);
+    const proposedMcpServerBody = await proposedMcpServer.json();
+    assert.equal(proposedMcpServerBody.proposal.targetProcess, "mcpServer.define");
+    assert.equal(proposedMcpServerBody.proposal.id, "proposal.mcp.server.shared");
+    assert.equal(proposedMcpServerBody.proposal.reason, "Create a shared MCP server for runtime tooling");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedMcpServerBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    const proposedToolInstall = await post("/api/mcp-tool-installs", {
+      server: "shared_mcp",
+      tool: "world.read",
+      actingMode: "delegated",
+      id: "proposal.mcp.tool.install.world-read",
+      reason: "Install world.read on the shared MCP server"
+    }, callan.cookie);
+    assert.equal(proposedToolInstall.status, 202);
+    const proposedToolInstallBody = await proposedToolInstall.json();
+    assert.equal(proposedToolInstallBody.proposal.targetProcess, "mcpTool.install");
+    assert.equal(proposedToolInstallBody.proposal.id, "proposal.mcp.tool.install.world-read");
+    assert.equal(proposedToolInstallBody.proposal.reason, "Install world.read on the shared MCP server");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedToolInstallBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    let state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(response => response.json());
+    assert.equal(state.runtimePluginInstalls.some(row => row.serverRunner === "shared_runner" && row.plugin === "plugin.inspect"), true);
+    assert.equal(state.mcpServers.some(row => row.id === "shared_mcp" && row.serverRunner === "shared_runner"), true);
+    assert.equal(state.mcpToolInstalls.some(row => row.server === "shared_mcp" && row.tool === "world.read"), true);
+
+    const proposedToolRemove = await post("/api/mcp-tool-installs", {
+      server: "shared_mcp",
+      tool: "world.read",
+      id: "proposal.mcp.tool.remove.world-read",
+      reason: "Remove world.read from the shared MCP server"
+    }, callan.cookie, "DELETE");
+    assert.equal(proposedToolRemove.status, 202);
+    const proposedToolRemoveBody = await proposedToolRemove.json();
+    assert.equal(proposedToolRemoveBody.proposal.targetProcess, "mcpTool.remove");
+    assert.equal(proposedToolRemoveBody.proposal.id, "proposal.mcp.tool.remove.world-read");
+    assert.equal(proposedToolRemoveBody.proposal.reason, "Remove world.read from the shared MCP server");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedToolRemoveBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    const proposedPluginRemove = await post("/api/runtime-plugin-installs", {
+      serverRunner: "shared_runner",
+      plugin: "plugin.inspect",
+      id: "proposal.runtime-plugin.remove.inspect",
+      reason: "Remove inspect from the shared runner"
+    }, callan.cookie, "DELETE");
+    assert.equal(proposedPluginRemove.status, 202);
+    const proposedPluginRemoveBody = await proposedPluginRemove.json();
+    assert.equal(proposedPluginRemoveBody.proposal.targetProcess, "runtimePlugin.remove");
+    assert.equal(proposedPluginRemoveBody.proposal.id, "proposal.runtime-plugin.remove.inspect");
+    assert.equal(proposedPluginRemoveBody.proposal.reason, "Remove inspect from the shared runner");
+    assert.equal((await post(`/api/proposals/${encodeURIComponent(proposedPluginRemoveBody.proposal.id)}/approve`, {}, aaron.cookie)).status, 200);
+
+    state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(response => response.json());
+    assert.equal(state.runtimePluginInstalls.some(row => row.serverRunner === "shared_runner" && row.plugin === "plugin.inspect"), false);
+    assert.equal(state.mcpToolInstalls.some(row => row.server === "shared_mcp" && row.tool === "world.read"), false);
   } finally {
     await server.close();
   }
@@ -1037,26 +1370,21 @@ test("unauthorized scoped writes return 403 and proposals can be approved exactl
     assert.equal((await post("/api/contexts", { id: "ctx.platform", label: "Platform" }, aaron.cookie)).status, 201);
 
     const callan = await openSession(server.url, { username: "callan", password: "callan" });
-    const denied = await post("/api/widgets", widgetInput({ id: "blocked_root", kind: "Page", title: "Blocked", attach: false, context: "ctx.platform" }), callan.cookie);
-    assert.equal(denied.status, 403);
+    const proposed = await post("/api/widgets", widgetInput({ id: "proposed_root", kind: "Page", title: "Proposed", attach: false, context: "ctx.platform" }), callan.cookie);
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.proposal.targetProcess, "widget.define");
+    assert.equal(proposedBody.proposal.targetKind, "context");
+    assert.equal(proposedBody.proposal.targetId, "ctx.platform");
+    const proposalId = proposedBody.proposal.id;
 
-    const proposed = await post("/api/proposals", {
-      id: "proposal.widget.root",
-      targetProcess: "widget.define",
-      targetKind: "widget",
-      targetId: "blocked_root",
-      bodyJson: JSON.stringify(widgetInput({ id: "proposed_root", kind: "Page", title: "Proposed", attach: false, context: "ctx.platform" })),
-      reason: "Need a root page"
-    }, callan.cookie);
-    assert.equal(proposed.status, 201);
-
-    const approved = await post("/api/proposals/proposal.widget.root/approve", {}, aaron.cookie);
+    const approved = await post(`/api/proposals/${encodeURIComponent(proposalId)}/approve`, {}, aaron.cookie);
     assert.equal(approved.status, 200);
-    const approveAgain = await post("/api/proposals/proposal.widget.root/approve", {}, aaron.cookie);
+    const approveAgain = await post(`/api/proposals/${encodeURIComponent(proposalId)}/approve`, {}, aaron.cookie);
     assert.equal(approveAgain.status, 409);
 
     const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
-    const proposal = state.proposals.find(row => row.id === "proposal.widget.root");
+    const proposal = state.proposals.find(row => row.id === proposalId);
     assert.equal(proposal.status, "approved");
     assert.equal(Array.isArray(proposal.executedWitnessIds), true);
     assert.equal(proposal.executedWitnessIds.length > 0, true);
@@ -1102,30 +1430,85 @@ test("live-surface style widget.update proposals can be created without direct a
     }, aaron.cookie);
     const callan = await openSession(server.url, { username: "callan", password: "callan" });
 
-    const denied = await request("/api/widgets/shared_title", { text: "Denied" }, callan.cookie, "PATCH");
-    assert.equal(denied.status, 403);
+    const proposed = await request("/api/widgets/shared_title", { text: "Proposed" }, callan.cookie, "PATCH");
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.proposal.targetProcess, "widget.update");
+    assert.equal(proposedBody.proposal.targetKind, "widget");
+    assert.equal(proposedBody.proposal.targetId, "shared_title");
+    const proposalId = proposedBody.proposal.id;
 
-    const proposed = await request("/api/proposals", {
-      id: "proposal.widget.update.shared-title",
-      targetProcess: "widget.update",
-      targetKind: "widget",
-      targetId: "shared_title",
-      bodyJson: JSON.stringify({ id: "shared_title", text: "Proposed" }),
-      reason: "Need a wording change"
-    }, callan.cookie);
-    assert.equal(proposed.status, 201);
-
-    const approved = await request("/api/proposals/proposal.widget.update.shared-title/approve", {}, aaron.cookie);
+    const approved = await request(`/api/proposals/${encodeURIComponent(proposalId)}/approve`, {}, aaron.cookie);
     assert.equal(approved.status, 200);
-    const approveAgain = await request("/api/proposals/proposal.widget.update.shared-title/approve", {}, aaron.cookie);
+    const approveAgain = await request(`/api/proposals/${encodeURIComponent(proposalId)}/approve`, {}, aaron.cookie);
     assert.equal(approveAgain.status, 409);
 
     const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
-    const proposal = state.proposals.find(row => row.id === "proposal.widget.update.shared-title");
+    const proposal = state.proposals.find(row => row.id === proposalId);
     assert.equal(proposal.status, "approved");
     assert.equal(Array.isArray(proposal.executedWitnessIds), true);
     assert.equal(proposal.executedWitnessIds.length > 0, true);
     assert.equal(state.widgets.some(row => row.id === "shared_title" && row.props?.text === "Proposed"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("package authoring proposals can be created without direct authority and approved once by an authorized actor", async () => {
+  const { world, server } = await startBlankServer();
+  try {
+    const request = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await request("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+    assert.equal((await request("/api/contexts", { id: "ctx.packages", label: "Packages" }, aaron.cookie)).status, 201);
+
+    await request("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie);
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    const proposed = await request("/api/packages", {
+      id: "package.plugin.inspect",
+      context: "ctx.packages",
+      label: "Inspect",
+      packageKind: "plugin",
+      exports: [{ id: "surface.world" }]
+    }, callan.cookie);
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.proposal.targetProcess, "package.define");
+    assert.equal(proposedBody.proposal.targetKind, "context");
+    assert.equal(proposedBody.proposal.targetId, "ctx.packages");
+    const proposalId = proposedBody.proposal.id;
+
+    const approved = await request(`/api/proposals/${encodeURIComponent(proposalId)}/approve`, {}, aaron.cookie);
+    assert.equal(approved.status, 200);
+    const approveAgain = await request(`/api/proposals/${encodeURIComponent(proposalId)}/approve`, {}, aaron.cookie);
+    assert.equal(approveAgain.status, 409);
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    const proposal = state.proposals.find(row => row.id === proposalId);
+    assert.equal(proposal.status, "approved");
+    assert.equal(Array.isArray(proposal.executedWitnessIds), true);
+    assert.equal(proposal.executedWitnessIds.length > 0, true);
+    assert.equal(world.project(moduleProjectors.packageIndex).byId["package.plugin.inspect"]?.id, "package.plugin.inspect");
   } finally {
     await server.close();
   }
@@ -1496,6 +1879,11 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     assert.equal(state.contextImports.some(row => row.context === "ctx.target" && row.sourceContext === "ctx.source" && row.exportName === "homePage" && row.name === "landingPage"), true);
     assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.sourceKind === "import" && row.sourceContext === "ctx.source" && row.exportName === "homePage"), true);
     assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "homePage"), false);
+    assert.equal(state.contextualTargets.some(row => row.id === "page_root" && row.context === "ctx.source"), true);
+    assert.equal(state.contextNameResolutions.some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.resolution === "resolved"), true);
+    assert.equal((state.contextNameConflicts || []).length, 0);
+    assert.equal(state.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget" && row.policyStatus === "allowed-transitional"), true);
+    assert.deepEqual(state.canonicalIdPolicyClasses, ["same-context-convenience", "imported-target-reference", "legacy-only-path"]);
     assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "backendAlias" && row.target === backendHost && row.sourceKind === "import"), true);
     assert.equal(state.widgets.some(row => row.id === "shell_child" && row.context === "ctx.target"), true);
     assert.equal(state.widgets.some(row => row.id === "legacy_child" && row.context === "ctx.target"), true);

@@ -2,6 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
+import {
+  activateBackendProgramVersion,
+  defineBackendProgram,
+  defineBackendProgramVersion,
+  defineBackendProgramVersionTransition
+} from "../../src/backend-programs.js";
 import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
 import { executeProgramAuthoringProposalTarget } from "./program-proposal-targets.js";
 
@@ -134,6 +140,160 @@ test("backend program version create checks target authority against soul", asyn
   assert.deepEqual(seenJson, [{ soul: "todo.todos.list", version: "todo.todos.list.v1", index: 0, context: "backend" }]);
   assert.deepEqual(seenTargets, [{ actor: "aaron", target: "todo.todos.list" }]);
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].kind, "gate");
-  assert.equal(sent[0].gate.reason, "forbidden");
+  assert.equal(sent[0].kind, "json");
+  assert.equal(sent[0].status, 202);
+  assert.equal(sent[0].body.proposal.targetProcess, "backendProgramVersion.define");
+  assert.equal(sent[0].body.proposal.targetKind, "backendProgram");
+  assert.equal(sent[0].body.proposal.targetId, "todo.todos.list");
+});
+
+test("program authoring handlers create proposals instead of dead-end 403s for governed routes", async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    readJson: async req => req.body ?? {},
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureContextAuthority: () => ({ ok: false, status: 403, reason: "forbidden context" }),
+      ensureTargetAuthority: () => ({ ok: false, status: 403, reason: "forbidden target" })
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ kind: "gate", gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ kind: "json", status, body });
+    },
+    supportedFrontendOps: [],
+    supportedBackendOps: []
+  });
+
+  await handlers["frontendProgram.create"]({
+    req: { body: { id: "landing", context: "ctx.shared", rootWidget: "page_root" } },
+    res: {},
+    requestActor: "callan"
+  });
+  await handlers["frontendStep.create"]({
+    req: { body: { program: "landing", event: "load", op: "widget.render" } },
+    res: {},
+    requestActor: "callan"
+  });
+  await handlers["backendProgram.create"]({
+    req: { body: { soul: "todo.todos.list", label: "Todo", context: "ctx.shared" } },
+    res: {},
+    requestActor: "callan"
+  });
+  await handlers["backendStep.create"]({
+    req: { body: { version: "todo.todos.list.v1", event: "request", op: "response.json" } },
+    res: {},
+    requestActor: "callan"
+  });
+  await handlers["backendProgramVersions.activate"]({
+    req: { body: { version: "todo.todos.list.v2" } },
+    res: {},
+    requestActor: "callan",
+    params: { soul: "todo.todos.list" }
+  });
+  await handlers["backendProgramVersions.rollback"]({
+    req: { body: {} },
+    res: {},
+    requestActor: "callan",
+    params: { soul: "todo.todos.list" }
+  });
+
+  assert.equal(sent.some(entry => entry.kind === "gate"), false);
+  assert.deepEqual(sent.map(entry => entry.status), [202, 202, 202, 202, 202, 202]);
+  assert.deepEqual(
+    sent.map(entry => ({
+      targetProcess: entry.body.proposal.targetProcess,
+      targetKind: entry.body.proposal.targetKind,
+      targetId: entry.body.proposal.targetId
+    })),
+    [
+      { targetProcess: "frontendProgram.define", targetKind: "context", targetId: "ctx.shared" },
+      { targetProcess: "frontendStep.define", targetKind: "frontendProgram", targetId: "landing" },
+      { targetProcess: "backendProgram.define", targetKind: "context", targetId: "ctx.shared" },
+      { targetProcess: "backendStep.define", targetKind: "backendProgramVersion", targetId: "todo.todos.list.v1" },
+      { targetProcess: "backendProgramVersion.activate", targetKind: "backendProgram", targetId: "todo.todos.list" },
+      { targetProcess: "backendProgramVersion.rollback", targetKind: "backendProgram", targetId: "todo.todos.list" }
+    ]
+  );
+});
+
+test("program proposal targets execute backend program version activate and rollback through the shared helpers", async () => {
+  const world = createWorld();
+  defineBackendProgram(world, {
+    actor: "system",
+    soul: "todo.todos.list",
+    label: "Todo",
+    context: "ctx.shared",
+    owner: "system"
+  });
+  defineBackendProgramVersion(world, {
+    actor: "system",
+    soul: "todo.todos.list",
+    version: "todo.todos.list.v1",
+    index: 0,
+    context: "ctx.shared",
+    owner: "system"
+  });
+  defineBackendProgramVersion(world, {
+    actor: "system",
+    soul: "todo.todos.list",
+    version: "todo.todos.list.v2",
+    index: 1,
+    context: "ctx.shared",
+    owner: "system"
+  });
+  defineBackendProgramVersionTransition(world, {
+    actor: "system",
+    soul: "todo.todos.list",
+    from: "todo.todos.list.v1",
+    to: "todo.todos.list.v2",
+    strategy: "compatible",
+    owner: "system"
+  });
+  activateBackendProgramVersion(world, {
+    actor: "system",
+    soul: "todo.todos.list",
+    version: "todo.todos.list.v1"
+  });
+
+  const activated = executeProgramAuthoringProposalTarget({
+    world,
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: { targetProcess: "backendProgramVersion.activate", targetId: "todo.todos.list" },
+    body: { soul: "todo.todos.list", version: "todo.todos.list.v2" },
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: () => ({ ok: true })
+  });
+  assert.equal(activated?.ok, true);
+  assert.equal(world.allWitnesses().some(witness =>
+    witness.process === "activateBackendProgramVersion"
+    && witness.actor === "aaron"
+    && witness.body?.soul === "todo.todos.list"
+    && witness.body?.version === "todo.todos.list.v2"
+  ), true);
+
+  const rolledBack = executeProgramAuthoringProposalTarget({
+    world,
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: { targetProcess: "backendProgramVersion.rollback", targetId: "todo.todos.list" },
+    body: { soul: "todo.todos.list" },
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: () => ({ ok: true })
+  });
+  assert.equal(rolledBack?.ok, true);
+  assert.equal(world.allWitnesses().some(witness =>
+    witness.process === "backendProgramVersion.rollback"
+    && witness.actor === "aaron"
+    && witness.body?.soul === "todo.todos.list"
+  ), true);
 });

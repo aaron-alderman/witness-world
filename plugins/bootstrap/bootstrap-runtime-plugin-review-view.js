@@ -69,6 +69,7 @@ export function buildBootstrapRuntimePluginPreviewSummary({
     }
     if (preview.delta?.effectiveNoOp) parts.push("Executable runtime composition is unchanged.");
   }
+  if (row.reconcileActions?.length) parts.push("Repair actions available.");
   return parts.join(" ");
 }
 
@@ -175,6 +176,10 @@ export function buildBootstrapRuntimePluginReviewView({
         formatRuntimePluginValue({ surfaces: row.resolvedRuntimeContributions?.surfaces ?? [] }),
         formatRuntimePluginValue({ handlerSets: row.resolvedRuntimeContributions?.handlerSets ?? [] })
       ]
+    },
+    {
+      title: "Reconcile And Repair",
+      codes: (row.reconcileActions || []).map(formatRuntimePluginValue)
     },
     {
       title: "Current Runner Composition",

@@ -85,6 +85,8 @@ test("bootstrap shell select fill applies the documented select inventories and 
       contexts: [{ id: "ctx.root" }],
       widgets: [{ id: "widget.root" }],
       frontendPrograms: [{ id: "program.root" }],
+      processes: [{ id: "ShellNavigation" }],
+      types: [{ id: "ActiveRoute", role: "state" }, { id: "NotState", role: "event" }],
       backendPrograms: [{ soul: "backend.program" }],
       routes: [{ id: "route.home" }],
       serverRunners: [{ id: "demo_server" }],
@@ -111,6 +113,8 @@ test("bootstrap shell select fill applies the documented select inventories and 
   });
 
   assert.equal(calls.some(([id]) => id === "widget-kind"), true);
+  assert.equal(calls.some(([id, values]) => id === "route-state-process" && values.includes("ShellNavigation")), true);
+  assert.equal(calls.some(([id, values]) => id === "route-state-state" && values.includes("ActiveRoute") && !values.includes("NotState")), true);
   assert.equal(calls.some(([id]) => id === "runtime-plugin-review-runner"), true);
   assert.equal(calls.some(([id]) => id === "runtime-plugin-review-plugin"), true);
   assert.equal(calls.some(([id]) => id === "operator-restore-artifact"), true);

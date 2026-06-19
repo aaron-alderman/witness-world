@@ -4,6 +4,7 @@ function ensureEdenPageSurface(surface, deps) {
     actionById,
     applySurfaceMeta,
     capabilityInstallRuntime,
+    createEdenVersionProposal,
     createEdenCapabilityInstallProposal,
     embeddedMode,
     focusTarget,

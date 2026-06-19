@@ -1,0 +1,121 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/pipeline-runtime"
+path = "plugins/pipeline-runtime"
+label = "pipeline-runtime"
+summary = "Auto-generated folder metadata for plugins/pipeline-runtime."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/burst-fit-kernels.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/catalog-runtime.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/clip-kernels.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/coordinator-runtime.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/desire-rvm.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/handler-catalog.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/handlers.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/health-kernels.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/job-handlers.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/kalman-kernels.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/pipeline-runtime.test.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/planner-runtime.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "json:plugins/pipeline-runtime/plugin.json"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/projections.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/proof-runtime.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "file:plugins/pipeline-runtime/runtime.js"
+
+[[relation]]
+from = "folder:plugins/pipeline-runtime"
+rel = "contains"
+to = "wtoml:plugins/pipeline-runtime/this.folder.wtoml"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/pipeline-runtime"
+# rel = "describedBy"
+# to = "doc:..."

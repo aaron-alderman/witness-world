@@ -19,6 +19,12 @@ import {
   bindContextName,
   exportContextName,
   importContextName,
+  explainContextualName,
+  explainContextualTargetVisibility,
+  classifyCanonicalIdPolicy,
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
+  resolveCoveredContextualRef,
+  resolveContextualRef,
   resolveContextualName,
   moduleProjectors
 } from "../src/modules.js";
@@ -73,7 +79,11 @@ test("server runner serves a route that points at a frontend artifact", () => {
     storage: { todoProjection: "todos.json" },
     runtimeConfig: null,
     allowActorHeader: false,
-    context: null
+    hosts: null,
+    default: false,
+    requireAuth: false,
+    context: null,
+    values: null
   }]);
   assert.deepEqual(world.project(moduleProjectors.servedRoutes), [{
     id: "root_route",
@@ -148,6 +158,9 @@ test("identity projector indexes authored identities by id, username, and actor"
     label: "Aaron",
     username: "aaron",
     password: "aaron",
+    displayName: null,
+    jobTitle: null,
+    initials: null,
     homeContext: null,
     homePerspective: "aaron:personal"
   }]);
@@ -192,4 +205,183 @@ test("context composition projectors expose local bindings, exports, imports, an
   const resolved = resolveContextualName(world.allWitnesses(), { context: "ctx.target", name: "landingPage" });
   assert.equal(resolved.ok, true);
   assert.equal(resolved.target, "page.root");
+});
+
+test("context explanation helpers expose resolved, ambiguous, and hidden contextual cases", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "system" });
+  defineContext(world, { actor: "system", id: "ctx.source", label: "Source" });
+  defineContext(world, { actor: "system", id: "ctx.target", label: "Target" });
+  createThing(world, { actor: "system", id: "page.root" });
+  createThing(world, { actor: "system", id: "page.alt" });
+  createThing(world, { actor: "system", id: "page.hidden" });
+  createThing(world, { actor: "system", id: "legacy.shell" });
+  world.emit({
+    process: "scope.page.alt",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.alt", rel: "inContext", to: "ctx.source" }],
+    body: {}
+  });
+  world.emit({
+    process: "scope.page.hidden",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.hidden", rel: "inContext", to: "ctx.source" }],
+    body: {}
+  });
+  bindContextName(world, { actor: "system", context: "ctx.source", name: "homePage", target: "page.root" });
+  exportContextName(world, { actor: "system", context: "ctx.source", name: "homePage", target: "page.root" });
+  importContextName(world, { actor: "system", context: "ctx.target", sourceContext: "ctx.source", exportName: "homePage", name: "landingPage" });
+
+  const imported = explainContextualName(world.allWitnesses(), { context: "ctx.target", name: "landingPage" });
+  assert.equal(imported.ok, true);
+  assert.equal(imported.resolution, "import");
+  assert.equal(imported.target, "page.root");
+
+  bindContextName(world, { actor: "system", context: "ctx.target", name: "landingPage", target: "page.alt" });
+  const ambiguity = explainContextualName(world.allWitnesses(), { context: "ctx.target", name: "landingPage" });
+  assert.equal(ambiguity.ok, false);
+  assert.equal(ambiguity.resolution, "ambiguous");
+  assert.deepEqual(ambiguity.targets, ["page.alt", "page.root"]);
+
+  const resolutions = world.project(moduleProjectors.contextNameResolutions);
+  assert.equal(resolutions.some(row =>
+    row.context === "ctx.target"
+    && row.name === "landingPage"
+    && row.resolution === "ambiguous"
+    && row.targets.includes("page.root")
+    && row.targets.includes("page.alt")
+  ), true);
+  const conflicts = world.project(moduleProjectors.contextNameConflicts);
+  assert.equal(conflicts.some(row =>
+    row.context === "ctx.target"
+    && row.name === "landingPage"
+    && row.targets.includes("page.root")
+    && row.targets.includes("page.alt")
+  ), true);
+  assert.equal(world.project(moduleProjectors.contextualTargets).some(row => row.id === "page.hidden" && row.context === "ctx.source"), true);
+
+  const hidden = explainContextualTargetVisibility(world.allWitnesses(), { context: "ctx.target", target: "page.hidden" });
+  assert.equal(hidden.ok, false);
+  assert.equal(hidden.visibility, "hidden");
+  assert.equal(hidden.targetContext, "ctx.source");
+
+  const importedVisibility = explainContextualTargetVisibility(world.allWitnesses(), { context: "ctx.target", target: "page.root" });
+  assert.equal(importedVisibility.ok, true);
+  assert.equal(importedVisibility.visibility, "import");
+  assert.deepEqual(importedVisibility.names, ["landingPage"]);
+
+  const unscoped = explainContextualTargetVisibility(world.allWitnesses(), { context: "ctx.target", target: "legacy.shell" });
+  assert.equal(unscoped.ok, true);
+  assert.equal(unscoped.visibility, "unscoped");
+});
+
+test("contextual ref resolution classifies canonical-id compatibility and enforces explicit allowed classes", () => {
+  const world = createWorld();
+  defineContext(world, { actor: "system", id: "ctx.source", label: "Source" });
+  defineContext(world, { actor: "system", id: "ctx.target", label: "Target" });
+  createThing(world, { actor: "system", id: "page.local" });
+  createThing(world, { actor: "system", id: "page.imported" });
+  createThing(world, { actor: "system", id: "legacy.shell" });
+  world.emit({
+    process: "scope.page.local",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.local", rel: "inContext", to: "ctx.target" }],
+    body: {}
+  });
+  world.emit({
+    process: "scope.page.imported",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.imported", rel: "inContext", to: "ctx.source" }],
+    body: {}
+  });
+  bindContextName(world, { actor: "system", context: "ctx.source", name: "sourcePage", target: "page.imported" });
+  exportContextName(world, { actor: "system", context: "ctx.source", name: "sourcePage", target: "page.imported" });
+  importContextName(world, { actor: "system", context: "ctx.target", sourceContext: "ctx.source", exportName: "sourcePage", name: "importedPage" });
+
+  assert.deepEqual(CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES, [
+    "same-context-convenience",
+    "imported-target-reference",
+    "legacy-only-path"
+  ]);
+
+  const sameContext = classifyCanonicalIdPolicy(world.allWitnesses(), {
+    context: "ctx.target",
+    target: "page.local"
+  });
+  assert.equal(sameContext.ok, true);
+  assert.equal(sameContext.policyClass, "same-context-convenience");
+
+  const imported = classifyCanonicalIdPolicy(world.allWitnesses(), {
+    context: "ctx.target",
+    target: "page.imported"
+  });
+  assert.equal(imported.ok, true);
+  assert.equal(imported.policyClass, "imported-target-reference");
+
+  const legacy = classifyCanonicalIdPolicy(world.allWitnesses(), {
+    context: "ctx.target",
+    target: "legacy.shell"
+  });
+  assert.equal(legacy.ok, true);
+  assert.equal(legacy.policyClass, "legacy-only-path");
+
+  const localResolved = resolveContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.local",
+    label: "root widget",
+    allowedCanonicalIdPolicyClasses: ["same-context-convenience"]
+  });
+  assert.equal(localResolved.ok, true);
+  assert.equal(localResolved.canonicalIdPolicyClass, "same-context-convenience");
+
+  const importedResolved = resolveContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.imported",
+    label: "root widget",
+    allowedCanonicalIdPolicyClasses: ["imported-target-reference"]
+  });
+  assert.equal(importedResolved.ok, true);
+  assert.equal(importedResolved.canonicalIdPolicyClass, "imported-target-reference");
+
+  const blockedImported = resolveContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.imported",
+    label: "root widget",
+    allowedCanonicalIdPolicyClasses: ["same-context-convenience"]
+  });
+  assert.equal(blockedImported.ok, false);
+  assert.match(blockedImported.error, /imported-target-reference/);
+
+  const blockedLegacy = resolveContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "legacy.shell",
+    label: "parent widget",
+    allowedCanonicalIdPolicyClasses: ["same-context-convenience", "imported-target-reference"]
+  });
+  assert.equal(blockedLegacy.ok, false);
+  assert.match(blockedLegacy.error, /legacy-only-path/);
+
+  createThing(world, { actor: "system", id: "page.hidden" });
+  world.emit({
+    process: "scope.page.hidden",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.hidden", rel: "inContext", to: "ctx.hidden" }],
+    body: {}
+  });
+
+  const coveredImported = resolveCoveredContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.imported",
+    label: "proposal target"
+  });
+  assert.equal(coveredImported.ok, true);
+  assert.equal(coveredImported.canonicalIdPolicyClass, "imported-target-reference");
+
+  const blockedHidden = resolveCoveredContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.hidden",
+    label: "proposal target"
+  });
+  assert.equal(blockedHidden.ok, false);
+  assert.match(blockedHidden.error, /not visible in authoring context ctx.target/);
 });

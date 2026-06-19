@@ -67,8 +67,19 @@ import {
   setTutorialContextDisabled,
   setTutorialPageDisabled,
   setTutorialScopeDisabled,
-  skipTutorialChapter
+  skipTutorialChapter,
+  guidanceScopeAncestors
 } from "../../src/runtime-guidance-model.js";
+import { buildGuidanceScopeInventoryRows } from "../../src/runtime-guidance-scope-inventory.js";
+import {
+  guidancePageScopeRecord,
+  guidanceScopeAnchor,
+  guidanceScopeAnchorsFromBootstrapSections,
+  guidanceScopeAnchorsFromWidgets,
+  guidanceSectionScopeRecord,
+  guidanceWidgetScopeRecord,
+  guidanceWorldScopeRecord
+} from "../../src/runtime-guidance-scope-anchors.js";
 import { todoTutorialSeed } from "./todo-tutorial-seed.js";
 
 export const TODO_TUTORIAL_ID = "todo-from-scratch";
@@ -83,54 +94,10 @@ function tutorialContextLabel(contextId) {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1) + " context";
 }
 
-function pageScope(page, label = null) {
-  const scopePage = typeof page === "string" ? page.trim() : "";
-  return scopePage
-    ? normalizeScopeFields({
-        scopeKey: tutorialPageScopeKey(scopePage),
-        scopeKind: "page",
-        scopePage,
-        scopeLabel: label || (page === "app" ? "App" : (page === "bootstrap" ? "Bootstrap" : "World"))
-      })
-    : {};
-}
-
-function worldScope(label = null) {
-  return normalizeScopeFields({
-    scopeKey: "world",
-    scopeKind: "world",
-    scopePage: "world",
-    scopeLabel: label || "World"
-  });
-}
-
-function sectionScope(page, sectionId, label = null) {
-  const scopePage = typeof page === "string" ? page.trim() : "";
-  const normalizedSectionId = typeof sectionId === "string" ? sectionId.trim() : "";
-  return scopePage && normalizedSectionId
-    ? normalizeScopeFields({
-        scopeKey: `section:${scopePage}:${normalizedSectionId}`,
-        scopeKind: "section",
-        scopePage,
-        scopeSectionId: normalizedSectionId,
-        scopeLabel: label || normalizedSectionId
-      })
-    : {};
-}
-
-function widgetScope(page, widgetId, label = null) {
-  const scopePage = typeof page === "string" ? page.trim() : "";
-  const normalizedWidgetId = typeof widgetId === "string" ? widgetId.trim() : "";
-  return normalizedWidgetId
-    ? normalizeScopeFields({
-        scopeKey: `widget:${normalizedWidgetId}`,
-        scopeKind: "widget",
-        scopePage: scopePage || null,
-        scopeWidgetId: normalizedWidgetId,
-        scopeLabel: label || normalizedWidgetId
-      })
-    : {};
-}
+const pageScope = guidancePageScopeRecord;
+const worldScope = guidanceWorldScopeRecord;
+const sectionScope = guidanceSectionScopeRecord;
+const widgetScope = guidanceWidgetScopeRecord;
 
 function withStepScope(step, scope = null) {
   const scoped = scope && typeof scope === "object" ? { ...scope } : null;
@@ -149,84 +116,10 @@ function withStepSurfaceContext(step, contextId = null, label = null) {
   };
 }
 
-function scopeAnchor(scope = null, target = null) {
-  const scoped = scope && typeof scope === "object" ? { ...scope } : {};
-  const normalizedTarget = typeof target === "string" && target.trim() ? target.trim() : "";
-  return normalizedTarget ? { ...scoped, target: normalizedTarget } : scoped;
-}
+const scopeAnchor = guidanceScopeAnchor;
 
 function tutorialConcept(id, label, summary) {
   return { id, label, summary };
-}
-
-function humanizeIdentifier(value) {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  if (!normalized) return "";
-  return normalized
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, letter => letter.toUpperCase());
-}
-
-function plainTutorialLabel(value) {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  if (!normalized || normalized.includes("${")) return "";
-  return normalized;
-}
-
-function tutorialScopeLabelFromWidget(widget, childrenByParent = new Map()) {
-  if (!widget || typeof widget !== "object") return "";
-  const directCandidates = [
-    widget.title,
-    widget.label,
-    widget.text,
-    widget.placeholder,
-    widget.role && humanizeIdentifier(widget.role),
-    widget.name && humanizeIdentifier(widget.name),
-    widget.id && humanizeIdentifier(widget.id)
-  ];
-  for (const candidate of directCandidates) {
-    const label = plainTutorialLabel(candidate);
-    if (label) return label;
-  }
-  for (const child of childrenByParent.get(widget.id) || []) {
-    const label = tutorialScopeLabelFromWidget(child, childrenByParent);
-    if (label) return label;
-  }
-  return widget.id ? humanizeIdentifier(widget.id) : "";
-}
-
-function tutorialScopeAnchorsFromWidgets(page, widgets = []) {
-  const normalizedPage = typeof page === "string" ? page.trim() : "";
-  if (!normalizedPage) return [];
-  const rows = Array.isArray(widgets) ? widgets : [];
-  const childrenByParent = new Map();
-  for (const row of rows) {
-    if (!row?.parent) continue;
-    if (!childrenByParent.has(row.parent)) childrenByParent.set(row.parent, []);
-    childrenByParent.get(row.parent).push(row);
-  }
-  for (const children of childrenByParent.values()) {
-    children.sort((left, right) => Number(left?.order ?? 0) - Number(right?.order ?? 0));
-  }
-  const anchors = [];
-  for (const row of rows) {
-    const target = typeof row?.guidanceTarget === "string" && row.guidanceTarget.trim()
-      ? row.guidanceTarget.trim()
-      : (typeof row?.tutorialTarget === "string" ? row.tutorialTarget.trim() : "");
-    if (!row?.id || !target) continue;
-    const label = tutorialScopeLabelFromWidget(row, childrenByParent) || row.id;
-    const isSection = row.kind === "Box" || row.kind === "Section" || row.kind === "Form";
-    anchors.push(scopeAnchor(
-      isSection
-        ? sectionScope(normalizedPage, row.id, label)
-        : widgetScope(normalizedPage, row.id, label),
-      target
-    ));
-  }
-  return anchors;
 }
 
 function tutorialStepWithConcepts(step, concepts) {
@@ -278,9 +171,24 @@ export function todoTutorialDefinition() {
     tutorialConcept("perspective-data", "Perspective Data", "Private notes belong to the signed-in perspective rather than the shared app view."),
     tutorialConcept("operating-surface", "Operating Surface", "The world page is a real surface for inspecting authored objects, witnessed execution, and hidden modes without leaving the product.")
   ];
+  const bootstrapOperatorScopes = guidanceScopeAnchorsFromBootstrapSections([
+    { sectionId: "context-form", label: "Context form", target: "context-form" },
+    { sectionId: "capability-form", label: "Capability form", target: "capability-form" },
+    { sectionId: "capability-install-form", label: "Capability install form", target: "capability-install-form" },
+    { sectionId: "backend-program-form", label: "Backend program form", target: "backend-program-form" },
+    { sectionId: "backend-program-version-form", label: "Backend program version form", target: "backend-program-version-form" },
+    { sectionId: "backend-step-form", label: "Backend step form", target: "backend-step-form" },
+    { sectionId: "runtime-plugin-install-form", label: "Runtime plugin install form", target: "runtime-plugin-install-form" },
+    { sectionId: "mcp-server-form", label: "MCP server form", target: "mcp-server-form" },
+    { sectionId: "mcp-tool-install-form", label: "MCP tool install form", target: "mcp-tool-install-form" },
+    { sectionId: "perspective-form", label: "Perspective form", target: "perspective-form" },
+    { widgetId: "bootstrap_identity_id_input", label: "Identity id", target: "identity-id" },
+    { widgetId: "bootstrap_identity_submit_button", label: "Identity submit", target: "identity-submit" }
+  ]);
   const scopes = [
-    ...tutorialScopeAnchorsFromWidgets("app", blueprint.widgets),
-    ...tutorialScopeAnchorsFromWidgets("world", blueprint.operatingWidgets)
+    ...bootstrapOperatorScopes,
+    ...guidanceScopeAnchorsFromWidgets("app", blueprint.widgets),
+    ...guidanceScopeAnchorsFromWidgets("world", blueprint.operatingWidgets)
   ];
   const widgetSteps = tutorialStepsWithConcepts(blueprint.widgets.map(definition => bootstrapStep(
     `widgets:${definition.id}`,
@@ -540,5 +448,7 @@ export {
   setTutorialContextDisabled,
   setTutorialPageDisabled,
   setTutorialScopeDisabled,
-  skipTutorialChapter
+  skipTutorialChapter,
+  guidanceScopeAncestors as tutorialScopeAncestors,
+  buildGuidanceScopeInventoryRows
 };

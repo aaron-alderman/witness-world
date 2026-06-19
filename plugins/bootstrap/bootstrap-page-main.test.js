@@ -22,6 +22,9 @@ test("bootstrap authored page main renders shell structure and replaces authored
   assert.match(html, /witness:bootstrap-runtime-plugin-review-sync/);
   assert.match(html, /id="mcp-server-inventory"/);
   assert.match(html, /id="state-contexts"/);
+  assert.match(html, /id="state-packages"/);
+  assert.match(html, /id="state-package-convergence"/);
+  assert.match(html, /id="state-package-apply-previews"/);
   assert.match(html, /id="injected-top-cards"/);
   assert.match(html, /id="injected-widgets"/);
   assert.match(html, /id="injected-starter"/);

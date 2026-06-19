@@ -169,8 +169,10 @@ test("process view routes expose correlated runs and dedicated process page", as
 
     const backendProcessView = await fetch(`${server.url}/api/process-view?program=todo.todos.list.v1&event=request&runId=${backendRunId}`).then(response => response.json());
     assert.equal(backendProcessView.selection.runId, backendRunId);
-    assert.equal(backendProcessView.run.requests[0].handler, "todos.readModel");
-    assert.equal(backendProcessView.run.requests[0].url, "/api/todos");
+    const projectorRequest = backendProcessView.run.requests.find(request => request.projector === "demo.todosReadModel");
+    assert.ok(projectorRequest);
+    assert.equal(projectorRequest.method, "PROJECT");
+    assert.equal(projectorRequest.url, "project:demo.todosReadModel");
   } finally {
     await server.close();
   }

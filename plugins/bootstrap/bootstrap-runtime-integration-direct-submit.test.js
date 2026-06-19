@@ -266,7 +266,7 @@ test("direct runtime integration submit bridge binds one documented event family
 
   const factory = renderBootstrapRuntimeIntegrationDirectSubmitFactory();
   assert.equal(factory.includes("const bootstrapRuntimeIntegrationDirectSubmitContractsByFamily ="), true);
-  assert.equal(factory.includes("const omitBlankStringFields ="), true);
+  assert.equal(factory.includes("const bootstrapRuntimeIntegrationDirectOmitBlankStringFields ="), true);
   assert.equal(factory.includes("const buildBootstrapRuntimeIntegrationDirectSubmitRequest ="), true);
   assert.equal(factory.includes("const runBootstrapRuntimeIntegrationDirectSubmit ="), true);
   assert.equal(factory.includes("const bindBootstrapRuntimeIntegrationDirectSubmit ="), true);

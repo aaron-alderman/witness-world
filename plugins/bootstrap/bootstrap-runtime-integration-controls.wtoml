@@ -10,6 +10,7 @@ children = ["bootstrap_runtime_plugin_install_form", "bootstrap_runtime_plugin_i
 [[form]]
 id = "bootstrap_runtime_plugin_install_form"
 domId = "runtime-plugin-install-form"
+guidanceTarget = "runtime-plugin-install-form"
 class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_grid", "bootstrap_runtime_plugin_install_actions"]
 
@@ -129,6 +130,7 @@ children = ["bootstrap_mcp_server_form", "bootstrap_mcp_server_help", "bootstrap
 [[form]]
 id = "bootstrap_mcp_server_form"
 domId = "mcp-server-form"
+guidanceTarget = "mcp-server-form"
 class = "surface-stack"
 children = ["bootstrap_mcp_server_row_one", "bootstrap_mcp_server_row_two", "bootstrap_mcp_server_row_three", "bootstrap_mcp_server_actions"]
 
@@ -322,6 +324,7 @@ children = ["bootstrap_mcp_tool_install_form", "bootstrap_mcp_tool_install_help"
 [[form]]
 id = "bootstrap_mcp_tool_install_form"
 domId = "mcp-tool-install-form"
+guidanceTarget = "mcp-tool-install-form"
 class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_row_one", "bootstrap_mcp_tool_install_row_two", "bootstrap_mcp_tool_install_scope_contexts_field", "bootstrap_mcp_tool_install_scope_targets_field", "bootstrap_mcp_tool_install_actions"]
 

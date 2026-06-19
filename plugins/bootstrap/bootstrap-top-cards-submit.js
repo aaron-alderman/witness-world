@@ -7,9 +7,10 @@ export function renderBootstrapTopCardsSubmitFactory() {
     const bootstrapTopCardsSubmitContractsByFamily = ${JSON.stringify(bootstrapTopCardsSubmitContractsByFamily)};
     const buildBootstrapTopCardsSubmitRequest = ${buildBootstrapTopCardsSubmitRequest.toString()};
     const contractMatchesDetail = ${contractMatchesDetail.toString()};
-    const contractForFamily = ${contractForFamily.toString()};
+    const normalizeBootstrapTopCardsBoolean = ${normalizeBootstrapTopCardsBoolean.toString()};
+    const bootstrapTopCardsContractForFamily = ${bootstrapTopCardsContractForFamily.toString()};
     const runBootstrapTopCardsSubmit = ${runBootstrapTopCardsSubmit.toString()};
-    const resolveUrlTemplate = ${resolveUrlTemplate.toString()};
+    const bootstrapTopCardsResolveUrlTemplate = ${bootstrapTopCardsResolveUrlTemplate.toString()};
     const applyBootstrapTopCardsSubmitFieldRule = ${applyBootstrapTopCardsSubmitFieldRule.toString()};
     const bindBootstrapTopCardsSubmit = ${bindBootstrapTopCardsSubmit.toString()};
   `;
@@ -29,13 +30,13 @@ function contractMatchesDetail(contract = {}, detail = {}) {
   return true;
 }
 
-function contractForFamily(family = "", detail = {}, contractsByFamily = bootstrapTopCardsSubmitContractsByFamily) {
+function bootstrapTopCardsContractForFamily(family = "", detail = {}, contractsByFamily = bootstrapTopCardsSubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   const variants = key ? (contractsByFamily[key] || []) : [];
   return variants.find(contract => contractMatchesDetail(contract, detail)) || null;
 }
 
-function resolveUrlTemplate(template = "", detail = {}) {
+function bootstrapTopCardsResolveUrlTemplate(template = "", detail = {}) {
   return String(template || "").replace(/\$\{([^}]+)\}/g, (_match, key) => (
     encodeURIComponent(detail?.[String(key).trim()] || "")
   ));
@@ -74,7 +75,7 @@ export function buildBootstrapTopCardsSubmitRequest({
   detail = {},
   contractsByFamily = bootstrapTopCardsSubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, detail, contractsByFamily);
+  const contract = bootstrapTopCardsContractForFamily(detail.family, detail, contractsByFamily);
   if (!contract) return null;
   let body = contract.omitBody === true
     ? undefined
@@ -87,7 +88,7 @@ export function buildBootstrapTopCardsSubmitRequest({
     }
   }
   return {
-    url: contract.urlTemplate ? resolveUrlTemplate(contract.urlTemplate, detail) : (contract.url || ""),
+    url: contract.urlTemplate ? bootstrapTopCardsResolveUrlTemplate(contract.urlTemplate, detail) : (contract.url || ""),
     ...(contract.method ? { method: contract.method } : {}),
     body,
     ...(contract.successText ? { successText: contract.successText } : {}),

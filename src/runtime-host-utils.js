@@ -96,9 +96,47 @@ export function resolveServerRunner(world, serverRunnerId = null) {
   return { ok: false, reason: "multiple server runners defined", body: { serverRunners: runners.map(runner => runner.id) } };
 }
 
+// Normalize a raw Host header for runner matching: take the host portion, lowercase, strip port.
+export function normalizeHostHeader(hostHeader) {
+  if (typeof hostHeader !== "string") return "";
+  const first = hostHeader.split(",")[0].trim().toLowerCase();
+  if (!first) return "";
+  // IPv6 literals arrive bracketed (e.g. [::1]:3000); keep the bracketed host, drop the port.
+  if (first.startsWith("[")) {
+    const close = first.indexOf("]");
+    return close === -1 ? first : first.slice(0, close + 1);
+  }
+  return first.replace(/:\d+$/, "");
+}
+
+// Pick the runner that should answer a request, by Host header. Falls back to the runner flagged
+// `default: true`, then to single-runner behavior so existing single-app launches are unchanged.
+export function resolveRunnerForHost(world, hostHeader = null) {
+  const runners = world.project(moduleProjectors.serverRunners);
+  if (!runners.length) return { ok: false, reason: "no server runners defined", body: {} };
+  const host = normalizeHostHeader(hostHeader);
+  if (host) {
+    const hostMatch = runners.find(runner => Array.isArray(runner.hosts) && runner.hosts.includes(host));
+    if (hostMatch) return { ok: true, runner: hostMatch, matchedBy: "host", host };
+  }
+  const defaultRunner = runners.find(runner => runner.default === true);
+  if (defaultRunner) return { ok: true, runner: defaultRunner, matchedBy: "default", host };
+  if (runners.length === 1) return { ok: true, runner: runners[0], matchedBy: "single", host };
+  return { ok: false, reason: "no server runner matches host and no default is set", body: { host, serverRunners: runners.map(runner => runner.id) } };
+}
+
 export function resolveStartupRunner(world, serverRunnerId = null) {
   const resolved = resolveServerRunner(world, serverRunnerId);
   if (resolved.ok) return resolved;
+  // Multi-host: when several runners are defined and none is explicitly requested, the primary
+  // (host-dispatch fallback) runner is the one flagged `default: true`. Per-request Host dispatch
+  // then routes other hosts to their own runners.
+  if (!serverRunnerId && resolved.reason === "multiple server runners defined") {
+    const runners = world.project(moduleProjectors.serverRunners);
+    const defaultRunner = runners.find(runner => runner.default === true);
+    if (defaultRunner) return { ok: true, runner: defaultRunner };
+    return resolved;
+  }
   if (serverRunnerId || resolved.reason !== "no server runners defined") return resolved;
   const backendHost = uniqueHostByCapability(world, "http.serve");
   const frontendHost = uniqueHostByCapability(world, "dom.render");

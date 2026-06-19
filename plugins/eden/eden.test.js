@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createWorld } from "../../src/kernel.js";
 import { renderEdenPersonalClientPrelude } from "./eden-personal-client.js";
 import { projectEdenPersonalBoxItems } from "./eden-personal-box.js";
 import { renderEdenEditClientPrelude } from "./eden-edit-client.js";
@@ -29,7 +30,7 @@ import { renderEdenTheoryClientPrelude } from "./eden-theory-client.js";
 import { renderEdenViewRuntimePrelude } from "./eden-view-runtime.js";
 import { EDEN_PAGE_CSS } from "./eden-page-styles.js";
 import { renderEdenVersionsClientPrelude } from "./eden-versions-client.js";
-import { providers } from "./runtime.js";
+import { createHandlers, providers } from "./runtime.js";
 
 test("eden plugin exposes eden bundle handlers", async () => {
   const source = await readFile(new URL("./runtime.js", import.meta.url), "utf8");
@@ -235,6 +236,77 @@ test("eden page script and client runtime delegate request, panel-status, action
   assert.equal(helperSource.includes("function renderEdenSurfaceActions"), true);
   assert.equal(helperSource.includes("function createEdenVersionProposalRequest"), true);
   assert.equal(helperSource.includes("function createEdenCapabilityInstallProposalRequest"), true);
+  assert.equal(helperSource.includes('"/api/proposals"'), false);
+  assert.equal(helperSource.includes('"/api/eden/versions/activate"'), true);
+  assert.equal(helperSource.includes('"/api/eden/versions/rollback"'), true);
+  assert.equal(helperSource.includes('"/api/eden/versions/publish"'), true);
+  assert.equal(helperSource.includes('"/api/eden/capability-installs"'), true);
+});
+
+test("eden direct version publish route creates a proposal instead of relying on browser-side proposal creation", async () => {
+  const sent = [];
+  const handlers = createHandlers({
+    world: createWorld(),
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    send() {},
+    sendJson(_res, status, body) {
+      sent.push({ status, body });
+    },
+    readJson: async () => ({ version: "todo_versioned_banner_v2" }),
+    requestVisibleWitnesses: () => [],
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureTargetAuthority: () => ({ ok: false, status: 403, reason: "forbidden" }),
+      executeBootstrapProposal: () => null
+    },
+    sendGateFailure() {}
+  });
+
+  await handlers["edenVersions.publish"]({
+    req: {},
+    res: {},
+    requestActor: "callan",
+    route: { params: { surfaceId: "eden.surface.versions", soul: "todo_versioned_banner", publishedVersion: "todo_versioned_banner_v1", draftVersion: "todo_versioned_banner_v2" } }
+  });
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].status, 202);
+  assert.equal(sent[0].body.proposal?.targetProcess, "edenVersions.publish");
+  assert.equal(sent[0].body.proposal?.targetId, "todo_versioned_banner");
+});
+
+test("eden direct capability install route creates a proposal instead of trusting the browser to post one", async () => {
+  const sent = [];
+  const handlers = createHandlers({
+    world: createWorld(),
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    send() {},
+    sendJson(_res, status, body) {
+      sent.push({ status, body });
+    },
+    readJson: async () => ({ capability: "notes.sidebar" }),
+    requestVisibleWitnesses: () => [],
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureTargetAuthority: () => ({ ok: false, status: 403, reason: "forbidden" }),
+      executeBootstrapProposal: () => null
+    },
+    sendGateFailure() {}
+  });
+
+  await handlers["edenCapabilityInstall.install"]({
+    req: {},
+    res: {},
+    requestActor: "callan",
+    route: { params: { surfaceId: "eden.surface.world", target: "frontend", targetKind: "context", targetLabel: "frontend context", recommendedCapabilities: ["notes.sidebar"] } }
+  });
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].status, 202);
+  assert.equal(sent[0].body.proposal?.targetProcess, "capability.install");
+  assert.equal(sent[0].body.proposal?.targetId, "frontend");
 });
 
 test("eden page no longer carries stale inline panel renderer bodies after helper extraction", async () => {
@@ -428,6 +500,7 @@ test("eden page script and client runtime delegate per-surface assembly and deta
   assert.equal(pageScriptSource.includes('from "./eden-surface-adapters.js"'), true);
   assert.equal(pageScriptSource.includes("renderEdenSurfaceAdaptersPrelude()"), true);
   assert.equal(clientRuntimeSource.includes("return ensureEdenPageSurface(surface, {"), true);
+  assert.equal(clientRuntimeSource.includes("createEdenVersionProposal,"), true);
   assert.equal(clientRuntimeSource.includes("return renderEdenPageSurfaceDetails(node, surface, {"), true);
   assert.equal(clientRuntimeSource.includes("function renderTreeSurface("), false);
   assert.equal(clientRuntimeSource.includes("return ensureEdenSurfaceNode(surface, {"), false);

@@ -27,12 +27,15 @@ import {
   shouldServeBootstrapFallback
 } from "./runtime-routing.js";
 import { ensureRuntimeBuiltins } from "./runtime-builtins.js";
+import { createRuntimeVerificationPersistence } from "./runtime-verification-persistence.js";
 import {
   DEFAULT_RUNTIME_PROFILE,
   defaultHostCapabilitiesForProfile,
   dispatchHandlerIdsForProfile,
   handlerSetDefinitionsForProfile,
   handlerSetFactoriesForProfile,
+  handlerMetadataForProfile,
+  matchRuntimeBundleRoute,
   providedCapabilityIdsForProfile,
   runtimeCapabilityDefinitionsForProfile,
   runtimeBuiltinSeedContributionsForProfile,
@@ -40,6 +43,7 @@ import {
   runtimeSurfaceEntriesForProfile,
   startupRequiredHostCapabilitiesForProfile
 } from "./runtime-bundles.js";
+import { renderCompositionGatedPage } from "./runtime-page-fallbacks.js";
 import {
   readRuntimePluginCatalog,
   resolveConfiguredRuntimePluginIds,
@@ -57,6 +61,7 @@ import {
 import { collectActiveRuntimeContributions } from "./runtime-active-contributions.js";
 import { buildRuntimeOperatorContract } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService } from "./runtime-operator-service.js";
+import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.js";
 
 export async function startRuntimeServer(world, {
   actor,
@@ -79,12 +84,14 @@ export async function startRuntimeServer(world, {
     hostCapabilities,
     resolveRuntimeConfig,
     resolveServerRunner,
+    resolveRunnerForHost,
     resolveStartupRunner,
     resolveStorageConfig,
     httpModule = http,
     fsModule = fs,
     ensureRuntimeBuiltins: ensureRuntimeBuiltinsImpl = ensureRuntimeBuiltins,
     runtimeBundleSummaryForProfile: runtimeBundleSummaryForProfileImpl = runtimeBundleSummaryForProfile,
+    handlerMetadataForProfile: handlerMetadataForProfileImpl = handlerMetadataForProfile,
     runtimeSurfaceEntriesForProfile: runtimeSurfaceEntriesForProfileImpl = runtimeSurfaceEntriesForProfile,
     dispatchHandlerIdsForProfile: dispatchHandlerIdsForProfileImpl = dispatchHandlerIdsForProfile,
     handlerSetFactoriesForProfile: handlerSetFactoriesForProfileImpl = handlerSetFactoriesForProfile,
@@ -106,6 +113,42 @@ export async function startRuntimeServer(world, {
     applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState,
     collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions
   } = deps;
+
+  const handleProfileGatedAbsence = async ({ req, res, appContext, pathname, method }) => {
+    const isHtml = String(req.headers["accept"] || "").includes("text/html");
+    if (!isHtml) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+    const compositionOptions = {
+      operatorPluginIds: appContext?.operatorRuntimePluginIds ?? [],
+      authoredPluginIds: appContext?.authoredRuntimePluginIds ?? []
+    };
+    const fullMatched = matchRuntimeBundleRoute("full", method, pathname, compositionOptions);
+    if (fullMatched) {
+      const handlerMetadata = handlerMetadataForProfileImpl("full", compositionOptions);
+      const metadata = handlerMetadata[String(fullMatched.route.handler)];
+      const html = renderCompositionGatedPage({
+        title: metadata?.displayName || "Feature Unavailable",
+        heading: metadata?.displayName || "Feature Unavailable",
+        reason: "This route is defined but its handler is inactive in the current profile.",
+        requiredProfile: metadata?.bundleId ? null : "full",
+        requiredBundles: metadata?.bundleId ? [metadata.bundleId] : [],
+        activeProfile: appContext?.runtimeProfile ?? null
+      });
+      res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      res.end(html);
+      return;
+    }
+    const html = renderCompositionGatedPage({
+      title: "Not Found",
+      heading: "Not Found",
+      reason: "The requested path was not found in the current runtime composition.",
+      activeProfile: appContext?.runtimeProfile ?? null
+    });
+    res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+    res.end(html);
+  };
   const logInfo = typeof logger?.info === "function"
     ? (event, fields) => logger.info(event, fields)
     : () => {};
@@ -151,8 +194,12 @@ export async function startRuntimeServer(world, {
 
   const serverRunner = resolved.runner;
   const runtimePluginInstallIndex = world.project(moduleProjectors.runtimePluginInstallIndex);
-  const authoredRuntimePluginIds = (runtimePluginInstallIndex?.byServerRunner?.[serverRunner.id] ?? [])
-    .map(row => row.plugin);
+  // Load plugin modules authored for ANY runner, not just the primary: a multi-host instance must
+  // have every host's handlers available. Per-runner route filtering (servedRoutes) still scopes
+  // which routes each host actually exposes, so loading extra handler code is inert for other hosts.
+  const authoredRuntimePluginIds = [...new Set(
+    (runtimePluginInstallIndex?.rows ?? []).map(row => row.plugin)
+  )];
   const runtimePluginCatalog = await readRuntimePluginCatalogImpl({
     pluginRoot: runtimePluginRoot,
     runtimeProfile,
@@ -231,6 +278,63 @@ export async function startRuntimeServer(world, {
   }
   const activeRuntimeProfile = resolvedRuntime.profile;
   const compositionOptions = { additionalBundleIds, bundleOverrides };
+  // Per-runner bundle gating (multi-host): plugin-contributed bundles are loaded process-wide so
+  // every host's handlers exist, but generic endpoints from authored runner installs must only
+  // answer on runners that actually install that plugin. Bundles activated by the runtime profile
+  // or explicit operator config are global and must stay mounted on every runner.
+  const pluginBundleIdsByPlugin = new Map();
+  const globalPluginIds = new Set();
+  for (const pluginPackage of effectiveRuntimePluginCatalog.packages ?? []) {
+    const ids = pluginPackage?.runtimeModule?.bundleIds ?? [];
+    if (ids.length) pluginBundleIdsByPlugin.set(pluginPackage.id, new Set(ids));
+    if (
+      pluginPackage?.activation?.active === true
+      && (pluginPackage.activation.requestedSources ?? []).some(source => source !== "authored")
+    ) {
+      globalPluginIds.add(pluginPackage.id);
+    }
+  }
+  const optInBundleIds = new Set();
+  for (const [pluginId, bundleIds] of pluginBundleIdsByPlugin.entries()) {
+    if (globalPluginIds.has(pluginId)) continue;
+    for (const bundleId of bundleIds) optInBundleIds.add(bundleId);
+  }
+  const activeAddedBundlesForRunner = runnerId => {
+    const active = new Set();
+    const installs = world.project(moduleProjectors.runtimePluginInstallIndex)?.byServerRunner?.[runnerId] ?? [];
+    for (const row of installs) {
+      const owned = pluginBundleIdsByPlugin.get(row.plugin);
+      if (owned) for (const bundleId of owned) active.add(bundleId);
+    }
+    return active;
+  };
+  // True when a matched generic endpoint belongs to an opt-in bundle this runner does not activate.
+  const genericEndpointGatedForRunner = (endpoint, runnerId) => {
+    const bundleId = endpoint?.bundleId ?? null;
+    if (!bundleId || !optInBundleIds.has(bundleId)) return false;
+    return !activeAddedBundlesForRunner(runnerId).has(bundleId);
+  };
+  // Universal auth gate (opt-in per runner via `requireAuth`). On a gated runner every endpoint
+  // requires an authenticated session except an allowlist: the auth/session endpoints needed to sign
+  // in, MCP (which carries its own industry-standard auth — see plugins/mcp), and any route that
+  // explicitly opts out with `params.auth.public = true`. Routes that declare their own auth policy
+  // (params.auth.featureId / login pages) are left to the existing per-route flow (evaluateRouteAccess),
+  // which the gate must not pre-empt. Runners without requireAuth are unchanged (dev/bootstrap/demo).
+  const authGateExemptPath = (pathname, method) => {
+    if (pathname === "/api/session") return true; // sign-in / sign-out / read current session
+    if (pathname.startsWith("/mcp/")) return true; // MCP resource servers authenticate themselves
+    if (method === "POST" && pathname === "/api/oauth/start") return true;
+    if (pathname.startsWith("/api/oauth/callback/")) return true;
+    return false;
+  };
+  const requestDeniedByAuthGate = (runner, requestContext, { pathname, method, matchedRoute }) => {
+    if (runner?.requireAuth !== true) return false;
+    if (requestContext?.authenticatedActor) return false; // a real authenticated session
+    if (authGateExemptPath(pathname, method)) return false;
+    if (matchedRoute?.params?.auth?.public === true) return false;
+    if (matchedRoute?.params?.auth) return false; // route owns its auth flow (login/forbidden pages)
+    return true;
+  };
   const runtimeSurfaceEntries = runtimeSurfaceEntriesForProfileImpl(activeRuntimeProfile, null, compositionOptions);
   const activeDispatchHandlers = new Set(resolvedRuntime.dispatchHandlers ?? dispatchHandlerIdsForProfileImpl(activeRuntimeProfile, compositionOptions));
   const handlerSetFactories = handlerSetFactoriesForProfileImpl(activeRuntimeProfile, compositionOptions);
@@ -351,6 +455,38 @@ export async function startRuntimeServer(world, {
   appContext.operatorRuntimePluginIds = effectiveRuntimePluginCatalog.operatorPluginIds;
   appContext.effectiveRuntimePluginIds = effectiveRuntimePluginCatalog.effectivePluginIds;
   appContext.activeRuntimePluginIds = effectiveRuntimePluginCatalog.activePluginIds;
+  const verificationPolicy = resolveRunnerVerificationPolicy({
+    serverRunner,
+    runtimeProfile: activeRuntimeProfile,
+    runtimeConfig: appContext.runtimeConfig
+  });
+  appContext.verificationPolicy = verificationPolicy;
+  appContext.verificationPolicySource = verificationPolicy.source;
+  appContext.verificationPolicyDiagnostics = verificationPolicy.diagnostics ?? [];
+  appContext.verificationPersistence = await createRuntimeVerificationPersistence({
+    serverRunner,
+    appProject,
+    runtimeRoot,
+    runtimeOperatorContract,
+    runtimeProfile: activeRuntimeProfile
+  });
+  appContext.verificationPersistenceDiagnostics = appContext.verificationPersistence?.inspect?.().diagnostics ?? [];
+  const closeVerificationPersistence = () => {
+    try {
+      appContext.verificationPersistence?.close?.();
+    } catch {}
+  };
+  if (typeof appContext.close === "function") {
+    const priorClose = appContext.close.bind(appContext);
+    appContext.close = async () => {
+      try {
+        await priorClose();
+      } finally {
+        closeVerificationPersistence();
+      }
+    };
+  }
+  await appContext.providerRuntimes?.["platform.testMonitor"]?.initialize?.();
   const currentWitnessCount = () => typeof world?.witnessCount === "function"
     ? Number(world.witnessCount() || 0)
     : Number(world?.allWitnesses?.().length || 0);
@@ -463,7 +599,11 @@ export async function startRuntimeServer(world, {
     createRuntimeAppContext: createRuntimeAppContextImpl,
     createUnavailableRuntimeAppContext: createUnavailableRuntimeAppContextImpl,
     createRuntimeContextResolver: createRuntimeContextResolverImpl,
-    resolveLiveRunner: () => resolveServerRunner(world, null)
+    resolveLiveRunner: requestHost => (
+      typeof resolveRunnerForHost === "function"
+        ? resolveRunnerForHost(world, requestHost ?? null)
+        : resolveServerRunner(world, null)
+    )
   });
   const { runtimeContexts, resolveActiveRuntime } = runtimeResolver;
   const staticPluginFiles = runtimeContributions.staticAssetFiles ?? new Map();
@@ -563,7 +703,7 @@ export async function startRuntimeServer(world, {
   const server = httpModule.createServer(async (req, res) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const runtime = await resolveActiveRuntime();
+    const runtime = await resolveActiveRuntime(req.headers?.host ?? null);
     if (appContext.appSnapshotManager && runtime.context && !runtime.context.appSnapshotManager) {
       runtime.context.appSnapshotManager = appContext.appSnapshotManager;
       runtime.context.devMode = activeDevMode === true;
@@ -620,6 +760,21 @@ export async function startRuntimeServer(world, {
       const mountedRouteTable = mountedRoutesFor(runtime.runner.id, activeAppContext);
       const matched = matchDeclaredRoute(mountedRouteTable, req.method || "GET", requestUrl.pathname);
 
+      if (requestDeniedByAuthGate(runtime.runner, requestContext, {
+        pathname: requestUrl.pathname,
+        method: req.method || "GET",
+        matchedRoute: matched?.route ?? null
+      })) {
+        world.observe({
+          process: "backend.authGate.denied",
+          actor: backendHost,
+          claims: [],
+          body: { serverRunner: runtime.runner.id, method: req.method || "GET", path: requestUrl.pathname }
+        });
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+
       if (shouldServeBootstrapFallback({
         world,
         routeTable: mountedRouteTable,
@@ -644,6 +799,11 @@ export async function startRuntimeServer(world, {
 
       if (!matched) {
         const genericEndpoint = matchGenericEndpoint(req.method || "GET", requestUrl.pathname, activeRuntimeProfile, compositionOptions);
+        if (genericEndpoint && genericEndpointGatedForRunner(genericEndpoint, runtime.runner.id)) {
+          // Endpoint belongs to a plugin bundle this host does not activate — behave as not-mounted.
+          await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
+          return;
+        }
         if (genericEndpoint) {
           const routeHandlers = {
             ...genericHandlers,
@@ -651,7 +811,7 @@ export async function startRuntimeServer(world, {
           };
           const handler = routeHandlers[genericEndpoint.handler];
           if (!activeDispatchHandlers.has(genericEndpoint.handler) || typeof handler !== "function") {
-            sendJson(res, 404, { error: "not found" });
+            await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
             return;
           }
           await handler({
@@ -671,7 +831,7 @@ export async function startRuntimeServer(world, {
       }
 
       if (!matched) {
-        sendJson(res, 404, { error: "not found" });
+        await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
         return;
       }
       matchedRoute = matched.route;
@@ -682,7 +842,7 @@ export async function startRuntimeServer(world, {
           claims: [],
           body: { route: matched.route.id, method: matched.route.method, path: matched.route.path, handler: matched.route.handler, reason: "handler unavailable in runtime profile", runtimeProfile }
         });
-        sendJson(res, 404, { error: "not found" });
+        await handleProfileGatedAbsence({ req, res, appContext: activeAppContext, pathname: requestUrl.pathname, method: req.method || "GET" });
         return;
       }
       const routeHandlers = {

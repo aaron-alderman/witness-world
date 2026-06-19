@@ -1,0 +1,236 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins"
+path = "plugins"
+label = "plugins"
+summary = "Auto-generated folder metadata for plugins."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/assets"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/authoring"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/authoring-core"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/backend-seams"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/bootstrap"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/canvas"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/capability-authoring"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/chart-runtime"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/demo"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/eden"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/engentus-dev-diagnostics"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/engentus-wcss-runtime"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/fs-blob"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/fs-json"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/fs-stream"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/http-outbound"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/inspect"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/jobs"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/mcp"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/mcp-authoring"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/notes-sidebar"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/notifications"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/oauth"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/pipeline-runtime"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/platform"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/practical-backend"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/program-authoring"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/proposals"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/runtime-config"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/search"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/secret"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/server-runner-authoring"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/sql"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/sqlite"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/starter"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "wtoml:plugins/this.folder.wtoml"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/tutorial"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/wcss-authoring"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/wcss-runtime"
+
+[[relation]]
+from = "folder:plugins"
+rel = "contains"
+to = "folder:plugins/webhooks"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins"
+# rel = "describedBy"
+# to = "doc:..."

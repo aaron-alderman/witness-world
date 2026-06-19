@@ -2,11 +2,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
+import {
+  activateBackendProgramVersion,
+  defineBackendProgram,
+  defineBackendProgramVersion,
+  defineBackendStep
+} from "../../src/backend-programs.js";
 import { activateWidgetVersion, defineWidgetVersion, defineWidgetVersionTransition } from "../../src/widgets.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { processRunProjection, processViewProjection, renderProcessPage } from "./process-view.js";
 import { renderWidgetPage } from "./widget-page.js";
-import { createHandlers } from "./runtime.js";
+import {
+  createHandlers,
+  inspectProcessRunReadModel,
+  inspectProcessViewReadModel,
+  inspectWitnessesReadModel,
+  inspectWorldGraphReadModel,
+  recordInspectProcessEventRequest,
+  providers
+} from "./runtime.js";
 import { requestWidgetVersionActivation, rollbackWidgetVersion } from "./widget-versions.js";
 
 test("inspect plugin owns inspect bundle catalog, routes, and surfaces", async () => {
@@ -116,6 +130,7 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   const worldShellViewSource = await readFile(new URL("./world-shell-view.js", import.meta.url), "utf8");
   const worldSurfaceViewSource = await readFile(new URL("./world-surface-view.js", import.meta.url), "utf8");
   const worldTutorialActionsSource = await readFile(new URL("./world-tutorial-actions.js", import.meta.url), "utf8");
+  const worldTutorialCompanionSource = await readFile(new URL("./world-tutorial-companion.js", import.meta.url), "utf8");
   const surfaceKitSource = await readFile(new URL("./surface-kit-styles.js", import.meta.url), "utf8");
   const runtimeSurfaceKitSource = await readFile(new URL("../../src/runtime-surface-kit.js", import.meta.url), "utf8");
   const runtimeSurfaceCommandSource = await readFile(new URL("../../src/runtime-surface-command-primitives.js", import.meta.url), "utf8");
@@ -149,6 +164,9 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(pluginWidgetPage.includes('from "./world-shell-view.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./world-surface-view.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./world-tutorial-actions.js"'), true);
+  assert.equal(pluginWidgetPage.includes('from "./world-tutorial-companion.js"'), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldTutorialCompanionFactory()"), true);
+  assert.equal(pluginWidgetPage.includes("syncWorldTutorialCompanion()"), true);
   assert.equal(pluginWidgetPage.includes('from "./widget-page-head.js"'), true);
   assert.equal(pluginWidgetPage.includes("const processTraceEnabled = config.traceProcessEvents !== false;"), true);
   assert.equal(pluginWidgetPage.includes("if (checkboxes === 'boolean')"), true);
@@ -171,6 +189,10 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(pluginWidgetPage.includes("renderSurfaceInspectorEditorView({"), true);
   assert.equal(pluginWidgetPage.includes("renderSurfaceInspectorOverlayView({"), true);
   assert.equal(pluginWidgetPage.includes("bindSurfaceInspectorVersionActions({"), true);
+  assert.equal(pluginWidgetPage.includes("'/api/proposals'"), false);
+  assert.equal(pluginWidgetPage.includes("'/api/widgets/' + encodeURIComponent(id)"), true);
+  assert.equal(pluginWidgetPage.includes("'/api/widget-versions/' + encodeURIComponent(soul) + '/activate'"), true);
+  assert.equal(pluginWidgetPage.includes("'/api/widget-versions/' + encodeURIComponent(soul) + '/rollback'"), true);
   assert.equal(pluginWidgetPage.includes("bindWorldCommandActions({"), true);
   assert.equal(pluginWidgetPage.includes("renderWorldSourceDocumentView({"), true);
   assert.equal(pluginWidgetPage.includes("renderWorldThingListView({"), true);
@@ -334,10 +356,12 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(worldSurfaceViewSource.includes("export function renderWorldTutorialPanelView"), true);
   assert.equal(worldSurfaceViewSource.includes("export function renderWorldSurfaceViewFactory"), true);
   assert.equal(worldSurfaceViewSource.includes("No matching surfaces, objects, or commands."), true);
-  assert.equal(worldSurfaceViewSource.includes("Show Disabled Sourcery Scopes"), true);
+  assert.equal(worldSurfaceViewSource.includes("Show Sourcery Scope Inventory"), true);
   assert.equal(worldSurfaceViewSource.includes("Search / Command"), true);
   assert.equal(worldTutorialActionsSource.includes("export function bindWorldTutorialActions"), true);
   assert.equal(worldTutorialActionsSource.includes("export function renderWorldTutorialActionsFactory"), true);
+  assert.equal(worldTutorialCompanionSource.includes("export function renderWorldTutorialCompanionFactory"), true);
+  assert.equal(worldTutorialCompanionSource.includes("export function syncWorldTutorialCompanionShell"), true);
   assert.equal(widgetPageHeadSource.includes("export function renderWidgetPageHead"), true);
   assert.equal(widgetPageHeadSource.includes("renderPagePresentationHead"), true);
   assert.equal(widgetPageHeadSource.includes("renderEdenPageThemeCssVars"), false);
@@ -446,4 +470,319 @@ test("inspect plugin owns widget-version request and rollback workflows", async 
   assert.equal(srcWidgets.includes("export function requestWidgetVersionActivation"), false);
   assert.equal(srcWidgets.includes("export function rollbackWidgetVersion"), false);
   assert.equal(srcWidgets.includes("../plugins/inspect/widget-versions.js"), false);
+});
+
+test("inspect handlers route unauthorized widget-version actions through shared routes with caller-supplied proposal reasons", async () => {
+  const world = createWorld();
+  const sent = [];
+
+  defineWidgetVersion(world, { actor: "adam", soul: "banner", version: "banner_v1", kind: "Banner", props: { text: "One" } });
+  defineWidgetVersion(world, { actor: "adam", soul: "banner", version: "banner_v2", kind: "Banner", props: { text: "Two" } });
+  activateWidgetVersion(world, { actor: "adam", soul: "banner", version: "banner_v1" });
+
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    logger: null,
+    send() {},
+    sendJson(_res, status, body) {
+      sent.push({ status, body });
+    },
+    readJson: async req => req.body ?? {},
+    sendGateFailure() {},
+    authorityServices: {
+      ensureTargetAuthority() {
+        return { ok: false, status: 403, reason: "forbidden" };
+      }
+    },
+    requestActors: () => [],
+    requestVisibleWitnesses: () => [],
+    processSelection: () => ({}),
+    processViewInputs: () => ({ witnesses: [], observations: [] }),
+    frontendTraceProcesses: new Set()
+  });
+
+  await handlers["widgetVersions.activate"]({
+    req: { body: { version: "banner_v2", reason: "Promote the shared banner draft" } },
+    res: {},
+    params: { soul: "banner" },
+    requestActor: "callan"
+  });
+  await handlers["widgetVersions.rollback"]({
+    req: { body: { reason: "Restore the previous shared banner" } },
+    res: {},
+    params: { soul: "banner" },
+    requestActor: "callan"
+  });
+
+  assert.deepEqual(sent.map(entry => entry.status), [202, 202]);
+  assert.deepEqual(
+    sent.map(entry => ({
+      status: entry.body.status,
+      targetProcess: entry.body.proposal?.targetProcess,
+      targetId: entry.body.proposal?.targetId,
+      reason: entry.body.proposal?.reason,
+      proposalBody: entry.body.proposal?.body
+    })),
+    [
+      {
+        status: "proposed",
+        targetProcess: "widgetVersion.activate",
+        targetId: "banner",
+        reason: "Promote the shared banner draft",
+        proposalBody: { soul: "banner", version: "banner_v2" }
+      },
+      {
+        status: "proposed",
+        targetProcess: "widgetVersion.rollback",
+        targetId: "banner",
+        reason: "Restore the previous shared banner",
+        proposalBody: { soul: "banner" }
+      }
+    ]
+  );
+});
+
+test("inspect runtime exports module projectors for shared read models", () => {
+  const projectorProvider = providers.find(provider => provider.id === "inspect.projections");
+  const processProvider = providers.find(provider => provider.id === "inspect.processes");
+  assert.equal(projectorProvider?.kind, "moduleProjectors");
+  assert.equal(processProvider?.kind, "backendProcessRequestHandlers");
+  assert.deepEqual(
+    Object.keys(projectorProvider?.projectors ?? {}).sort(),
+    [
+      "inspect.processRunReadModel",
+      "inspect.processViewReadModel",
+      "inspect.witnessesReadModel",
+      "inspect.worldGraphReadModel"
+    ]
+  );
+  assert.equal(projectorProvider.projectors["inspect.witnessesReadModel"], inspectWitnessesReadModel);
+  assert.equal(projectorProvider.projectors["inspect.worldGraphReadModel"], inspectWorldGraphReadModel);
+  assert.equal(projectorProvider.projectors["inspect.processViewReadModel"], inspectProcessViewReadModel);
+  assert.equal(projectorProvider.projectors["inspect.processRunReadModel"], inspectProcessRunReadModel);
+  assert.equal(typeof processProvider.handlers["inspect.processEventRecord"], "function");
+});
+
+test("inspect witness and world-graph read models honor visible witness projection", () => {
+  const world = createWorld();
+  const visibleWitness = world.emit({
+    process: "todo.created",
+    actor: "alice",
+    claims: [],
+    body: { id: "visible", title: "Visible todo" }
+  });
+  world.emit({
+    process: "todo.created",
+    actor: "bob",
+    claims: [],
+    body: { id: "hidden", title: "Hidden todo" }
+  });
+  const appContext = {
+    visibleWitnesses(requestActor) {
+      return world.allWitnesses().filter(witness => witness.actor === requestActor);
+    }
+  };
+
+  const witnessesModel = inspectWitnessesReadModel(world.allWitnesses(), {
+    requestActor: "alice",
+    appContext,
+    query: { offset: "0" }
+  });
+  assert.equal(witnessesModel.total, 1);
+  assert.equal(witnessesModel.witnesses[0].id, visibleWitness.id);
+  assert.equal(witnessesModel.witnesses[0].bodyJson, JSON.stringify(visibleWitness.body));
+
+  const graphModel = inspectWorldGraphReadModel(world.allWitnesses(), {
+    requestActor: "alice",
+    appContext
+  });
+  assert.equal(Array.isArray(graphModel.graph.nodes), true);
+  assert.equal(graphModel.graph.nodes.some(node => node.id === "genesis"), true);
+  assert.equal(typeof graphModel.astNodes.byFile, "object");
+  assert.equal(Array.isArray(graphModel.astNodes.byTarget[visibleWitness.body.id] ?? []), true);
+});
+
+test("inspect process read models use observations, filter hidden witness ids, and preserve missing-run status", () => {
+  const world = createWorld();
+  defineBackendProgram(world, { actor: "backendHost", soul: "backend.echo", owner: "backendHost" });
+  defineBackendProgramVersion(world, {
+    actor: "backendHost",
+    soul: "backend.echo",
+    version: "backend.echo.v1",
+    owner: "backendHost"
+  });
+  defineBackendStep(world, {
+    actor: "backendHost",
+    version: "backend.echo.v1",
+    event: "request",
+    op: "project.read",
+    order: 0,
+    params: { projector: "demo.todosReadModel", into: "todos" }
+  });
+  defineBackendStep(world, {
+    actor: "backendHost",
+    version: "backend.echo.v1",
+    event: "request",
+    op: "response.json",
+    order: 1,
+    params: { body: { ok: true } }
+  });
+  activateBackendProgramVersion(world, {
+    actor: "backendHost",
+    soul: "backend.echo",
+    version: "backend.echo.v1"
+  });
+
+  const program = world.project(witnesses => processViewProjection({ witnesses, observations: [] }, {
+    program: "backend.echo.v1",
+    event: "request"
+  }).graph);
+  const projectStep = program.nodes.find(node => node.op === "project.read");
+  assert.ok(projectStep);
+
+  const visibleWitness = world.emit({
+    process: "todo.created",
+    actor: "alice",
+    claims: [],
+    body: { id: "visible", title: "Visible todo" }
+  });
+  const hiddenWitness = world.emit({
+    process: "todo.created",
+    actor: "bob",
+    claims: [],
+    body: { id: "hidden", title: "Hidden todo" }
+  });
+  const runId = "backend-project-run";
+  world.observe({
+    process: "backend.process.start",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", timestamp: 1 }
+  });
+  world.observe({
+    process: "backend.step.start",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", nodeId: projectStep.id, op: projectStep.op, timestamp: 2 }
+  });
+  world.observe({
+    process: "backend.request.finish",
+    actor: "backendHost",
+    claims: [],
+    body: {
+      requestId: `${runId}:${projectStep.id}:demo.todosReadModel`,
+      stepId: projectStep.id,
+      method: "PROJECT",
+      url: "project:demo.todosReadModel",
+      statusCode: 200,
+      route: null,
+      handler: null,
+      projector: "demo.todosReadModel",
+      runId,
+      emittedWitnessIds: [visibleWitness.id, hiddenWitness.id],
+      failureWitnessIds: [hiddenWitness.id]
+    }
+  });
+  world.observe({
+    process: "backend.step.done",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", nodeId: projectStep.id, op: projectStep.op, timestamp: 3 }
+  });
+  world.observe({
+    process: "backend.process.done",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", timestamp: 4 }
+  });
+
+  const appContext = {
+    visibleWitnesses(requestActor) {
+      return world.allWitnesses().filter(witness => witness.actor === requestActor || witness.process.startsWith("define"));
+    }
+  };
+  const processView = inspectProcessViewReadModel(world.allWitnesses(), {
+    requestActor: "alice",
+    appContext,
+    query: { program: "backend.echo.v1", event: "request", runId },
+    observations: world.allObservations()
+  });
+  assert.equal(processView.selection.runId, runId);
+  assert.equal(processView.run.requests.length, 1);
+  assert.equal(processView.run.requests[0].projector, "demo.todosReadModel");
+  assert.deepEqual(
+    processView.run.requests[0].emittedWitnesses.map(witness => witness.id),
+    [visibleWitness.id]
+  );
+  assert.deepEqual(processView.run.requests[0].failureWitnesses, []);
+
+  const processRun = inspectProcessRunReadModel(world.allWitnesses(), {
+    requestActor: "alice",
+    appContext,
+    runId,
+    observations: world.allObservations()
+  });
+  assert.equal(processRun.ok, true);
+  assert.equal(processRun.status, 200);
+  assert.equal(processRun.body.run.runId, runId);
+  assert.equal(processRun.body.run.requests[0].projector, "demo.todosReadModel");
+
+  const missingRun = inspectProcessRunReadModel(world.allWitnesses(), {
+    requestActor: "alice",
+    appContext,
+    runId: "missing-run",
+    observations: world.allObservations()
+  });
+  assert.deepEqual(missingRun, {
+    ok: false,
+    status: 404,
+    error: "process run not found",
+    body: {
+      error: "process run not found",
+      runId: "missing-run"
+    }
+  });
+});
+
+test("inspect process-event recorder validates trace processes and returns backend-process payloads", async () => {
+  const world = createWorld();
+
+  const recorded = await recordInspectProcessEventRequest({
+    world,
+    frontendHost: "frontendHost",
+    requestActor: "alice",
+    body: {
+      process: "frontend.process.start",
+      runId: "trace-run",
+      program: "todo_frontend_program",
+      event: "load",
+      timestamp: 123
+    }
+  });
+  assert.equal(recorded.ok, true);
+  assert.equal(recorded.status, 200);
+  assert.equal(recorded.payload.ok, true);
+  assert.equal(typeof recorded.payload.id, "string");
+  assert.equal(world.allWitnesses().at(-1)?.process, "frontend.process.start");
+  assert.equal(world.allWitnesses().at(-1)?.actor, "alice");
+
+  const rejected = await recordInspectProcessEventRequest({
+    world,
+    frontendHost: "frontendHost",
+    body: {
+      process: "backend.process.start",
+      runId: "trace-run"
+    }
+  });
+  assert.deepEqual(rejected, {
+    ok: false,
+    status: 400,
+    error: "unknown process trace",
+    payload: {
+      error: "unknown process trace",
+      process: "backend.process.start"
+    }
+  });
 });

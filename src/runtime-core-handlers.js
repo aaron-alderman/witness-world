@@ -11,6 +11,7 @@ import {
 import { runProcessGraph } from "./process-graph.js";
 import {
   grantIdentityActorAssumption,
+  moduleProjectorByName,
   moduleProjectors,
   revokeIdentityActorAssumption
 } from "./modules.js";
@@ -35,6 +36,11 @@ import {
   normalizeAuthorityTuple,
   resolveSessionAuthorityForIdentity
 } from "./runtime-authz.js";
+import {
+  cloneRuntimeOwnerChain,
+  describeMountedRouteOwnership
+} from "./runtime-ownership.js";
+import { describeMountedRouteGovernance } from "./runtime-governance.js";
 
 function widgetPageGuidanceSurface(world, {
   route = null,
@@ -104,7 +110,7 @@ export function createCoreRuntimeBundleHandlers({
   const witnessesSince = index => typeof world?.witnessesSince === "function"
     ? world.witnessesSince(index)
     : world?.allWitnesses?.().slice(index) ?? [];
-  const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget }) => renderInactiveRuntimeWidgetPage({ rootWidget }));
+  const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget, appContext }) => renderInactiveRuntimeWidgetPage({ rootWidget, appContext }));
   const projectPagePresentationThemeHook = coreHooks.projectPagePresentationTheme
     ?? coreHooks.projectEdenPageTheme
     ?? (() => null);
@@ -153,6 +159,23 @@ export function createCoreRuntimeBundleHandlers({
     if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, interpolateValue(item, scope)]));
     return value;
   };
+  const normalizeWitnessClaims = claims => Array.isArray(claims)
+    ? claims.flatMap(claim => {
+        if (!claim || typeof claim !== "object") return [];
+        if (claim.op === "thing") {
+          const thingId = typeof claim.thing === "string" && claim.thing.trim() ? claim.thing.trim() : "";
+          return thingId ? [{ op: "thing", thing: thingId }] : [];
+        }
+        if (claim.op === "relation") {
+          const from = typeof claim.from === "string" && claim.from.trim() ? claim.from.trim() : "";
+          const rel = typeof claim.rel === "string" && claim.rel.trim() ? claim.rel.trim() : "";
+          const to = typeof claim.to === "string" && claim.to.trim() ? claim.to.trim() : "";
+          if (!from || !rel || !to) return [];
+          return [relation(from, rel, to, claim.meta && typeof claim.meta === "object" ? claim.meta : {})];
+        }
+        return [];
+      })
+    : [];
   const normalizedRequestAuthority = ({
     requestActor = null,
     requestIdentity = null,
@@ -259,6 +282,29 @@ export function createCoreRuntimeBundleHandlers({
     const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
     if (!snapshotManager || appContext?.devMode !== true) return html;
     return snapshotManager.injectDevClient(html, snapshotManager.getActiveSnapshot());
+  };
+  const backendProcessRequestHandler = processId => {
+    const id = typeof processId === "string" && processId.trim() ? processId.trim() : "";
+    return id ? (runtimeContributions?.backendProcessRequestHandlers?.[id] ?? null) : null;
+  };
+  const normalizeBackendProcessRequestResult = (processId, result) => {
+    if (result && typeof result === "object") {
+      const status = Number.isInteger(result.status)
+        ? result.status
+        : (result.ok === false ? 500 : 200);
+      return {
+        ok: result.ok !== false,
+        status,
+        payload: Object.prototype.hasOwnProperty.call(result, "payload") ? result.payload : null,
+        error: typeof result.error === "string" && result.error.trim() ? result.error.trim() : null
+      };
+    }
+    return {
+      ok: false,
+      status: 500,
+      payload: null,
+      error: `process ${processId} returned an invalid result`
+    };
   };
   const revisionEventFrame = payload => `data: ${JSON.stringify(payload)}\n\n`;
   const backendRevisionEventPayload = event => ({
@@ -396,6 +442,134 @@ export function createCoreRuntimeBundleHandlers({
         if ((result.status || 500) >= 400 && params.allowFailure !== true) {
           throw new Error(result.body?.error || `handler ${handler} failed`);
         }
+        return;
+      }
+      if (step.op === "process.request") {
+        const processId = typeof params.process === "string" && params.process.trim() ? params.process.trim() : "";
+        if (!processId) throw new Error("process.request requires process");
+        const handler = backendProcessRequestHandler(processId);
+        if (typeof handler !== "function") throw new Error(`unknown backend process requester ${processId}`);
+        const requestBody = Object.prototype.hasOwnProperty.call(params, "body")
+          ? params.body
+          : (typeof params.from === "string" && params.from.trim() ? readPath(stateRef, params.from.trim()) : null);
+        const witnessCountBefore = witnessCount();
+        const normalizedResult = normalizeBackendProcessRequestResult(processId, await handler({
+          world,
+          backendHost,
+          frontendHost,
+          process: processId,
+          body: requestBody,
+          params,
+          requestActor,
+          requestIdentity,
+          requestSession,
+          route,
+          appContext
+        }));
+        const emittedWitnesses = witnessesSince(witnessCountBefore);
+        const failedWitnesses = emittedWitnesses.filter(witness => witness.process.endsWith(".failed") || witness.process.endsWith(".blocked"));
+        world.observe({
+          process: "backend.request.finish",
+          actor: requestActor || backendHost,
+          claims: [],
+          body: {
+            requestId: `${runId}:${step.id}:${processId}`,
+            method: "PROCESS",
+            url: `process:${processId}`,
+            statusCode: normalizedResult.status || 0,
+            route: null,
+            handler: null,
+            process: processId,
+            runId,
+            stepId: step.id,
+            emittedWitnessIds: emittedWitnesses.map(witness => witness.id),
+            failureWitnessIds: failedWitnesses.map(witness => witness.id)
+          }
+        });
+        const into = typeof params.into === "string" && params.into.trim() ? params.into.trim() : "lastResponse";
+        writePath(stateRef, into, normalizedResult);
+        if ((normalizedResult.status || 500) >= 400 && params.allowFailure !== true) {
+          throw new Error(normalizedResult.error || `process ${processId} failed`);
+        }
+        return;
+      }
+      if (step.op === "project.read") {
+        const projectorName = typeof params.projector === "string" && params.projector.trim() ? params.projector.trim() : "";
+        if (!projectorName) throw new Error("project.read requires projector");
+        const projector = moduleProjectorByName(projectorName, {
+          fallback: () => {
+            throw new Error(`unknown module projector ${projectorName}`);
+          }
+        });
+        const projectionOptions = params.options && typeof params.options === "object"
+          ? { ...params.options }
+          : {};
+        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "requestActor")) projectionOptions.requestActor = requestActor ?? null;
+        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "requestIdentity")) projectionOptions.requestIdentity = requestIdentity ?? null;
+        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "requestSession")) projectionOptions.requestSession = requestSession ?? null;
+        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "appContext")) projectionOptions.appContext = appContext ?? null;
+        if (!Object.prototype.hasOwnProperty.call(projectionOptions, "observations")) projectionOptions.observations = world.allObservations();
+        const requestId = `${runId}:${step.id}:${projectorName}`;
+        try {
+          const value = world.project(projector, projectionOptions);
+          world.observe({
+            process: "backend.request.finish",
+            actor: requestActor || backendHost,
+            claims: [],
+            body: {
+              requestId,
+              method: "PROJECT",
+              url: `project:${projectorName}`,
+              statusCode: 200,
+              route: null,
+              handler: null,
+              projector: projectorName,
+              runId,
+              stepId: step.id,
+              emittedWitnessIds: [],
+              failureWitnessIds: []
+            }
+          });
+          const into = typeof params.into === "string" && params.into.trim() ? params.into.trim() : "projectionResult";
+          writePath(stateRef, into, value);
+          return;
+        } catch (error) {
+          world.observe({
+            process: "backend.request.finish",
+            actor: requestActor || backendHost,
+            claims: [],
+            body: {
+              requestId,
+              method: "PROJECT",
+              url: `project:${projectorName}`,
+              statusCode: 500,
+              route: null,
+              handler: null,
+              projector: projectorName,
+              runId,
+              stepId: step.id,
+              emittedWitnessIds: [],
+              failureWitnessIds: []
+            }
+          });
+          throw error;
+        }
+      }
+      if (step.op === "witness.emit") {
+        const process = typeof params.process === "string" && params.process.trim() ? params.process.trim() : "";
+        if (!process) throw new Error("witness.emit requires process");
+        const actor = typeof params.actor === "string" && params.actor.trim()
+          ? params.actor.trim()
+          : (requestActor || backendHost);
+        const body = params.body && typeof params.body === "object" ? params.body : {};
+        const witness = world.emit({
+          process,
+          actor,
+          claims: normalizeWitnessClaims(params.claims),
+          body
+        });
+        const into = typeof params.into === "string" && params.into.trim() ? params.into.trim() : "";
+        if (into) writePath(stateRef, into, witness);
         return;
       }
       if (step.op === "response.json") {
@@ -817,7 +991,8 @@ export function createCoreRuntimeBundleHandlers({
         send(res, 200, "text/html", renderWidgetPageHook(world, {
           actor: frontendHost,
           rootWidget,
-        frontendProgram: params.frontendProgram ?? null,
+          appContext,
+          frontendProgram: params.frontendProgram ?? null,
         appConfig: {
           actors: requestActors(appContext),
           page,
@@ -825,6 +1000,9 @@ export function createCoreRuntimeBundleHandlers({
           pageChrome: pageTheme,
           liveProjection: params.liveProjection !== false,
             runtimeSurfaces: appContext.runtimeSurfaceEntries ?? [],
+            browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
+              .map(definition => typeof definition?.id === "string" ? definition.id : "")
+              .filter(Boolean),
             surfaceContext: guidanceSurface.context,
             surfaceRouteId: guidanceSurface.routeId,
             surfaceRootWidgetId: guidanceSurface.rootWidgetId,
@@ -847,6 +1025,9 @@ export function createCoreRuntimeBundleHandlers({
         rootSurfaceId,
         requestPathname: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/"),
         route,
+        stylesheetQuery: {
+          wcssPreview: requestUrl?.searchParams?.get("wcssPreview")?.trim() || null
+        },
         browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
           .map(definition => typeof definition?.id === "string" ? definition.id : "")
           .filter(Boolean),
@@ -979,8 +1160,42 @@ export function createCoreRuntimeBundleHandlers({
         activePluginIds: pluginCatalog.activePluginIds,
         rejectedPlugins: pluginCatalog.rejectedPlugins,
         pluginAddedBundleIds: pluginCatalog.addedBundleIds,
-        authoringPolicy: currentAuthoringPolicy(appContext)
+        authoringPolicy: currentAuthoringPolicy(appContext),
+        handlerSetProviders: appContext?.runtimeContributions?.handlerSetProviders ?? {}
       });
+      diagnostics.mountedRoutes = world.project(moduleProjectors.servedRoutes)
+        .filter(route => !appContext?.serverRunnerId || route.serverRunner === appContext.serverRunnerId)
+        .map(route => {
+          const ownership = describeMountedRouteOwnership({
+            route,
+            handlerMetadataById: diagnostics.handlerMetadata ?? {},
+            handlerSetDefinitions,
+            handlerSetProviders: appContext?.runtimeContributions?.handlerSetProviders ?? {}
+          });
+          const governance = describeMountedRouteGovernance({
+            route,
+            governanceRoutes: diagnostics.governanceRoutes ?? []
+          });
+          const handlerMetadata = diagnostics.handlerMetadata?.[String(route.handler || "")] ?? null;
+          return {
+            id: route.id,
+            serverRunner: route.serverRunner ?? null,
+            method: route.method,
+            path: route.path,
+            handler: route.handler,
+            serves: route.serves ?? null,
+            params: route.params && typeof route.params === "object" ? { ...route.params } : {},
+            ...ownership,
+            ...governance,
+            ownerChain: cloneRuntimeOwnerChain(ownership.ownerChain),
+            handlerMetadata: handlerMetadata
+              ? {
+                  ...handlerMetadata,
+                  ownerChain: cloneRuntimeOwnerChain(handlerMetadata.ownerChain)
+                }
+              : null
+          };
+        });
       diagnostics.appSnapshot = appContext?.appSnapshotManager?.diagnostics?.() ?? null;
       world.observe({
         process: "runtime.diagnostics.read",

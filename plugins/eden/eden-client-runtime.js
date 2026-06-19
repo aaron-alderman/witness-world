@@ -391,6 +391,7 @@ export function startEdenClientRuntime({
       actionById,
       applySurfaceMeta,
       capabilityInstallRuntime,
+      createEdenVersionProposal,
       createEdenCapabilityInstallProposal,
       embeddedMode,
       focusTarget,

@@ -17,6 +17,7 @@ Related direction:
 
 - [ROADMAP.md](C:\Users\aaron\Documents\world\ROADMAP.md)
 - [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md)
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
 - [BASELINE.md](C:\Users\aaron\Documents\world\BASELINE.md)
 
 ---
@@ -48,7 +49,7 @@ The current backend slice is real but narrow:
 - authored MCP transport and tool surfaces through `mcpServer` + `mcpToolInstall`
 - many shipped demo/backend routes now execute through authored `backendProgram` definitions instead of raw handler-set glue
 - the remaining demo/runtime compatibility seam is explicit: `serverRunner.handlerSet = "demo"` still causes startup to add `bundle-demo`, and that ownership is now reported honestly in runtime diagnostics
-- several shipped backend-program versions still call demo handler-set model helpers such as `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel`, so the remaining app-logic compatibility seam is narrower than before but not gone yet
+- shipped demo backend-program reads and mutations now run through explicit `project.read`, `process.request`, and `witness.emit` steps for maintained Todo, private-note, widget, inspect, and trace flows; the old demo handler-set route wrappers are no longer the authored truth path and have been removed from `plugins/demo/handler-set.js`
 
 That is an honest baseline.
 
@@ -569,13 +570,14 @@ The capability seam continues to own:
   - local in-process worker first
 - `auth.oauth`
   - local stub provider first
-  - Google or GitHub later
+  - generic OIDC/OAuth2, Google, and GitHub now shipped behind the same seam
 - `http.outbound`
   - generic local test adapter first
 - `webhook.inbound`
   - generic signed inbound adapter first
 - `notify.email`
   - local stub transport first
+  - generic HTTP and SendGrid transports now shipped behind the same seam
 - `notify.sms`
   - local stub transport first
 - `search.index`
@@ -622,6 +624,32 @@ They should be isolated so vendor flakiness does not become the main test story.
 - host-level tests required for request-driven seams
 - provider integration tests later
 - no section-6 feature turns `[X]` on docs alone
+
+### Continuous verification follow-on
+
+The next testing step should not be a second product or a loose pile of CI scripts.
+
+It should be an authored runtime seam:
+
+- verification policy declared on the same runtime story as other capability bindings
+- local dev, CI, and prod all using the same runtime and gate model
+- different environments changing authority, risk posture, concurrency, and approval rules rather than switching to a different testing product
+- background verification work staying visible through the normal runtime and operator surfaces
+- dangerous verification work using explicit isolated execution paths rather than pretending all tests are equally safe to run in-process
+
+That means the long-term target here is not only layered tests.
+
+It is layered tests plus a first-class verification runtime that can:
+
+- classify gates by isolation mode such as in-process, child-process, browser, or candidate-snapshot
+- schedule work slowly by default, including one-core or one-worker background operation when requested
+- cache coverage, timing, and other verification artifacts as derived runtime data
+- invalidate those artifacts from authored dependency and reverse-DAG knowledge when code or provider inputs change
+- surface product failures and statistically meaningful regressions through the same product/runtime diagnostics story instead of a separate hidden CI report
+
+Detailed planning for that follow-on lives here:
+
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
 
 ---
 
@@ -1121,7 +1149,7 @@ Slice status:
 - transaction execution
 - provider adapter mapping
 - current shipped SQLite runtime uses `node:sqlite`, caches datasource handles by resolved path, and records applied migrations in a local ledger table
-- current shipped Postgres and MySQL paths stay explicit unsupported adapter boundaries until real provider wiring lands
+- current shipped Postgres (`pg`) and MySQL (`mysql2`) paths resolve and connection-test, but query/command/migrate remain SQLite-only; both vendors are marked `preview` in the capability metadata rather than `shipped`
 
 `authority`
 
@@ -1138,9 +1166,8 @@ Slice status:
 
 `provider adapters`
 
-- SQLite first
-- explicit Postgres adapter boundary now exists but is not yet a live provider path
-- explicit MySQL adapter boundary now exists but is not yet a live provider path
+- SQLite first and the default `shipped` adapter
+- Postgres and MySQL adapters are `preview`: they resolve and connection-test but do not yet serve query/command/migrate
 
 `witness contract`
 
@@ -1306,13 +1333,17 @@ Slice status:
   - `auth.oauth.provider`
   - `auth.oauth.autoCreate`
   - `auth.oauth.callbackBaseUrl`
+  - generic OIDC keys: `auth.oauth.oidc.clientId`, `auth.oauth.oidc.clientSecret`, `auth.oauth.oidc.authorizeUrl`, `auth.oauth.oidc.tokenUrl`, `auth.oauth.oidc.userinfoUrl`, `auth.oauth.oidc.scope`, `auth.oauth.oidc.redirectUri`, `auth.oauth.oidc.externalIdField`, `auth.oauth.oidc.usernameField`, `auth.oauth.oidc.labelField`
+  - named vendor keys (endpoints default from a preset, overridable for self-hosted/Enterprise): `auth.oauth.google.clientId`, `auth.oauth.google.clientSecret`, `auth.oauth.github.clientId`, `auth.oauth.github.clientSecret`
 
 `internals`
 
 - state or nonce handling
 - callback verifier
 - identity-link resolver
-- current shipped runtime keeps pending stub flow state in the server-runner app context, resolves a deterministic stub profile on callback, and then either links onto the signed-in identity or opens a session for an existing or newly created internal identity
+- current shipped runtime keeps pending flow state in the server-runner app context keyed by `state`, then either links onto the signed-in identity or opens a session for an existing or newly created internal identity
+- the stub provider resolves a deterministic profile on callback; real providers build the vendor authorize URL on start, then exchange the authorization code and fetch userinfo on callback through the host-injected `fetchImpl`, mapping the userinfo response to the internal profile
+- provider-specific behavior lives in `plugins/oauth/oauth-providers.js` (stub + generic OIDC/OAuth2 adapter); named vendors are config presets in `plugins/oauth/support-services.js`, so the shared link/login/session path stays provider-agnostic
 
 `authority`
 
@@ -1326,9 +1357,12 @@ Slice status:
 
 `provider adapters`
 
-- local stub provider first
-- Google or GitHub later
-- the current shipped provider path is `stub`
+- local stub provider first and still the default
+- shipped real providers behind the same seam:
+  - `oidc` generic OIDC/OAuth2 authorization-code adapter
+  - `google` preset over the OIDC adapter (`sub` account id)
+  - `github` preset over the OAuth2 adapter (numeric `id` account id coerced to string, required `User-Agent` userinfo header)
+- additional vendor presets remain later work behind the same adapter
 
 `witness contract`
 
@@ -1336,7 +1370,7 @@ Slice status:
 - callback receipt
 - identity link or create decision
 - session establishment result
-- failure reason when it fails
+- failure reason when it fails (including real-provider token-exchange and userinfo failures, surfaced through `auth.oauth.callback.failed`)
 - current shipped witness processes:
   - `auth.oauth.start`
   - `auth.oauth.start.failed`
@@ -1349,11 +1383,14 @@ Slice status:
 
 `stub/test mode`
 
-- deterministic stub-provider success and failure flows
+- deterministic stub-provider success and failure flows; real-provider flows are tested against a local mock OIDC server through the host-injected fetch
 - current shipped tests cover:
   - first-time stub login that auto-creates a linked internal identity
   - stub callback failure without link creation
   - signed-in account linking followed by later login through the existing OAuth link
+  - generic OIDC success (code exchange + userinfo), token-exchange failure surfaced through `auth.oauth.callback.failed`, and signed-in account linking
+  - Google preset linking by `sub`
+  - GitHub preset coercing the numeric account id and sending the required `User-Agent`
 
 `dependencies`
 
@@ -1568,6 +1605,11 @@ Slice status:
 - sender defaults
 - template binding
 - current shipped stub transport uses a local default sender and does not require external provider credentials
+- current shipped runtime config keys:
+  - `notify.email.provider` (default `stub`)
+  - `notify.email.stubSender`
+  - generic HTTP transport: `notify.email.http.url`, `notify.email.http.apiKey`, `notify.email.http.fromAddress`, `notify.email.http.responseIdPath`
+  - SendGrid transport: `notify.email.sendgrid.apiKey`, `notify.email.sendgrid.fromAddress`, `notify.email.sendgrid.url`
 
 `internals`
 
@@ -1576,6 +1618,7 @@ Slice status:
 - delivery adapter
 - retry integration
 - current shipped outbox is projected from `notify.email.*` witnesses plus linked `jobs.queue` state
+- the delivery job selects its transport by `notify.email.provider`; transports live in `plugins/notifications/email-transports.js` and run on the host-injected `fetchImpl` so a provider failure flows back through the normal `jobs.queue` retry/dead-letter path
 
 `authority`
 
@@ -1590,9 +1633,10 @@ Slice status:
 
 `provider adapters`
 
-- local stub transport first
-- real provider later
-- the local stub transport is the shipped provider path
+- local stub transport first and still the default
+- shipped real transports behind the same seam:
+  - `http` vendor-neutral transport (POST JSON, message id read from a configurable response body path)
+  - `sendgrid` transport (SendGrid v3 mail-send schema, message id read from the `X-Message-Id` response header)
 
 `witness contract`
 
@@ -1600,19 +1644,20 @@ Slice status:
 - render attempt
 - send attempt
 - success or failure
-- provider message id when present
+- provider message id when present (real `providerMessageId` for the http/sendgrid transports)
 - current shipped processes:
   - `notify.email.enqueue`
   - `notify.email.enqueue.failed`
   - `notify.email.render`
   - `notify.email.render.failed`
   - `notify.email.send`
+  - `notify.email.send.failed`
 - queue-linked retry and final failure state remain visible through `jobs.queue.retry` and `jobs.queue.deadLetter`
 
 `stub/test mode`
 
 - local preview and stub delivery path
-- current shipped tests cover successful preview plus render failure with retry and dead-letter
+- current shipped tests cover successful stub preview plus render failure with retry and dead-letter, the http transport success/failure path, and the SendGrid transport success/failure path (both driven by a fake fetch)
 
 `dependencies`
 
@@ -1831,16 +1876,17 @@ For the active first slice, completion additionally requires:
 
 Current honest status:
 
-- shipped backend capability definitions now project explicit `dependsOn`, `authority`, `providerAdapters`, and `witnessContract` metadata through the normal capability model
+- shipped backend capability definitions now project explicit `dependsOn`, `authority`, `providerAdapters`, `config`, and `witnessContract` metadata through the normal capability model
+- a contract-coverage guard (`test/backend-seam-contract.test.js`, the canonical list lives in `BACKEND_SEAM_CAPABILITY_IDS` in `src/runtime-builtins.js`) freezes that shape: every shipped backend seam must declare provider adapters (exactly one default), a witness contract with at least one failure process, and present authority and config arrays, and any new seam that ships provider/failure metadata must be declared, or the test fails
 - `GET /api/backend-seams` now exposes the installed backend capability contracts for the active host rather than leaving those seam-wide rules only in prose
 - `runtime.config` is shipped runtime behavior with runner-authored config, env-backed secret resolution, safe inspection, and startup failure on unresolved required secrets
 - `jobs.queue` is shipped runtime behavior with a witnessed in-process worker, delayed execution, idempotent enqueue, retry/backoff, dead-letter state, generic host endpoints, and host tests
-- `db.sql` is shipped runtime behavior with generic host endpoints, a local SQLite provider path, witnessed datasource and operation boundaries, explicit unsupported Postgres/MySQL adapter boundaries, diagnostics, and host tests
+- `db.sql` is shipped runtime behavior with generic host endpoints, a local SQLite provider path, witnessed datasource and operation boundaries, `preview` Postgres/MySQL adapters that resolve and connection-test but do not yet serve query/command/migrate, diagnostics, and host tests
 - `search.index` is shipped runtime behavior with generic host build, reindex, inspect, and query endpoints, a local-text provider path, asset-backed source support, diagnostics, and host tests
 - `search.index` now also exposes explicit `search.index.assetRefreshPolicy` behavior and structured local asset-text extraction through the queue-backed ingestion path
 - `search.index` now also exposes asset-scoped repair for stale indexed assets through `POST /api/assets/:id/search/reindex`, with host tests and explicit witness events
-- `auth.oauth` is shipped runtime behavior with a stub provider path, host start and callback endpoints, first-class OAuth link witnessing, session establishment through the existing identity model, diagnostics, and host tests
-- `notify.email` is shipped runtime behavior with a stub outbox, rendered preview, queue-backed delivery, retry/dead-letter integration, generic host endpoints, and host tests
+- `auth.oauth` is shipped runtime behavior with a default stub provider plus real generic-OIDC, Google, and GitHub providers behind the same seam, host start and callback endpoints, real-provider code exchange and userinfo through the host-injected fetch, first-class OAuth link witnessing, session establishment through the existing identity model, diagnostics, and host tests (real-provider flows covered against a local mock OIDC server)
+- `notify.email` is shipped runtime behavior with a default stub outbox plus real generic-HTTP and SendGrid transports behind the same seam, rendered preview, queue-backed delivery, retry/dead-letter integration with `notify.email.send.failed` witnessing, generic host endpoints, and host tests
 - `notify.sms` is shipped runtime behavior with a stub outbox, preview text, queue-backed delivery, generic host endpoints, and host tests
 - `http.outbound` is shipped runtime behavior with generic host endpoints, a deterministic local stub adapter, config-backed signing, retry and timeout witnessing, inspection endpoints, and host tests
 - `fs.blob` is shipped runtime behavior with host tests for scope enforcement, path restrictions, stable refs, folder listing, read, write, and delete
@@ -1890,7 +1936,7 @@ Current shipped subset:
   - `db.sql` defaults to SQLite
   - `jobs.queue` defaults to the in-process worker
   - `search.index` defaults to the local text index
-  - `auth.oauth`, `notify.email`, and `notify.sms` default to stub providers
+  - `auth.oauth`, `notify.email`, and `notify.sms` default to stub providers; `auth.oauth` (generic OIDC, Google, GitHub) and `notify.email` (generic HTTP, SendGrid) now also ship real providers behind the same default-stub seam
   - `http.outbound` exposes both shipped native-fetch and deterministic stub transports
 - shipped external integration seams stay proxy-shaped with witnessed external reference ids on first-class world objects:
   - `auth.oauth` links project `providerAccountId`

@@ -62,8 +62,29 @@ test("world surface tutorial views render concept rows and tutorial actions", ()
   assert.equal(panelHtml.includes("surface-button-secondary"), true);
   assert.equal(panelHtml.includes("surface-item-list"), true);
   assert.equal(panelHtml.includes("Resume Tutorial"), true);
-  assert.equal(panelHtml.includes("Show Disabled Sourcery Scopes"), true);
+  assert.equal(panelHtml.includes("Show Sourcery Scope Inventory"), true);
   assert.equal(panelHtml.includes("Disable Sourcery In This Context"), true);
+});
+
+test("world tutorial panel hides companion-owned recovery buttons when the shell is active", () => {
+  const previous = globalThis.window;
+  globalThis.window = { __sourceryCompanionShell: {} };
+  try {
+    const panelHtml = renderWorldTutorialPanelView({
+      sessionAuthenticated: true,
+      progress: { completedAt: null, hidden: true },
+      step: { title: "Inspect widget", page: "world" },
+      surfaceKind: "hidden",
+      summary: "Tutorial paused.",
+      disabledRows: [{ label: "Todo", type: "scope", scopeKey: "todo" }],
+      resumeLabel: "Resume Tutorial",
+      escapeHtml: value => String(value)
+    });
+    assert.equal(panelHtml.includes("data-world-tutorial-resume"), false);
+    assert.equal(panelHtml.includes("data-world-tutorial-show-disabled"), false);
+  } finally {
+    globalThis.window = previous;
+  }
 });
 
 test("world surface view factory exposes the shared browser helpers", () => {

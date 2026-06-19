@@ -89,7 +89,8 @@ test("bootstrap app authoring submit request builder preserves create-form paylo
         page: "home",
         backendProgramSoul: "",
         rootWidget: "page_root",
-        frontendProgram: "home_program",
+        rootWidgetRef: "landingPage",
+        frontendProgramRef: "landingProgram",
         liveProjection: true
       }
     }),
@@ -101,8 +102,40 @@ test("bootstrap app authoring submit request builder preserves create-form paylo
         handler: "page.home",
         page: "home",
         rootWidget: "page_root",
-        frontendProgram: "home_program",
+        rootWidgetRef: "landingPage",
+        frontendProgramRef: "landingProgram",
         liveProjection: true
+      }
+    }
+  );
+
+  assert.deepEqual(
+    buildBootstrapAppAuthoringSubmitRequest({
+      detail: { family: "route" },
+      data: {
+        id: "surface_route",
+        path: "/surface",
+        handler: "page.surface",
+        rootWidget: "",
+        frontendProgram: "",
+        routeStateProcess: "ShellNavigation",
+        routeStateProcessRef: "",
+        routeStateState: "",
+        routeStateStateRef: "activeRoute",
+        liveProjection: false
+      }
+    }),
+    {
+      url: "/api/routes",
+      body: {
+        id: "surface_route",
+        path: "/surface",
+        handler: "page.surface",
+        routeState: {
+          process: "ShellNavigation",
+          stateRef: "activeRoute"
+        },
+        liveProjection: false
       }
     }
   );

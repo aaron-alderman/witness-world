@@ -23,6 +23,7 @@ export const handlerCatalog = Object.freeze({
     "pipeline.platform-config.access.session.assume",
     "pipeline.platform-config.access.session.direct",
     "pipeline.script.binding.save",
+    "pipeline.script.schedule.save",
     "pipeline.script.run"
   ]),
   pageHandlers: freezeStrings([]),
@@ -46,6 +47,7 @@ export const handlerCatalog = Object.freeze({
     "pipeline.platform-config.access.session.assume",
     "pipeline.platform-config.access.session.direct",
     "pipeline.script.binding.save",
+    "pipeline.script.schedule.save",
     "pipeline.script.run"
   ]),
   handlerMetadata: Object.freeze({
@@ -68,6 +70,7 @@ export const handlerCatalog = Object.freeze({
     "pipeline.platform-config.access.session.assume": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
     "pipeline.platform-config.access.session.direct": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
     "pipeline.script.binding.save": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "pipeline.script.schedule.save": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
     "pipeline.script.run": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] })
   })
 });

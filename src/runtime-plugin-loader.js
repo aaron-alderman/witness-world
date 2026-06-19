@@ -1,10 +1,17 @@
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import {
+  cloneRuntimeOwnerChain,
+  describeHandlerOwnership,
+  describeRuntimeRouteOwnership,
+  describeSurfaceOwnership
+} from "./runtime-ownership.js";
 
 function cloneHandlerMetadataEntry(entry = {}) {
   return {
     ...(entry || {}),
-    methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined
+    methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined,
+    ownerChain: cloneRuntimeOwnerChain(entry?.ownerChain)
   };
 }
 
@@ -394,6 +401,7 @@ export async function loadRuntimePluginModules({
           : [];
         bundleOverrides[bundleDefinition.bundleId] = {
           id: bundleDefinition.bundleId,
+          pluginId: pluginPackage.id,
           version: pluginPackage.metadata?.version ?? "0",
           kind: "plugin",
           displayName: pluginPackage.metadata?.displayName ?? bundleDefinition.bundleId,
@@ -471,7 +479,7 @@ function handlerCatalogProvider(bundle = null) {
   return (bundle?.contributes?.providers ?? []).find(provider => provider?.kind === "handlerCatalog") ?? null;
 }
 
-function summarizeLoadedRoute(route = {}, handlerMetadata = {}) {
+function summarizeLoadedRoute(route = {}, handlerMetadata = {}, bundle = null) {
   const method = String(route.method || "GET").toUpperCase();
   const matcher = route.kind === "exact" ? route.path : String(route.pattern);
   const metadata = handlerMetadata[String(route.handler || "")] ?? undefined;
@@ -479,9 +487,15 @@ function summarizeLoadedRoute(route = {}, handlerMetadata = {}) {
     method,
     matcher,
     handler: String(route.handler || ""),
+    ...describeRuntimeRouteOwnership({
+      route,
+      handlerMetadata: metadata ?? {},
+      bundle: bundle ?? {}
+    }),
     handlerMetadata: metadata ? {
       ...metadata,
-      methods: Array.isArray(metadata.methods) ? [...metadata.methods] : undefined
+      methods: Array.isArray(metadata.methods) ? [...metadata.methods] : undefined,
+      ownerChain: cloneRuntimeOwnerChain(metadata.ownerChain)
     } : undefined
   };
 }
@@ -498,21 +512,26 @@ function summarizeLoadedBundleContributions(bundleIds = [], bundleOverrides = {}
     const catalog = handlerCatalogProvider(bundle);
     for (const [handlerId, entry] of Object.entries(catalog?.handlerMetadata ?? {})) {
       handlerMetadata[handlerId] = {
-        ...(entry || {}),
-        methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined
+        ...cloneHandlerMetadataEntry(entry),
+        ...describeHandlerOwnership({
+          handlerId,
+          handlerMetadata: entry,
+          bundle
+        })
       };
     }
     for (const capability of bundle.contributes?.capabilities ?? []) {
       capabilities.add(typeof capability === "string" ? capability : capability?.id);
     }
-    for (const route of bundle.contributes?.routes ?? []) routes.push(summarizeLoadedRoute(route, handlerMetadata));
+    for (const route of bundle.contributes?.routes ?? []) routes.push(summarizeLoadedRoute(route, handlerMetadata, bundle));
     for (const surface of bundle.contributes?.surfaces ?? []) {
       surfaces.push({
         id: surface.id,
         href: surface.href ?? null,
         action: surface.action ? { ...surface.action } : null,
         tier: surface.tier ?? "internal",
-        contexts: [...(surface.contexts ?? [])]
+        contexts: [...(surface.contexts ?? [])],
+        ...describeSurfaceOwnership({ surface, bundle })
       });
     }
     for (const provider of bundle.contributes?.providers ?? []) {

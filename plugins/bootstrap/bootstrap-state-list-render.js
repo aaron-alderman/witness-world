@@ -1,3 +1,5 @@
+import path from "node:path";
+
 export function renderBootstrapStateListRenderFactory() {
   return String.raw`
     const renderBootstrapStateItems = ${renderBootstrapStateItems.toString()};
@@ -120,9 +122,36 @@ export function renderBootstrapStateInventory({
   renderList("state-context-exports", authored.contextExports || [], row => row.context + " :: " + row.name + " -> " + row.target);
   renderList("state-context-imports", authored.contextImports || [], row => row.context + " <- " + row.sourceContext + " :: " + row.name + " => " + row.exportName);
   renderList("state-context-scopes", authored.contextScopes || [], row => row.context + " :: " + row.name + " -> " + row.target + (row.sourceKind === "import" ? " [import]" : " [local]"));
+  renderList("state-context-name-resolutions", authored.contextNameResolutions || [], row => row.context + " :: " + row.name + " -> " + (row.target || row.targets?.join(", ") || "(none)") + " [" + row.resolution + "]");
+  renderList("state-context-name-conflicts", authored.contextNameConflicts || [], row => row.context + " :: " + row.name + " -> " + ((row.targets || []).join(", ") || "(none)") + " [conflict]");
   renderList("state-perspectives", authored.perspectives || [], row => row.id + (row.context ? " @" + row.context : ""));
   renderList("state-stewardships", authored.stewardships || [], row => row.steward + " -> " + row.target);
   renderList("state-proposals", authored.proposals || [], row => row.id + " [" + row.status + "] " + row.targetProcess);
+  renderList("state-packages", authored.packages || [], row => row.id + (row.context ? " @" + row.context : "") + (row.packageKind ? " [" + row.packageKind + "]" : ""));
+  renderList("state-package-revisions", authored.packageRevisions || [], row =>
+    row.id + " -> " + row.package + (row.version ? " [" + row.version + "]" : "") + (row.status ? " [" + row.status + "]" : "")
+  );
+  renderList("state-package-patches", authored.packagePatches || [], row =>
+    row.id + " -> " + row.revision + " :: " + row.path + (row.operation ? " [" + row.operation + "]" : "")
+  );
+  renderList("state-package-namespaces", authored.packageNamespaces || [], row =>
+    row.id + " -> " + row.package + (row.context ? " @" + row.context : "") + (row.revision ? " [" + row.revision + "]" : "")
+  );
+  renderList("state-package-dependencies", authored.packageDependencies || [], row =>
+    row.id + " :: " + row.sourceRevision + " -> " + row.targetKind + " " + row.targetId
+  );
+  renderList("state-package-transformers", authored.packageTransformers || [], row =>
+    row.id + " :: " + (row.sourceNamespace || row.sourceRevision || "(none)") + " -> " + (row.targetNamespace || row.targetRevision || "(none)")
+  );
+  renderList("state-package-coexistence", authored.packageCoexistence || [], row =>
+    row.packageId + " [" + (row.coexistenceMode || "unknown") + "] -> " + (((row.selectedRevisionIds || []).join(", ")) || "(none)")
+  );
+  renderList("state-package-convergence", authored.packageConvergence || [], row =>
+    row.packageId + " [" + (row.status || "unknown") + "] -> " + (((row.transformerIds || []).join(", ")) || "(no transformers)")
+  );
+  renderList("state-package-apply-previews", authored.packageApplyPreviews || [], row =>
+    row.packageId + " :: " + row.revisionId + " [" + (row.status || "unknown") + "]"
+  );
   renderList("state-authority", authored.authority ? [
     "actor: " + (authored.authority.actor || "(none)"),
     "contexts: " + (authored.authority.mutationContexts || []).join(", ")
@@ -145,8 +174,22 @@ export function renderBootstrapStateInventory({
   renderList("mcp-tool-inventory", (authored.mcp?.servers || []).filter(row => (row.tools || []).length), mcpToolInventoryLabel);
   renderList("state-mcp-servers", authored.mcp?.servers || [], mcpServerInventoryLabel);
   renderList("state-mcp-tool-installs", (authored.mcp?.servers || []).filter(row => (row.tools || []).length), mcpToolInventoryLabel);
-  renderList("state-operator-backups", operator.inventory?.backups || [], row => row.id + " / witnesses " + row.witnessCount + " / observations " + row.observationCount);
-  renderList("state-operator-exports", operator.inventory?.exports || [], row => row.id + " / witnesses " + row.witnessCount + " / observations " + row.observationCount);
-  renderList("state-operator-imports", operator.inventory?.imports || [], row => row.id + " / " + (row.status || "unknown"));
+  renderList("state-operator-backups", operator.inventory?.backups || [], row => {
+    const lineage = row.lineage?.worldHome ? ` (from ${path.basename(row.lineage.worldHome)})` : "";
+    const comp = row.compatibility?.platformVersion ? ` [v:${row.compatibility.platformVersion}]` : "";
+    const warning = row.compatibility?.platformVersion !== "v1" ? " [WARN: Incompatible]" : "";
+    return `${row.id}${lineage}${comp}${warning} / ${row.createdAt?.slice(0, 10) || "unknown"} / ${row.witnessCount}w ${row.observationCount}o`;
+  });
+  renderList("state-operator-exports", operator.inventory?.exports || [], row => {
+    const lineage = row.lineage?.worldHome ? ` (from ${path.basename(row.lineage.worldHome)})` : "";
+    const comp = row.compatibility?.platformVersion ? ` [v:${row.compatibility.platformVersion}]` : "";
+    const warning = row.compatibility?.platformVersion !== "v1" ? " [WARN: Incompatible]" : "";
+    return `${row.id}${lineage}${comp}${warning} / ${row.createdAt?.slice(0, 10) || "unknown"} / ${row.witnessCount}w ${row.observationCount}o`;
+  });
+  renderList("state-operator-imports", operator.inventory?.imports || [], row => {
+    const comp = row.compatibility?.platformVersion ? ` [v:${row.compatibility.platformVersion}]` : "";
+    const warning = row.compatibility?.platformVersion !== "v1" ? " [WARN: Incompatible]" : "";
+    return `${row.id}${comp}${warning} / ${row.status || "unknown"}`;
+  });
   renderList("state-operator-activity", operator.recentActivity || [], row => row.process + " / " + (row.body?.artifactId || row.id));
 }

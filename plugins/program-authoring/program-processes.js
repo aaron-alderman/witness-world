@@ -1,5 +1,5 @@
 import { projectors, relation } from "../../src/kernel.js";
-import { resolveContextualRef } from "../../src/modules.js";
+import { resolveContextualRef, resolveCoveredContextualRef } from "../../src/modules.js";
 import { defineFrontendProgram, defineFrontendStep } from "../../src/widgets.js";
 import {
   defineBackendProgram,
@@ -55,9 +55,25 @@ function resolveBodyRef(world, body, {
   contextField = "context",
   idField,
   refField,
-  label
+  label,
+  allowedCanonicalIdPolicyClasses = null
 }) {
   return resolveContextualRef(world.allWitnesses(), {
+    context: body?.[contextField] ?? null,
+    id: body?.[idField] ?? null,
+    ref: body?.[refField] ?? null,
+    label,
+    allowedCanonicalIdPolicyClasses
+  });
+}
+
+function resolveCoveredBodyRef(world, body, {
+  contextField = "context",
+  idField,
+  refField,
+  label
+}) {
+  return resolveCoveredContextualRef(world.allWitnesses(), {
     context: body?.[contextField] ?? null,
     id: body?.[idField] ?? null,
     ref: body?.[refField] ?? null,
@@ -79,7 +95,7 @@ export function requestBootstrapFrontendProgramDefine(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const resolvedRootWidget = resolveBodyRef(world, body, {
+  const resolvedRootWidget = resolveCoveredBodyRef(world, body, {
     contextField: "context",
     idField: "rootWidget",
     refField: "rootWidgetRef",

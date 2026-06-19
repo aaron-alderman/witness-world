@@ -116,7 +116,8 @@ export async function createRuntimeAppContext({
     runtimeConfig: appContext.runtimeConfig,
     runtimeConfigLookup,
     positiveInteger,
-    isoAt
+    isoAt,
+    fetchImpl: typeof globalThis.fetch === "function" ? (...args) => globalThis.fetch(...args) : null
   };
   const pluginJobHandlers = Object.assign(
     {},
@@ -124,10 +125,8 @@ export async function createRuntimeAppContext({
   );
   const providerRuntimeFactories = runtimeContributions?.providerRuntimeFactories ?? {};
   const jobsFactory = providerRuntimeFactories["jobs.queue"];
-  const secretStoreFactory = providerRuntimeFactories["secret.store"];
-  const dbSqlFactory = providerRuntimeFactories["db.sql"];
-  const searchIndexFactory = providerRuntimeFactories["search.index"];
   const jobHandlers = { ...pluginJobHandlers, ...(appContext.jobHandlers ?? {}) };
+  const providerRuntimes = Object.create(null);
   appContext.jobs = typeof jobsFactory === "function"
     ? jobsFactory({
         world,
@@ -141,48 +140,41 @@ export async function createRuntimeAppContext({
         jobHandlers,
         close() {}
       };
-  appContext.secretStore = typeof secretStoreFactory === "function"
-    ? secretStoreFactory({
-        world,
-        project,
-        runtimeConfig: appContext.runtimeConfig,
-        runtimeRoot,
-        storage,
-        serverRunnerId: serverRunner.id,
-        getAppContext: () => contextRef
-      })
-    : null;
-  appContext.dbSql = typeof dbSqlFactory === "function"
-    ? dbSqlFactory({
-        world,
-        project,
-        runtimeConfig: appContext.runtimeConfig,
-        runtimeRoot,
-        storage,
-        serverRunnerId: serverRunner.id,
-        getAppContext: () => contextRef
-      })
-    : null;
-  appContext.searchIndex = typeof searchIndexFactory === "function"
-    ? searchIndexFactory({
-        world,
-        project,
-        runtimeConfig: appContext.runtimeConfig,
-        runtimeRoot,
-        serverRunnerId: serverRunner.id,
-        storage
-      })
-    : null;
+  providerRuntimes["jobs.queue"] = appContext.jobs;
+  const instantiateProviderRuntime = (providerId, factory) => {
+    if (typeof factory !== "function" || providerId === "jobs.queue") return null;
+    return factory({
+      world,
+      project,
+      runtimeConfig: appContext.runtimeConfig,
+      runtimeRoot,
+      storage,
+      serverRunnerId: serverRunner.id,
+      backendHost,
+      frontendHost,
+      getAppContext: () => contextRef
+    });
+  };
+  for (const [providerId, factory] of Object.entries(providerRuntimeFactories)) {
+    const runtime = instantiateProviderRuntime(providerId, factory);
+    if (runtime != null) providerRuntimes[providerId] = runtime;
+  }
+  appContext.providerRuntimes = providerRuntimes;
+  appContext.secretStore = providerRuntimes["secret.store"] ?? null;
+  appContext.dbSql = providerRuntimes["db.sql"] ?? null;
+  appContext.searchIndex = providerRuntimes["search.index"] ?? null;
   appContext.authOAuth = {
     pendingFlows: new Map()
   };
   appContext.runtimeContributions = runtimeContributions;
   appContext.httpOutboundStubState = new Map();
   appContext.close = () => {
-    appContext.jobs?.close?.();
-    appContext.secretStore?.close?.();
-    appContext.dbSql?.close?.();
-    appContext.searchIndex?.close?.();
+    const closed = new Set();
+    for (const runtime of Object.values(appContext.providerRuntimes ?? {})) {
+      if (!runtime || closed.has(runtime)) continue;
+      closed.add(runtime);
+      runtime.close?.();
+    }
   };
   contextRef = appContext;
   return appContext;

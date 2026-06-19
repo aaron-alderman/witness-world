@@ -1,4 +1,6 @@
 import { surfaceDomId } from "./runtime-surface-dom-identity.js";
+import { appendQueryParamsToHref } from "./runtime-url-utils.js";
+import { deriveProjectionSnapshot } from "./desire/projection-eval.js";
 
 const surfaceMapCache = new WeakMap();
 const initialStateCache = new WeakMap();
@@ -52,6 +54,12 @@ export function readInitialStateFromWorld(world) {
   }
   if (world) initialStateCache.set(world, { witnessCount, value: state });
   return state;
+}
+
+export function readProjectionStateFromWorld(world, initialState = new Map()) {
+  const projectionWitnesses = (world?.allWitnesses?.() ?? [])
+    .filter(witness => witness?.process === "desire.defineProjection");
+  return deriveProjectionSnapshot(projectionWitnesses, initialState);
 }
 
 function readProps(surface) {
@@ -261,12 +269,33 @@ function readClassNames(surface) {
   return [...new Set(tokens)];
 }
 
+function projectionValue(projectionState, projectionId) {
+  if (!projectionId) return undefined;
+  if (projectionState instanceof Map) return projectionState.get(projectionId);
+  if (projectionState && typeof projectionState === "object") return projectionState[projectionId];
+  return undefined;
+}
+
+function evaluateInitialBinding(binding, initialState, projectionState) {
+  const source = binding?.source;
+  if (!source || typeof source !== "object") return undefined;
+  let value;
+  if (source.kind === "state") value = stateValue(initialState, source.state);
+  else if (source.kind === "projection") value = projectionValue(projectionState, source.projection);
+  else return undefined;
+  const map = source?.map && typeof source.map === "object" ? source.map : null;
+  if (map && Object.prototype.hasOwnProperty.call(map, String(value))) return map[String(value)];
+  if (map && Object.prototype.hasOwnProperty.call(map, "default")) return map.default;
+  if (Object.prototype.hasOwnProperty.call(source ?? {}, "default")) return source.default;
+  return value;
+}
+
 function readProjectedProps(surface, options = {}) {
   const props = { ...readProps(surface) };
   for (const binding of surface?.bindings ?? []) {
     const prop = binding?.prop;
     if (!INITIAL_PROJECTED_BINDINGS.has(prop)) continue;
-    const value = evaluateStateBinding(binding, options.initialState);
+    const value = evaluateInitialBinding(binding, options.initialState, options.projectionState);
     if (value !== undefined) props[prop] = value;
   }
   return props;
@@ -278,7 +307,7 @@ function readProjectedClassNames(surface, options = {}) {
     ? surface.bindings.find(binding => binding?.prop === "className")
     : null;
   if (!classBinding) return classNames;
-  const resolved = evaluateStateBinding(classBinding, options.initialState);
+  const resolved = evaluateInitialBinding(classBinding, options.initialState, options.projectionState);
   if (typeof resolved !== "string" || !resolved.trim()) return classNames;
   const tokens = [
     ...classNames,
@@ -719,18 +748,6 @@ function stateValue(initialState, stateId) {
   return undefined;
 }
 
-function evaluateStateBinding(binding, initialState) {
-  const source = binding?.source;
-  const stateId = source?.state;
-  if (!stateId) return undefined;
-  const value = stateValue(initialState, stateId);
-  const map = source?.map && typeof source.map === "object" ? source.map : null;
-  if (map && Object.prototype.hasOwnProperty.call(map, String(value))) return map[String(value)];
-  if (map && Object.prototype.hasOwnProperty.call(map, "default")) return map.default;
-  if (Object.prototype.hasOwnProperty.call(source ?? {}, "default")) return source.default;
-  return value;
-}
-
 function coerceVisibleFlag(value) {
   if (value === false || value === 0 || value == null) return false;
   if (typeof value === "string") {
@@ -745,7 +762,7 @@ function surfaceVisibleInInitialProjection(surface, options = {}) {
     ? surface.bindings.find(binding => binding?.prop === "visible")
     : null;
   if (!visibleBinding) return true;
-  return coerceVisibleFlag(evaluateStateBinding(visibleBinding, options.initialState));
+  return coerceVisibleFlag(evaluateInitialBinding(visibleBinding, options.initialState, options.projectionState));
 }
 
 function renderSurfaceNode(surfaces, surfaceId, options = {}) {
@@ -838,16 +855,21 @@ function renderSurfaceDocument({
   activeSurface,
   surfaces,
   surfaceRenderers = [],
-  initialState = new Map()
+  initialState = new Map(),
+  projectionState = {},
+  stylesheetQuery = null
 }) {
   const rootProps = readProps(rootSurface);
-  const stylesheetHref = staticTextValue(rootProps, "stylesheetHref");
+  const stylesheetHref = appendQueryParamsToHref(
+    staticTextValue(rootProps, "stylesheetHref"),
+    stylesheetQuery ?? {}
+  );
   const rootInfo = describeSurface(rootSurface);
   const activeInfo = describeSurface(activeSurface);
   const bodyClass = readClassNames(rootSurface).join(" ");
   const bodyClassAttr = bodyClass ? ` class="${escapeAttr(bodyClass)}"` : "";
-  const html = renderSurfaceNode(surfaces, activeSurface.id, { surfaceRenderers, initialState });
-  const templates = renderSurfaceTemplates(surfaces, activeSurface.id, { surfaceRenderers, initialState });
+  const html = renderSurfaceNode(surfaces, activeSurface.id, { surfaceRenderers, initialState, projectionState });
+  const templates = renderSurfaceTemplates(surfaces, activeSurface.id, { surfaceRenderers, initialState, projectionState });
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -924,7 +946,9 @@ export function renderSurfaceShellFromMap({
   requestPathname = "/",
   route = null,
   surfaceRenderers = [],
-  initialState = new Map()
+  initialState = new Map(),
+  projectionState = {},
+  stylesheetQuery = null
 } = {}) {
   const state = resolveSurfaceShellFromMap({
     surfaces,
@@ -932,7 +956,9 @@ export function renderSurfaceShellFromMap({
     requestPathname,
     route,
     surfaceRenderers,
-    initialState
+    initialState,
+    projectionState,
+    stylesheetQuery
   });
   return state?.html ?? null;
 }
@@ -943,7 +969,9 @@ export function resolveSurfaceShellFromMap({
   requestPathname = "/",
   route = null,
   surfaceRenderers = [],
-  initialState = new Map()
+  initialState = new Map(),
+  projectionState = {},
+  stylesheetQuery = null
 } = {}) {
   if (!(surfaces instanceof Map) || !rootSurfaceId) return null;
   const rootSurface = surfaces.get(rootSurfaceId);
@@ -962,7 +990,9 @@ export function resolveSurfaceShellFromMap({
       activeSurface,
       surfaces,
       surfaceRenderers,
-      initialState
+      initialState,
+      projectionState,
+      stylesheetQuery
     });
     return {
       html,
@@ -1001,7 +1031,8 @@ export function renderSurfaceShellPage(world, {
     requestPathname,
     route,
     surfaceRenderers,
-    initialState
+    initialState,
+    projectionState: readProjectionStateFromWorld(world, initialState)
   });
 }
 
@@ -1018,6 +1049,7 @@ export function resolveSurfaceShellPage(world, {
     requestPathname,
     route,
     surfaceRenderers,
-    initialState
+    initialState,
+    projectionState: readProjectionStateFromWorld(world, initialState)
   });
 }

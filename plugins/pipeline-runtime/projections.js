@@ -40,6 +40,26 @@ function defaultCheckpointRow(id, { titles, owners, contexts }) {
   };
 }
 
+function defaultScheduleRow(id, { titles, owners, contexts }) {
+  return {
+    id,
+    title: titles.get(id) ?? id,
+    owner: owners.get(id) ?? null,
+    context: contexts.get(id) ?? null,
+    serverRunner: null,
+    syncId: null,
+    enabled: false,
+    intervalMs: 0,
+    rowLimit: 0,
+    maxBatchesPerRun: 0,
+    createdAt: null,
+    updatedAt: null,
+    lastTriggeredAt: null,
+    lastParentRunId: null,
+    deleted: false
+  };
+}
+
 function defaultRunRow(id, { titles, owners, contexts }) {
   return {
     id,
@@ -48,18 +68,27 @@ function defaultRunRow(id, { titles, owners, contexts }) {
     context: contexts.get(id) ?? null,
     serverRunner: null,
     syncId: null,
+    runKind: "parent",
+    triggerKind: "manual",
     mode: null,
     status: "queued",
+    scheduleId: null,
+    parentRunId: null,
+    batchOrdinal: null,
     jobId: null,
     rowLimit: 0,
+    maxBatches: 0,
+    childCount: 0,
     startedAt: null,
     completedAt: null,
     sourceBinding: null,
     sourceDatasourceId: null,
     targetBindings: [],
     checkpointBefore: null,
+    checkpointAfter: null,
     checkpointCandidate: null,
     checkpointCommitted: false,
+    completionReason: null,
     rowsRead: 0,
     worldCounts: {},
     sqlCounts: {},
@@ -159,18 +188,83 @@ export function pipelineCheckpointIndex(witnesses, options = {}) {
   return { rows, byId, byRunnerSync };
 }
 
+export function pipelineSchedules(witnesses, options = {}) {
+  const rows = new Map();
+  const owners = projectors.owners(witnesses);
+  const contexts = moduleProjectors.objectContexts(witnesses, options);
+  const modules = moduleProjectors.modules(witnesses, options);
+  const titles = titleMap(witnesses);
+
+  for (const [id, kind] of modules) {
+    if (kind !== "pipelineSchedule") continue;
+    rows.set(id, defaultScheduleRow(id, { titles, owners, contexts }));
+  }
+
+  for (const witness of witnesses) {
+    if (!witness.process.startsWith("pipeline.schedule.") || !witness.body?.id) continue;
+    const id = String(witness.body.id);
+    const row = rows.get(id) ?? defaultScheduleRow(id, { titles, owners, contexts });
+    row.serverRunner = typeof witness.body.serverRunner === "string" ? witness.body.serverRunner : row.serverRunner;
+    row.syncId = typeof witness.body.syncId === "string" ? witness.body.syncId : row.syncId;
+    row.enabled = typeof witness.body.enabled === "boolean" ? witness.body.enabled : row.enabled;
+    row.intervalMs = Number.isFinite(witness.body.intervalMs) ? witness.body.intervalMs : row.intervalMs;
+    row.rowLimit = Number.isFinite(witness.body.rowLimit) ? witness.body.rowLimit : row.rowLimit;
+    row.maxBatchesPerRun = Number.isFinite(witness.body.maxBatchesPerRun) ? witness.body.maxBatchesPerRun : row.maxBatchesPerRun;
+    row.createdAt = typeof witness.body.createdAt === "string" ? witness.body.createdAt : row.createdAt;
+    row.updatedAt = typeof witness.body.updatedAt === "string" ? witness.body.updatedAt : row.updatedAt;
+    row.lastTriggeredAt = typeof witness.body.lastTriggeredAt === "string"
+      ? witness.body.lastTriggeredAt
+      : (typeof witness.body.triggeredAt === "string"
+          ? witness.body.triggeredAt
+          : (typeof witness.body.skippedAt === "string" ? witness.body.skippedAt : row.lastTriggeredAt));
+    row.lastParentRunId = typeof witness.body.lastParentRunId === "string" ? witness.body.lastParentRunId : row.lastParentRunId;
+    row.title = titles.get(id) ?? row.syncId ?? row.title;
+    if (witness.process === "pipeline.schedule.delete") row.deleted = true;
+    rows.set(id, row);
+  }
+
+  return [...rows.values()]
+    .filter(row => row.deleted !== true)
+    .map(({ deleted, ...row }) => row)
+    .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+}
+
+export function pipelineScheduleIndex(witnesses, options = {}) {
+  const rows = pipelineSchedules(witnesses, options);
+  const byId = Object.create(null);
+  const byRunner = Object.create(null);
+  const byRunnerSync = Object.create(null);
+  for (const row of rows) {
+    byId[row.id] = row;
+    if (row.serverRunner) {
+      byRunner[row.serverRunner] = [...(byRunner[row.serverRunner] ?? []), row];
+      if (row.syncId) byRunnerSync[`${row.serverRunner}:${row.syncId}`] = row;
+    }
+  }
+  return { rows, byId, byRunner, byRunnerSync };
+}
+
 function assignRunBody(row, body = {}) {
   row.serverRunner = typeof body.serverRunner === "string" ? body.serverRunner : row.serverRunner;
   row.syncId = typeof body.syncId === "string" ? body.syncId : row.syncId;
+  row.runKind = typeof body.runKind === "string" ? body.runKind : row.runKind;
+  row.triggerKind = typeof body.triggerKind === "string" ? body.triggerKind : row.triggerKind;
   row.mode = typeof body.mode === "string" ? body.mode : row.mode;
+  row.scheduleId = typeof body.scheduleId === "string" ? body.scheduleId : row.scheduleId;
+  row.parentRunId = typeof body.parentRunId === "string" ? body.parentRunId : row.parentRunId;
+  row.batchOrdinal = Number.isFinite(body.batchOrdinal) ? body.batchOrdinal : row.batchOrdinal;
   row.jobId = typeof body.jobId === "string" ? body.jobId : row.jobId;
   row.rowLimit = Number.isFinite(body.rowLimit) ? body.rowLimit : row.rowLimit;
+  row.maxBatches = Number.isFinite(body.maxBatches) ? body.maxBatches : row.maxBatches;
+  row.childCount = Number.isFinite(body.childCount) ? body.childCount : row.childCount;
   row.sourceBinding = typeof body.sourceBinding === "string" ? body.sourceBinding : row.sourceBinding;
   row.sourceDatasourceId = typeof body.sourceDatasourceId === "string" ? body.sourceDatasourceId : row.sourceDatasourceId;
   row.targetBindings = Array.isArray(body.targetBindings) ? body.targetBindings.map(entry => ({ ...entry })) : row.targetBindings;
   row.checkpointBefore = body.checkpointBefore ?? row.checkpointBefore;
+  row.checkpointAfter = body.checkpointAfter ?? row.checkpointAfter;
   row.checkpointCandidate = body.checkpointCandidate ?? row.checkpointCandidate;
   row.checkpointCommitted = typeof body.checkpointCommitted === "boolean" ? body.checkpointCommitted : row.checkpointCommitted;
+  row.completionReason = typeof body.completionReason === "string" ? body.completionReason : row.completionReason;
   row.rowsRead = Number.isFinite(body.rowsRead) ? body.rowsRead : row.rowsRead;
   row.worldCounts = body.worldCounts && typeof body.worldCounts === "object" ? { ...body.worldCounts } : row.worldCounts;
   row.sqlCounts = body.sqlCounts && typeof body.sqlCounts === "object" ? { ...body.sqlCounts } : row.sqlCounts;
@@ -231,11 +325,23 @@ export function pipelineRunIndex(witnesses, options = {}) {
   const rows = pipelineRuns(witnesses, options);
   const byId = Object.create(null);
   const byRunner = Object.create(null);
+  const byParentId = Object.create(null);
+  const byRunnerSyncParents = Object.create(null);
+  const byRunnerSyncChildren = Object.create(null);
   for (const row of rows) {
     byId[row.id] = row;
-    if (row.serverRunner) byRunner[row.serverRunner] = [...(byRunner[row.serverRunner] ?? []), row];
+    if (row.serverRunner) {
+      byRunner[row.serverRunner] = [...(byRunner[row.serverRunner] ?? []), row];
+      const runnerSyncKey = `${row.serverRunner}:${row.syncId ?? ""}`;
+      if (row.runKind === "parent") {
+        byRunnerSyncParents[runnerSyncKey] = [...(byRunnerSyncParents[runnerSyncKey] ?? []), row];
+      } else if (row.runKind === "child") {
+        byRunnerSyncChildren[runnerSyncKey] = [...(byRunnerSyncChildren[runnerSyncKey] ?? []), row];
+      }
+    }
+    if (row.parentRunId) byParentId[row.parentRunId] = [...(byParentId[row.parentRunId] ?? []), row];
   }
-  return { rows, byId, byRunner };
+  return { rows, byId, byRunner, byParentId, byRunnerSyncParents, byRunnerSyncChildren };
 }
 
 export function pipelineRunLogs(witnesses) {
@@ -278,6 +384,8 @@ export const pipelineModuleProjectors = Object.freeze({
   pipelineSqlBindingIndex,
   pipelineCheckpoints,
   pipelineCheckpointIndex,
+  pipelineSchedules,
+  pipelineScheduleIndex,
   pipelineRuns,
   pipelineRunIndex,
   pipelineRunLogs,

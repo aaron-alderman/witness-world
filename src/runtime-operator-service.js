@@ -150,6 +150,8 @@ async function describeArtifactDirectory({
     includesDerived: manifest?.includesDerived === true,
     witnessCount: Number.isFinite(canonicalTruth.witnessCount) ? canonicalTruth.witnessCount : 0,
     observationCount: Number.isFinite(canonicalTruth.observationCount) ? canonicalTruth.observationCount : 0,
+    lineage: manifest?.lineage ?? null,
+    compatibility: manifest?.compatibility ?? null,
     status: kindAllowed && witnessExists && observationExists ? "ready" : "invalid",
     reason: !kindAllowed
       ? `artifact kind ${kind || "(unknown)"} not allowed here`
@@ -326,6 +328,13 @@ export function createRuntimeOperatorService({
       label: String(label || "").trim() || null,
       source,
       includesDerived: includeDerived,
+      lineage: {
+        worldHome,
+        persistenceMode: operatorContract?.persistence?.mode ?? null
+      },
+      compatibility: {
+        platformVersion: "v1" // Placeholder: replace with actual platform version logic
+      },
       operatorContract: {
         layout: operatorContract?.layout ?? null,
         persistenceMode: operatorContract?.persistence?.mode ?? null,
@@ -427,16 +436,11 @@ export function createRuntimeOperatorService({
       await renameReplace(logsRoot, oldLogsRoot);
     }
     await renameReplace(stageLogsRoot, logsRoot);
-    if (runtimeRoot) {
-      if (payload.manifest.includesDerived === true && (await exists(stageRuntimeRoot))) {
-        if (await exists(runtimeRoot)) {
-          await renameReplace(runtimeRoot, oldRuntimeRoot);
-        }
-        await renameReplace(stageRuntimeRoot, runtimeRoot);
-      } else {
-        await fs.rm(runtimeRoot, { recursive: true, force: true });
-        await ensureDirectory(runtimeRoot);
+    if (runtimeRoot && payload.manifest.includesDerived === true && (await exists(stageRuntimeRoot))) {
+      if (await exists(runtimeRoot)) {
+        await renameReplace(runtimeRoot, oldRuntimeRoot);
       }
+      await renameReplace(stageRuntimeRoot, runtimeRoot);
     }
     await fs.rm(stagingRoot, { recursive: true, force: true });
     await fs.rm(swapRoot, { recursive: true, force: true });

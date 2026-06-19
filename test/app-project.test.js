@@ -138,5 +138,5 @@ imports = ["../../examples_rvm/engentus/PIPELINE.rvm"]
 
 test("examples root contains only the standardized app directories and shared library", async () => {
   const entries = (await fs.readdir(path.join(process.cwd(), "examples"))).sort();
-  assert.deepEqual(entries, ["_lib", "demo-todo-app", "eden", "engentus"]);
+  assert.deepEqual(entries, ["_lib", "demo-todo-app", "eden", "engentus", "master"]);
 });

@@ -10,11 +10,33 @@ import {
   requestBootstrapContextImportRemove,
   requestBootstrapStewardshipGrant,
   requestBootstrapStewardshipRevoke,
+  resolveStewardshipTargetInput,
+  requestSurfaceDefine,
+  requestProcessDefine,
+  requestTypeDefine,
+  requestProjectionDefine,
+  requestMessageDefine,
+  requestPackageDefine,
+  requestPackageRevisionDefine,
+  requestPackageRevisionPublish,
+  requestPackagePatchDefine,
+  requestPackageNamespaceDefine,
+  requestPackageDependencyDefine,
+  requestPackageTransformerDefine,
+  resolveCoveredAuthoringRefInput,
+  requireCoveredAuthoringRefInput,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
   requestWidgetDefine,
   requestWidgetUpdate
 } from "./authoring-core-processes.js";
+
+function surfaceProposalContexts(body) {
+  const docs = Array.isArray(body) ? body : [body];
+  return docs
+    .map(doc => doc && typeof doc === "object" && !Array.isArray(doc) ? (doc.context ?? null) : null)
+    .filter(context => typeof context === "string" && context.trim());
+}
 
 export function executeAuthoringCoreProposalTarget({
   world,
@@ -88,15 +110,179 @@ export function executeAuthoringCoreProposalTarget({
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "stewardship.grant": {
-      const gate = ensureTargetAuthority(actor, body.target);
+      const resolvedTarget = resolveStewardshipTargetInput(world, body, {
+        label: "stewardship target"
+      });
+      if (!resolvedTarget.ok) return { ok: false, status: 400, error: resolvedTarget.error };
+      const gate = ensureTargetAuthority(actor, resolvedTarget.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-      const result = requestBootstrapStewardshipGrant(world, { actor, backendHost, body });
+      const result = requestBootstrapStewardshipGrant(world, {
+        actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "stewardship.revoke": {
-      const gate = ensureTargetAuthority(actor, body.target);
+      const resolvedTarget = resolveStewardshipTargetInput(world, body, {
+        label: "stewardship target"
+      });
+      if (!resolvedTarget.ok) return { ok: false, status: 400, error: resolvedTarget.error };
+      const gate = ensureTargetAuthority(actor, resolvedTarget.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-      const result = requestBootstrapStewardshipRevoke(world, { actor, backendHost, body });
+      const result = requestBootstrapStewardshipRevoke(world, {
+        actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "surface.define": {
+      for (const context of surfaceProposalContexts(body)) {
+        const gate = ensureContextAuthority(actor, context);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      }
+      const result = requestSurfaceDefine(world, { actor, backendHost, body });
+      return result.ok
+        ? { ok: true, witnessIds: (result.witnesses ?? []).map(entry => entry.id).filter(Boolean) }
+        : result;
+    }
+    case "process.define": {
+      const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestProcessDefine(world, { actor, backendHost, body });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "type.define": {
+      const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestTypeDefine(world, { actor, backendHost, body });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "projection.define": {
+      const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestProjectionDefine(world, { actor, backendHost, body });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "message.define": {
+      const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestMessageDefine(world, { actor, backendHost, body });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "package.define": {
+      const gate = body?.context
+        ? ensureContextAuthority(actor, body.context)
+        : (proposal.targetId ? ensureContextAuthority(actor, proposal.targetId) : { ok: true });
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestPackageDefine(world, {
+        actor,
+        body: body?.context ? body : { ...body, context: proposal.targetId ?? null }
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "packageRevision.define": {
+      const resolvedPackage = resolveCoveredAuthoringRefInput(world, body, {
+        idField: "package",
+        refField: "packageRef",
+        label: "package"
+      });
+      if (!resolvedPackage.ok) return { ok: false, status: 400, error: resolvedPackage.error };
+      const packageId = resolvedPackage.target ?? proposal.targetId ?? "";
+      const gate = ensureTargetAuthority(actor, packageId);
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestPackageRevisionDefine(world, {
+        actor,
+        body: { ...body, package: packageId, packageRef: null }
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "packageRevision.publish": {
+      const resolvedRevision = resolveCoveredAuthoringRefInput(world, body, {
+        idField: "id",
+        refField: "idRef",
+        label: "package revision"
+      });
+      if (!resolvedRevision.ok) return { ok: false, status: 400, error: resolvedRevision.error };
+      const revisionId = resolvedRevision.target ?? proposal.targetId ?? "";
+      const gate = ensureTargetAuthority(actor, revisionId);
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestPackageRevisionPublish(world, {
+        actor,
+        body: { ...body, id: revisionId, idRef: null }
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "packagePatch.define": {
+      const resolvedRevision = resolveCoveredAuthoringRefInput(world, body, {
+        idField: "revision",
+        refField: "revisionRef",
+        label: "package revision"
+      });
+      if (!resolvedRevision.ok) return { ok: false, status: 400, error: resolvedRevision.error };
+      const revisionId = resolvedRevision.target ?? proposal.targetId ?? "";
+      const gate = ensureTargetAuthority(actor, revisionId);
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestPackagePatchDefine(world, {
+        actor,
+        body: { ...body, revision: revisionId, revisionRef: null }
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "packageNamespace.define": {
+      const gate = ensureContextAuthority(actor, body?.context ?? proposal.targetId ?? null);
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestPackageNamespaceDefine(world, {
+        actor,
+        body: { ...body, context: body?.context ?? proposal.targetId ?? null }
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "packageDependency.define": {
+      const resolvedSourceRevision = resolveCoveredAuthoringRefInput(world, body, {
+        idField: "sourceRevision",
+        refField: "sourceRevisionRef",
+        label: "package source revision"
+      });
+      if (!resolvedSourceRevision.ok) return { ok: false, status: 400, error: resolvedSourceRevision.error };
+      const sourceRevisionId = resolvedSourceRevision.target ?? proposal.targetId ?? "";
+      const gate = ensureTargetAuthority(actor, sourceRevisionId);
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestPackageDependencyDefine(world, {
+        actor,
+        body: { ...body, sourceRevision: sourceRevisionId, sourceRevisionRef: null }
+      });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "packageTransformer.define": {
+      const resolvedTargetRevision = resolveCoveredAuthoringRefInput(world, body, {
+        idField: "targetRevision",
+        refField: "targetRevisionRef",
+        label: "target package revision"
+      });
+      if (!resolvedTargetRevision.ok) return { ok: false, status: 400, error: resolvedTargetRevision.error };
+      const resolvedPackage = resolveCoveredAuthoringRefInput(world, body, {
+        idField: "package",
+        refField: "packageRef",
+        label: "package"
+      });
+      if (!resolvedPackage.ok) return { ok: false, status: 400, error: resolvedPackage.error };
+      const packageId = resolvedPackage.target
+        ?? body?.package
+        ?? (!resolvedTargetRevision.target ? (proposal.targetId ?? "") : "");
+      const targetId = resolvedTargetRevision.target ?? proposal.targetId ?? packageId;
+      const gate = ensureTargetAuthority(actor, targetId);
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestPackageTransformerDefine(world, {
+        actor,
+        body: {
+          ...body,
+          package: packageId,
+          packageRef: null,
+          ...(resolvedTargetRevision.target ? { targetRevision: resolvedTargetRevision.target, targetRevisionRef: null } : {})
+        }
+      });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "widget.define": {

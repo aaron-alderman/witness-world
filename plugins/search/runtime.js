@@ -23,6 +23,25 @@ export const surfaces = Object.freeze([]);
 
 export const providers = Object.freeze([
   {
+    kind: "capabilityDefinitions",
+    id: "search.capabilities",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: "search.index",
+        label: "Search Index",
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "local-text", label: "Local text index", status: "shipped", default: true })
+        ]),
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["indexId"]),
+          failure: Object.freeze(["search.index.build.failed", "search.index.reindex.failed", "search.index.query.failed"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([])
+      })
+    ])
+  },
+  {
     kind: "moduleProjectors",
     id: "search.projections",
     projectors: searchModuleProjectors

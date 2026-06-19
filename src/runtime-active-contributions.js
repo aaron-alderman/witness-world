@@ -21,6 +21,8 @@ function collectProviders(bundles = []) {
   return bundles.flatMap(bundle =>
     (bundle?.contributes?.providers ?? []).map((provider, index) => ({
       bundleId: bundle.id,
+      bundleKind: bundle.kind,
+      pluginId: bundle.pluginId ?? null,
       provider,
       providerId: `${bundle.id}:${providerIdentity(provider, index)}`
     }))
@@ -36,6 +38,7 @@ export function collectActiveRuntimeContributions({
   const providerRuntimeFactories = {};
   const jobHandlerFactories = {};
   const handlerSetProviders = {};
+  const backendProcessRequestHandlers = {};
   const runtimeBuiltinSeeds = [];
   const capabilityDefinitions = [];
   const staticAssetProviders = [];
@@ -48,7 +51,7 @@ export function collectActiveRuntimeContributions({
   const starterBlueprints = [];
   const starterBlueprintIndex = new Map();
 
-  for (const { provider, providerId } of collectProviders(bundles)) {
+  for (const { provider, providerId, bundleId, bundleKind, pluginId } of collectProviders(bundles)) {
     if (!provider || typeof provider !== "object") continue;
     if (provider.kind === "supportServiceFactory") {
       if (typeof provider.factory !== "function") {
@@ -82,7 +85,26 @@ export function collectActiveRuntimeContributions({
       continue;
     }
     if (provider.kind === "handlerSet") {
-      if (provider.id) handlerSetProviders[String(provider.id)] = provider;
+      if (provider.id) {
+        handlerSetProviders[String(provider.id)] = {
+          ...provider,
+          bundleId,
+          bundleKind,
+          pluginId
+        };
+      }
+      continue;
+    }
+    if (provider.kind === "backendProcessRequestHandlers") {
+      const handlers = provider.handlers && typeof provider.handlers === "object" && !Array.isArray(provider.handlers)
+        ? provider.handlers
+        : {};
+      for (const [name, handler] of Object.entries(handlers)) {
+        if (typeof handler !== "function") {
+          throw new Error(`backend process requester provider ${providerId} must expose function handler ${name}`);
+        }
+      }
+      mergeNamed(backendProcessRequestHandlers, handlers, providerId);
       continue;
     }
     if (provider.kind === "runtimeBuiltinSeeds") {
@@ -173,6 +195,7 @@ export function collectActiveRuntimeContributions({
     providerRuntimeFactories: Object.freeze(providerRuntimeFactories),
     jobHandlerFactories: Object.freeze(jobHandlerFactories),
     handlerSetProviders: Object.freeze(handlerSetProviders),
+    backendProcessRequestHandlers: Object.freeze(backendProcessRequestHandlers),
     runtimeBuiltinSeeds: Object.freeze(runtimeBuiltinSeeds),
     capabilityDefinitions: Object.freeze(capabilityDefinitions),
     moduleProjectors: Object.freeze(moduleProjectors),

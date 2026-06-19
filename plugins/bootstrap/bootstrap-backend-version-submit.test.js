@@ -125,7 +125,7 @@ test("backend version submit bridge binds one documented event family", () => {
 
   const factory = renderBootstrapBackendVersionSubmitFactory();
   assert.equal(factory.includes("const bootstrapBackendVersionSubmitContractsByFamily ="), true);
-  assert.equal(factory.includes("const resolveUrlTemplate ="), true);
+  assert.equal(factory.includes("const bootstrapBackendVersionResolveUrlTemplate ="), true);
   assert.equal(factory.includes("const buildBootstrapBackendVersionSubmitRequest ="), true);
   assert.equal(factory.includes("const runBootstrapBackendVersionSubmit ="), true);
   assert.equal(factory.includes("const bindBootstrapBackendVersionSubmit ="), true);

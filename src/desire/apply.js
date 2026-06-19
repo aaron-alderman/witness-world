@@ -21,10 +21,17 @@ import {
   validateContextExport,
   validateContextImport,
   resolveContextualRef,
+  resolveCoveredContextualRef,
   removeCapability,
   createCompiler,
   createDescription,
   compileDescription,
+  definePackage,
+  definePackageRevision,
+  definePackagePatch,
+  definePackageNamespace,
+  definePackageDependency,
+  definePackageTransformer,
   installRuntimePlugin,
   removeRuntimePlugin,
   createServerRunner,
@@ -76,6 +83,12 @@ export const NATIVE_RUNTIME_DECLARATION_KINDS = new Set([
   "contextImport",
   "stewardship",
   "proposal",
+  "package",
+  "packageRevision",
+  "packagePatch",
+  "packageNamespace",
+  "packageDependency",
+  "packageTransformer",
   "thing",
   "relation",
   "compiler",
@@ -472,6 +485,7 @@ function applyNativeWtomlCapability(world, node, runtimeNodesBySourceNodeId, han
     authority: values.authority ?? [],
     providerAdapters: values.providerAdapters ?? [],
     witnessContract: values.witnessContract ?? null,
+    compatibility: values.compatibility ?? null,
     placement: values.placement ?? [],
     context: values.context ?? null,
     owner: values.owner ?? actor
@@ -741,6 +755,7 @@ function applyGenericSemanticDefinition(world, node) {
     if (node.body?.projectionKind) claims.push(relation(name, "projectionKind", node.body.projectionKind));
   }
   if (node.kind === "surface") {
+    if (node.body?.context) claims.push(relation(name, "inContext", node.body.context));
     if (node.body?.surfaceKind) claims.push(relation(name, "surfaceKind", node.body.surfaceKind));
     if (node.body?.className) claims.push(relation(name, "surfaceClass", node.body.className));
     if (node.body?.processRef) claims.push(relation(name, "surfaceProcess", node.body.processRef));
@@ -1095,27 +1110,159 @@ function applyCoreRuntimeDeclaration(world, doc) {
       ]);
     }
     case "stewardship":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const target = resolveCoveredPreparedDocRef(world, values, {
+          idField: "target",
+          refField: "targetRef",
+          label: "stewardship target"
+        });
+        if (!target.ok) throw new Error(target.error);
+        if (!target.target) throw new Error("stewardship target is required");
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "target", refField: "targetRef", resolved: target })
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, sourceTargetsForDoc(annotatedDoc), req(values, "actor"), [
         (values.revoke === true ? revokeStewardship : grantStewardship)(world, {
           actor: req(values, "actor"),
           steward: req(values, "steward"),
-          target: req(values, "target"),
+          target: target.target,
           targetKind: values.targetKind ?? null
         })
-      ]);
+        ]);
+      }
     case "proposal":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const target = resolveCoveredPreparedDocRef(world, values, {
+          idField: "targetId",
+          refField: "targetIdRef",
+          label: "proposal target"
+        });
+        if (!target.ok) throw new Error(target.error);
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "targetId", refField: "targetIdRef", resolved: target })
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, sourceTargetsForDoc(annotatedDoc), req(values, "actor"), [
         createProposal(world, {
           actor: req(values, "actor"),
           id: req(values, "id"),
           targetProcess: req(values, "targetProcess"),
           targetKind: req(values, "targetKind"),
-          targetId: values.targetId ?? null,
+          targetId: target.target ?? null,
           body: values.body ?? {},
           reason: values.reason ?? null,
           owner: values.owner ?? values.actor
         })
+        ]);
+      }
+    case "package":
+      return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+        definePackage(world, {
+          actor: req(values, "actor"),
+          id: req(values, "id"),
+          context: values.context ?? null,
+          label: values.label ?? values.id,
+          packageKind: values.packageKind ?? values.kind ?? "plugin",
+          version: values.version ?? null,
+          description: values.description ?? null,
+          defaultNamespace: values.defaultNamespace ?? null,
+          exports: values.exports ?? [],
+          provenance: values.provenance ?? null,
+          compatibleRuntimeProfiles: values.compatibleRuntimeProfiles ?? [],
+          compatibleShells: values.compatibleShells ?? [],
+          runtimeFlavor: values.runtimeFlavor ?? null,
+          owner: values.owner ?? values.actor
+        })
       ]);
+    case "packageRevision":
+      return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+        definePackageRevision(world, {
+          actor: req(values, "actor"),
+          id: req(values, "id"),
+          package: req(values, "package"),
+          version: values.version ?? null,
+          status: values.status ?? "draft",
+          supersedes: values.supersedes ?? [],
+          emittedBundleHash: values.emittedBundleHash ?? null,
+          manifest: values.manifest ?? null,
+          compatibility: values.compatibility ?? null,
+          owner: values.owner ?? values.actor
+        })
+      ]);
+    case "packagePatch":
+      {
+        const patchWitness = definePackagePatch(world, {
+          actor: req(values, "actor"),
+          package: req(values, "package"),
+          revision: req(values, "revision"),
+          ordinal: values.ordinal ?? null,
+          path: req(values, "path"),
+          operation: req(values, "operation"),
+          sourceLanguage: req(values, "sourceLanguage"),
+          transformer: values.transformer ?? null,
+          previousHash: values.previousHash ?? null,
+          nextHash: values.nextHash ?? null,
+          body: values.body ?? null,
+          owner: values.owner ?? values.actor
+        });
+        return withSourceAnnotations(world, doc, [patchWitness.body?.id].filter(Boolean), req(values, "actor"), [
+          patchWitness
+        ]);
+      }
+    case "packageNamespace":
+      {
+        const namespaceWitness = definePackageNamespace(world, {
+          actor: req(values, "actor"),
+          id: values.id ?? null,
+          context: req(values, "context"),
+          name: req(values, "name"),
+          package: req(values, "package"),
+          revision: values.revision ?? null,
+          visibility: values.visibility ?? "context",
+          owner: values.owner ?? values.actor
+        });
+        return withSourceAnnotations(world, doc, [namespaceWitness.body?.id].filter(Boolean), req(values, "actor"), [
+          namespaceWitness
+        ]);
+      }
+    case "packageDependency":
+      {
+        const dependencyWitness = definePackageDependency(world, {
+          actor: req(values, "actor"),
+          id: values.id ?? null,
+          sourcePackage: values.sourcePackage ?? null,
+          sourceRevision: req(values, "sourceRevision"),
+          targetKind: req(values, "targetKind"),
+          targetId: req(values, "targetId"),
+          versionRange: values.versionRange ?? null,
+          compatibility: values.compatibility ?? null,
+          runtimeProfiles: values.runtimeProfiles ?? [],
+          owner: values.owner ?? values.actor
+        });
+        return withSourceAnnotations(world, doc, [dependencyWitness.body?.id].filter(Boolean), req(values, "actor"), [
+          dependencyWitness
+        ]);
+      }
+    case "packageTransformer":
+      {
+        const transformerWitness = definePackageTransformer(world, {
+          actor: req(values, "actor"),
+          id: values.id ?? null,
+          package: req(values, "package"),
+          sourceRevision: values.sourceRevision ?? null,
+          sourceNamespace: values.sourceNamespace ?? null,
+          targetRevision: values.targetRevision ?? null,
+          targetNamespace: values.targetNamespace ?? null,
+          strategy: values.strategy ?? "follow-up-revision",
+          status: values.status ?? "draft",
+          mappings: values.mappings ?? [],
+          remainingGlue: values.remainingGlue ?? [],
+          notes: values.notes ?? [],
+          owner: values.owner ?? values.actor
+        });
+        return withSourceAnnotations(world, doc, [transformerWitness.body?.id].filter(Boolean), req(values, "actor"), [
+          transformerWitness
+        ]);
+      }
     case "thing":
       return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
         createThing(world, {
@@ -1157,55 +1304,107 @@ function applyCoreRuntimeDeclaration(world, doc) {
         output: req(values, "output")
       });
     case "capabilityInstall":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const target = resolveCoveredPreparedDocRef(world, values, {
+          idField: "target",
+          refField: "targetRef",
+          label: "capability install target"
+        });
+        if (!target.ok) throw new Error(target.error);
+        if (!target.target) throw new Error("capability target is required");
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "target", refField: "targetRef", resolved: target })
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, sourceTargetsForDoc(annotatedDoc), req(values, "actor"), [
         installCapability(world, {
           actor: req(values, "actor"),
           capability: req(values, "capability"),
-          target: req(values, "target"),
+          target: target.target,
           targetKind: req(values, "targetKind"),
           config: values.config ?? null
         })
-      ]);
+        ]);
+      }
     case "capabilityRemove":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const target = resolveCoveredPreparedDocRef(world, values, {
+          idField: "target",
+          refField: "targetRef",
+          label: "capability remove target"
+        });
+        if (!target.ok) throw new Error(target.error);
+        if (!target.target) throw new Error("capability target is required");
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "target", refField: "targetRef", resolved: target })
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, sourceTargetsForDoc(annotatedDoc), req(values, "actor"), [
         removeCapability(world, {
           actor: req(values, "actor"),
           capability: req(values, "capability"),
-          target: req(values, "target"),
+          target: target.target,
           targetKind: values.targetKind ?? null
         })
-      ]);
+        ]);
+      }
     case "runtimePluginInstall":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const serverRunner = resolveCoveredPreparedDocRef(world, values, {
+          idField: "serverRunner",
+          refField: "serverRunnerRef",
+          label: "server runner"
+        });
+        if (!serverRunner.ok) throw new Error(serverRunner.error);
+        if (!serverRunner.target) throw new Error("server runner is required");
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "serverRunner", refField: "serverRunnerRef", resolved: serverRunner })
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, sourceTargetsForDoc(annotatedDoc), req(values, "actor"), [
         installRuntimePlugin(world, {
           actor: req(values, "actor"),
-          serverRunner: req(values, "serverRunner"),
+          serverRunner: serverRunner.target,
           plugin: req(values, "plugin")
         })
-      ]);
+        ]);
+      }
     case "runtimePluginRemove":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const serverRunner = resolveCoveredPreparedDocRef(world, values, {
+          idField: "serverRunner",
+          refField: "serverRunnerRef",
+          label: "server runner"
+        });
+        if (!serverRunner.ok) throw new Error(serverRunner.error);
+        if (!serverRunner.target) throw new Error("server runner is required");
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "serverRunner", refField: "serverRunnerRef", resolved: serverRunner })
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, sourceTargetsForDoc(annotatedDoc), req(values, "actor"), [
         removeRuntimePlugin(world, {
           actor: req(values, "actor"),
-          serverRunner: req(values, "serverRunner"),
+          serverRunner: serverRunner.target,
           plugin: req(values, "plugin")
         })
-      ]);
+        ]);
+      }
     case "serverRunner":
       {
-        const backendHost = resolvePreparedDocRef(world, values, {
+        const backendHost = resolveCoveredPreparedDocRef(world, values, {
           idField: "backendHost",
           refField: "backendHostRef",
           label: "backend host"
         });
         if (!backendHost.ok) throw new Error(backendHost.error);
-        const frontendHost = resolvePreparedDocRef(world, values, {
+        const frontendHost = resolveCoveredPreparedDocRef(world, values, {
           idField: "frontendHost",
           refField: "frontendHostRef",
           label: "frontend host"
         });
         if (!frontendHost.ok) throw new Error(frontendHost.error);
-        return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "backendHost", refField: "backendHostRef", resolved: backendHost }),
+          docRefResolution({ idField: "frontendHost", refField: "frontendHostRef", resolved: frontendHost })
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, sourceTargetsForDoc(annotatedDoc), req(values, "actor"), [
           createServerRunner(world, {
             actor: req(values, "actor"),
             id: req(values, "id"),
@@ -1216,14 +1415,17 @@ function applyCoreRuntimeDeclaration(world, doc) {
             storage: values.storage ?? null,
             runtimeConfig: values.runtimeConfig ?? null,
             allowActorHeader: values.allowActorHeader === true,
+            hosts: values.hosts ?? null,
+            default: values.default === true,
             context: values.context ?? null,
-            owner: values.owner ?? values.actor
+            owner: values.owner ?? values.actor,
+            values
           })
         ]);
       }
     case "route":
       {
-        const serves = resolvePreparedDocRef(world, values, {
+        const serves = resolveCoveredPreparedDocRef(world, values, {
           idField: "serves",
           refField: "servesRef",
           label: "route target"
@@ -1232,7 +1434,11 @@ function applyCoreRuntimeDeclaration(world, doc) {
         if (!serves.target) return null;
         const params = routeParamsResolved(world, values);
         if (!params.ok) throw new Error(params.error);
-        return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "serves", refField: "servesRef", resolved: serves }),
+          ...(params.refResolutions ?? [])
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, [req(values, "id")], req(values, "actor"), [
           defineRoute(world, {
             actor: req(values, "actor"),
             id: req(values, "id"),
@@ -1289,14 +1495,14 @@ function applyCoreRuntimeDeclaration(world, doc) {
       ]);
     case "serve":
       {
-        const serverRunner = resolvePreparedDocRef(world, values, {
+        const serverRunner = resolveCoveredPreparedDocRef(world, values, {
           idField: "serverRunner",
           refField: "serverRunnerRef",
           label: "server runner"
         });
         if (!serverRunner.ok) throw new Error(serverRunner.error);
         if (!serverRunner.target) return null;
-        const route = resolvePreparedDocRef(world, values, {
+        const route = resolveCoveredPreparedDocRef(world, values, {
           idField: "route",
           refField: "routeRef",
           label: "route"
@@ -1378,13 +1584,16 @@ function applyCoreRuntimeDeclaration(world, doc) {
       return applyNativeWidgetLikeDoc(world, doc, values, WIDGET_KIND_BY_SECTION.get(doc.kind));
     case "frontendProgram":
       {
-        const rootWidget = resolvePreparedDocRef(world, values, {
+        const rootWidget = resolveCoveredPreparedDocRef(world, values, {
           idField: "rootWidget",
           refField: "rootWidgetRef",
           label: "root widget"
         });
         if (!rootWidget.ok) throw new Error(rootWidget.error);
-        return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+        const annotatedDoc = docWithRefResolutions(doc, [
+          docRefResolution({ idField: "rootWidget", refField: "rootWidgetRef", resolved: rootWidget })
+        ]);
+        return withSourceAnnotations(world, annotatedDoc, sourceTargetsForDoc(annotatedDoc), req(values, "actor"), [
           defineFrontendProgram(world, {
             actor: req(values, "actor"),
             id: req(values, "id"),
@@ -1582,9 +1791,45 @@ function emitSourceAnnotationFromDoc(world, doc, target, actor) {
       desireSourceNodeIds: trace.desireSourceNodeIds ?? [],
       originNodeId: trace.originNodeId ?? null,
       via: Array.isArray(trace.via) ? trace.via : [],
-      values: structuredClone(doc.values ?? {})
+      values: structuredClone(doc.values ?? {}),
+      refResolutions: Array.isArray(doc.refResolutions)
+        ? structuredClone(doc.refResolutions)
+        : []
     }
   });
+}
+
+function docWithRefResolutions(doc, refResolutions = []) {
+  if (!Array.isArray(refResolutions) || !refResolutions.length) return doc;
+  return {
+    ...doc,
+    refResolutions: refResolutions
+      .filter(Boolean)
+      .map(resolution => ({
+        idField: String(resolution.idField || ""),
+        refField: String(resolution.refField || ""),
+        source: resolution.source ? String(resolution.source) : null,
+        target: resolution.target ? String(resolution.target) : null,
+        canonicalIdPolicyClass: resolution.canonicalIdPolicyClass ? String(resolution.canonicalIdPolicyClass) : null,
+        targetContext: resolution.targetContext ? String(resolution.targetContext) : null
+      }))
+  };
+}
+
+function docRefResolution({
+  idField,
+  refField,
+  resolved
+} = {}) {
+  if (!resolved || resolved.ok !== true || !resolved.target) return null;
+  return {
+    idField,
+    refField,
+    source: resolved.source ?? null,
+    target: resolved.target ?? null,
+    canonicalIdPolicyClass: resolved.canonicalIdPolicyClass ?? null,
+    targetContext: resolved.visibility?.targetContext ?? null
+  };
 }
 
 function emitSourceAnnotationFromSemanticNode(world, node, target, actor) {
@@ -1689,11 +1934,14 @@ function sourceTargetsForDoc(doc) {
   if (doc.kind === "backendStep" && values.version) {
     ids.push(values.version);
   }
+  for (const resolution of doc.refResolutions ?? []) {
+    if (resolution?.target) ids.push(resolution.target);
+  }
   return ids;
 }
 
 function applyNativeWidgetLikeDoc(world, doc, values, kind) {
-  const parent = resolvePreparedDocRef(world, values, {
+  const parent = resolveCoveredPreparedDocRef(world, values, {
     idField: "parent",
     refField: "parentRef",
     label: "parent widget"
@@ -1751,45 +1999,154 @@ function applyNativeFrontendStepDoc(world, doc, values) {
 function routeParamsDirect(values) {
   const params = values.params && typeof values.params === "object" ? { ...values.params } : {};
   if (values.rootWidget != null) params.rootWidget = values.rootWidget;
+  if (values.rootSurface != null) params.rootSurface = values.rootSurface;
   if (values.page != null) params.page = values.page;
   if (values.frontendProgram != null) params.frontendProgram = values.frontendProgram;
   if (values.backendProgramSoul != null) params.backendProgramSoul = values.backendProgramSoul;
+  if (values.defaultScreen != null) params.defaultScreen = values.defaultScreen;
+  if (values.routeState && typeof values.routeState === "object" && !Array.isArray(values.routeState)) {
+    const process = trimOptionalString(values.routeState.process) ?? trimOptionalString(values.routeState.processRef);
+    const state = trimOptionalString(values.routeState.state) ?? trimOptionalString(values.routeState.stateRef);
+    if (state) {
+      params.routeState = {
+        ...(process ? { process } : {}),
+        state
+      };
+    }
+  }
   if (values.liveProjection === true) params.liveProjection = true;
+  if (Array.isArray(values.excludeWidgetRoles) && values.excludeWidgetRoles.length) {
+    params.excludeWidgetRoles = [...values.excludeWidgetRoles];
+  }
+  if (typeof values.defaultRootWidget === "string" && values.defaultRootWidget.trim()) {
+    params.rootWidget = values.defaultRootWidget.trim();
+  }
   return Object.keys(params).length ? params : null;
 }
 
 function routeParamsResolved(world, values) {
   const params = values.params && typeof values.params === "object" ? { ...values.params } : {};
-  const rootWidget = resolvePreparedDocRef(world, values, {
+  const refResolutions = [];
+  const rootWidget = resolveCoveredPreparedDocRef(world, values, {
     idField: "rootWidget",
     refField: "rootWidgetRef",
     label: "root widget"
   });
   if (!rootWidget.ok) return { ok: false, error: rootWidget.error };
   if (rootWidget.target) params.rootWidget = rootWidget.target;
+  refResolutions.push(docRefResolution({ idField: "rootWidget", refField: "rootWidgetRef", resolved: rootWidget }));
+  const rootSurface = resolveCoveredPreparedDocRef(world, values, {
+    idField: "rootSurface",
+    refField: "rootSurfaceRef",
+    label: "root surface"
+  });
+  if (!rootSurface.ok) return { ok: false, error: rootSurface.error };
+  if (rootSurface.target) params.rootSurface = rootSurface.target;
+  refResolutions.push(docRefResolution({ idField: "rootSurface", refField: "rootSurfaceRef", resolved: rootSurface }));
   if (values.page != null) params.page = values.page;
-  if (values.frontendProgram != null) params.frontendProgram = values.frontendProgram;
-  const backendProgramSoul = resolvePreparedDocRef(world, values, {
+  const frontendProgram = resolveCoveredPreparedDocRef(world, values, {
+    idField: "frontendProgram",
+    refField: "frontendProgramRef",
+    label: "frontend program"
+  });
+  if (!frontendProgram.ok) return { ok: false, error: frontendProgram.error };
+  if (frontendProgram.target) params.frontendProgram = frontendProgram.target;
+  refResolutions.push(docRefResolution({ idField: "frontendProgram", refField: "frontendProgramRef", resolved: frontendProgram }));
+  const backendProgramSoul = resolveCoveredPreparedDocRef(world, values, {
     idField: "backendProgramSoul",
     refField: "backendProgramSoulRef",
     label: "backend program soul"
   });
   if (!backendProgramSoul.ok) return { ok: false, error: backendProgramSoul.error };
   if (backendProgramSoul.target) params.backendProgramSoul = backendProgramSoul.target;
+  refResolutions.push(docRefResolution({ idField: "backendProgramSoul", refField: "backendProgramSoulRef", resolved: backendProgramSoul }));
+  if (values.defaultScreen != null) params.defaultScreen = values.defaultScreen;
+  if (values.routeState && typeof values.routeState === "object" && !Array.isArray(values.routeState)) {
+    const routeStateProcess = resolveCoveredNestedPreparedDocRef(world, values.context ?? null, values.routeState, {
+      idField: "process",
+      refField: "processRef",
+      label: "route state process"
+    });
+    if (!routeStateProcess.ok) return { ok: false, error: routeStateProcess.error };
+    refResolutions.push(docRefResolution({ idField: "routeState.process", refField: "routeState.processRef", resolved: routeStateProcess }));
+    const routeStateState = resolveCoveredNestedPreparedDocRef(world, values.context ?? null, values.routeState, {
+      idField: "state",
+      refField: "stateRef",
+      label: "route state state"
+    });
+    if (!routeStateState.ok) return { ok: false, error: routeStateState.error };
+    refResolutions.push(docRefResolution({ idField: "routeState.state", refField: "routeState.stateRef", resolved: routeStateState }));
+    if (routeStateState.target) {
+      params.routeState = {
+        ...(routeStateProcess.target ? { process: routeStateProcess.target } : {}),
+        state: routeStateState.target
+      };
+    }
+  }
   if (values.liveProjection === true) params.liveProjection = true;
-  return { ok: true, value: Object.keys(params).length ? params : null };
+  if (Array.isArray(values.excludeWidgetRoles) && values.excludeWidgetRoles.length) {
+    params.excludeWidgetRoles = [...values.excludeWidgetRoles];
+  }
+  const defaultRootWidget = resolveCoveredPreparedDocRef(world, values, {
+    idField: "defaultRootWidget",
+    refField: "defaultRootWidgetRef",
+    label: "default root widget"
+  });
+  if (!defaultRootWidget.ok) return { ok: false, error: defaultRootWidget.error };
+  if (defaultRootWidget.target) {
+    params.rootWidget = defaultRootWidget.target;
+  }
+  refResolutions.push(docRefResolution({ idField: "defaultRootWidget", refField: "defaultRootWidgetRef", resolved: defaultRootWidget }));
+  return {
+    ok: true,
+    value: Object.keys(params).length ? params : null,
+    refResolutions: refResolutions.filter(Boolean)
+  };
+}
+
+function trimOptionalString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function resolvePreparedDocRef(world, values, {
   contextField = "context",
   idField,
   refField,
-  label
+  label,
+  allowedCanonicalIdPolicyClasses = null
 }) {
   return resolveContextualRef(world.allWitnesses(), {
     context: values[contextField] ?? null,
     id: values[idField] ?? null,
     ref: values[refField] ?? null,
+    label,
+    allowedCanonicalIdPolicyClasses
+  });
+}
+
+function resolveCoveredPreparedDocRef(world, values, {
+  contextField = "context",
+  idField,
+  refField,
+  label
+}) {
+  return resolveCoveredContextualRef(world.allWitnesses(), {
+    context: values[contextField] ?? null,
+    id: values[idField] ?? null,
+    ref: values[refField] ?? null,
+    label
+  });
+}
+
+function resolveCoveredNestedPreparedDocRef(world, context, values, {
+  idField,
+  refField,
+  label
+}) {
+  return resolveCoveredContextualRef(world.allWitnesses(), {
+    context,
+    id: values?.[idField] ?? null,
+    ref: values?.[refField] ?? null,
     label
   });
 }

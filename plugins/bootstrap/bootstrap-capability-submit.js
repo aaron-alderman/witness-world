@@ -5,14 +5,14 @@ import {
 export function renderBootstrapCapabilitySubmitFactory() {
   return String.raw`
     const bootstrapCapabilitySubmitContractsByFamily = ${JSON.stringify(bootstrapCapabilitySubmitContractsByFamily)};
-    const contractForFamily = ${contractForFamily.toString()};
+    const bootstrapCapabilityContractForFamily = ${bootstrapCapabilityContractForFamily.toString()};
     const buildBootstrapCapabilitySubmitRequest = ${buildBootstrapCapabilitySubmitRequest.toString()};
     const runBootstrapCapabilitySubmit = ${runBootstrapCapabilitySubmit.toString()};
     const bindBootstrapCapabilitySubmit = ${bindBootstrapCapabilitySubmit.toString()};
   `;
 }
 
-function contractForFamily(family = "", contractsByFamily = bootstrapCapabilitySubmitContractsByFamily) {
+function bootstrapCapabilityContractForFamily(family = "", contractsByFamily = bootstrapCapabilitySubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   return key ? (contractsByFamily[key] || null) : null;
 }
@@ -21,7 +21,7 @@ export function buildBootstrapCapabilitySubmitRequest({
   detail = {},
   contractsByFamily = bootstrapCapabilitySubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, contractsByFamily);
+  const contract = bootstrapCapabilityContractForFamily(detail.family, contractsByFamily);
   if (!contract) return null;
   const body = Object.fromEntries(
     (contract.bodyFields || []).map(field => [field, detail[field] || ""])

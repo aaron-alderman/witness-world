@@ -27,6 +27,54 @@ export const surfaces = Object.freeze([]);
 
 export const providers = Object.freeze([
   {
+    kind: "capabilityDefinitions",
+    id: "notifications.capabilities",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: "notify.email",
+        label: "Email Notifications",
+        dependsOn: Object.freeze(["jobs.queue"]),
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "stub", label: "Stub delivery", status: "shipped", default: true }),
+          Object.freeze({ id: "http", label: "Generic HTTP", status: "shipped" }),
+          Object.freeze({ id: "sendgrid", label: "SendGrid", status: "shipped" })
+        ]),
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["providerMessageId"]),
+          failure: Object.freeze(["notify.email.render.failed", "notify.email.send.failed"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([
+          Object.freeze({ name: "notify.email.provider", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "notify.email.stubSender", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "notify.email.http.url", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "notify.email.http.apiKey", accepts: "runtimeConfig.key", source: "secret" }),
+          Object.freeze({ name: "notify.email.http.fromAddress", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "notify.email.http.responseIdPath", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "notify.email.sendgrid.apiKey", accepts: "runtimeConfig.key", source: "secret" }),
+          Object.freeze({ name: "notify.email.sendgrid.fromAddress", accepts: "runtimeConfig.key" }),
+          Object.freeze({ name: "notify.email.sendgrid.url", accepts: "runtimeConfig.key" })
+        ])
+      }),
+      Object.freeze({
+        id: "notify.sms",
+        label: "SMS Notifications",
+        dependsOn: Object.freeze(["jobs.queue"]),
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "stub", label: "Stub delivery", status: "shipped", default: true })
+        ]),
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["providerMessageId"]),
+          failure: Object.freeze(["notify.sms.render.failed"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([
+          Object.freeze({ name: "notify.sms.stubSender", accepts: "runtimeConfig.key" })
+        ])
+      })
+    ])
+  },
+  {
     kind: "moduleProjectors",
     id: "notifications.projections",
     projectors: notificationModuleProjectors

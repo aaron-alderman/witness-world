@@ -330,5 +330,5 @@ test("WHTML/WCSS remains absent from the constrained public MCP authoring surfac
   assert.equal(policy.publicMcpActions.includes("widget.create"), false);
   assert.equal(matrix.publicAuthoringConcepts.whtml, undefined);
   assert.equal(matrix.publicAuthoringConcepts.wcss, undefined);
-  assert.equal(matrix.runtimeConsumers["page.surface"].pathwaySemantics.urlToRouteState.status, "blocked");
+  assert.equal(matrix.runtimeConsumers["page.surface"].pathwaySemantics.urlToRouteState.status, "supported");
 });

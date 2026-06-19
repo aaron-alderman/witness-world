@@ -6,7 +6,7 @@ import {
   mcpToolProposalBody
 } from "./bootstrap-proposal-adjacent.js";
 
-test("runtime plugin proposal helper shapes install and remove proposals", () => {
+test("runtime plugin proposal helper shapes install and remove shared-route bodies", () => {
   const install = runtimePluginProposalBody({
     id: "proposal.runtime-plugin.install.canvas",
     serverRunner: "demo_server",
@@ -21,23 +21,19 @@ test("runtime plugin proposal helper shapes install and remove proposals", () =>
 
   assert.deepEqual(install, {
     id: "proposal.runtime-plugin.install.canvas",
-    targetProcess: "runtimePlugin.install",
-    targetKind: "serverRunner",
-    targetId: "demo_server",
-    bodyJson: JSON.stringify({ serverRunner: "demo_server", plugin: "plugin.canvas" }),
+    serverRunner: "demo_server",
+    plugin: "plugin.canvas",
     reason: "Need canvas"
   });
   assert.deepEqual(remove, {
     id: "proposal.runtime-plugin.remove.canvas",
-    targetProcess: "runtimePlugin.remove",
-    targetKind: "serverRunner",
-    targetId: "demo_server",
-    bodyJson: JSON.stringify({ serverRunner: "demo_server", plugin: "plugin.canvas" }),
+    serverRunner: "demo_server",
+    plugin: "plugin.canvas",
     reason: ""
   });
 });
 
-test("mcp server proposal helper shapes optional fields and defaults", () => {
+test("mcp server proposal helper shapes optional fields and shared-route defaults", () => {
   const minimal = mcpServerProposalBody({
     id: "proposal.mcp.server.ops",
     serverId: "ops_mcp",
@@ -55,36 +51,26 @@ test("mcp server proposal helper shapes optional fields and defaults", () => {
   });
 
   assert.deepEqual(minimal, {
-    id: "proposal.mcp.server.ops",
-    targetProcess: "mcpServer.define",
-    targetKind: "serverRunner",
-    targetId: "demo_server",
-    bodyJson: JSON.stringify({
-      id: "ops_mcp",
-      label: "ops_mcp",
-      serverRunner: "demo_server",
-      transportsJson: '["stdio","http"]'
-    }),
+    proposalId: "proposal.mcp.server.ops",
+    id: "ops_mcp",
+    label: "ops_mcp",
+    serverRunner: "demo_server",
+    transportsJson: '["stdio","http"]',
     reason: ""
   });
   assert.deepEqual(full, {
-    id: "proposal.mcp.server.personal",
-    targetProcess: "mcpServer.define",
-    targetKind: "serverRunner",
-    targetId: "demo_server",
-    bodyJson: JSON.stringify({
-      id: "personal_mcp",
-      label: "Personal MCP",
-      serverRunner: "demo_server",
-      transportsJson: '["http"]',
-      context: "ctx.ops",
-      serviceIdentity: "aaron"
-    }),
+    proposalId: "proposal.mcp.server.personal",
+    id: "personal_mcp",
+    label: "Personal MCP",
+    serverRunner: "demo_server",
+    transportsJson: '["http"]',
+    context: "ctx.ops",
+    serviceIdentity: "aaron",
     reason: "Need service-mode server"
   });
 });
 
-test("mcp tool proposal helper shapes runner fallback and JSON defaults", () => {
+test("mcp tool proposal helper shapes shared-route bodies for install and remove", () => {
   const install = mcpToolProposalBody({
     id: "proposal.mcp.tool.install.ops",
     server: "ops_mcp",
@@ -103,30 +89,17 @@ test("mcp tool proposal helper shapes runner fallback and JSON defaults", () => 
 
   assert.deepEqual(install, {
     id: "proposal.mcp.tool.install.ops",
-    targetProcess: "mcpTool.install",
-    targetKind: "serverRunner",
-    targetId: "demo_server",
-    bodyJson: JSON.stringify({
-      server: "ops_mcp",
-      tool: "world.read",
-      actingMode: "delegated",
-      scopeContextsJson: '["ctx.docs"]',
-      scopeTargetsJson: '["ctx.docs:home"]'
-    }),
+    server: "ops_mcp",
+    tool: "world.read",
+    actingMode: "delegated",
+    scopeContextsJson: '["ctx.docs"]',
+    scopeTargetsJson: '["ctx.docs:home"]',
     reason: "Need world reads"
   });
   assert.deepEqual(remove, {
     id: "proposal.mcp.tool.remove.ops",
-    targetProcess: "mcpTool.remove",
-    targetKind: "serverRunner",
-    targetId: "ops_mcp",
-    bodyJson: JSON.stringify({
-      server: "ops_mcp",
-      tool: "world.read",
-      actingMode: "delegated",
-      scopeContextsJson: "[]",
-      scopeTargetsJson: "[]"
-    }),
+    server: "ops_mcp",
+    tool: "world.read",
     reason: ""
   });
 });

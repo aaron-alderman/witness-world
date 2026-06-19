@@ -11,6 +11,7 @@ import {
   runtimeBundleManifest
 } from "./runtime-bundles.js";
 import { availableRuntimeShellIds } from "./runtime-shell-contract.js";
+import { cloneRuntimeOwnerChain, extractRuntimeOwnershipFields } from "./runtime-ownership.js";
 
 export const DEFAULT_RUNTIME_PLUGIN_DIRECTORY = "plugins";
 export const DEFAULT_PLUGIN_EXECUTION_REASON = "metadata-only plugin package; provider loading is not enabled";
@@ -42,7 +43,12 @@ const CONTRIBUTES_FIELDS = new Set([
   "capabilities",
   "routes",
   "surfaces",
-  "providers"
+  "providers",
+  "styles",
+  "themes",
+  "widgets",
+  "renderers",
+  "authoringTools"
 ]);
 
 const PROVENANCE_FIELDS = new Set([
@@ -80,7 +86,12 @@ const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
  *   capabilities: Array<string|{id:string,[key:string]:any}>,
  *   routes: Array<{handler:string,path?:string,pattern?:string,[key:string]:any}>,
  *   surfaces: Array<{id:string,title:string,[key:string]:any}>,
- *   providers: Array<{id:string,kind:string,[key:string]:any}>
+ *   providers: Array<{id:string,kind:string,[key:string]:any}>,
+ *   styles: Array<{id:string,[key:string]:any}>,
+ *   themes: Array<{id:string,[key:string]:any}>,
+ *   widgets: Array<{id:string,[key:string]:any}>,
+ *   renderers: Array<{id:string,[key:string]:any}>,
+ *   authoringTools: Array<{id:string,[key:string]:any}>
  * }} contributes
  * @property {string[]=} dependsOnPlugins
  * @property {string[]=} dependsOnCapabilities
@@ -228,6 +239,28 @@ function normalizeProviderEntries(value, errors) {
       continue;
     }
     rows.push({ ...entry, id, kind });
+  }
+  return rows;
+}
+
+function normalizeTypedContributionEntries(value, label, errors) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    errors.push(`${label} must be an array`);
+    return [];
+  }
+  const rows = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      errors.push(`${label} entries must be objects`);
+      continue;
+    }
+    const id = typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : null;
+    if (!id) {
+      errors.push(`${label} entries must include id`);
+      continue;
+    }
+    rows.push({ ...entry, id });
   }
   return rows;
 }
@@ -396,7 +429,12 @@ function normalizeManifestObject(raw, discoveryPath) {
     capabilities: normalizeCapabilityEntries(contributesRaw?.capabilities, errors),
     routes: normalizeRouteEntries(contributesRaw?.routes, errors),
     surfaces: normalizeSurfaceEntries(contributesRaw?.surfaces, errors),
-    providers: normalizeProviderEntries(contributesRaw?.providers, errors)
+    providers: normalizeProviderEntries(contributesRaw?.providers, errors),
+    styles: normalizeTypedContributionEntries(contributesRaw?.styles, "contributes.styles", errors),
+    themes: normalizeTypedContributionEntries(contributesRaw?.themes, "contributes.themes", errors),
+    widgets: normalizeTypedContributionEntries(contributesRaw?.widgets, "contributes.widgets", errors),
+    renderers: normalizeTypedContributionEntries(contributesRaw?.renderers, "contributes.renderers", errors),
+    authoringTools: normalizeTypedContributionEntries(contributesRaw?.authoringTools, "contributes.authoringTools", errors)
   };
   return {
     manifest: id && version && displayName && description && kind === "plugin"
@@ -556,7 +594,8 @@ function summarizeRoute(route) {
 function cloneHandlerMetadataEntry(entry = {}) {
   return {
     ...(entry || {}),
-    methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined
+    methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined,
+    ownerChain: cloneRuntimeOwnerChain(entry?.ownerChain)
   };
 }
 
@@ -581,6 +620,7 @@ function enrichRouteSummary(route, handlerMetadata = {}) {
   return metadata
     ? {
         ...summary,
+        ...extractRuntimeOwnershipFields(metadata),
         handlerMetadata: cloneHandlerMetadataEntry(metadata)
       }
     : summary;
@@ -646,6 +686,7 @@ function cloneContributionRoute(route) {
     method: route.method,
     matcher: route.matcher,
     handler: route.handler,
+    ...extractRuntimeOwnershipFields(route),
     handlerMetadata: route.handlerMetadata ? cloneHandlerMetadataEntry(route.handlerMetadata) : undefined
   };
 }
@@ -867,7 +908,12 @@ function buildPluginPackageRow({
           capabilities: manifest.contributes.capabilities.map(entry => ({ ...entry })),
           routes: manifest.contributes.routes.map(entry => ({ ...entry })),
           surfaces: manifest.contributes.surfaces.map(entry => ({ ...entry })),
-          providers: manifest.contributes.providers.map(entry => ({ ...entry }))
+          providers: manifest.contributes.providers.map(entry => ({ ...entry })),
+          styles: manifest.contributes.styles.map(entry => ({ ...entry })),
+          themes: manifest.contributes.themes.map(entry => ({ ...entry })),
+          widgets: manifest.contributes.widgets.map(entry => ({ ...entry })),
+          renderers: manifest.contributes.renderers.map(entry => ({ ...entry })),
+          authoringTools: manifest.contributes.authoringTools.map(entry => ({ ...entry }))
         },
         provenance: manifest.provenance ? { ...manifest.provenance } : null
       }
@@ -939,7 +985,12 @@ function buildPluginPackageRow({
         capabilities: manifest.contributes.capabilities.map(entry => ({ ...entry })),
         routes: manifest.contributes.routes.map(entry => ({ ...entry })),
         surfaces: manifest.contributes.surfaces.map(entry => ({ ...entry })),
-        providers: manifest.contributes.providers.map(entry => ({ ...entry }))
+        providers: manifest.contributes.providers.map(entry => ({ ...entry })),
+        styles: manifest.contributes.styles.map(entry => ({ ...entry })),
+        themes: manifest.contributes.themes.map(entry => ({ ...entry })),
+        widgets: manifest.contributes.widgets.map(entry => ({ ...entry })),
+        renderers: manifest.contributes.renderers.map(entry => ({ ...entry })),
+        authoringTools: manifest.contributes.authoringTools.map(entry => ({ ...entry }))
       }
     } : null
   };
@@ -967,6 +1018,27 @@ function activationFailureReasons(pluginPackage, {
     reasons.push(`missing requested plugin dependencies: ${missingRequestedDependencies.join(", ")}`);
   }
   return uniqueStrings(reasons);
+}
+
+function missingPluginPackage(pluginId) {
+  return {
+    id: pluginId,
+    missingPackage: true,
+    discoveryPath: null,
+    manifest: null,
+    validation: { ok: false, errors: ["plugin package not found"] },
+    compatibility: { compatible: false, reasons: ["plugin package not found"] },
+    activation: { eligible: false, reasons: ["plugin package not found"] },
+    execution: { executable: false },
+    resolvedBundles: [],
+    resolvedRuntimeContributions: {
+      capabilities: [],
+      routes: [],
+      surfaces: [],
+      providers: [],
+      handlerSets: []
+    }
+  };
 }
 
 export function resolveRuntimePluginSelection({
@@ -1000,7 +1072,10 @@ export function resolveRuntimePluginSelection({
   const rejectedPlugins = [];
   const activeBundleIds = [];
   const activeBundleSet = new Set();
-  const packages = discoveredPlugins.map(pluginPackage => {
+  const pluginToBundleMap = Object.create(null);
+  const allPluginIds = uniqueStrings([...discoveredPlugins.map(p => p.id), ...effectivePluginIds]);
+  const packages = allPluginIds.map(pluginId => {
+    const pluginPackage = packageById.get(pluginId) ?? missingPluginPackage(pluginId);
     const requestedSources = [...(requestedSourcesById.get(pluginPackage.id) ?? [])];
     const requested = requestedSources.length > 0;
     const missingRequestedDependencies = requested
@@ -1017,11 +1092,14 @@ export function resolveRuntimePluginSelection({
       : [];
     if (active) {
       activePluginIds.push(pluginPackage.id);
+      const addedBundles = [];
       for (const bundleId of pluginPackage.manifest?.activatesBundles ?? []) {
+        if (!baseBundleSet.has(bundleId)) addedBundles.push(bundleId);
         if (activeBundleSet.has(bundleId)) continue;
         activeBundleSet.add(bundleId);
         activeBundleIds.push(bundleId);
       }
+      if (addedBundles.length) pluginToBundleMap[pluginPackage.id] = addedBundles;
     } else if (requested) {
       rejectedPlugins.push({ id: pluginPackage.id, reasons, requestedSources });
     }
@@ -1036,14 +1114,6 @@ export function resolveRuntimePluginSelection({
       }
     };
   });
-  for (const pluginId of effectivePluginIds) {
-    if (packageById.has(pluginId)) continue;
-    rejectedPlugins.push({
-      id: pluginId,
-      reasons: ["plugin package not found"],
-      requestedSources: [...(requestedSourcesById.get(pluginId) ?? [])]
-    });
-  }
   return {
     profileName,
     profilePluginIds,
@@ -1054,6 +1124,7 @@ export function resolveRuntimePluginSelection({
     activePluginIds,
     rejectedPlugins,
     activeBundleIds,
+    pluginToBundleMap,
     addedBundleIds: activeBundleIds.filter(bundleId => !baseBundleSet.has(bundleId)),
     packages,
     hasBlockingErrors: rejectedPlugins.length > 0
@@ -1371,6 +1442,7 @@ function buildRuntimePluginReviewRows({
     .map(pluginPackage => {
       const pluginId = pluginPackage.id;
       const installed = requestedAuthoredIds.includes(pluginId);
+      const requested = installed || pluginPackage.activation?.requested === true;
       const directDependencies = [...(pluginPackage.manifest?.dependsOnPlugins ?? pluginPackage.metadata?.dependsOnPlugins ?? [])];
       const missingDependencies = directDependencies.filter(dependencyId => !requestedAuthoredIds.includes(dependencyId));
       const dependencyIssues = directDependencies.flatMap(dependencyId => {
@@ -1426,6 +1498,32 @@ function buildRuntimePluginReviewRows({
               : []
           })
         : null;
+      const reconcileActions = [];
+      const uniqueBlockingReasons = uniqueStrings(blockingReasons);
+      if (installed && uniqueBlockingReasons.length > 0) {
+        reconcileActions.push({
+          kind: "remove",
+          label: "Remove broken install",
+          severity: "high",
+          description: `This authored plugin install is broken: ${uniqueBlockingReasons.join("; ")}.`
+        });
+      } else if (!installed && requested && pluginPackage.missingPackage) {
+        reconcileActions.push({
+          kind: "remove",
+          label: "Cleanup missing plugin intent",
+          severity: "medium",
+          description: "This plugin is requested in the world model but is missing from the local plugin directory."
+        });
+      }
+      for (const dependencyId of missingDependencies) {
+        reconcileActions.push({
+          kind: "install",
+          label: `Install missing dependency: ${dependencyId}`,
+          severity: "medium",
+          targetPluginId: dependencyId
+        });
+      }
+
       const metadata = pluginPackage.metadata ?? null;
       return {
         plugin: pluginId,
@@ -1438,7 +1536,8 @@ function buildRuntimePluginReviewRows({
         installable: !installed && blockingReasons.length === 0,
         executable: pluginPackage.execution?.executable === true,
         compatible: pluginPackage.compatibility?.compatible === true,
-        blockingReasons: uniqueStrings(blockingReasons),
+        blockingReasons: uniqueBlockingReasons,
+        reconcileActions,
         dependencies: {
           direct: directDependencies,
           missing: missingDependencies,
@@ -1480,7 +1579,12 @@ function buildRuntimePluginReviewRows({
             capabilities: (metadata.contributes?.capabilities ?? []).map(entry => ({ ...entry })),
             routes: (metadata.contributes?.routes ?? []).map(entry => ({ ...entry })),
             surfaces: (metadata.contributes?.surfaces ?? []).map(entry => ({ ...entry })),
-            providers: (metadata.contributes?.providers ?? []).map(entry => ({ ...entry }))
+            providers: (metadata.contributes?.providers ?? []).map(entry => ({ ...entry })),
+            styles: (metadata.contributes?.styles ?? []).map(entry => ({ ...entry })),
+            themes: (metadata.contributes?.themes ?? []).map(entry => ({ ...entry })),
+            widgets: (metadata.contributes?.widgets ?? []).map(entry => ({ ...entry })),
+            renderers: (metadata.contributes?.renderers ?? []).map(entry => ({ ...entry })),
+            authoringTools: (metadata.contributes?.authoringTools ?? []).map(entry => ({ ...entry }))
           }
         } : null,
         declaredManifestContributions: {
@@ -1490,6 +1594,11 @@ function buildRuntimePluginReviewRows({
             .sort(compareRouteSummary),
           surfaces: (metadata?.contributes?.surfaces ?? []).map(entry => ({ ...entry })),
           providers: (metadata?.contributes?.providers ?? []).map(entry => ({ ...entry })),
+          styles: (metadata?.contributes?.styles ?? []).map(entry => ({ ...entry })),
+          themes: (metadata?.contributes?.themes ?? []).map(entry => ({ ...entry })),
+          widgets: (metadata?.contributes?.widgets ?? []).map(entry => ({ ...entry })),
+          renderers: (metadata?.contributes?.renderers ?? []).map(entry => ({ ...entry })),
+          authoringTools: (metadata?.contributes?.authoringTools ?? []).map(entry => ({ ...entry })),
           handlerMetadata: Object.fromEntries(
             Object.entries(pluginPackage.resolvedRuntimeContributions?.handlerMetadata ?? {})
               .sort(([left], [right]) => left.localeCompare(right))

@@ -1,8 +1,26 @@
 import {
   requestBootstrapMcpServerDefine,
   requestBootstrapMcpToolInstall,
-  requestBootstrapMcpToolRemove
+  requestBootstrapMcpToolRemove,
+  resolveMcpServerInput,
+  resolveMcpServerRunnerInput
 } from "./mcp-processes.js";
+import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
+
+function proposalPart(value, fallback) {
+  const normalized = String(value || "").trim().replace(/[^A-Za-z0-9_.:-]+/g, "-");
+  return normalized || fallback;
+}
+
+function mcpProposalId({ actor, process, target, extra = null }) {
+  return [
+    "proposal",
+    proposalPart(process, "mcp"),
+    proposalPart(actor, "actor"),
+    proposalPart(target, "target"),
+    proposalPart(extra, "change")
+  ].join(".");
+}
 
 export function createMcpAuthoringBundleHandlers({
   world,
@@ -18,6 +36,10 @@ export function createMcpAuthoringBundleHandlers({
     ensureTargetAuthority,
     ensureContextAuthority
   } = authoringServices;
+  const trimmedStringOrEmpty = value => typeof value === "string" ? value.trim() : "";
+  const omitProposalMetadata = body => body && typeof body === "object" && !Array.isArray(body)
+    ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "proposalId" && key !== "reason"))
+    : {};
   return {
     "mcpServer.create": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
@@ -26,14 +48,56 @@ export function createMcpAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = body.serverRunner
-        ? ensureTargetAuthority(gate.actor, body.serverRunner)
-        : ensureContextAuthority(gate.actor, body.context ?? null);
+      const proposalId = trimmedStringOrEmpty(body?.proposalId);
+      const proposalReason = trimmedStringOrEmpty(body?.reason);
+      const mutationBody = omitProposalMetadata(body);
+      const resolvedServerRunner = resolveMcpServerRunnerInput(world, body, {
+        contextField: "context",
+        idField: "serverRunner",
+        refField: "serverRunnerRef",
+        label: "server runner"
+      });
+      if (!resolvedServerRunner.ok) {
+        sendJson(res, 400, { error: resolvedServerRunner.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedServerRunner.target);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestBootstrapProposalCreate(world, {
+            actor: gate.actor,
+            backendHost,
+            body: {
+              id: proposalId || mcpProposalId({
+                actor: gate.actor,
+                process: "mcpServer.define",
+                target: resolvedServerRunner.target,
+                extra: mutationBody?.id
+              }),
+              targetProcess: "mcpServer.define",
+              targetKind: "serverRunner",
+              targetId: resolvedServerRunner.target,
+              bodyJson: JSON.stringify(mutationBody ?? {}),
+              reason: proposalReason || "Create an MCP server through witnessed proposal"
+            }
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: "Proposed MCP server creation for review."
+          });
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapMcpServerDefine(world, { actor: gate.actor, backendHost, body, appContext });
+      const result = requestBootstrapMcpServerDefine(world, { actor: gate.actor, backendHost, body: mutationBody, appContext });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
@@ -48,15 +112,57 @@ export function createMcpAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.server);
+      const proposalId = trimmedStringOrEmpty(body?.proposalId || body?.id);
+      const proposalReason = trimmedStringOrEmpty(body?.reason);
+      const mutationBody = omitProposalMetadata(body);
+      delete mutationBody.id;
+      const resolvedServer = resolveMcpServerInput(world, body, {
+        label: "mcp server"
+      });
+      if (!resolvedServer.ok) {
+        sendJson(res, 400, { error: resolvedServer.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedServer.target);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestBootstrapProposalCreate(world, {
+            actor: gate.actor,
+            backendHost,
+            body: {
+              id: proposalId || mcpProposalId({
+                actor: gate.actor,
+                process: "mcpTool.install",
+                target: resolvedServer.target,
+                extra: mutationBody?.tool
+              }),
+              targetProcess: "mcpTool.install",
+              targetKind: "mcpServer",
+              targetId: resolvedServer.target,
+              bodyJson: JSON.stringify(mutationBody ?? {}),
+              reason: proposalReason || "Install an MCP tool through witnessed proposal"
+            }
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: "Proposed MCP tool install for review."
+          });
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
       const result = requestBootstrapMcpToolInstall(world, {
         actor: gate.actor,
         backendHost,
-        body,
+        body: { ...mutationBody, server: resolvedServer.target, serverRef: null },
         allowedTools: mcpToolNames(),
         appContext
       });
@@ -74,12 +180,59 @@ export function createMcpAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.server);
+      const proposalId = trimmedStringOrEmpty(body?.proposalId || body?.id);
+      const proposalReason = trimmedStringOrEmpty(body?.reason);
+      const mutationBody = omitProposalMetadata(body);
+      delete mutationBody.id;
+      const resolvedServer = resolveMcpServerInput(world, body, {
+        label: "mcp server"
+      });
+      if (!resolvedServer.ok) {
+        sendJson(res, 400, { error: resolvedServer.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedServer.target);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestBootstrapProposalCreate(world, {
+            actor: gate.actor,
+            backendHost,
+            body: {
+              id: proposalId || mcpProposalId({
+                actor: gate.actor,
+                process: "mcpTool.remove",
+                target: resolvedServer.target,
+                extra: mutationBody?.tool
+              }),
+              targetProcess: "mcpTool.remove",
+              targetKind: "mcpServer",
+              targetId: resolvedServer.target,
+              bodyJson: JSON.stringify(mutationBody ?? {}),
+              reason: proposalReason || "Remove an MCP tool through witnessed proposal"
+            }
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: "Proposed MCP tool removal for review."
+          });
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapMcpToolRemove(world, { actor: gate.actor, backendHost, body, appContext });
+      const result = requestBootstrapMcpToolRemove(world, {
+        actor: gate.actor,
+        backendHost,
+        body: { ...mutationBody, server: resolvedServer.target, serverRef: null },
+        appContext
+      });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;

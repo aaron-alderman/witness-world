@@ -187,4 +187,7 @@ test("tutorial client runtime assembles helper-owned seams and starts the shared
 test("tutorial client runtime factory exposes the shared browser helper", () => {
   const factory = renderTutorialClientRuntimeFactory();
   assert.equal(factory.includes("const startTutorialClientRuntimeApp ="), true);
+  assert.equal(factory.includes("const syncSourceryCompanionShell ="), true);
+  assert.equal(factory.includes("const buildLiveGuidanceSuggestions ="), true);
+  assert.equal(factory.includes("const runGuidanceSuggestionAction ="), true);
 });

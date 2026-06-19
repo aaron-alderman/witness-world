@@ -5,7 +5,7 @@ import {
 export function renderBootstrapProposalAdjacentSubmitFactory() {
   return String.raw`
     const bootstrapProposalAdjacentSubmitContractsByFamily = ${JSON.stringify(bootstrapProposalAdjacentSubmitContractsByFamily)};
-    const contractForFamily = ${contractForFamily.toString()};
+    const bootstrapProposalAdjacentContractForFamily = ${bootstrapProposalAdjacentContractForFamily.toString()};
     const buildBootstrapProposalAdjacentSubmitBody = ${buildBootstrapProposalAdjacentSubmitBody.toString()};
     const buildBootstrapProposalAdjacentSubmitRequest = ${buildBootstrapProposalAdjacentSubmitRequest.toString()};
     const runBootstrapProposalAdjacentSubmit = ${runBootstrapProposalAdjacentSubmit.toString()};
@@ -13,7 +13,7 @@ export function renderBootstrapProposalAdjacentSubmitFactory() {
   `;
 }
 
-function contractForFamily(family = "", contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily) {
+function bootstrapProposalAdjacentContractForFamily(family = "", contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   return key ? (contractsByFamily[key] || null) : null;
 }
@@ -52,7 +52,7 @@ export function buildBootstrapProposalAdjacentSubmitRequest({
   mcpToolProposalBodyFn = null,
   contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, contractsByFamily);
+  const contract = bootstrapProposalAdjacentContractForFamily(detail.family, contractsByFamily);
   if (!contract) return null;
   const body = buildBootstrapProposalAdjacentSubmitBody({
     contract,
@@ -64,7 +64,8 @@ export function buildBootstrapProposalAdjacentSubmitRequest({
   });
   if (!body) return null;
   return {
-    url: contract.url || "/api/proposals",
+    url: contract.url || "",
+    ...(contract.method ? { method: contract.method } : {}),
     body,
     successText: contract.successText || "Saved."
   };
@@ -92,7 +93,7 @@ export async function runBootstrapProposalAdjacentSubmit({
       contractsByFamily
     });
     if (!request) return false;
-    await postJson(request.url, request.body);
+    await postJson(request.url, request.body, request.method || "POST");
     setStatus(detail.statusId, request.successText);
     resetForm(detail.formId);
     await refresh();

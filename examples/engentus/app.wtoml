@@ -24,6 +24,11 @@ plugin = "plugin.wcss-runtime"
 [[runtimePluginInstall]]
 actor = "aaron"
 serverRunner = "engentus_server"
+plugin = "plugin.wcss-authoring"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
 plugin = "plugin.secret"
 
 [[runtimePluginInstall]]
@@ -155,7 +160,7 @@ method = "GET"
 path = "/engentus/__generated/engentus-shell.css"
 serves = "engentusShellStylesheet"
 handler = "wcss.stylesheet.read"
-params = { asset = "shell", adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "buildEngentusGeneratedStylesheets" }
+params = { asset = "shell", adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "loadEngentusWcssAuthoringAdapter" }
 
 [[serve]]
 actor = "aaron"
@@ -169,12 +174,82 @@ method = "GET"
 path = "/engentus/__generated/engentus-chart-pages.css"
 serves = "engentusChartStylesheet"
 handler = "wcss.stylesheet.read"
-params = { asset = "chart", adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "buildEngentusGeneratedStylesheets" }
+params = { asset = "chart", adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "loadEngentusWcssAuthoringAdapter" }
 
 [[serve]]
 actor = "aaron"
 serverRunner = "engentus_server"
 route = "engentus_chart_stylesheet_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_wcss_document_route"
+method = "GET"
+path = "/engentus/__generated/wcss/document"
+serves = "engentusWcssDocument"
+handler = "wcss.document.read"
+params = { adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "loadEngentusWcssAuthoringAdapter" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_wcss_document_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_wcss_schema_route"
+method = "GET"
+path = "/engentus/__generated/wcss/schema"
+serves = "engentusWcssSchema"
+handler = "wcss.schema.read"
+params = { adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "loadEngentusWcssAuthoringAdapter" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_wcss_schema_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_wcss_preview_session_create_route"
+method = "POST"
+path = "/engentus/__generated/wcss/preview-session"
+serves = "engentusWcssPreviewSessionCreate"
+handler = "wcss.preview.session.create"
+params = { adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "loadEngentusWcssAuthoringAdapter" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_wcss_preview_session_create_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_wcss_preview_tokens_patch_route"
+method = "PATCH"
+path = "/engentus/__generated/wcss/preview-session"
+serves = "engentusWcssPreviewTokensPatch"
+handler = "wcss.preview.document.patch"
+params = { adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "loadEngentusWcssAuthoringAdapter" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_wcss_preview_tokens_patch_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_wcss_preview_session_clear_route"
+method = "DELETE"
+path = "/engentus/__generated/wcss/preview-session"
+serves = "engentusWcssPreviewSessionClear"
+handler = "wcss.preview.session.clear"
+params = { adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "loadEngentusWcssAuthoringAdapter" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_wcss_preview_session_clear_route"
 
 [[route]]
 actor = "aaron"
@@ -595,6 +670,20 @@ params = { auth = { featureId = "engentus.platform_config" } }
 actor = "aaron"
 serverRunner = "engentus_server"
 route = "engentus_pipeline_script_run_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_pipeline_script_schedule_save_route"
+method = "POST"
+path = "/api/pipeline/scripts/schedules"
+serves = "pipelineScriptScheduleSave"
+handler = "pipeline.script.schedule.save"
+params = { auth = { featureId = "engentus.platform_config" } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_pipeline_script_schedule_save_route"
 
 [[desktopTarget]]
 id = "engentus_desktop"

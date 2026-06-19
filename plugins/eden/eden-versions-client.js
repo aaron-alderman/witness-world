@@ -188,8 +188,10 @@ function createEdenVersionsSurfaceNode(surface, deps) {
   node.querySelector('[data-eden-version-open-published]').addEventListener('click', async () => {
     const runtime = versionsRuntime(surface);
     if (runtime.authority?.canPropose) {
+      setVersionStatus('Proposed loading the published version into the board as proposal.', 'ok');
+      render();
       await createEdenVersionProposal(surface, {
-        processName: 'widgetVersion.activate',
+        processName: 'edenVersions.activate',
         version: runtime.publishedVersion,
         reason: 'Load the published shared version into the live board through proposal review',
         statusText: 'Proposed loading the published version into the board'
@@ -216,8 +218,10 @@ function createEdenVersionsSurfaceNode(surface, deps) {
   node.querySelector('[data-eden-version-open-draft]').addEventListener('click', async () => {
     const runtime = versionsRuntime(surface);
     if (runtime.authority?.canPropose) {
+      setVersionStatus('Proposed opening the draft version in the board as proposal.', 'ok');
+      render();
       await createEdenVersionProposal(surface, {
-        processName: 'widgetVersion.activate',
+        processName: 'edenVersions.activate',
         version: runtime.draftVersion,
         reason: 'Open the draft shared version in the live board through proposal review',
         statusText: 'Proposed opening the draft version in the board'
@@ -244,8 +248,10 @@ function createEdenVersionsSurfaceNode(surface, deps) {
   node.querySelector('[data-eden-version-restore]').addEventListener('click', async () => {
     const runtime = versionsRuntime(surface);
     if (runtime.authority?.canPropose) {
+      setVersionStatus('Proposed restoring the last good version as proposal.', 'ok');
+      render();
       await createEdenVersionProposal(surface, {
-        processName: 'widgetVersion.rollback',
+        processName: 'edenVersions.rollback',
         reason: 'Restore the last good shared version through proposal review',
         statusText: 'Proposed restoring the last good version'
       });
@@ -269,6 +275,8 @@ function createEdenVersionsSurfaceNode(surface, deps) {
   node.querySelector('[data-eden-version-publish]').addEventListener('click', async () => {
     const runtime = versionsRuntime(surface);
     if (runtime.authority?.canPropose) {
+      setVersionStatus('Proposed publishing the current live version as proposal.', 'ok');
+      render();
       await createEdenVersionProposal(surface, {
         processName: 'edenVersions.publish',
         version: runtime.activeVersion,

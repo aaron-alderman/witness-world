@@ -1,0 +1,231 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:docs"
+path = "docs"
+label = "docs"
+summary = "Auto-generated folder metadata for docs."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/ACADEMY.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/AUTHORING-REPLAY-PLAYBOOK.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/AUTHORITY-MODEL.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/BACKEND-SEAMS.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/CANVAS-v2.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/CANVAS.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/CAPABILITIES.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/CONTEXTHUB-SPEC.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/CONTINUOUS-VERIFICATION-ROADMAP.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/DESIRE-SPA.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/DESIRE.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/EMBEDDED-HTML-JS-AUDIT.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/ENGENTUS-CHART-GAP-ANALYSIS.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/ENGENTUS-ORACLE-BEHAVIOR-INVENTORY.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/ENGENTUS-WCSS-APPLICATION.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/ENGENTUS-WCSS-THEME-GRAMMAR.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/EXPERIENCE.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "folder:docs/experiment"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/FIRST-5-MINUTES.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/FIRST-NEIGHBOURHOOD.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/generic-platform-refactor-tracker.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "folder:docs/intent"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/INTENT-REGISTRY-ROADMAP.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/LLM-AUTHORING-POLICY.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/PACKAGE-PLUGIN-AUTHORSHIP-MODEL.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/PIPELINE-FIDELITY-AUDIT.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/PIPELINE-FIDELITY-ROADMAP.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/PLUGIN-MIGRATION-CONTROL.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "folder:docs/roadmap-groups"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/ROADMAP-TRANCHES.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/RUNTIME-AUDIT-INVENTORY.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/RUNTIME-STACK-MAP.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/SHELLS-PERSISTENCE-ECOSYSTEM.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/SYSTEM.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "wtoml:docs/this.folder.wtoml"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/WHTML-WCSS-UPLIFT.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
+to = "doc:docs/witness-world-spec.md"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:docs"
+# rel = "describedBy"
+# to = "doc:..."

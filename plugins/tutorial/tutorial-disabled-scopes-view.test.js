@@ -68,14 +68,14 @@ test("tutorial disabled-scope view helper renders cards with preserved action ho
   assert.equal(list.children.length, 2);
   const scopeCard = list.children[0];
   assert.equal(scopeCard.children[0].textContent, "Todo form");
-  assert.equal(scopeCard.children[2].children[0].attributes.get("data-disabled-scope-focus"), "section:app:todo_form");
-  assert.equal(scopeCard.children[2].children[1].attributes.get("data-disabled-scope-enable"), "section:app:todo_form");
+  assert.equal(scopeCard.children[3].children[0].attributes.get("data-disabled-scope-focus"), "section:app:todo_form");
+  assert.equal(scopeCard.children[3].children[1].attributes.get("data-disabled-scope-enable"), "section:app:todo_form");
 
   const contextCard = list.children[1];
-  assert.equal(contextCard.children[1].textContent, "Sourcery is disabled for this context, but you can re-enable it without losing progress.");
-  assert.equal(contextCard.children[2].children[0].attributes.get("data-disabled-context-enable"), "ctx.todo");
-  assert.equal(contextCard.children[2].children[1].attributes.get("data-disabled-scope-open"), "bootstrap");
-  assert.equal(contextCard.children[2].children[1].textContent, "Open Bootstrap");
+  assert.equal(contextCard.children[2].textContent, "Sourcery is disabled for this context, but you can re-enable it without losing progress.");
+  assert.equal(contextCard.children[3].children[0].attributes.get("data-disabled-context-enable"), "ctx.todo");
+  assert.equal(contextCard.children[3].children[1].attributes.get("data-disabled-scope-open"), "bootstrap");
+  assert.equal(contextCard.children[3].children[1].textContent, "Open Bootstrap");
 });
 
 test("tutorial disabled-scope view helper exposes row description and factory contracts", () => {
@@ -91,5 +91,5 @@ test("tutorial disabled-scope view helper exposes row description and factory co
     tutorialPageLabel: page => page,
     document
   });
-  assert.equal(card.children[2].children[0].attributes.get("data-disabled-scope-enable"), "widget:todo_widget_editor_button");
+  assert.equal(card.children[3].children[0].attributes.get("data-disabled-scope-enable"), "widget:todo_widget_editor_button");
 });

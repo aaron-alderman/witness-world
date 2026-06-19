@@ -1,0 +1,246 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/tutorial"
+path = "plugins/tutorial"
+label = "tutorial"
+summary = "Auto-generated folder metadata for plugins/tutorial."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "json:plugins/tutorial/plugin.json"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/runtime.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "wtoml:plugins/tutorial/this.folder.wtoml"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/todo-tutorial-seed.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-app-client.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-bootstrap-client.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-bootstrap-controller-client.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-bootstrap-ui.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-adapter.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-adapter.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-bootstrap.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-bootstrap.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-interactions.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-interactions.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-runtime.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-runtime.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-state.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-client-state.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-disabled-scopes-actions.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-disabled-scopes-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-disabled-scopes-view.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-disabled-scopes-view.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-handlers.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-actions.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-dom.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-dom.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-drag.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-drag.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-interactions.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-interactions.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-view.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-overlay-view.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-progress-runtime.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-progress-runtime.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-progress-state.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-progress-state.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-runtime-actions.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-runtime-actions.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial-runtime-ui.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorial.test.js"
+
+[[relation]]
+from = "folder:plugins/tutorial"
+rel = "contains"
+to = "file:plugins/tutorial/tutorials.js"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/tutorial"
+# rel = "describedBy"
+# to = "doc:..."

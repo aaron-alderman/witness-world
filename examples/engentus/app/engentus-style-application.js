@@ -14,7 +14,7 @@ import {
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CANONICAL_WCSS_FILE = path.join(MODULE_DIR, "engentus-desired-v2.wcss");
 const DEFAULT_SWITCH_MANIFEST_FILE = path.join(MODULE_DIR, "engentus-style-switch.json");
-const REQUIRED_TOP_LEVEL_SECTIONS = ["tokens", "styles", "views", "application", "lowering"];
+const REQUIRED_CORE_TOP_LEVEL_SECTIONS = ["tokens", "styles", "views", "application"];
 const DEFAULT_BROWSER_BACKEND = "browser";
 const KNOWN_STYLE_ASSETS = new Set(["shell", "chart"]);
 const CANONICAL_TOKEN_DOMAINS = Object.freeze(["color", "size", "radius", "font", "shadow"]);
@@ -49,6 +49,43 @@ export const ENGENTUS_GENERATED_STYLESHEET_PATHS = Object.freeze({
   shell: "/engentus/__generated/engentus-shell.css",
   chart: "/engentus/__generated/engentus-chart-pages.css"
 });
+const ENGENTUS_PREVIEWABLE_TOKEN_BINDINGS = Object.freeze({
+  "color.chrome.bg": Object.freeze([{ asset: "shell", cssVariable: "--dk" }, { asset: "chart", cssVariable: "--dk" }]),
+  "color.chrome.panel": Object.freeze([{ asset: "shell", cssVariable: "--mid" }, { asset: "chart", cssVariable: "--mid" }]),
+  "color.chrome.edge": Object.freeze([{ asset: "shell", cssVariable: "--brd" }, { asset: "chart", cssVariable: "--brd" }]),
+  "color.ink.primary": Object.freeze([{ asset: "shell", cssVariable: "--t1" }, { asset: "chart", cssVariable: "--t1" }]),
+  "color.ink.secondary": Object.freeze([{ asset: "shell", cssVariable: "--t2" }, { asset: "chart", cssVariable: "--t2" }]),
+  "color.ink.body": Object.freeze([{ asset: "shell", cssVariable: "--t3" }, { asset: "chart", cssVariable: "--t3" }]),
+  "color.accent.cool": Object.freeze([{ asset: "shell", cssVariable: "--blue" }, { asset: "chart", cssVariable: "--blue" }]),
+  "color.accent.cool.strong": Object.freeze([{ asset: "shell", cssVariable: "--blu2" }]),
+  "color.accent.warm": Object.freeze([{ asset: "shell", cssVariable: "--ylw" }]),
+  "color.success": Object.freeze([{ asset: "shell", cssVariable: "--grn" }]),
+  "size.sidebar.width": Object.freeze([{ asset: "shell", cssVariable: "--sw" }]),
+  "size.toolbar.height": Object.freeze([{ asset: "shell", cssVariable: "--th" }]),
+  "size.scrubber.height": Object.freeze([{ asset: "shell", cssVariable: "--sch" }])
+});
+const ENGENTUS_PREVIEWABLE_STYLE_FIELD_BINDINGS = Object.freeze({
+  "chrome.toolbar\u0000base\u0000layout.height": Object.freeze([{ asset: "shell", cssVariable: "--th" }])
+});
+const WCSS_AUTHORING_OPERATION_KINDS = Object.freeze([
+  "token.create",
+  "token.remove",
+  "token.set",
+  "token.reset",
+  "style.create",
+  "style.remove",
+  "style.field.set",
+  "style.field.reset",
+  "style.state.create",
+  "style.state.remove",
+  "style.state_field.set",
+  "style.state_field.reset",
+  "slice.family.assign",
+  "slice.family.unassign",
+  "slice.seam.upsert",
+  "slice.seam.remove"
+]);
+const WCSS_STYLE_FIELD_GROUPS = Object.freeze(["layout", "paint", "text", "ornament", "affordance"]);
 
 function splitClassTokens(value) {
   if (typeof value !== "string") return [];
@@ -57,6 +94,10 @@ function splitClassTokens(value) {
 
 function uniqueSorted(values) {
   return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
+}
+
+function escapeRegExp(value) {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function maybeUnquote(value) {
@@ -655,6 +696,147 @@ function sectionStatus(root) {
   };
 }
 
+function renderIndentedWcssNode(node, level = 0) {
+  const lines = [`${"  ".repeat(level)}${node.text}`];
+  for (const child of node.children ?? []) {
+    lines.push(renderIndentedWcssNode(child, level + 1));
+  }
+  return lines.join("\n");
+}
+
+function buildTokenSectionNode(tokens = []) {
+  return {
+    text: "tokens",
+    children: tokens.map(token => ({
+      text: `${token.name} = ${token.value}`,
+      children: []
+    }))
+  };
+}
+
+function buildFieldNodes(fields = []) {
+  const directNodes = [];
+  const groupedNodes = new Map();
+  const groupOrder = [];
+  for (const field of fields) {
+    const path = String(field?.field ?? "").trim();
+    const value = String(field?.value ?? "").trim();
+    if (!path || !value) continue;
+    const segments = path.split(".").filter(Boolean);
+    if (segments.length <= 1) {
+      directNodes.push({
+        text: `${path} = ${value}`,
+        children: []
+      });
+      continue;
+    }
+    const group = segments[0];
+    const property = segments.slice(1).join(".");
+    if (!groupedNodes.has(group)) {
+      groupedNodes.set(group, []);
+      groupOrder.push(group);
+    }
+    groupedNodes.get(group).push({
+      text: `${property} = ${value}`,
+      children: []
+    });
+  }
+  return [
+    ...directNodes,
+    ...groupOrder.map(group => ({
+      text: group,
+      children: groupedNodes.get(group)
+    }))
+  ];
+}
+
+function buildStateNode(state) {
+  return {
+    text: `when ${state.name}`,
+    children: buildFieldNodes(state.fields)
+  };
+}
+
+function buildPartNode(part) {
+  return {
+    text: `part ${part.name}`,
+    children: [
+      ...buildFieldNodes(part.fields),
+      ...(part.states ?? []).map(buildStateNode)
+    ]
+  };
+}
+
+function buildStyleNode(style) {
+  return {
+    text: `style ${style.name}`,
+    children: [
+      ...buildFieldNodes(style.fields),
+      ...(style.states ?? []).map(buildStateNode),
+      ...(style.parts ?? []).map(buildPartNode)
+    ]
+  };
+}
+
+function buildStyleSectionNode(styles = []) {
+  return {
+    text: "styles",
+    children: styles.map(buildStyleNode)
+  };
+}
+
+function buildSeamNode(seam) {
+  const children = [{ text: `prop ${seam.prop}`, children: [] }];
+  if (seam.values?.length) children.push({ text: `values ${seam.values.join(" ")}`, children: [] });
+  if (seam.token) children.push({ text: `token ${seam.token}`, children: [] });
+  for (const identity of seam.identities ?? []) children.push({ text: `identity ${identity}`, children: [] });
+  for (const trait of seam.traits ?? []) children.push({ text: `trait ${trait}`, children: [] });
+  if (seam.min != null) children.push({ text: `min ${seam.min}`, children: [] });
+  if (seam.max != null) children.push({ text: `max ${seam.max}`, children: [] });
+  for (const note of seam.notes ?? []) children.push({ text: `note ${note}`, children: [] });
+  return {
+    text: `seam ${seam.kind} ${seam.name}`,
+    children
+  };
+}
+
+function buildApplicationSectionNode(slices = []) {
+  return {
+    text: "application",
+    children: slices.map(slice => ({
+      text: `slice ${slice.name}`,
+      children: [
+        { text: `asset ${slice.asset}`, children: [] },
+        ...(slice.sourceFiles ?? []).map(sourceFile => ({ text: `source ${sourceFile}`, children: [] })),
+        ...(slice.identities ?? []).map(identity => ({ text: `identity ${identity}`, children: [] })),
+        ...(slice.traits ?? []).map(trait => ({ text: `trait ${trait}`, children: [] })),
+        ...(slice.families ?? []).map(family => ({ text: `family ${family}`, children: [] })),
+        ...(slice.seams ?? []).map(buildSeamNode),
+        ...(slice.notes ?? []).map(note => ({ text: `note ${note}`, children: [] }))
+      ]
+    }))
+  };
+}
+
+function replaceTopLevelSectionNode(ast, sectionName, nextSectionNode) {
+  const root = ast && typeof ast === "object" ? structuredClone(ast) : { text: "__root__", children: [] };
+  const children = Array.isArray(root.children) ? [...root.children] : [];
+  const index = children.findIndex(node => node?.text === sectionName);
+  if (index === -1) children.push(nextSectionNode);
+  else children[index] = nextSectionNode;
+  root.children = children;
+  return root;
+}
+
+function setTopLevelSectionNodes(ast, nextSections = {}) {
+  let nextAst = ast;
+  for (const [sectionName, sectionNode] of Object.entries(nextSections)) {
+    if (!sectionNode) continue;
+    nextAst = replaceTopLevelSectionNode(nextAst, sectionName, sectionNode);
+  }
+  return nextAst;
+}
+
 function parseTokenSection(node) {
   return node.children.map(child => {
     const equals = child.text.indexOf("=");
@@ -666,6 +848,69 @@ function parseTokenSection(node) {
       value: child.text.slice(equals + 1).trim()
     };
   });
+}
+
+function isFieldAssignmentNode(node) {
+  return typeof node?.text === "string" && node.text.includes("=");
+}
+
+function parseFieldAssignmentText(text, lineNumber, context) {
+  const equals = text.indexOf("=");
+  if (equals === -1) {
+    throw new Error(`Invalid ${context} field on line ${lineNumber}: ${text}`);
+  }
+  const field = text.slice(0, equals).trim();
+  const value = text.slice(equals + 1).trim();
+  if (!field || !value) {
+    throw new Error(`Invalid ${context} field on line ${lineNumber}: ${text}`);
+  }
+  return { field, value };
+}
+
+function collectStyleFieldEntries(nodes, context) {
+  const fields = [];
+  for (const node of nodes) {
+    if (isFieldAssignmentNode(node)) {
+      fields.push(parseFieldAssignmentText(node.text, node.line, context));
+      continue;
+    }
+    if (node.text.startsWith("when ") || node.text.startsWith("part ")) continue;
+    const group = node.text.trim();
+    for (const child of node.children ?? []) {
+      if (!isFieldAssignmentNode(child)) {
+        throw new Error(`Unsupported nested ${context} directive on line ${child.line}: ${child.text}`);
+      }
+      const assignment = parseFieldAssignmentText(child.text, child.line, context);
+      fields.push({
+        field: `${group}.${assignment.field}`,
+        value: assignment.value
+      });
+    }
+  }
+  return fields;
+}
+
+function parseStateBlock(node, context) {
+  const name = childValue(node, "when ");
+  if (!name) throw new Error(`State block is missing a name on line ${node.line}`);
+  return {
+    name,
+    line: node.line,
+    fields: collectStyleFieldEntries(node.children ?? [], `${context} state ${name}`)
+  };
+}
+
+function parsePartBlock(node, context) {
+  const name = childValue(node, "part ");
+  if (!name) throw new Error(`Part block is missing a name on line ${node.line}`);
+  return {
+    name,
+    line: node.line,
+    fields: collectStyleFieldEntries(node.children ?? [], `${context} part ${name}`),
+    states: (node.children ?? [])
+      .filter(child => child.text.startsWith("when "))
+      .map(child => parseStateBlock(child, `${context} part ${name}`))
+  };
 }
 
 function parseStyleSection(node) {
@@ -680,7 +925,14 @@ function parseStyleSection(node) {
     seen.add(name);
     styles.push({
       name,
-      line: child.line
+      line: child.line,
+      fields: collectStyleFieldEntries(child.children ?? [], `style ${name}`),
+      states: (child.children ?? [])
+        .filter(entry => entry.text.startsWith("when "))
+        .map(entry => parseStateBlock(entry, `style ${name}`)),
+      parts: (child.children ?? [])
+        .filter(entry => entry.text.startsWith("part "))
+        .map(entry => parsePartBlock(entry, `style ${name}`))
     });
   }
   return styles;
@@ -1465,11 +1717,11 @@ function parseLoweringSection(node, authoredSlices, styleNames) {
   return lowering;
 }
 
-function compatibilitySlicesFromCanonical(canonical, backendName = DEFAULT_BROWSER_BACKEND) {
-  const backend = canonical.lowering.byBackend[backendName] ?? null;
+function compatibilitySlicesFromDocument(document, loweringSidecar, backendName = DEFAULT_BROWSER_BACKEND) {
+  const backend = loweringSidecar?.byBackend?.[backendName] ?? null;
   if (!backend) throw new Error(`Unknown lowering backend ${backendName}`);
   const loweringBySlice = new Map(backend.slices.map(slice => [slice.name, slice]));
-  return canonical.slices.map(slice => {
+  return (document?.application?.slices ?? []).map(slice => {
     const lowering = loweringBySlice.get(slice.name) ?? null;
     if (!lowering) throw new Error(`Missing lowering coverage for slice ${slice.name} on backend ${backendName}`);
     return {
@@ -1497,7 +1749,7 @@ export function parseEngentusCanonicalWcss(text) {
   }
 
   const sections = sectionStatus(root);
-  for (const sectionName of REQUIRED_TOP_LEVEL_SECTIONS) {
+  for (const sectionName of REQUIRED_CORE_TOP_LEVEL_SECTIONS) {
     if (!sections[sectionName]) throw new Error(`Missing required top-level section: ${sectionName}`);
   }
 
@@ -1505,15 +1757,27 @@ export function parseEngentusCanonicalWcss(text) {
   const styles = parseStyleSection(sections.styles);
   const views = parseViewSection(sections.views);
   const slices = parseApplicationSection(sections.application, new Set(styles.map(style => style.name)));
-  const lowering = parseLoweringSection(sections.lowering, slices, new Set(styles.map(style => style.name)));
 
   return {
+    kind: "wcss-document",
     theme,
     tokens,
     styles,
     views,
-    slices,
-    lowering,
+    application: {
+      slices
+    },
+    sections: {
+      theme: structuredClone(themeNode),
+      tokens: structuredClone(sections.tokens),
+      styles: structuredClone(sections.styles),
+      views: structuredClone(sections.views),
+      application: structuredClone(sections.application)
+    },
+    attachments: {
+      loweringSectionPresent: Boolean(sections.lowering),
+      loweringSection: sections.lowering ? structuredClone(sections.lowering) : null
+    },
     ast: root
   };
 }
@@ -1537,7 +1801,7 @@ function collectNamesByDomain(names = []) {
 export function buildEngentusCanonicalStyleGrammar(canonical) {
   const tokensByDomain = collectNamesByDomain((canonical?.tokens ?? []).map(token => token.name));
   const stylesByDomain = collectNamesByDomain((canonical?.styles ?? []).map(style => style.name));
-  const slices = (canonical?.slices ?? []).map(slice => {
+  const slices = (canonical?.application?.slices ?? canonical?.slices ?? []).map(slice => {
     const familyDomains = uniqueSorted(slice.families.map(family => primaryNameDomain(family)));
     const seamKinds = uniqueSorted(slice.seams.map(seam => seam.kind));
     return {
@@ -1645,6 +1909,528 @@ export function validateEngentusCanonicalStyleGrammar(canonical) {
   return grammar;
 }
 
+export function serializeEngentusCanonicalWcss(document) {
+  if (!document || document.kind !== "wcss-document") {
+    throw new Error("serializeEngentusCanonicalWcss expects a WCSSDocument");
+  }
+  const nodes = [
+    document.sections?.theme ?? { text: `theme ${document.theme}`, children: [] },
+    document.sections?.tokens,
+    document.sections?.styles,
+    document.sections?.views,
+    document.sections?.application
+  ].filter(Boolean);
+  return `${nodes.map(node => renderIndentedWcssNode(node)).join("\n\n")}\n`;
+}
+
+function serializeEngentusDocumentWithAttachments(document) {
+  const children = Array.isArray(document?.ast?.children) ? document.ast.children : [];
+  return `${children.map(node => renderIndentedWcssNode(node)).join("\n\n")}\n`;
+}
+
+function tokenValueByName(document) {
+  return new Map((document?.tokens ?? []).map(token => [token.name, token.value]));
+}
+
+function canonicalizeEngentusDocument(document) {
+  const canonical = structuredClone(document);
+  canonical.grammar = validateEngentusCanonicalStyleGrammar(canonical);
+  return canonical;
+}
+
+function styleFieldBindingKey({
+  style,
+  field,
+  part = null,
+  state = null
+}) {
+  return [
+    style,
+    part ? `part:${part}` : "base",
+    state ? `state:${state}` : field
+  ].join("\u0000") + (state ? `\u0000${field}` : "");
+}
+
+function buildStyleFieldValueIndex(document) {
+  const index = new Map();
+  for (const style of document?.styles ?? []) {
+    for (const field of style.fields ?? []) {
+      index.set(styleFieldBindingKey({
+        style: style.name,
+        field: field.field
+      }), field.value);
+    }
+    for (const state of style.states ?? []) {
+      for (const field of state.fields ?? []) {
+        index.set(styleFieldBindingKey({
+          style: style.name,
+          state: state.name,
+          field: field.field
+        }), field.value);
+      }
+    }
+    for (const part of style.parts ?? []) {
+      for (const field of part.fields ?? []) {
+        index.set(styleFieldBindingKey({
+          style: style.name,
+          part: part.name,
+          field: field.field
+        }), field.value);
+      }
+      for (const state of part.states ?? []) {
+        for (const field of state.fields ?? []) {
+          index.set(styleFieldBindingKey({
+            style: style.name,
+            part: part.name,
+            state: state.name,
+            field: field.field
+          }), field.value);
+        }
+      }
+    }
+  }
+  return index;
+}
+
+export function buildEngentusTokenCatalog(document) {
+  const values = tokenValueByName(document);
+  return {
+    theme: ENGENTUS_STYLE_THEME,
+    tokens: Object.entries(ENGENTUS_PREVIEWABLE_TOKEN_BINDINGS)
+      .map(([name, bindings]) => {
+        if (!values.has(name)) return null;
+        return {
+          name,
+          value: values.get(name),
+          domain: primaryNameDomain(name),
+          bindings: structuredClone(bindings)
+        };
+      })
+      .filter(Boolean)
+  };
+}
+
+export function buildEngentusAuthoringSchema(document) {
+  if (!document || document.kind !== "wcss-document") {
+    throw new Error("buildEngentusAuthoringSchema requires a WCSSDocument");
+  }
+  const tokenCatalog = buildEngentusTokenCatalog(document);
+  const previewableTokens = new Set(tokenCatalog.tokens.map(token => token.name));
+  const grammar = document.grammar ?? buildEngentusCanonicalStyleGrammar(document);
+  return {
+    theme: document.theme,
+    supportedOperations: [...WCSS_AUTHORING_OPERATION_KINDS],
+    tokens: (document.tokens ?? []).map(token => ({
+      name: token.name,
+      domain: primaryNameDomain(token.name),
+      currentValue: token.value,
+      canonicalValue: token.value,
+      previewable: previewableTokens.has(token.name),
+      editable: true
+    })),
+    styles: (document.styles ?? []).map(style => ({
+      name: style.name,
+      domain: primaryNameDomain(style.name),
+      editable: true,
+      fields: (style.fields ?? []).map(field => ({
+        field: field.field,
+        value: field.value,
+        previewable: ENGENTUS_PREVIEWABLE_STYLE_FIELD_BINDINGS[styleFieldBindingKey({
+          style: style.name,
+          field: field.field
+        })] != null,
+        editable: true
+      })),
+      states: (style.states ?? []).map(state => ({
+        name: state.name,
+        editable: true,
+        fields: (state.fields ?? []).map(field => ({
+          field: field.field,
+          value: field.value,
+          previewable: ENGENTUS_PREVIEWABLE_STYLE_FIELD_BINDINGS[styleFieldBindingKey({
+            style: style.name,
+            state: state.name,
+            field: field.field
+          })] != null,
+          editable: true
+        }))
+      })),
+      parts: (style.parts ?? []).map(part => ({
+        name: part.name,
+        editable: true,
+        fields: (part.fields ?? []).map(field => ({
+          field: field.field,
+          value: field.value,
+          previewable: ENGENTUS_PREVIEWABLE_STYLE_FIELD_BINDINGS[styleFieldBindingKey({
+            style: style.name,
+            part: part.name,
+            field: field.field
+          })] != null,
+          editable: true
+        })),
+        states: (part.states ?? []).map(state => ({
+          name: state.name,
+          editable: true,
+          fields: (state.fields ?? []).map(field => ({
+            field: field.field,
+            value: field.value,
+            previewable: ENGENTUS_PREVIEWABLE_STYLE_FIELD_BINDINGS[styleFieldBindingKey({
+              style: style.name,
+              part: part.name,
+              state: state.name,
+              field: field.field
+            })] != null,
+            editable: true
+          }))
+        }))
+      }))
+    })),
+    slices: (document.application?.slices ?? []).map(slice => ({
+      name: slice.name,
+      asset: slice.asset,
+      currentFamilies: [...slice.families],
+      allowedFamilyDomains: [...(grammar.application.sliceFamilyDomainContracts[slice.name] ?? [])],
+      seams: structuredClone(slice.seams),
+      editable: {
+        families: true,
+        seams: true,
+        topology: false
+      }
+    })),
+    views: (document.views ?? []).map(view => ({
+      name: view.name,
+      readOnly: true
+    })),
+    contributions: {
+      themes: [],
+      styles: [],
+      authoringTools: []
+    }
+  };
+}
+
+function ensureFieldGroupAllowed(field, operationKind) {
+  const normalized = String(field ?? "").trim();
+  if (!normalized) throw new Error(`${operationKind} requires field`);
+  const [group] = normalized.split(".");
+  if (normalized.includes(".") && !WCSS_STYLE_FIELD_GROUPS.includes(group)) {
+    throw new Error(`${operationKind} uses unknown field group ${group}`);
+  }
+  return normalized;
+}
+
+function findStyle(styles, styleName, operationKind) {
+  const style = styles.find(entry => entry.name === styleName) ?? null;
+  if (!style) throw new Error(`${operationKind} references unknown style ${styleName}`);
+  return style;
+}
+
+function findSlice(slices, sliceName, operationKind) {
+  const slice = slices.find(entry => entry.name === sliceName) ?? null;
+  if (!slice) throw new Error(`${operationKind} references unknown slice ${sliceName}`);
+  return slice;
+}
+
+function partContainerForStyle(style, partName, operationKind) {
+  if (!partName) return style;
+  const part = (style.parts ?? []).find(entry => entry.name === partName) ?? null;
+  if (!part) throw new Error(`${operationKind} references unknown part ${partName} in style ${style.name}`);
+  return part;
+}
+
+function findState(states, stateName) {
+  return (states ?? []).find(entry => entry.name === stateName) ?? null;
+}
+
+function fieldIndex(fields, field) {
+  return (fields ?? []).findIndex(entry => entry.field === field);
+}
+
+function setFieldValue(fields, field, value) {
+  const index = fieldIndex(fields, field);
+  if (index === -1) fields.push({ field, value });
+  else fields[index] = { field, value };
+}
+
+function removeFieldValue(fields, field) {
+  const index = fieldIndex(fields, field);
+  if (index !== -1) fields.splice(index, 1);
+}
+
+function ensureState(states, stateName) {
+  let state = findState(states, stateName);
+  if (!state) {
+    state = { name: stateName, fields: [] };
+    states.push(state);
+  }
+  return state;
+}
+
+function removeState(states, stateName) {
+  const index = (states ?? []).findIndex(entry => entry.name === stateName);
+  if (index === -1) return;
+  states.splice(index, 1);
+}
+
+function originalFieldValue(originalDocument, {
+  styleName,
+  partName = null,
+  stateName = null,
+  field,
+  operationKind
+}) {
+  const style = findStyle(originalDocument.styles ?? [], styleName, operationKind);
+  const container = partContainerForStyle(style, partName, operationKind);
+  if (!stateName) {
+    return (container.fields ?? []).find(entry => entry.field === field)?.value ?? null;
+  }
+  const state = findState(container.states ?? [], stateName);
+  return state?.fields?.find(entry => entry.field === field)?.value ?? null;
+}
+
+function normalizeSeamPatch(seam, operationKind) {
+  if (!seam || typeof seam !== "object" || Array.isArray(seam)) {
+    throw new Error(`${operationKind} requires seam`);
+  }
+  const kind = typeof seam.kind === "string" ? seam.kind.trim() : "";
+  const name = typeof seam.name === "string" ? seam.name.trim() : "";
+  const prop = typeof seam.prop === "string" ? seam.prop.trim() : "";
+  if (!kind || !name || !prop) {
+    throw new Error(`${operationKind} requires seam kind, name, and prop`);
+  }
+  return {
+    kind,
+    name,
+    prop,
+    token: typeof seam.token === "string" && seam.token.trim() ? seam.token.trim() : null,
+    identities: uniqueSorted(Array.isArray(seam.identities) ? seam.identities.map(value => String(value).trim()).filter(Boolean) : []),
+    traits: uniqueSorted(Array.isArray(seam.traits) ? seam.traits.map(value => String(value).trim()).filter(Boolean) : []),
+    values: uniqueSorted(Array.isArray(seam.values) ? seam.values.map(value => String(value).trim()).filter(Boolean) : []),
+    min: seam.min == null ? null : Number(seam.min),
+    max: seam.max == null ? null : Number(seam.max),
+    notes: uniqueSorted(Array.isArray(seam.notes) ? seam.notes.map(value => String(value).trim()).filter(Boolean) : [])
+  };
+}
+
+export function applyEngentusDocumentPatch(document, { ops } = {}) {
+  if (!document || document.kind !== "wcss-document") {
+    throw new Error("applyEngentusDocumentPatch requires a WCSSDocument");
+  }
+  if (!Array.isArray(ops)) {
+    throw new Error("applyEngentusDocumentPatch requires ops");
+  }
+  const original = structuredClone(document);
+  const nextTokens = structuredClone(document.tokens ?? []);
+  const nextStyles = structuredClone(document.styles ?? []);
+  const nextSlices = structuredClone(document.application?.slices ?? []);
+  const tokenCatalog = buildEngentusTokenCatalog(document);
+  const previewableTokens = new Set(tokenCatalog.tokens.map(token => token.name));
+
+  for (const [index, rawOp] of ops.entries()) {
+    const kind = typeof rawOp?.kind === "string" ? rawOp.kind.trim() : "";
+    if (!kind) throw new Error(`Document patch op ${index} is missing kind`);
+    if (!WCSS_AUTHORING_OPERATION_KINDS.includes(kind)) {
+      throw new Error(`Unsupported document patch op ${kind}`);
+    }
+    if (kind.startsWith("token.")) {
+      const tokenName = typeof rawOp?.token === "string" ? rawOp.token.trim() : "";
+      if (!tokenName) throw new Error(`${kind} is missing token`);
+      const tokenIndex = nextTokens.findIndex(token => token.name === tokenName);
+      if (kind === "token.create") {
+        const value = typeof rawOp?.value === "string" ? rawOp.value.trim() : "";
+        if (!value) throw new Error("token.create requires value");
+        if (tokenIndex !== -1) throw new Error(`Token ${tokenName} already exists`);
+        nextTokens.push({ name: tokenName, value });
+        continue;
+      }
+      if (tokenIndex === -1) throw new Error(`${kind} references unknown token ${tokenName}`);
+      if (kind === "token.remove") {
+        nextTokens.splice(tokenIndex, 1);
+        continue;
+      }
+      if (kind === "token.set") {
+        const value = typeof rawOp?.value === "string" ? rawOp.value.trim() : "";
+        if (!value) throw new Error("token.set requires value");
+        nextTokens[tokenIndex] = { name: tokenName, value };
+        continue;
+      }
+      if (kind === "token.reset") {
+        const originalTokens = tokenValueByName(original);
+        if (!previewableTokens.has(tokenName) && !originalTokens.has(tokenName)) {
+          throw new Error(`Unknown Engentus token ${tokenName}`);
+        }
+        if (!originalTokens.has(tokenName)) {
+          nextTokens.splice(tokenIndex, 1);
+        } else {
+          nextTokens[tokenIndex] = { name: tokenName, value: originalTokens.get(tokenName) };
+        }
+        continue;
+      }
+    }
+
+    if (kind === "style.create") {
+      const styleName = typeof rawOp?.style === "string" ? rawOp.style.trim() : "";
+      if (!styleName) throw new Error("style.create requires style");
+      if ((nextStyles ?? []).some(style => style.name === styleName)) {
+        throw new Error(`Style ${styleName} already exists`);
+      }
+      nextStyles.push({
+        name: styleName,
+        fields: [],
+        states: [],
+        parts: []
+      });
+      continue;
+    }
+
+    if (kind === "style.remove") {
+      const styleName = typeof rawOp?.style === "string" ? rawOp.style.trim() : "";
+      const styleIndex = nextStyles.findIndex(style => style.name === styleName);
+      if (styleIndex === -1) throw new Error(`style.remove references unknown style ${styleName}`);
+      nextStyles.splice(styleIndex, 1);
+      continue;
+    }
+
+    if (kind.startsWith("style.")) {
+      const styleName = typeof rawOp?.style === "string" ? rawOp.style.trim() : "";
+      const partName = typeof rawOp?.part === "string" && rawOp.part.trim() ? rawOp.part.trim() : null;
+      const style = findStyle(nextStyles, styleName, kind);
+      const container = partContainerForStyle(style, partName, kind);
+      if (kind === "style.field.set" || kind === "style.field.reset") {
+        const field = ensureFieldGroupAllowed(rawOp?.field, kind);
+        if (kind === "style.field.set") {
+          const value = typeof rawOp?.value === "string" ? rawOp.value.trim() : "";
+          if (!value) throw new Error("style.field.set requires value");
+          setFieldValue(container.fields, field, value);
+        } else {
+          const value = originalFieldValue(original, {
+            styleName,
+            partName,
+            field,
+            operationKind: kind
+          });
+          if (value == null) removeFieldValue(container.fields, field);
+          else setFieldValue(container.fields, field, value);
+        }
+        continue;
+      }
+      const stateName = typeof rawOp?.state === "string" ? rawOp.state.trim() : "";
+      if (!stateName) throw new Error(`${kind} requires state`);
+      if (kind === "style.state.create") {
+        if (findState(container.states, stateName)) {
+          throw new Error(`State ${stateName} already exists in style ${styleName}`);
+        }
+        container.states.push({ name: stateName, fields: [] });
+        continue;
+      }
+      if (kind === "style.state.remove") {
+        if (!findState(container.states, stateName)) {
+          throw new Error(`style.state.remove references unknown state ${stateName}`);
+        }
+        removeState(container.states, stateName);
+        continue;
+      }
+      const state = findState(container.states, stateName);
+      if (!state) throw new Error(`${kind} references unknown state ${stateName}`);
+      const field = ensureFieldGroupAllowed(rawOp?.field, kind);
+      if (kind === "style.state_field.set") {
+        const value = typeof rawOp?.value === "string" ? rawOp.value.trim() : "";
+        if (!value) throw new Error("style.state_field.set requires value");
+        setFieldValue(state.fields, field, value);
+        continue;
+      }
+      if (kind === "style.state_field.reset") {
+        const value = originalFieldValue(original, {
+          styleName,
+          partName,
+          stateName,
+          field,
+          operationKind: kind
+        });
+        if (value == null) {
+          removeFieldValue(state.fields, field);
+          if (!state.fields.length && !findState((partContainerForStyle(findStyle(original.styles ?? [], styleName, kind), partName, kind).states ?? []), stateName)) {
+            removeState(container.states, stateName);
+          }
+        } else {
+          setFieldValue(state.fields, field, value);
+        }
+        continue;
+      }
+    }
+
+    if (kind === "slice.family.assign" || kind === "slice.family.unassign") {
+      const sliceName = typeof rawOp?.slice === "string" ? rawOp.slice.trim() : "";
+      const family = typeof rawOp?.family === "string" ? rawOp.family.trim() : "";
+      if (!family) throw new Error(`${kind} requires family`);
+      const slice = findSlice(nextSlices, sliceName, kind);
+      const nextFamilies = new Set(slice.families ?? []);
+      if (kind === "slice.family.assign") nextFamilies.add(family);
+      else nextFamilies.delete(family);
+      slice.families = uniqueSorted([...nextFamilies]);
+      continue;
+    }
+
+    if (kind === "slice.seam.upsert" || kind === "slice.seam.remove") {
+      const sliceName = typeof rawOp?.slice === "string" ? rawOp.slice.trim() : "";
+      const slice = findSlice(nextSlices, sliceName, kind);
+      if (kind === "slice.seam.remove") {
+        const seamName = typeof rawOp?.seam === "string" ? rawOp.seam.trim() : "";
+        if (!seamName) throw new Error("slice.seam.remove requires seam");
+        slice.seams = (slice.seams ?? []).filter(seam => seam.name !== seamName);
+      } else {
+        const seam = normalizeSeamPatch(rawOp?.seam, kind);
+        const seams = [...(slice.seams ?? []).filter(entry => entry.name !== seam.name), seam];
+        slice.seams = seams.sort((left, right) => left.name.localeCompare(right.name) || left.kind.localeCompare(right.kind));
+      }
+      slice.overrides = uniqueSorted((slice.seams ?? []).map(seam => seam.prop));
+      continue;
+    }
+  }
+
+  const nextSections = {
+    ...(document.sections ?? {}),
+    tokens: buildTokenSectionNode(nextTokens),
+    styles: buildStyleSectionNode(nextStyles),
+    application: buildApplicationSectionNode(nextSlices)
+  };
+  const nextAst = setTopLevelSectionNodes(document.ast, {
+    tokens: nextSections.tokens,
+    styles: nextSections.styles,
+    application: nextSections.application
+  });
+  const reparsed = parseEngentusCanonicalWcss(serializeEngentusDocumentWithAttachments({
+    ...structuredClone(document),
+    sections: nextSections,
+    ast: nextAst
+  }));
+  return canonicalizeEngentusDocument(reparsed);
+}
+
+export function applyEngentusTokenPatch(document, { ops } = {}) {
+  return applyEngentusDocumentPatch(document, {
+    ops: Array.isArray(ops)
+      ? ops.map(op => {
+        const kind = typeof op?.kind === "string" ? op.kind.trim() : "";
+        if (kind === "set") {
+          return {
+            kind: "token.set",
+            token: op.token,
+            value: op.value
+          };
+        }
+        if (kind === "reset") {
+          return {
+            kind: "token.reset",
+            token: op.token
+          };
+        }
+        return op;
+      })
+      : ops
+  });
+}
+
 export async function loadEngentusCanonicalWcss(file = DEFAULT_CANONICAL_WCSS_FILE) {
   const canonical = parseEngentusCanonicalWcss(await readFile(file, "utf8"));
   canonical.grammar = validateEngentusCanonicalStyleGrammar(canonical);
@@ -1656,9 +2442,50 @@ export async function loadEngentusCanonicalStyleGrammar(file = DEFAULT_CANONICAL
   return structuredClone(canonical.grammar ?? buildEngentusCanonicalStyleGrammar(canonical));
 }
 
+export function deriveEngentusLoweringSidecar({
+  document,
+  text
+} = {}) {
+  if (!document || document.kind !== "wcss-document") {
+    throw new Error("deriveEngentusLoweringSidecar requires a WCSSDocument");
+  }
+  const sourceText = typeof text === "string" ? text : serializeEngentusCanonicalWcss(document);
+  const root = typeof text === "string" ? parseIndentedWcssDocument(text) : document.ast;
+  const sections = sectionStatus(root);
+  if (!sections.lowering) {
+    throw new Error(`Missing required lowering section for renderer backend ${DEFAULT_BROWSER_BACKEND}`);
+  }
+  const lowering = parseLoweringSection(
+    sections.lowering,
+    document.application.slices,
+    new Set(document.styles.map(style => style.name))
+  );
+  return {
+    kind: "wcss-renderer-sidecar",
+    theme: document.theme,
+    sourceText,
+    backends: structuredClone(lowering.backends),
+    byBackend: structuredClone(lowering.byBackend),
+    sections: {
+      lowering: structuredClone(sections.lowering)
+    }
+  };
+}
+
+export async function loadEngentusLoweringSidecar(file = DEFAULT_CANONICAL_WCSS_FILE) {
+  const [text, canonical] = await Promise.all([
+    readFile(file, "utf8"),
+    loadEngentusCanonicalWcss(file)
+  ]);
+  return deriveEngentusLoweringSidecar({
+    document: canonical,
+    text
+  });
+}
+
 export async function loadEngentusBrowserLoweringMap(file = DEFAULT_CANONICAL_WCSS_FILE) {
-  const canonical = await loadEngentusCanonicalWcss(file);
-  return structuredClone(canonical.lowering.byBackend[DEFAULT_BROWSER_BACKEND]);
+  const sidecar = await loadEngentusLoweringSidecar(file);
+  return structuredClone(sidecar.byBackend[DEFAULT_BROWSER_BACKEND]);
 }
 
 export async function loadEngentusBrowserDeclarationGroups(file = DEFAULT_CANONICAL_WCSS_FILE) {
@@ -1669,13 +2496,29 @@ export async function loadEngentusBrowserDeclarationGroups(file = DEFAULT_CANONI
 }
 
 export async function loadEngentusAppliedWcss(file = DEFAULT_CANONICAL_WCSS_FILE) {
-  const canonical = await loadEngentusCanonicalWcss(file);
+  const [canonical, loweringSidecar] = await Promise.all([
+    loadEngentusCanonicalWcss(file),
+    loadEngentusLoweringSidecar(file)
+  ]);
+  return createEngentusAppliedWcssFromDocument(canonical, { loweringSidecar });
+}
+
+export function createEngentusAppliedWcssFromDocument(document, {
+  loweringSidecar = null
+} = {}) {
+  const canonical = canonicalizeEngentusDocument(document);
+  const resolvedLoweringSidecar = loweringSidecar ?? deriveEngentusLoweringSidecar({
+    document: canonical,
+    text: serializeEngentusDocumentWithAttachments(canonical)
+  });
   return {
     theme: canonical.theme,
+    kind: canonical.kind,
     styles: canonical.styles.map(style => style.name),
     views: canonical.views.map(view => view.name),
-    lowering: structuredClone(canonical.lowering),
-    slices: compatibilitySlicesFromCanonical(canonical)
+    document: structuredClone(canonical),
+    lowering: structuredClone(resolvedLoweringSidecar),
+    slices: compatibilitySlicesFromDocument(canonical, resolvedLoweringSidecar)
   };
 }
 
@@ -2261,10 +3104,47 @@ export async function loadEngentusGeneratedCssBundle({
   };
 }
 
+export function applyEngentusTokenBindingsToCssBundle(files, document) {
+  const tokenValues = tokenValueByName(document);
+  const nextFiles = { ...files };
+  for (const [tokenName, bindings] of Object.entries(ENGENTUS_PREVIEWABLE_TOKEN_BINDINGS)) {
+    const value = tokenValues.get(tokenName);
+    if (typeof value !== "string" || !value.trim()) continue;
+    for (const binding of bindings) {
+      const fileName = styleAssetName(binding.asset);
+      const source = nextFiles[fileName];
+      if (typeof source !== "string") continue;
+      const pattern = new RegExp(`(${escapeRegExp(binding.cssVariable)}\\s*:\\s*)([^;]+)(;)`, "g");
+      nextFiles[fileName] = source.replace(pattern, `$1${value}$3`);
+    }
+  }
+  return nextFiles;
+}
+
+export function applyEngentusStyleFieldBindingsToCssBundle(files, document) {
+  const fieldValues = buildStyleFieldValueIndex(document);
+  const tokenValues = tokenValueByName(document);
+  const nextFiles = { ...files };
+  for (const [fieldKey, bindings] of Object.entries(ENGENTUS_PREVIEWABLE_STYLE_FIELD_BINDINGS)) {
+    const rawValue = fieldValues.get(fieldKey);
+    const value = tokenValues.get(rawValue) ?? rawValue;
+    if (typeof value !== "string" || !value.trim()) continue;
+    for (const binding of bindings) {
+      const fileName = styleAssetName(binding.asset);
+      const source = nextFiles[fileName];
+      if (typeof source !== "string") continue;
+      const pattern = new RegExp(`(${escapeRegExp(binding.cssVariable)}\\s*:\\s*)([^;]+)(;)`, "g");
+      nextFiles[fileName] = source.replace(pattern, `$1${value}$3`);
+    }
+  }
+  return nextFiles;
+}
+
 export async function buildEngentusStyleArtifacts() {
   const bundle = await loadEngentusGeneratedCssBundle();
   const { authoredPlan, switchManifest, stylesheets, files } = bundle;
   const grammar = await loadEngentusCanonicalStyleGrammar();
+  const loweringSidecar = structuredClone(authoredPlan.lowering);
   const inventory = await buildEngentusPresentationInventory(authoredPlan);
   const ownership = verifyEngentusStyleOwnership({
     inventory,
@@ -2279,6 +3159,7 @@ export async function buildEngentusStyleArtifacts() {
     authoredPlan,
     switchManifest,
     grammar,
+    loweringSidecar,
     inventory,
     parity,
     ownership,

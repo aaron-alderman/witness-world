@@ -1,6 +1,11 @@
 import fs from "node:fs/promises";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
+import {
+  loadWcssAdapterExport,
+  normalizeWcssAuthoringAdapter,
+  requireWcssRouteParam,
+  resolveWcssAdapterIdentity,
+  validateWcssGeneratedFiles
+} from "../../src/runtime-wcss-adapter.js";
 
 export const bundleId = "bundle-wcss-runtime";
 
@@ -22,65 +27,6 @@ export const surfaces = Object.freeze([]);
 export const capabilities = Object.freeze([]);
 export const providers = Object.freeze([]);
 
-function isWithinRoot(filePath, rootPath) {
-  const relative = path.relative(rootPath, filePath);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
-function sharedLibRootFor(appRoot) {
-  return path.join(path.dirname(appRoot), "_lib");
-}
-
-function allowedRootsFor(appRoot) {
-  return [appRoot, sharedLibRootFor(appRoot)];
-}
-
-function assertWithinAllowedRoots(filePath, appRoot) {
-  if (allowedRootsFor(appRoot).some(root => isWithinRoot(filePath, root))) return;
-  throw new Error(`adapter module path outside allowed roots: ${filePath}`);
-}
-
-function requireRouteParam(route, paramName) {
-  const value = route?.params?.[paramName];
-  if (typeof value === "string" && value.trim()) return value.trim();
-  throw new Error(`wcss.stylesheet.read requires route param ${paramName}`);
-}
-
-function resolveAdapterModulePath(appRoot, adapterModule) {
-  const resolvedAppRoot = path.resolve(String(appRoot || ""));
-  if (!resolvedAppRoot) throw new Error("wcss.stylesheet.read requires appContext.appRoot");
-  if (path.isAbsolute(adapterModule)) {
-    throw new Error("adapterModule must be app-relative");
-  }
-  const resolved = path.resolve(resolvedAppRoot, adapterModule);
-  assertWithinAllowedRoots(resolved, resolvedAppRoot);
-  const ext = path.extname(resolved).toLowerCase();
-  if (ext !== ".js" && ext !== ".mjs") {
-    throw new Error("adapterModule must reference a .js or .mjs file");
-  }
-  return resolved;
-}
-
-async function loadAdapterExport({
-  appRoot,
-  adapterModule,
-  adapterExport,
-  requestSnapshot,
-  importModule = specifier => import(specifier),
-  fsModule = fs
-}) {
-  const resolvedModulePath = resolveAdapterModulePath(appRoot, adapterModule);
-  const stat = await fsModule.stat(resolvedModulePath);
-  const snapshotRevision = Number(requestSnapshot?.appRevision || 0);
-  const specifier = `${pathToFileURL(resolvedModulePath).href}?appRevision=${encodeURIComponent(String(snapshotRevision))}&mtime=${encodeURIComponent(String(stat.mtimeMs || 0))}`;
-  const imported = await importModule(specifier);
-  const exported = imported?.[adapterExport];
-  if (typeof exported !== "function") {
-    throw new Error(`adapter export ${adapterExport} is not a function in ${adapterModule}`);
-  }
-  return exported;
-}
-
 function memoizedBundle(cache, key, adapterKey, loadBundle) {
   let bundleMap = cache.get(key);
   if (!bundleMap) {
@@ -100,22 +46,6 @@ function memoizedBundle(cache, key, adapterKey, loadBundle) {
   return pending;
 }
 
-function validateGeneratedBundle(result) {
-  if (!result || typeof result !== "object" || Array.isArray(result)) {
-    throw new Error("WCSS adapter must return an object");
-  }
-  const files = result.files;
-  if (!files || typeof files !== "object" || Array.isArray(files)) {
-    throw new Error("WCSS adapter must return { files }");
-  }
-  for (const [name, content] of Object.entries(files)) {
-    if (typeof content !== "string") {
-      throw new Error(`WCSS adapter file ${name} must be a string`);
-    }
-  }
-  return { files };
-}
-
 export function createHandlers(deps = {}) {
   const {
     send,
@@ -127,25 +57,65 @@ export function createHandlers(deps = {}) {
   const bundleBySnapshotManager = new WeakMap();
   const bundleByAppContext = new WeakMap();
 
-  async function bundleForRequest({ route, appContext }) {
+  async function bundleForRequest({ route, appContext, requestUrl }) {
+    const previewSessionId = requestUrl?.searchParams?.get("wcssPreview")?.trim() || "";
     const appRoot = appContext?.appRoot ?? null;
     const requestSnapshot = appContext?.requestSnapshot
       ?? appContext?.appSnapshotManager?.getActiveSnapshot?.()
       ?? null;
-    const adapterModule = requireRouteParam(route, "adapterModule");
-    const adapterExport = requireRouteParam(route, "adapterExport");
-    const adapterKey = `${adapterModule}\u0000${adapterExport}`;
+    const adapterModule = requireWcssRouteParam(route, "adapterModule", "wcss.stylesheet.read");
+    const adapterExport = requireWcssRouteParam(route, "adapterExport", "wcss.stylesheet.read");
+    const identity = resolveWcssAdapterIdentity({
+      appRoot,
+      adapterModule,
+      adapterExport,
+      handlerName: "wcss.stylesheet.read"
+    });
+    const adapterKeyBase = identity.key;
+    const previewService = appContext?.providerRuntimes?.["wcss.previewSessions"] ?? null;
+    let previewSession = null;
+    if (previewSessionId) {
+      if (!previewService || typeof previewService.resolveSession !== "function") {
+        throw new Error("wcss preview session service unavailable");
+      }
+      previewSession = previewService.resolveSession({
+        previewSessionId,
+        appRoot: identity.appRoot,
+        adapterKey: adapterKeyBase,
+        requestSnapshot
+      });
+    }
+    const adapterKey = previewSession
+      ? `${adapterKeyBase}\u0000preview:${previewSession.previewSessionId}\u0000v:${previewSession.version}`
+      : adapterKeyBase;
     const loadBundle = async () => {
-      const adapterFactory = await loadAdapterExport({
-        appRoot,
+      const loaded = await loadWcssAdapterExport({
+        appRoot: identity.appRoot,
         adapterModule,
         adapterExport,
         requestSnapshot,
         importModule,
-        fsModule
+        fsModule,
+        handlerName: "wcss.stylesheet.read"
       });
-      return validateGeneratedBundle(await adapterFactory({
-        appRoot,
+      const adapterResult = await loaded.exported({
+        appRoot: identity.appRoot,
+        appContext,
+        requestSnapshot
+      });
+      const adapter = normalizeWcssAuthoringAdapter(adapterResult);
+      if (previewSession && adapter.kind !== "authoring") {
+        throw new Error("wcss preview requires an authoring-capable adapter");
+      }
+      if (adapter.kind === "stylesheets-only") {
+        return adapter;
+      }
+      const document = previewSession
+        ? adapter.applyPatch({ ops: previewSession.ops })
+        : structuredClone(adapter.document);
+      return validateWcssGeneratedFiles(await adapter.buildStylesheets({
+        document,
+        appRoot: identity.appRoot,
         appContext,
         requestSnapshot
       }));
@@ -157,15 +127,17 @@ export function createHandlers(deps = {}) {
     if (snapshotManager && typeof snapshotManager === "object") {
       return memoizedBundle(bundleBySnapshotManager, snapshotManager, adapterKey, loadBundle);
     }
-    const appContextKey = appContext && typeof appContext === "object" ? appContext : { appRoot, adapterKey };
+    const appContextKey = appContext && typeof appContext === "object"
+      ? appContext
+      : { appRoot: identity.appRoot, adapterKey };
     return memoizedBundle(bundleByAppContext, appContextKey, adapterKey, loadBundle);
   }
 
   return {
-    "wcss.stylesheet.read": async ({ res, route, appContext }) => {
+    "wcss.stylesheet.read": async ({ res, route, appContext, requestUrl }) => {
       try {
-        const asset = requireRouteParam(route, "asset");
-        const bundle = await bundleForRequest({ route, appContext });
+        const asset = requireWcssRouteParam(route, "asset", "wcss.stylesheet.read");
+        const bundle = await bundleForRequest({ route, appContext, requestUrl });
         const body = bundle.files?.[asset];
         if (typeof body !== "string") {
           if (typeof sendJson === "function") sendJson(res, 404, { error: "not found", asset });

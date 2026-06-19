@@ -11,6 +11,7 @@ children = ["bootstrap_backend_program_form", "bootstrap_backend_program_status"
 [[form]]
 id = "bootstrap_backend_program_form"
 domId = "backend-program-form"
+guidanceTarget = "backend-program-form"
 class = "surface-stack surface-mono"
 children = ["bootstrap_backend_program_grid_primary", "bootstrap_backend_program_grid_secondary", "bootstrap_backend_program_actions"]
 
@@ -88,6 +89,7 @@ text = ""
 [[form]]
 id = "bootstrap_backend_program_version_form"
 domId = "backend-program-version-form"
+guidanceTarget = "backend-program-version-form"
 class = "surface-stack surface-mono"
 children = ["bootstrap_backend_program_version_grid_primary", "bootstrap_backend_program_version_grid_secondary", "bootstrap_backend_program_version_grid_transition", "bootstrap_backend_program_version_actions"]
 
@@ -210,6 +212,7 @@ text = ""
 [[form]]
 id = "bootstrap_backend_step_form"
 domId = "backend-step-form"
+guidanceTarget = "backend-step-form"
 class = "surface-stack surface-mono"
 children = ["bootstrap_backend_step_grid_primary", "bootstrap_backend_step_grid_secondary", "bootstrap_backend_step_params_field", "bootstrap_backend_step_when_field", "bootstrap_backend_step_repeat_field", "bootstrap_backend_step_after_field", "bootstrap_backend_step_actions"]
 
@@ -292,7 +295,7 @@ text = "Params JSON"
 [[textarea]]
 id = "bootstrap_backend_step_params_input"
 name = "paramsJson"
-placeholder = "{\"handler\":\"todos.readModel\",\"method\":\"GET\",\"into\":\"todoResponse\"}"
+placeholder = "{\"projector\":\"demo.todosReadModel\",\"into\":\"todoResponse\"}"
 
 [[box]]
 id = "bootstrap_backend_step_when_field"

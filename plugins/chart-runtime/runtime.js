@@ -141,7 +141,16 @@ export function createHandlers(deps = {}) {
         if (sendJson) sendJson(res, 404, { error: `chart not found: ${chartName}` });
         return;
       }
-      let html = renderChartHtml({ title: chartName, spec, pageProps: spec.pageProps ?? {} });
+      let html = renderChartHtml({
+        title: chartName,
+        spec,
+        pageProps: {
+          ...(spec.pageProps ?? {}),
+          stylesheetQuery: {
+            wcssPreview: requestUrl?.searchParams?.get("wcssPreview")?.trim() || null
+          }
+        }
+      });
       if (appContext?.devMode && appContext?.appSnapshotManager) {
         html = injectDevClient(html, {
           appRevision: appContext.appSnapshotManager.getActiveSnapshot()?.appRevision ?? 0

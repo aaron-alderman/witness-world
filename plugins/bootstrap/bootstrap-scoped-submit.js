@@ -5,14 +5,14 @@ import {
 export function renderBootstrapScopedSubmitFactory() {
   return String.raw`
     const bootstrapScopedSubmitContractsByFamily = ${JSON.stringify(bootstrapScopedSubmitContractsByFamily)};
-    const contractForFamily = ${contractForFamily.toString()};
+    const bootstrapScopedContractForFamily = ${bootstrapScopedContractForFamily.toString()};
     const buildBootstrapScopedSubmitRequest = ${buildBootstrapScopedSubmitRequest.toString()};
     const runBootstrapScopedSubmit = ${runBootstrapScopedSubmit.toString()};
     const bindBootstrapScopedSubmit = ${bindBootstrapScopedSubmit.toString()};
   `;
 }
 
-function contractForFamily(family = "", contractsByFamily = bootstrapScopedSubmitContractsByFamily) {
+function bootstrapScopedContractForFamily(family = "", contractsByFamily = bootstrapScopedSubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   return key ? (contractsByFamily[key] || null) : null;
 }
@@ -21,7 +21,7 @@ export function buildBootstrapScopedSubmitRequest({
   detail = {},
   contractsByFamily = bootstrapScopedSubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, contractsByFamily);
+  const contract = bootstrapScopedContractForFamily(detail.family, contractsByFamily);
   if (!contract) return null;
   const body = Object.fromEntries(
     (contract.bodyFields || []).map(field => [field, detail[field] || ""])

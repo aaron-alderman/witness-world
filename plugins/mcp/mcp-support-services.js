@@ -66,6 +66,11 @@ export function createMcpBundleSupportServices({
       case "platform.proposal":
       case "platform.changeSet":
       case "platform.test":
+      case "docs.list":
+      case "docs.read":
+      case "docs.search":
+      case "docs.pack":
+      case "platform.folder":
         return capabilities.has("platform.self");
       default:
         return true;

@@ -349,6 +349,7 @@ function validateDesireNodeBody(kind, body, path) {
       assertPlainObject(body.policyOutcomes ?? {}, `${path}.policyOutcomes`);
       return;
     case "surface":
+      assertNullableString(body.context, `${path}.context`);
       assertNullableString(body.surfaceKind, `${path}.surfaceKind`);
       assertNullableString(body.className, `${path}.className`);
       assertArray(body.children ?? [], `${path}.children`);

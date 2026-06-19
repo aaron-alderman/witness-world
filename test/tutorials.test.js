@@ -145,6 +145,14 @@ test("disabling the frontend context disables both app and world tutorial surfac
   assert.equal(isTutorialContextDisabled(tutorial, bootstrap, tutorialStepSurfaceContext(tutorial, "runner:create")?.id), false);
 });
 
+test("tutorial scope catalog includes bootstrap operator anchors beyond the Todo tutorial steps", () => {
+  const tutorial = todoTutorialDefinition();
+
+  assert.equal(tutorialScopeInfo(tutorial, "section:bootstrap:capability-form")?.target, "capability-form");
+  assert.equal(tutorialScopeInfo(tutorial, "section:bootstrap:mcp-server-form")?.target, "mcp-server-form");
+  assert.equal(tutorialScopeInfo(tutorial, "widget:bootstrap_identity_id_input")?.target, "identity-id");
+});
+
 test("tutorial scope catalog includes authored non-step anchors for shipped app and world surfaces", () => {
   const tutorial = todoTutorialDefinition();
 

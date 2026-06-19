@@ -133,6 +133,64 @@ test("runtime-surface-page emits generic fallback ids for interactive surfaces w
   assert.doesNotMatch(html, FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN);
 });
 
+test("runtime-surface-page projects authored projection bindings during the initial page.surface render", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineType",
+      body: { id: "StatusText", role: "state", valueType: "text", initial: "signedIn" }
+    },
+    {
+      process: "desire.defineProjection",
+      body: {
+        id: "StatusSummary",
+        projectionKind: "format",
+        source: "StatusText",
+        props: { prefix: "Status: " }
+      }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "ShellNavigation",
+        state: ["StatusText"],
+        handles: [],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "ShellNavigation",
+        children: ["StatusReadout"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "StatusReadout",
+        surfaceKind: "text",
+        props: {
+          domId: "status-readout",
+          text: "Pending"
+        },
+        bindings: [
+          { prop: "text", source: { kind: "projection", projection: "StatusSummary" } }
+        ]
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/status"
+  });
+
+  assert.match(html, /<div id="status-readout">Status: signedIn<\/div>/);
+  assert.match(html, /"id":"StatusSummary"/);
+  assert.match(html, /"projection":"StatusSummary"/);
+});
+
 test("runtime-surface-page projects authored input tags with normal form attributes", () => {
   const html = renderSurfacePage(fakeWorld([
     {
@@ -1060,5 +1118,5 @@ test("runtime-surface-page reuses cached world-derived surface data across repea
   assert.match(firstHtml, /<button id="primary-action">Sign in<\/button>/);
   assert.equal(secondHtml, firstHtml);
   assert.equal(readsAfterFirstRender > 0, true);
-  assert.equal(witnessReads <= readsAfterFirstRender + 3, true);
+  assert.equal(witnessReads <= readsAfterFirstRender + 4, true);
 });

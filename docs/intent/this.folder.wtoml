@@ -1,0 +1,384 @@
+# this.folder.wtoml
+#
+# Folder-level metadata for docs/intent/
+# 
+# Philosophy:
+# - Explicit, authored knowledge about the folder's structure and meaning.
+# - Tolerates staleness (meta can lag the filesystem).
+# - Append-only friendly: new relations, observations, or human notes can be added.
+# - Continuity: when a child disappears, the relation becomes a "stale contains" that
+#   ContextHub / reapers / tests can surface as alignment debt rather than breaking.
+# - Multi-source: hand edits + automation + server touches + tests can all contribute.
+#
+# Lowering:
+# This file is WTOML. It produces entity + relation forms that flow into
+# the platform model, DESIRE, witnesses, ContextHub, and MCP surfaces.
+#
+# Id conventions (align with platform-model and knowledge-relations):
+#   folder:docs/intent
+#   doc:docs/intent/...
+#   wtoml:docs/intent/...
+#   intent:...
+#   code:src/...
+
+[folder]
+id = "folder:docs/intent"
+path = "docs/intent"
+label = "Platform Intent Registry"
+summary = "Canonical tree of the platform's core desires/intents, their documentation, and links to realizing code."
+facet = ["system", "rationale", "product", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+lastHumanEdit = "2026-06-19"   # human can bump or leave; automation fills scannedAt
+
+# --- Structural containment (auto-generatable base) ---
+# These are the direct children we know about at authoring time.
+# A generator script can refresh this section.
+# "contains" relations are the primary structural truth here.
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/PRIMARY-INTENT.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/02-witness-substrate-projections.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/03-semantic-authoring-kernel.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/04-composition-primitives-authoring.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/06-identity-context-authority-governance.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/08-product-experience-guidance-academy.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/09-surfaces-editing-grammar.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/10-shells-persistence-ecosystem.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/12-backend-external-integration-seams.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/CATEGORIZED-LIST.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/INTENT-TREE.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/README.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "wtoml:docs/intent/knowledge-relations.wtoml"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "file:docs/intent/this.folder.wtoml"
+
+# --- Knowledge & intent linkage (hand-maintained + high value) ---
+# These connect the folder to the modelled intent tree and the dedicated
+# relations file. These are the parts that benefit most from human care
+# and are more stable than raw file lists.
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:primary"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:01-foundational-philosophy-ontology"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:02-witness-substrate-projections"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:03-semantic-authoring-kernel"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:04-composition-primitives-authoring"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:05-capabilities-plugins-extensibility"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:06-identity-context-authority-governance"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:07-runtime-execution-processes-inspection"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:08-product-experience-guidance-academy"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:09-surfaces-editing-grammar"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:10-shells-persistence-ecosystem"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:11-platform-self-modeling-verification-knowledge"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "models"
+to = "intent:12-backend-external-integration-seams"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "detailedBy"
+to = "wtoml:docs/intent/knowledge-relations.wtoml"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "describedBy"
+to = "doc:docs/intent/INTENT-TREE.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "describedBy"
+to = "doc:docs/intent/CATEGORIZED-LIST.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "describedBy"
+to = "doc:docs/intent/README.md"
+
+# --- Cross references (examples of hand-added value) ---
+# These point outside the folder to related platform concepts / code.
+# Humans and automation (e.g. static analysis, tests) can append more.
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "references"
+to = "doc:docs/SYSTEM.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "references"
+to = "doc:docs/CAPABILITIES.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "references"
+to = "doc:docs/EXPERIENCE.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "references"
+to = "folder:src/desire"          # the kernel that the intents describe
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "references"
+to = "folder:plugins/platform"    # the model that ingests the relations
+
+# --- Observations / server touches (append-only zone) ---
+# The running system (or a background scanner) can append facts here
+# without disturbing human/automation content above.
+# Example of what a reaper or server might add on load:
+
+# [[relation]]
+# from = "folder:docs/intent"
+# rel = "lastScanned"
+# to = "observation:2026-06-19T12:00:00Z"
+# meta = { childrenFound = 17, missing = [], added = [] }
+
+# --- Notes on lifecycle (human guidance) ---
+#
+# - Auto-generation target: the "contains" block + basic folder entity.
+#   A script can rewrite only that section and preserve everything else.
+#
+# - Hand-maintained sections: the "models", "detailedBy", "references",
+#   and any custom facets/descriptions. These are the valuable, slower-changing part.
+#
+# - Staleness handling: if a contained doc disappears, the "contains" relation
+#   stays until a reaper or ContextHub marks it as alignmentDebt.
+#   The relation itself is the witness of what used to be claimed.
+#
+# - Append-only meta: prefer adding new [[relation]] blocks with new
+#   observations rather than mutating old ones.
+#
+# - Reaping: a future reaper process can find this.folder.wtoml files whose
+#   path no longer exists, or whose contains targets are long-unreferenced,
+#   and either archive them or emit a cleanup proposal.
+#
+# - Server interaction: the main platform server (or platform plugin) can
+#   read these files at startup / on change and merge the entities/relations
+#   into the live model, just like it does for knowledge-relations.wtoml today.
+#
+# - Tests: tests can assert presence of certain high-value relations
+#   (e.g. "the intent folder must model the primary intent and reference
+#    the knowledge-relations file").
+#
+# This file is intentionally tolerant of divergence because the platform's
+# core truth (witness log + actual files + intent entities) is what matters.
+# The meta is a helpful, repairable projection.
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/02-witness-substrate-projections.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/03-semantic-authoring-kernel.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/04-composition-primitives-authoring.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/06-identity-context-authority-governance.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/08-product-experience-guidance-academy.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/09-surfaces-editing-grammar.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/10-shells-persistence-ecosystem.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/12-backend-external-integration-seams.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/CATEGORIZED-LIST.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/INTENT-TREE.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "wtoml:docs/intent/knowledge-relations.wtoml"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/PRIMARY-INTENT.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "doc:docs/intent/README.md"
+
+[[relation]]
+from = "folder:docs/intent"
+rel = "contains"
+to = "wtoml:docs/intent/this.folder.wtoml"
+
+# --- End of auto-generated structural section ---

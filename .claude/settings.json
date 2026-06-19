@@ -57,7 +57,8 @@
       "Bash(node --test test/)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
       "Bash(node --test test/desire-*.test.js)",
-      "Bash(xargs grep -ln \"serializeRvm\\\\|serializeDesire\\\\|toRvm\\\\|round\")"
+      "Bash(xargs grep -ln \"serializeRvm\\\\|serializeDesire\\\\|toRvm\\\\|round\")",
+      "Bash(node --test test/backend-seam-contract.test.js)"
     ]
   }
 }

@@ -63,6 +63,7 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
     "pipeline.platform-config.access.session.assume",
     "pipeline.platform-config.access.session.direct",
     "pipeline.script.binding.save",
+    "pipeline.script.schedule.save",
     "pipeline.script.run"
   ]);
   assert.deepEqual(handlerCatalog.pageHandlers, []);
@@ -89,6 +90,12 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
   assert.equal(
     runtimeModule.providers.some(provider =>
       provider?.kind === "jobHandlerFactory" && provider?.id === "pipeline.jobs"
+    ),
+    true
+  );
+  assert.equal(
+    runtimeModule.providers.some(provider =>
+      provider?.kind === "providerRuntimeFactory" && provider?.id === "pipeline.orchestrator"
     ),
     true
   );
@@ -148,7 +155,7 @@ test("pipeline runtime session-open response hook hydrates platform-config route
   assert.equal(hydrated.PlatformConfigAuthorityEffectiveActor, "aaron");
 });
 
-test("pipeline script handlers save bindings and enqueue manual runs", async () => withRegisteredPluginProjectors([runtimeModule.providers, sqlProviders], async () => {
+test("pipeline script handlers save bindings, schedules, and create parent runs", async () => withRegisteredPluginProjectors([runtimeModule.providers, sqlProviders], async () => {
   const world = createWorld();
   const authoredDesire = await pipelineAuthoredDesireDoc();
   world.emit({
@@ -211,6 +218,9 @@ test("pipeline script handlers save bindings and enqueue manual runs", async () 
     },
     jobs: {
       enqueue: () => ({ ok: true, job: { id: "job_pipeline_1" } })
+    },
+    providerRuntimes: {
+      "pipeline.orchestrator": { tick: async () => {} }
     }
   };
 
@@ -239,8 +249,28 @@ test("pipeline script handlers save bindings and enqueue manual runs", async () 
 
   readBody = {
     syncId: "EngentusImuSensorIngest",
+    enabled: true,
+    intervalMs: 30000,
+    rowLimit: 250,
+    maxBatches: 6
+  };
+  await handlers["pipeline.script.schedule.save"]({
+    req: {},
+    res: {},
+    requestActor: "aaron",
+    appContext
+  });
+  assert.equal(json[2].status, 200);
+  assert.equal(
+    world.project(pipelineModuleProjectors.pipelineScheduleIndex).byRunnerSync["engentus_server:EngentusImuSensorIngest"].intervalMs,
+    30000
+  );
+
+  readBody = {
+    syncId: "EngentusImuSensorIngest",
     mode: "dry_run",
-    rowLimit: 250
+    rowLimit: 250,
+    maxBatches: 4
   };
   await handlers["pipeline.script.run"]({
     req: {},
@@ -248,9 +278,12 @@ test("pipeline script handlers save bindings and enqueue manual runs", async () 
     requestActor: "aaron",
     appContext
   });
-  assert.equal(json[2].status, 200);
-  assert.equal(json[2].body.PlatformConfigPipelineRunSelectedId.startsWith("pipeline_run_"), true);
-  assert.match(json[2].body.message, /Queued dry run/);
+  assert.equal(json[3].status, 200);
+  assert.match(json[3].body.message, /Queued dry run/);
+  const createdRun = world.project(pipelineModuleProjectors.pipelineRuns).find(row => row.runKind === "parent");
+  assert.ok(createdRun);
+  assert.equal(createdRun.runKind, "parent");
+  assert.equal(createdRun.maxBatches, 4);
   assert.deepEqual(world.project(pipelineModuleProjectors.pipelineRuns).map(row => row.mode), ["dry_run"]);
 }));
 
@@ -326,7 +359,7 @@ test("pipeline job handler executes dry runs and execute runs through db.sql sea
       }
     },
     jobs: {
-      enqueue: () => ({ ok: true, job: { id: `job_${json.length + 1}` } })
+      enqueue: payload => ({ ok: true, job: { id: `job_${json.length + writes.length + 1}` }, payload })
     }
   };
 
@@ -334,39 +367,71 @@ test("pipeline job handler executes dry runs and execute runs through db.sql sea
   readBody = { syncId: "EngentusImuSensorIngest", bindingName: "warehouse_pg", datasourceId: "pg_target" };
   await handlers["pipeline.script.binding.save"]({ req: {}, res: {}, requestActor: "aaron", appContext });
 
-  readBody = { syncId: "EngentusImuSensorIngest", mode: "dry_run", rowLimit: 100 };
-  await handlers["pipeline.script.run"]({ req: {}, res: {}, requestActor: "aaron", appContext });
-  assert.equal(json.at(-1).status, 200);
-  const dryRunId = world.project(pipelineModuleProjectors.pipelineRuns)[0].id;
+  const dryRunParent = runtimeModule.createPipelineParentRunForSync({
+    world,
+    project: projector => world.project(projector),
+    actor: "aaron",
+    appContext,
+    serverRunnerId: "engentus_server",
+    syncId: "EngentusImuSensorIngest",
+    triggerKind: "manual",
+    mode: "dry_run",
+    rowLimit: 100,
+    maxBatches: 2
+  });
+  assert.equal(dryRunParent.ok, true);
+  runtimeModule.coordinatePipelineRuntimeStep({
+    world,
+    project: projector => world.project(projector),
+    serverRunnerId: "engentus_server",
+    appContext
+  });
+  const dryRunChild = world.project(pipelineModuleProjectors.pipelineRuns)
+    .find(row => row.parentRunId === dryRunParent.runId);
   const jobHandlers = runtimeModule.providers.find(provider => provider?.id === "pipeline.jobs")?.factory({
     world,
     project: projector => world.project(projector),
     isoAt: value => new Date(value).toISOString()
   });
-  await jobHandlers["pipeline.run.execute"]({
+  await jobHandlers["pipeline.run.child.execute"]({
     actor: "aaron",
     appContext,
-    payload: { runId: dryRunId }
+    payload: { runId: dryRunChild.id }
   });
   assert.equal(writes.length, 0);
   assert.equal(world.project(pipelineModuleProjectors.pipelineCheckpoints).length, 0);
-  assert.equal(world.project(pipelineModuleProjectors.pipelineRunIndex).byId[dryRunId].status, "succeeded");
-  assert.equal(world.project(pipelineModuleProjectors.pipelineRunLogIndex).byRunId[dryRunId].some(row => row.process === "pipeline.run.write.simulated"), true);
+  assert.equal(world.project(pipelineModuleProjectors.pipelineRunIndex).byId[dryRunChild.id].status, "succeeded");
+  assert.equal(world.project(pipelineModuleProjectors.pipelineRunLogIndex).byRunId[dryRunChild.id].some(row => row.process === "pipeline.run.write.simulated"), true);
 
-  readBody = { syncId: "EngentusImuSensorIngest", mode: "execute", rowLimit: 100 };
-  await handlers["pipeline.script.run"]({ req: {}, res: {}, requestActor: "aaron", appContext });
-  assert.equal(json.at(-1).status, 200);
-  const executeRunId = world.project(pipelineModuleProjectors.pipelineRuns)[0].id === dryRunId
-    ? world.project(pipelineModuleProjectors.pipelineRuns)[1].id
-    : world.project(pipelineModuleProjectors.pipelineRuns)[0].id;
-  await jobHandlers["pipeline.run.execute"]({
+  const executeParent = runtimeModule.createPipelineParentRunForSync({
+    world,
+    project: projector => world.project(projector),
     actor: "aaron",
     appContext,
-    payload: { runId: executeRunId }
+    serverRunnerId: "engentus_server",
+    syncId: "EngentusImuSensorIngest",
+    triggerKind: "manual",
+    mode: "execute",
+    rowLimit: 100,
+    maxBatches: 2
+  });
+  assert.equal(executeParent.ok, true);
+  runtimeModule.coordinatePipelineRuntimeStep({
+    world,
+    project: projector => world.project(projector),
+    serverRunnerId: "engentus_server",
+    appContext
+  });
+  const executeChild = world.project(pipelineModuleProjectors.pipelineRuns)
+    .find(row => row.parentRunId === executeParent.runId);
+  await jobHandlers["pipeline.run.child.execute"]({
+    actor: "aaron",
+    appContext,
+    payload: { runId: executeChild.id }
   });
   assert.equal(writes.length, 2);
   assert.equal(world.project(pipelineModuleProjectors.pipelineCheckpointIndex).byRunnerSync["engentus_server:EngentusImuSensorIngest"].cursorValue, 1700000000000);
-  assert.equal(world.project(pipelineModuleProjectors.pipelineRunIndex).byId[executeRunId].checkpointCommitted, true);
+  assert.equal(world.project(pipelineModuleProjectors.pipelineRunIndex).byId[executeChild.id].checkpointCommitted, true);
 }));
 
 test("pipeline platform-config snapshot presents human-readable table content", async () => {

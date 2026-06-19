@@ -58,11 +58,21 @@ family = "route"
 url = "/api/routes"
 checkboxes = "boolean"
 omitBlankStrings = true
+dropFields = ["routeStateProcess", "routeStateProcessRef", "routeStateState", "routeStateStateRef"]
 
 [[bootstrapAppAuthoringSubmitField]]
 family = "route"
 name = "liveProjection"
 strategy = "boolean"
+
+[[bootstrapAppAuthoringSubmitField]]
+family = "route"
+name = "routeState"
+strategy = "routeStateDescriptor"
+processSource = "routeStateProcess"
+processRefSource = "routeStateProcessRef"
+stateSource = "routeStateState"
+stateRefSource = "routeStateStateRef"
 
 [[bootstrapAppAuthoringSubmit]]
 family = "serve"

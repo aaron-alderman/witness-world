@@ -10,5 +10,14 @@
   "activatesBundles": [
     "bundle-wcss-runtime"
   ],
-  "contributes": {}
+  "contributes": {
+    "renderers": [
+      {
+        "id": "renderer.wcss-browser",
+        "kind": "stylesheet-runtime",
+        "documentModel": "wcss",
+        "output": "text/css"
+      }
+    ]
+  }
 }

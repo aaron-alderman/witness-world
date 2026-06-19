@@ -86,6 +86,8 @@ export function createBootstrapGuidanceInteractionRuntime({
     if (!field) return;
     if (field.type === "checkbox") field.checked = value === true;
     else field.value = value == null ? "" : String(value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
   };
 
   const fillForm = (target, payload) => {

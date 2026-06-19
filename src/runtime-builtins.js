@@ -49,7 +49,7 @@ const VALUE_TYPES = [
   { id: "backendProgram.version", label: "Backend Program Version", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "backendProgram.label", label: "Backend Program Label", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "backendProgram.transitionStrategy", label: "Backend Program Transition Strategy", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["compatible", "migrate", "block", "fork"] } },
-  { id: "backendProgram.op", label: "Backend Program Operation", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["request.readJson", "state.assign", "handler.invoke", "response.json", "response.error", "run"] } },
+  { id: "backendProgram.op", label: "Backend Program Operation", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["request.readJson", "state.assign", "handler.invoke", "process.request", "project.read", "witness.emit", "response.json", "response.error", "run"] } },
   { id: "route.id", label: "Route Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "route.path", label: "Route Path", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "route.serves", label: "Route Serves", compatibleWith: ["textual"], editor: { control: "text" } },
@@ -193,7 +193,9 @@ const PROCESS_SPECS = [
     process: "stewardship.grant",
     inputs: [
       { name: "steward", accepts: "stewardship.actor", required: true },
-      { name: "target", accepts: "stewardship.target", required: true },
+      { name: "target", accepts: "stewardship.target", required: false },
+      { name: "targetRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "targetKind", accepts: "stewardship.targetKind", required: false }
     ],
     outputs: [{ name: "target", accepts: "stewardship.target", required: true }]
@@ -203,7 +205,9 @@ const PROCESS_SPECS = [
     process: "stewardship.revoke",
     inputs: [
       { name: "steward", accepts: "stewardship.actor", required: true },
-      { name: "target", accepts: "stewardship.target", required: true },
+      { name: "target", accepts: "stewardship.target", required: false },
+      { name: "targetRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "targetKind", accepts: "stewardship.targetKind", required: false }
     ],
     outputs: [{ name: "target", accepts: "stewardship.target", required: true }]
@@ -216,6 +220,8 @@ const PROCESS_SPECS = [
       { name: "targetProcess", accepts: "proposal.process", required: true },
       { name: "targetKind", accepts: "proposal.kind", required: true },
       { name: "targetId", accepts: "stewardship.target", required: false },
+      { name: "targetIdRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "bodyJson", accepts: "json.text", required: true },
       { name: "reason", accepts: "widget.text", required: false }
     ],
@@ -237,6 +243,28 @@ const PROCESS_SPECS = [
       { name: "reason", accepts: "widget.text", required: false }
     ],
     outputs: [{ name: "id", accepts: "proposal.id", required: true }]
+  },
+  {
+    id: "runtime_plugin_install_spec",
+    process: "runtimePlugin.install",
+    inputs: [
+      { name: "serverRunner", accepts: "serverRunner.id", required: false },
+      { name: "serverRunnerRef", accepts: "context.name", required: false },
+      { name: "plugin", accepts: "widget.text", required: true },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "serverRunner", accepts: "serverRunner.id", required: true }]
+  },
+  {
+    id: "runtime_plugin_remove_spec",
+    process: "runtimePlugin.remove",
+    inputs: [
+      { name: "serverRunner", accepts: "serverRunner.id", required: false },
+      { name: "serverRunnerRef", accepts: "context.name", required: false },
+      { name: "plugin", accepts: "widget.text", required: true },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "serverRunner", accepts: "serverRunner.id", required: true }]
   },
   {
     id: "frontend_program_define_spec",
@@ -331,7 +359,10 @@ const PROCESS_SPECS = [
       { name: "handler", accepts: "route.handler", required: true },
       { name: "backendProgramSoul", accepts: "route.backendProgramSoul", required: false },
       { name: "backendProgramSoulRef", accepts: "context.name", required: false },
+      { name: "frontendProgramRef", accepts: "context.name", required: false },
       { name: "rootWidgetRef", accepts: "context.name", required: false },
+      { name: "rootSurfaceRef", accepts: "context.name", required: false },
+      { name: "defaultRootWidgetRef", accepts: "context.name", required: false },
       { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "route.id", required: true }]
@@ -439,6 +470,7 @@ const PROCESS_SPECS = [
       { name: "configJson", accepts: "json.text", required: false },
       { name: "internalsJson", accepts: "json.text", required: false },
       { name: "authorityJson", accepts: "json.text", required: false },
+      { name: "compatibilityJson", accepts: "json.text", required: false },
       { name: "placementJson", accepts: "json.text", required: false },
       { name: "context", accepts: "context.id", required: false }
     ],
@@ -449,7 +481,9 @@ const PROCESS_SPECS = [
     process: "capability.install",
     inputs: [
       { name: "capability", accepts: "capability.id", required: true },
-      { name: "target", accepts: "capability.target", required: true },
+      { name: "target", accepts: "capability.target", required: false },
+      { name: "targetRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "targetKind", accepts: "capability.targetKind", required: true }
     ],
     outputs: [{ name: "capability", accepts: "capability.id", required: true }]
@@ -459,10 +493,40 @@ const PROCESS_SPECS = [
     process: "capability.remove",
     inputs: [
       { name: "capability", accepts: "capability.id", required: true },
-      { name: "target", accepts: "capability.target", required: true },
+      { name: "target", accepts: "capability.target", required: false },
+      { name: "targetRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "targetKind", accepts: "capability.targetKind", required: true }
     ],
     outputs: [{ name: "capability", accepts: "capability.id", required: true }]
+  },
+  {
+    id: "capability_update_spec",
+    process: "capability.update",
+    inputs: [
+      { name: "id", accepts: "capability.id", required: true },
+      { name: "label", accepts: "capability.label", required: false },
+      { name: "version", accepts: "capability.version", required: false },
+      { name: "provenanceJson", accepts: "json.text", required: false },
+      { name: "dependsOnJson", accepts: "json.text", required: false },
+      { name: "publicApiJson", accepts: "json.text", required: false },
+      { name: "configJson", accepts: "json.text", required: false },
+      { name: "internalsJson", accepts: "json.text", required: false },
+      { name: "authorityJson", accepts: "json.text", required: false },
+      { name: "compatibilityJson", accepts: "json.text", required: false },
+      { name: "placementJson", accepts: "json.text", required: false },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "capability.id", required: true }]
+  },
+  {
+    id: "capability_rollback_spec",
+    process: "capability.rollback",
+    inputs: [
+      { name: "id", accepts: "capability.id", required: true },
+      { name: "version", accepts: "capability.version", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "capability.id", required: true }]
   }
 ];
 
@@ -489,6 +553,7 @@ const BUILTIN_CAPABILITIES = [
       failure: ["server.start.failed"],
       externalRefs: ["secretRef"]
     },
+    config: [],
     authority: [{ name: "secret.access", accepts: "authority.id", required: true }],
     placement: ["serverRunner"]
   },
@@ -515,6 +580,26 @@ export const CORE_RUNTIME_CAPABILITY_IDS = Object.freeze([
   "runtime.config",
   "dom.render",
   "http.fetch"
+]);
+
+// Canonical list of shipped backend capability seams. Every id here must carry the
+// full seam contract (providerAdapters, witnessContract with a failure phase, authority,
+// config). The Stage C0 guard (test/backend-seam-contract.test.js) freezes this: a new
+// seam that ships provider+failure metadata must be added here, and every id here must
+// keep its contract fields, or the test fails.
+export const BACKEND_SEAM_CAPABILITY_IDS = Object.freeze([
+  "runtime.config",
+  "fs.blob",
+  "fs.stream",
+  "upload.asset",
+  "db.sql",
+  "jobs.queue",
+  "search.index",
+  "auth.oauth",
+  "http.outbound",
+  "webhook.inbound",
+  "notify.email",
+  "notify.sms"
 ]);
 
 const BUILTIN_CAPABILITY_BY_ID = new Map(BUILTIN_CAPABILITIES.map(capability => [capability.id, capability]));

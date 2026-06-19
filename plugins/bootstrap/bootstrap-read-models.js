@@ -1,5 +1,18 @@
 import { authorityForActor } from "../../src/kernel.js";
-import { moduleProjectors } from "../../src/modules.js";
+import { buildCompatibilityBridgeLedger } from "../../src/compatibility-bridges.js";
+import {
+  legacyCapabilityCompatibilityModeFromProject,
+  previewLegacyCapabilityMigrationFromProject
+} from "../../src/capability-legacy-migration.js";
+import {
+  packageApplyPreviewRowsFromProject,
+  packageCoexistenceFromProject,
+  packageConvergenceFromProject
+} from "../../src/package-authorship-world.js";
+import {
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
+  moduleProjectors
+} from "../../src/modules.js";
 import {
   widgetDefinitions,
   widgetVersions,
@@ -23,6 +36,11 @@ import {
   createRuntimeAuthoringPolicy,
   defaultRuntimeAuthoringMode
 } from "../../src/runtime-authoring-policy.js";
+import {
+  buildGovernanceRouteInventory,
+  proposalTargetGovernanceRows,
+  proposalTargetProcessIds
+} from "../../src/runtime-governance.js";
 
 export function createBootstrapReadModels({
   world,
@@ -147,12 +165,35 @@ export function createBootstrapReadModels({
     const contextExports = project(moduleProjectors.contextExports);
     const contextImports = project(moduleProjectors.contextImports);
     const contextScopes = project(moduleProjectors.contextScopes);
+    const contextualTargets = project(moduleProjectors.contextualTargets);
+    const contextNameResolutions = project(moduleProjectors.contextNameResolutions);
+    const contextNameConflicts = project(moduleProjectors.contextNameConflicts);
     const perspectives = project(moduleProjectors.perspectives);
     const stewardships = project(moduleProjectors.stewardships);
     const proposals = project(moduleProjectors.proposals);
+    const packages = project(moduleProjectors.packages);
+    const packageRevisions = project(moduleProjectors.packageRevisions);
+    const packagePatches = project(moduleProjectors.packagePatches);
+    const packageNamespaces = project(moduleProjectors.packageNamespaces);
+    const packageDependencies = project(moduleProjectors.packageDependencies);
+    const packageTransformers = project(moduleProjectors.packageTransformers);
+    const packageCoexistence = packageCoexistenceFromProject(project);
+    const packageConvergence = packageConvergenceFromProject(project);
+    const packageApplyPreviews = packageApplyPreviewRowsFromProject(project);
     const capabilities = project(moduleProjectors.capabilities);
     const capabilityCatalog = project(moduleProjectors.capabilityCatalog);
     const capabilityInstalls = project(moduleProjectors.capabilityInstalls);
+    const capabilityRevisionHistory = project(moduleProjectors.capabilityRevisionHistory);
+    const legacyCapabilityCompatibilityMode = legacyCapabilityCompatibilityModeFromProject(project);
+    const legacyCapabilityMigration = previewLegacyCapabilityMigrationFromProject(project);
+    const compatibilityBridges = buildCompatibilityBridgeLedger({
+      capabilities,
+      capabilityInstalls
+    });
+    const governanceRoutes = runtimeBundleSummary?.governanceRoutes
+      ?? buildGovernanceRouteInventory(runtimeBundleSummary?.routes ?? []);
+    const proposalTargetGovernance = runtimeBundleSummary?.proposalTargetGovernance
+      ?? proposalTargetGovernanceRows();
     const runtimePluginInstalls = project(moduleProjectors.runtimePluginInstalls);
     const mcpServers = project(moduleProjectors.mcpServers);
     const mcpToolInstalls = project(moduleProjectors.mcpToolInstalls);
@@ -200,14 +241,33 @@ export function createBootstrapReadModels({
       contextExports,
       contextImports,
       contextScopes,
+      contextualTargets,
+      contextNameResolutions,
+      contextNameConflicts,
+      canonicalIdPolicyClasses: [...CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES],
       perspectives,
       stewardships,
       authority: authorityForActor(world, requestActor),
       proposals,
+      packages,
+      packageRevisions,
+      packagePatches,
+      packageNamespaces,
+      packageDependencies,
+      packageTransformers,
+      packageCoexistence,
+      packageConvergence,
+      packageApplyPreviews,
       capabilities,
       capabilityCatalog: capabilityPluginSources.capabilityCatalog,
       capabilityPackageSources: capabilityPluginSources.capabilityPackageSources,
       capabilityInstalls,
+      capabilityRevisionHistory,
+      legacyCapabilityCompatibilityMode,
+      legacyCapabilityMigration,
+      compatibilityBridges,
+      governanceRoutes,
+      proposalTargetGovernance,
       runtimePluginInstalls,
       runtimePluginAvailability,
       authoringPolicy,
@@ -238,6 +298,7 @@ export function createBootstrapReadModels({
 
   const bootstrapModel = async (appContext = null) => {
     const authored = await bootstrapState(null, appContext);
+    const proposalTargetGovernance = proposalTargetGovernanceRows({ bootstrapSelectableOnly: true });
     const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
     const appReady = Boolean(homeRoute && homeRoute.params?.rootWidget);
     const typeModel = world.project(typeModelProjection);
@@ -282,6 +343,12 @@ export function createBootstrapReadModels({
         ...(authored.identities || []),
         ...(authored.contexts || []),
         ...(authored.perspectives || []),
+        ...(authored.packages || []),
+        ...(authored.packageRevisions || []),
+        ...(authored.packagePatches || []),
+        ...(authored.packageNamespaces || []),
+        ...(authored.packageDependencies || []),
+        ...(authored.packageTransformers || []),
         ...(authored.widgets || []),
         ...(authored.frontendPrograms || []),
         ...(authored.backendPrograms || []),
@@ -292,62 +359,8 @@ export function createBootstrapReadModels({
         ...(authored.capabilities || [])
       ],
       attachableContexts: authored.contexts || [],
-      proposalTargetProcesses: [
-        "identity.update",
-        "todo.create",
-        "todo.update",
-        "todo.delete",
-        "canvas.place",
-        "canvas.move",
-        "canvas.moveMany",
-        "canvas.style",
-        "canvas.remove",
-        "canvas.removeMany",
-        "canvas.duplicate",
-        "canvas.camera",
-        "canvas.grid",
-        "canvas.batch",
-        "canvas.createThing",
-        "canvas.perspective.create",
-        "canvas.thing.setTitle",
-        "canvas.relate",
-        "canvas.unrelate",
-        "asset.attach",
-        "asset.detach",
-        "context.define",
-        "context.bind",
-        "context.unbind",
-        "context.export",
-        "context.unexport",
-        "context.import",
-        "context.unimport",
-        "perspective.define",
-        "stewardship.grant",
-        "stewardship.revoke",
-        "widget.define",
-        "widget.update",
-        "widgetVersion.activate",
-        "widgetVersion.rollback",
-        "edenVersions.publish",
-        "frontendProgram.define",
-        "frontendStep.define",
-        "backendProgram.define",
-        "backendProgramVersion.define",
-        "backendStep.define",
-        "backendProgramVersion.activate",
-        "backendProgramVersion.rollback",
-        "route.define",
-        "serve.define",
-        "serverRunner.define",
-        "mcpServer.define",
-        "capability.define",
-        "capability.install",
-        "capability.remove",
-        "runtimePlugin.install",
-        "runtimePlugin.remove",
-        "mcpTool.install",
-        "mcpTool.remove"
-      ]
+      proposalTargetProcesses: proposalTargetProcessIds({ bootstrapSelectableOnly: true }),
+      proposalTargetGovernance
     };
   };
 

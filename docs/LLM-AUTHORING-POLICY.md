@@ -90,8 +90,12 @@ Current constrained truth is:
 - it now slices served runtime transport to the reachable fragment used by the
   active authored route subtree instead of serializing the whole broad process
   closure by default
-- route/state equivalence and canonical interactive execution through
-  `page.surface` remain blocked
+- it now supports authored projection-bound surface output on canonical routes
+- route/state equivalence is pathway-proven on canonical `page.surface`
+- canonical interactive execution through authored process rules is
+  pathway-proven on canonical `page.surface`
+- broader authored module behavior and the remaining legacy widget-program path
+  remain the next major gaps
 
 Any future claim beyond that must be pathway-proven first.
 

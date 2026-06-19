@@ -48,19 +48,23 @@ test("core runtime bundle exposes authority grant routes and metadata", () => {
   const summary = runtimeBundleSummaryForProfile("minimal");
   assert.deepEqual(matchRuntimeBundleRoute("minimal", "GET", "/api/authority/grants"), {
     handler: "authority.grants.read",
-    params: {}
+    params: {},
+    bundleId: "bundle-core-runtime"
   });
   assert.deepEqual(matchRuntimeBundleRoute("minimal", "POST", "/api/authority/grants"), {
     handler: "authority.grants.create",
-    params: {}
+    params: {},
+    bundleId: "bundle-core-runtime"
   });
   assert.deepEqual(matchRuntimeBundleRoute("minimal", "DELETE", "/api/authority/grants/identity.aaron%3D%3Ecallan"), {
     handler: "authority.grants.revoke",
-    params: { grantId: "identity.aaron=>callan" }
+    params: { grantId: "identity.aaron=>callan" },
+    bundleId: "bundle-core-runtime"
   });
   assert.deepEqual(matchRuntimeBundleRoute("minimal", "GET", "/api/runtime/backend-revisions/events"), {
     handler: "backend.revision.events",
-    params: {}
+    params: {},
+    bundleId: "bundle-core-runtime"
   });
   assert.equal(summary.handlerMetadata["authority.grants.read"].routeKind, "json");
   assert.deepEqual(summary.handlerMetadata["authority.grants.revoke"].methods, ["DELETE"]);
@@ -153,8 +157,112 @@ test("route and dispatch ownership varies by loaded plugin composition", async (
   assert.equal(matchRuntimeBundleRoute("minimal", "GET", "/api/events"), null);
   assert.deepEqual(matchRuntimeBundleRoute("minimal", "GET", "/api/events", inspectOptions), {
     handler: "events.stream",
-    params: {}
+    params: {},
+    bundleId: "bundle-inspect"
   });
+});
+
+test("authoring composition exposes program-authoring routes and proposal governance through loaded plugin bundles", async () => {
+  const authoringOptions = await loadedOptions("authoring");
+  const diagnostics = buildRuntimeDiagnosticsForProfile({
+    requestedProfile: "authoring",
+    profileName: "authoring",
+    additionalBundleIds: authoringOptions.additionalBundleIds,
+    bundleOverrides: authoringOptions.bundleOverrides,
+    pluginAddedBundleIds: authoringOptions.additionalBundleIds
+  });
+
+  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/frontend-programs", authoringOptions), {
+    handler: "frontendProgram.create",
+    params: {},
+    bundleId: "bundle-program-authoring"
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/frontend-steps", authoringOptions), {
+    handler: "frontendStep.create",
+    params: {},
+    bundleId: "bundle-program-authoring"
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/backend-programs", authoringOptions), {
+    handler: "backendProgram.create",
+    params: {},
+    bundleId: "bundle-program-authoring"
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/backend-program-versions", authoringOptions), {
+    handler: "backendProgramVersion.create",
+    params: {},
+    bundleId: "bundle-program-authoring"
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/backend-steps", authoringOptions), {
+    handler: "backendStep.create",
+    params: {},
+    bundleId: "bundle-program-authoring"
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/backend-program-versions/shared.backend/activate", authoringOptions), {
+    handler: "backendProgramVersions.activate",
+    params: { soul: "shared.backend" },
+    bundleId: "bundle-program-authoring"
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/backend-program-versions/shared.backend/rollback", authoringOptions), {
+    handler: "backendProgramVersions.rollback",
+    params: { soul: "shared.backend" },
+    bundleId: "bundle-program-authoring"
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("authoring", "POST", "/api/widgets", authoringOptions), {
+    handler: "widgets.create",
+    params: {},
+    bundleId: "bundle-authoring-core"
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("authoring", "PATCH", "/api/widgets/shared-note", authoringOptions), {
+    handler: "widgets.update",
+    params: { id: "shared-note" },
+    bundleId: "bundle-authoring-core"
+  });
+
+  assert.equal(diagnostics.proposalTargetGovernance.some(row =>
+    row.targetProcess === "frontendProgram.define"
+      && row.governanceMode === "proposal-fallback"
+      && row.authorityMechanism === "bootstrap-target-authority"
+  ), true);
+  assert.equal(diagnostics.proposalTargetGovernance.some(row =>
+    row.targetProcess === "frontendStep.define"
+      && row.governanceMode === "proposal-fallback"
+      && row.authorityMechanism === "bootstrap-target-authority"
+  ), true);
+  assert.equal(diagnostics.proposalTargetGovernance.some(row =>
+    row.targetProcess === "backendProgram.define"
+      && row.governanceMode === "proposal-fallback"
+      && row.authorityMechanism === "bootstrap-target-authority"
+  ), true);
+  assert.equal(diagnostics.proposalTargetGovernance.some(row =>
+    row.targetProcess === "backendProgramVersion.define"
+      && row.governanceMode === "proposal-fallback"
+      && row.authorityMechanism === "bootstrap-target-authority"
+  ), true);
+  assert.equal(diagnostics.proposalTargetGovernance.some(row =>
+    row.targetProcess === "backendStep.define"
+      && row.governanceMode === "proposal-fallback"
+      && row.authorityMechanism === "bootstrap-target-authority"
+  ), true);
+  assert.equal(diagnostics.proposalTargetGovernance.some(row =>
+    row.targetProcess === "backendProgramVersion.activate"
+      && row.governanceMode === "proposal-fallback"
+      && row.authorityMechanism === "bootstrap-target-authority"
+  ), true);
+  assert.equal(diagnostics.proposalTargetGovernance.some(row =>
+    row.targetProcess === "backendProgramVersion.rollback"
+      && row.governanceMode === "proposal-fallback"
+      && row.authorityMechanism === "bootstrap-target-authority"
+  ), true);
+  assert.equal(diagnostics.governanceRoutes.some(row =>
+    row.handler === "widgets.create"
+      && row.governanceMode === "proposal-fallback"
+      && row.authorityMechanism === "bootstrap-context-or-target-authority"
+  ), true);
+  assert.equal(diagnostics.governanceRoutes.some(row =>
+    row.handler === "widgets.update"
+      && row.governanceMode === "proposal-fallback"
+      && row.authorityMechanism === "bootstrap-target-authority"
+  ), true);
 });
 
 test("internal runtime bundle manifests expose seed skeleton contract metadata", () => {
@@ -190,8 +298,15 @@ test("runtime diagnostics summarize seed profile and loaded composition separate
   assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.frontendProgram.status, "legacy_only");
   assert.deepEqual(diagnostics.profilePluginIds, []);
   assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
+  assert.equal(diagnostics.activeBundles.find(bundle => bundle.id === "bundle-inspect")?.ownerClass, "runtime-plugin");
   assert.equal(diagnostics.surfaces.some(surface => surface.id === "surface:process-view"), true);
+  assert.equal(diagnostics.surfaces.find(surface => surface.id === "surface:process-view")?.ownerClass, "runtime-plugin");
   assert.equal(diagnostics.handlerMetadata["events.stream"].routeKind, "stream");
+  assert.equal(diagnostics.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
+  assert.equal(diagnostics.routes.find(route => route.handler === "events.stream")?.ownerClass, "runtime-plugin");
+  assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "runtimePlugin.install" && row.governanceMode === "proposal-fallback"), true);
+  assert.equal(diagnostics.proposalTargetGovernance.some(row => row.targetProcess === "changeSet.apply" && row.governanceMode === "operator-only"), true);
+  assert.equal(diagnostics.shells.shells.find(shell => shell.id === "browser")?.ownerClass, "shell");
 });
 
 test("runtime diagnostics include authored, operator, and effective runtime plugin request state", () => {

@@ -1,7 +1,10 @@
 import { thing, relation, retract, createThing, projectors } from "./kernel.js";
 import { normalizeFields } from "./type-model.js";
+import { createCanonicalPackagePatch } from "./package-authorship.js";
+import { normalizeCapabilityCompatibility } from "./capability-compatibility.js";
 
 const CAPABILITY_INSTALL_TARGET_KINDS = new Set(["context", "serverRunner", "routePage", "host"]);
+const CAPABILITY_DEFINITION_PROCESSES = new Set(["defineCapability", "updateCapability", "rollbackCapability"]);
 const NAME_REL_PREFIX = "bindsName:";
 const EXPORT_REL_PREFIX = "exportsName:";
 const IMPORT_REL_PREFIX = "importsName:";
@@ -28,6 +31,7 @@ function normalizeCapabilityDefinition({
   authority = [],
   providerAdapters = [],
   witnessContract = null,
+  compatibility = null,
   placement = [],
   context = null
 }) {
@@ -43,6 +47,7 @@ function normalizeCapabilityDefinition({
     authority: normalizeFields(authority),
     providerAdapters: normalizeCapabilityProviderAdapters(providerAdapters),
     witnessContract: normalizeCapabilityWitnessContract(witnessContract),
+    compatibility: normalizeCapabilityCompatibility(compatibility),
     placement: [...new Set((Array.isArray(placement) ? placement : []).map(String).filter(Boolean))],
     context: typeof context === "string" && context.trim() ? context.trim() : null
   };
@@ -101,6 +106,169 @@ function normalizeCapabilityWitnessContract(contract) {
   return normalized;
 }
 
+function normalizePackageExports(exports) {
+  return Array.isArray(exports)
+    ? exports
+      .map(entry => {
+        if (typeof entry === "string" && entry.trim()) return { id: entry.trim() };
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+        const id = String(entry.id ?? "").trim();
+        if (!id) return null;
+        return {
+          ...entry,
+          id
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => String(left.id).localeCompare(String(right.id)))
+    : [];
+}
+
+function normalizePackageDefinition({
+  id,
+  context = null,
+  label = id,
+  packageKind = "plugin",
+  version = null,
+  description = null,
+  defaultNamespace = null,
+  exports = [],
+  provenance = null,
+  compatibleRuntimeProfiles = [],
+  compatibleShells = [],
+  runtimeFlavor = null
+}) {
+  return {
+    id: String(id),
+    context: typeof context === "string" && context.trim() ? context.trim() : null,
+    label: String(label ?? id),
+    packageKind: typeof packageKind === "string" && packageKind.trim() ? packageKind.trim() : "plugin",
+    version: typeof version === "string" && version.trim() ? version.trim() : null,
+    description: typeof description === "string" && description.trim() ? description.trim() : null,
+    defaultNamespace: typeof defaultNamespace === "string" && defaultNamespace.trim() ? defaultNamespace.trim() : null,
+    exports: normalizePackageExports(exports),
+    provenance: provenance && typeof provenance === "object" ? structuredClone(provenance) : null,
+    compatibleRuntimeProfiles: [...new Set((Array.isArray(compatibleRuntimeProfiles) ? compatibleRuntimeProfiles : []).map(String).filter(Boolean))].sort(),
+    compatibleShells: [...new Set((Array.isArray(compatibleShells) ? compatibleShells : []).map(String).filter(Boolean))].sort(),
+    runtimeFlavor: typeof runtimeFlavor === "string" && runtimeFlavor.trim() ? runtimeFlavor.trim() : null
+  };
+}
+
+function normalizePackageRevisionDefinition({
+  id,
+  package: packageId,
+  version = null,
+  status = "draft",
+  supersedes = [],
+  emittedBundleHash = null,
+  manifest = null,
+  compatibility = null
+}) {
+  return {
+    id: String(id),
+    package: String(packageId),
+    version: typeof version === "string" && version.trim() ? version.trim() : null,
+    status: typeof status === "string" && status.trim() ? status.trim() : "draft",
+    supersedes: [...new Set((Array.isArray(supersedes) ? supersedes : []).map(String).filter(Boolean))].sort(),
+    emittedBundleHash: typeof emittedBundleHash === "string" && emittedBundleHash.trim() ? emittedBundleHash.trim() : null,
+    manifest: manifest && typeof manifest === "object" ? structuredClone(manifest) : null,
+    compatibility: compatibility && typeof compatibility === "object" ? structuredClone(compatibility) : null
+  };
+}
+
+function normalizePackageNamespaceDefinition({
+  id,
+  context,
+  name,
+  package: packageId,
+  revision = null,
+  visibility = "context"
+}) {
+  return {
+    id: String(id),
+    context: String(context),
+    name: String(name),
+    package: String(packageId),
+    revision: typeof revision === "string" && revision.trim() ? revision.trim() : null,
+    visibility: typeof visibility === "string" && visibility.trim() ? visibility.trim() : "context"
+  };
+}
+
+function normalizePackageTransformerMappings(mappings) {
+  return Array.isArray(mappings)
+    ? mappings
+      .filter(entry => entry && typeof entry === "object" && !Array.isArray(entry))
+      .map(entry => {
+        const from = String(entry.from ?? "").trim();
+        const to = String(entry.to ?? "").trim();
+        if (!from || !to) return null;
+        return {
+          kind: typeof entry.kind === "string" && entry.kind.trim() ? entry.kind.trim() : "alias",
+          from,
+          to,
+          note: typeof entry.note === "string" && entry.note.trim() ? entry.note.trim() : null
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) =>
+        String(left.kind).localeCompare(String(right.kind))
+        || String(left.from).localeCompare(String(right.from))
+        || String(left.to).localeCompare(String(right.to))
+        || String(left.note ?? "").localeCompare(String(right.note ?? ""))
+      )
+    : [];
+}
+
+function normalizePackageTransformerDefinition({
+  id,
+  package: packageId,
+  sourceRevision = null,
+  sourceNamespace = null,
+  targetRevision = null,
+  targetNamespace = null,
+  strategy = "follow-up-revision",
+  status = "draft",
+  mappings = [],
+  remainingGlue = [],
+  notes = []
+}) {
+  return {
+    id: String(id),
+    package: String(packageId),
+    sourceRevision: typeof sourceRevision === "string" && sourceRevision.trim() ? sourceRevision.trim() : null,
+    sourceNamespace: typeof sourceNamespace === "string" && sourceNamespace.trim() ? sourceNamespace.trim() : null,
+    targetRevision: typeof targetRevision === "string" && targetRevision.trim() ? targetRevision.trim() : null,
+    targetNamespace: typeof targetNamespace === "string" && targetNamespace.trim() ? targetNamespace.trim() : null,
+    strategy: typeof strategy === "string" && strategy.trim() ? strategy.trim() : "follow-up-revision",
+    status: typeof status === "string" && status.trim() ? status.trim() : "draft",
+    mappings: normalizePackageTransformerMappings(mappings),
+    remainingGlue: uniqueStrings(remainingGlue),
+    notes: uniqueStrings(notes)
+  };
+}
+
+function normalizePackageDependencyDefinition({
+  id,
+  sourcePackage = null,
+  sourceRevision,
+  targetKind,
+  targetId,
+  versionRange = null,
+  compatibility = null,
+  runtimeProfiles = []
+}) {
+  return {
+    id: String(id),
+    sourcePackage: typeof sourcePackage === "string" && sourcePackage.trim() ? sourcePackage.trim() : null,
+    sourceRevision: String(sourceRevision),
+    targetKind: String(targetKind),
+    targetId: String(targetId),
+    versionRange: typeof versionRange === "string" && versionRange.trim() ? versionRange.trim() : null,
+    compatibility: compatibility && typeof compatibility === "object" ? structuredClone(compatibility) : null,
+    runtimeProfiles: [...new Set((Array.isArray(runtimeProfiles) ? runtimeProfiles : []).map(String).filter(Boolean))].sort()
+  };
+}
+
 function currentRelations(witnesses) {
   return projectors.currentRelations(witnesses);
 }
@@ -140,10 +308,96 @@ function parseImportTargetValue(value) {
 function capabilityDefinitionsById(witnesses) {
   const rows = new Map();
   for (const w of witnesses) {
-    if (w.process !== "defineCapability" || !w.body?.id) continue;
+    if (!CAPABILITY_DEFINITION_PROCESSES.has(w.process) || !w.body?.id) continue;
     rows.set(w.body.id, normalizeCapabilityDefinition(w.body));
   }
   return rows;
+}
+
+function capabilityDefinitionHistoryRows(witnesses) {
+  const rows = [];
+  for (const witness of witnesses) {
+    if (!CAPABILITY_DEFINITION_PROCESSES.has(witness.process) || !witness.body?.id) continue;
+    const definition = normalizeCapabilityDefinition(witness.body);
+    rows.push({
+      capabilityId: definition.id,
+      action: witness.process === "defineCapability"
+        ? "define"
+        : (witness.process === "updateCapability" ? "update" : "rollback"),
+      version: definition.version,
+      previousVersion: typeof witness.body?.previousVersion === "string" ? witness.body.previousVersion : null,
+      rollbackFromVersion: typeof witness.body?.rollbackFromVersion === "string" ? witness.body.rollbackFromVersion : null,
+      witnessId: witness.id,
+      actor: witness.actor ?? null,
+      definition
+    });
+  }
+  return rows;
+}
+
+function packageDefinitionsById(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (witness.process !== "definePackage" || !witness.body?.id) continue;
+    rows.set(witness.body.id, normalizePackageDefinition(witness.body));
+  }
+  return rows;
+}
+
+function packageRevisionDefinitionsById(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if ((witness.process !== "definePackageRevision" && witness.process !== "publishPackageRevision") || !witness.body?.id) continue;
+    rows.set(witness.body.id, normalizePackageRevisionDefinition(witness.body));
+  }
+  return rows;
+}
+
+function packagePatchDefinitionsById(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (witness.process !== "definePackagePatch" || !witness.body?.id) continue;
+    rows.set(witness.body.id, structuredClone(witness.body));
+  }
+  return rows;
+}
+
+function packageNamespaceDefinitionsById(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (witness.process !== "definePackageNamespace" || !witness.body?.id) continue;
+    rows.set(witness.body.id, normalizePackageNamespaceDefinition(witness.body));
+  }
+  return rows;
+}
+
+function packageDependencyDefinitionsById(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (witness.process !== "definePackageDependency" || !witness.body?.id) continue;
+    rows.set(witness.body.id, normalizePackageDependencyDefinition(witness.body));
+  }
+  return rows;
+}
+
+function packageTransformerDefinitionsById(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (witness.process !== "definePackageTransformer" || !witness.body?.id) continue;
+    rows.set(witness.body.id, normalizePackageTransformerDefinition(witness.body));
+  }
+  return rows;
+}
+
+function uniqueStrings(values) {
+  return [...new Set((Array.isArray(values) ? values : []).map(String).filter(Boolean))].sort();
+}
+
+function packageManifestPluginId(manifest) {
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) return null;
+  return typeof manifest.pluginId === "string" && manifest.pluginId.trim()
+    ? manifest.pluginId.trim()
+    : null;
 }
 
 const registeredModuleProjectors = new Map();
@@ -211,6 +465,19 @@ function delegatedModuleProjector(name, fallback) {
   };
 }
 
+export function moduleProjectorByName(name, {
+  fallback = () => null
+} = {}) {
+  const projectorName = typeof name === "string" && name.trim() ? name.trim() : "";
+  if (!projectorName) return null;
+  const builtin = moduleProjectors[projectorName];
+  if (typeof builtin === "function") return builtin;
+  const fallbackProjector = typeof fallback === "function"
+    ? fallback
+    : (() => fallback);
+  return delegatedModuleProjector(projectorName, fallbackProjector);
+}
+
 function emptyRows() {
   return [];
 }
@@ -232,6 +499,7 @@ export function ensureCapabilityDefinition(world, {
   authority = [],
   providerAdapters = [],
   witnessContract = null,
+  compatibility = null,
   placement = [],
   context = null,
   owner = actor
@@ -250,10 +518,28 @@ export function ensureCapabilityDefinition(world, {
     authority,
     providerAdapters,
     witnessContract,
+    compatibility,
     placement,
     context,
     owner
   });
+}
+
+function capabilityDefinitionClaims(id, normalized, previous = null) {
+  const claims = [relation(id, "hasModuleKind", "capability")];
+  if (previous?.context && previous.context !== normalized.context) {
+    claims.push(retract(id, "inContext", previous.context));
+  }
+  if (normalized.context) claims.push(relation(id, "inContext", normalized.context));
+  const previousDepends = new Set(previous?.dependsOn ?? []);
+  const nextDepends = new Set(normalized.dependsOn ?? []);
+  for (const dependency of previousDepends) {
+    if (!nextDepends.has(dependency)) claims.push(retract(id, "dependsOnCapability", dependency));
+  }
+  for (const dependency of nextDepends) {
+    claims.push(relation(id, "dependsOnCapability", dependency));
+  }
+  return claims;
 }
 
 export function defineCapability(world, {
@@ -269,6 +555,7 @@ export function defineCapability(world, {
   authority = [],
   providerAdapters = [],
   witnessContract = null,
+  compatibility = null,
   placement = [],
   context = null,
   owner = actor
@@ -286,17 +573,108 @@ export function defineCapability(world, {
     authority,
     providerAdapters,
     witnessContract,
+    compatibility,
     placement
   });
   return world.emit({
     process: "defineCapability",
     actor,
-    claims: [
-      relation(id, "hasModuleKind", "capability"),
-      ...(context ? [relation(id, "inContext", context)] : []),
-      ...normalized.dependsOn.map(target => relation(id, "dependsOnCapability", target))
-    ],
+    claims: capabilityDefinitionClaims(id, { ...normalized, context: context ? String(context) : null }),
     body: { ...normalized, context: context ? String(context) : null }
+  });
+}
+
+export function updateCapability(world, {
+  actor,
+  id,
+  label = id,
+  version = null,
+  provenance = null,
+  dependsOn = [],
+  publicApi = [],
+  config = [],
+  internals = [],
+  authority = [],
+  providerAdapters = [],
+  witnessContract = null,
+  compatibility = null,
+  placement = [],
+  context = null,
+  previousDefinition = null,
+  previousVersion = null
+}) {
+  const normalized = normalizeCapabilityDefinition({
+    id,
+    label,
+    version,
+    provenance,
+    dependsOn,
+    publicApi,
+    config,
+    internals,
+    authority,
+    providerAdapters,
+    witnessContract,
+    compatibility,
+    placement,
+    context
+  });
+  return world.emit({
+    process: "updateCapability",
+    actor,
+    claims: capabilityDefinitionClaims(id, normalized, previousDefinition),
+    body: {
+      ...normalized,
+      previousVersion: typeof previousVersion === "string" && previousVersion.trim() ? previousVersion.trim() : null
+    }
+  });
+}
+
+export function rollbackCapability(world, {
+  actor,
+  id,
+  label = id,
+  version = null,
+  provenance = null,
+  dependsOn = [],
+  publicApi = [],
+  config = [],
+  internals = [],
+  authority = [],
+  providerAdapters = [],
+  witnessContract = null,
+  compatibility = null,
+  placement = [],
+  context = null,
+  previousDefinition = null,
+  previousVersion = null,
+  rollbackFromVersion = null
+}) {
+  const normalized = normalizeCapabilityDefinition({
+    id,
+    label,
+    version,
+    provenance,
+    dependsOn,
+    publicApi,
+    config,
+    internals,
+    authority,
+    providerAdapters,
+    witnessContract,
+    compatibility,
+    placement,
+    context
+  });
+  return world.emit({
+    process: "rollbackCapability",
+    actor,
+    claims: capabilityDefinitionClaims(id, normalized, previousDefinition),
+    body: {
+      ...normalized,
+      previousVersion: typeof previousVersion === "string" && previousVersion.trim() ? previousVersion.trim() : null,
+      rollbackFromVersion: typeof rollbackFromVersion === "string" && rollbackFromVersion.trim() ? rollbackFromVersion.trim() : null
+    }
   });
 }
 
@@ -433,6 +811,296 @@ export function removeRuntimePlugin(world, {
   });
 }
 
+export function definePackage(world, {
+  actor,
+  id,
+  context = null,
+  label = id,
+  packageKind = "plugin",
+  version = null,
+  description = null,
+  defaultNamespace = null,
+  exports = [],
+  provenance = null,
+  compatibleRuntimeProfiles = [],
+  compatibleShells = [],
+  runtimeFlavor = null,
+  owner = actor
+}) {
+  createThing(world, { actor, id, owner });
+  const normalized = normalizePackageDefinition({
+    id,
+    context,
+    label,
+    packageKind,
+    version,
+    description,
+    defaultNamespace,
+    exports,
+    provenance,
+    compatibleRuntimeProfiles,
+    compatibleShells,
+    runtimeFlavor
+  });
+  return world.emit({
+    process: "definePackage",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "package"),
+      ...(normalized.context ? [relation(id, "inContext", normalized.context)] : []),
+      ...(normalized.defaultNamespace ? [relation(id, "packageDefaultNamespace", normalized.defaultNamespace)] : []),
+      ...(normalized.version ? [relation(id, "packageVersionLabel", normalized.version)] : []),
+      ...normalized.compatibleRuntimeProfiles.map(profile => relation(id, "packageCompatibleRuntimeProfile", profile)),
+      ...normalized.compatibleShells.map(shell => relation(id, "packageCompatibleShell", shell)),
+      ...normalized.exports.map(entry => relation(id, "exportsConcept", entry.id, { entry: structuredClone(entry) }))
+    ],
+    body: normalized
+  });
+}
+
+export function definePackageRevision(world, {
+  actor,
+  id,
+  package: packageId,
+  version = null,
+  status = "draft",
+  supersedes = [],
+  emittedBundleHash = null,
+  manifest = null,
+  compatibility = null,
+  owner = actor
+}) {
+  createThing(world, { actor, id, owner });
+  const normalized = normalizePackageRevisionDefinition({
+    id,
+    package: packageId,
+    version,
+    status,
+    supersedes,
+    emittedBundleHash,
+    manifest,
+    compatibility
+  });
+  return world.emit({
+    process: "definePackageRevision",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "packageRevision"),
+      relation(id, "packageRevisionOf", normalized.package),
+      relation(id, "packageRevisionStatus", normalized.status),
+      ...(normalized.version ? [relation(id, "packageRevisionVersion", normalized.version)] : []),
+      ...(normalized.emittedBundleHash ? [relation(id, "emitsBundleHash", normalized.emittedBundleHash)] : []),
+      ...normalized.supersedes.map(target => relation(id, "supersedesPackageRevision", target))
+    ],
+    body: normalized
+  });
+}
+
+export function publishPackageRevision(world, {
+  actor,
+  id,
+  package: packageId,
+  version = null,
+  status = "published",
+  supersedes = [],
+  emittedBundleHash = null,
+  manifest = null,
+  compatibility = null
+}) {
+  const normalized = normalizePackageRevisionDefinition({
+    id,
+    package: packageId,
+    version,
+    status,
+    supersedes,
+    emittedBundleHash,
+    manifest,
+    compatibility
+  });
+  return world.emit({
+    process: "publishPackageRevision",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "packageRevision"),
+      relation(id, "packageRevisionOf", normalized.package),
+      relation(id, "packageRevisionStatus", normalized.status),
+      ...(normalized.version ? [relation(id, "packageRevisionVersion", normalized.version)] : []),
+      ...(normalized.emittedBundleHash ? [relation(id, "emitsBundleHash", normalized.emittedBundleHash)] : []),
+      ...normalized.supersedes.map(target => relation(id, "supersedesPackageRevision", target))
+    ],
+    body: normalized
+  });
+}
+
+export function definePackagePatch(world, {
+  actor,
+  package: packageId,
+  revision,
+  ordinal = null,
+  path,
+  operation,
+  sourceLanguage,
+  transformer = null,
+  previousHash = null,
+  nextHash = null,
+  body = null,
+  owner = actor
+}) {
+  const normalized = createCanonicalPackagePatch({
+    package: packageId,
+    revision,
+    ordinal,
+    path,
+    operation,
+    sourceLanguage,
+    transformer,
+    previousHash,
+    nextHash,
+    body
+  });
+  createThing(world, { actor, id: normalized.id, owner });
+  return world.emit({
+    process: "definePackagePatch",
+    actor,
+    claims: [
+      relation(normalized.id, "hasModuleKind", "packagePatch"),
+      relation(normalized.id, "packagePatchOf", normalized.package),
+      relation(normalized.id, "packagePatchRevision", normalized.revision),
+      relation(normalized.id, "patchesPath", normalized.path),
+      relation(normalized.id, "packagePatchOperation", normalized.operation),
+      relation(normalized.id, "packagePatchSourceLanguage", normalized.sourceLanguage),
+      ...(normalized.transformer ? [relation(normalized.id, "packagePatchTransformer", normalized.transformer)] : []),
+      ...(normalized.nextHash ? [relation(normalized.id, "packagePatchNextHash", normalized.nextHash)] : []),
+      ...(normalized.previousHash ? [relation(normalized.id, "packagePatchPreviousHash", normalized.previousHash)] : [])
+    ],
+    body: normalized
+  });
+}
+
+export function definePackageNamespace(world, {
+  actor,
+  id = null,
+  context,
+  name,
+  package: packageId,
+  revision = null,
+  visibility = "context",
+  owner = actor
+}) {
+  const namespaceId = id ? String(id) : `packageNamespace:${String(context)}:${String(name)}`;
+  createThing(world, { actor, id: namespaceId, owner });
+  const normalized = normalizePackageNamespaceDefinition({
+    id: namespaceId,
+    context,
+    name,
+    package: packageId,
+    revision,
+    visibility
+  });
+  return world.emit({
+    process: "definePackageNamespace",
+    actor,
+    claims: [
+      relation(namespaceId, "hasModuleKind", "packageNamespace"),
+      relation(namespaceId, "inContext", normalized.context),
+      relation(namespaceId, "namesPackage", normalized.package),
+      relation(normalized.context, `bindsPackageNamespace:${normalized.name}`, namespaceId),
+      ...(normalized.revision ? [relation(namespaceId, "namesPackageRevision", normalized.revision)] : [])
+    ],
+    body: normalized
+  });
+}
+
+export function definePackageDependency(world, {
+  actor,
+  id = null,
+  sourcePackage = null,
+  sourceRevision,
+  targetKind,
+  targetId,
+  versionRange = null,
+  compatibility = null,
+  runtimeProfiles = [],
+  owner = actor
+}) {
+  const dependencyId = id ? String(id) : `packageDependency:${String(sourceRevision)}:${String(targetKind)}:${String(targetId)}`;
+  createThing(world, { actor, id: dependencyId, owner });
+  const normalized = normalizePackageDependencyDefinition({
+    id: dependencyId,
+    sourcePackage,
+    sourceRevision,
+    targetKind,
+    targetId,
+    versionRange,
+    compatibility,
+    runtimeProfiles
+  });
+  return world.emit({
+    process: "definePackageDependency",
+    actor,
+    claims: [
+      relation(dependencyId, "hasModuleKind", "packageDependency"),
+      relation(dependencyId, "packageDependencySourceRevision", normalized.sourceRevision),
+      relation(dependencyId, "packageDependencyTarget", normalized.targetId, { targetKind: normalized.targetKind }),
+      relation(normalized.sourceRevision, "dependsOnPackageTarget", normalized.targetId, {
+        targetKind: normalized.targetKind,
+        dependencyId
+      }),
+      ...(normalized.sourcePackage ? [relation(dependencyId, "packageDependencySourcePackage", normalized.sourcePackage)] : []),
+      ...(normalized.versionRange ? [relation(dependencyId, "packageDependencyVersionRange", normalized.versionRange)] : []),
+      ...normalized.runtimeProfiles.map(profile => relation(dependencyId, "packageDependencyRuntimeProfile", profile))
+    ],
+    body: normalized
+  });
+}
+
+export function definePackageTransformer(world, {
+  actor,
+  id = null,
+  package: packageId,
+  sourceRevision = null,
+  sourceNamespace = null,
+  targetRevision = null,
+  targetNamespace = null,
+  strategy = "follow-up-revision",
+  status = "draft",
+  mappings = [],
+  remainingGlue = [],
+  notes = [],
+  owner = actor
+}) {
+  const transformerId = id
+    ? String(id)
+    : `packageTransformer:${String(packageId)}:${String(targetRevision ?? targetNamespace ?? sourceRevision ?? sourceNamespace ?? "draft")}`;
+  createThing(world, { actor, id: transformerId, owner });
+  const normalized = normalizePackageTransformerDefinition({
+    id: transformerId,
+    package: packageId,
+    sourceRevision,
+    sourceNamespace,
+    targetRevision,
+    targetNamespace,
+    strategy,
+    status,
+    mappings,
+    remainingGlue,
+    notes
+  });
+  return world.emit({
+    process: "definePackageTransformer",
+    actor,
+    claims: [
+      relation(transformerId, "hasModuleKind", "packageTransformer"),
+      relation(transformerId, "packageTransformerOf", normalized.package),
+      ...(normalized.sourceRevision ? [relation(transformerId, "transformsFromPackageRevision", normalized.sourceRevision)] : []),
+      ...(normalized.targetRevision ? [relation(transformerId, "transformsToPackageRevision", normalized.targetRevision)] : []),
+      ...(normalized.sourceNamespace ? [relation(transformerId, "transformsFromPackageNamespace", normalized.sourceNamespace)] : []),
+      ...(normalized.targetNamespace ? [relation(transformerId, "transformsToPackageNamespace", normalized.targetNamespace)] : [])
+    ],
+    body: normalized
+  });
+}
+
 export function createCompiler(world, { actor, id, owner = actor }) {
   const w = createThing(world, { actor, id, owner });
   world.emit({
@@ -489,6 +1157,18 @@ export function compileDescription(world, { actor, compiler, description, output
   });
 }
 
+// Hosts a runner answers to, normalized for Host-header matching: lowercased, port stripped,
+// de-duplicated. A null/empty list means the runner is not host-bound (legacy single-runner case).
+export function normalizeRunnerHosts(hosts) {
+  if (!Array.isArray(hosts)) return null;
+  const normalized = [...new Set(
+    hosts
+      .map(value => (typeof value === "string" ? value.trim().toLowerCase().replace(/:\d+$/, "") : ""))
+      .filter(Boolean)
+  )];
+  return normalized.length ? normalized : null;
+}
+
 export function createServerRunner(world, {
   actor,
   id,
@@ -500,7 +1180,10 @@ export function createServerRunner(world, {
   storage = null,
   runtimeConfig = null,
   allowActorHeader = false,
-  context = null
+  hosts = null,
+  default: isDefault = false,
+  context = null,
+  values = null
 }) {
   createThing(world, { actor, id, owner });
   return world.emit({
@@ -523,7 +1206,10 @@ export function createServerRunner(world, {
       storage: storage && typeof storage === "object" ? { ...storage } : null,
       runtimeConfig: runtimeConfig && typeof runtimeConfig === "object" ? { ...runtimeConfig } : null,
       allowActorHeader: allowActorHeader === true,
-      context: context ? String(context) : null
+      hosts: normalizeRunnerHosts(hosts),
+      default: isDefault === true,
+      context: context ? String(context) : null,
+      values: values && typeof values === "object" ? structuredClone(values) : null
     }
   });
 }
@@ -1321,49 +2007,382 @@ function exportIndex(witnesses) {
   return map;
 }
 
+function uniqueSortedStrings(values) {
+  return [...new Set((values ?? []).map(value => String(value)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function contextNameResolutionRows(witnesses) {
+  const grouped = new Map();
+  for (const row of moduleProjectors.contextScopes(witnesses)) {
+    const key = `${row.context}${CONTEXT_REF_SEP}${row.name}`;
+    const current = grouped.get(key) ?? {
+      context: row.context,
+      name: row.name,
+      resolution: "resolved",
+      target: null,
+      targets: [],
+      sourceKinds: [],
+      localTargets: [],
+      importedTargets: [],
+      imports: [],
+      witnesses: [],
+      rows: []
+    };
+    current.targets.push(row.target);
+    current.sourceKinds.push(row.sourceKind);
+    if (row.sourceKind === "local") current.localTargets.push(row.target);
+    if (row.sourceKind === "import") {
+      current.importedTargets.push(row.target);
+      current.imports.push({
+        sourceContext: row.sourceContext ?? null,
+        exportName: row.exportName ?? null,
+        target: row.target
+      });
+    }
+    if (row.witness) current.witnesses.push(row.witness);
+    current.rows.push({ ...row });
+    grouped.set(key, current);
+  }
+
+  return [...grouped.values()]
+    .map(row => {
+      const targets = uniqueSortedStrings(row.targets);
+      const sourceKinds = uniqueSortedStrings(row.sourceKinds);
+      const localTargets = uniqueSortedStrings(row.localTargets);
+      const importedTargets = uniqueSortedStrings(row.importedTargets);
+      const witnesses = uniqueSortedStrings(row.witnesses);
+      const imports = row.imports
+        .map(spec => ({
+          sourceContext: spec.sourceContext,
+          exportName: spec.exportName,
+          target: spec.target
+        }))
+        .sort((a, b) =>
+          String(a.sourceContext).localeCompare(String(b.sourceContext))
+          || String(a.exportName).localeCompare(String(b.exportName))
+          || String(a.target).localeCompare(String(b.target))
+        );
+      return {
+        context: row.context,
+        name: row.name,
+        resolution: targets.length === 1 ? "resolved" : "ambiguous",
+        target: targets.length === 1 ? targets[0] : null,
+        targets,
+        sourceKinds,
+        localTargets,
+        importedTargets,
+        imports,
+        witnesses,
+        rows: row.rows
+      };
+    })
+    .sort((a, b) =>
+      String(a.context).localeCompare(String(b.context))
+      || String(a.name).localeCompare(String(b.name))
+    );
+}
+
+function contextNameConflictRows(witnesses) {
+  return contextNameResolutionRows(witnesses)
+    .filter(row => row.resolution === "ambiguous")
+    .map(row => ({
+      context: row.context,
+      name: row.name,
+      targets: [...row.targets],
+      sourceKinds: [...row.sourceKinds],
+      imports: row.imports.map(spec => ({ ...spec })),
+      witnesses: [...row.witnesses],
+      rows: row.rows.map(spec => ({ ...spec }))
+    }));
+}
+
 export function resolveContextualName(witnesses, {
+  context,
+  name
+}) {
+  const explanation = explainContextualName(witnesses, { context, name });
+  if (!explanation.ok) return { ok: false, error: explanation.reason };
+  return { ok: true, target: explanation.target, row: explanation.rows[0] ?? null };
+}
+
+export function explainContextualName(witnesses, {
   context,
   name
 }) {
   const wantedContext = typeof context === "string" && context.trim() ? context.trim() : "";
   const wantedName = typeof name === "string" && name.trim() ? name.trim() : "";
-  if (!wantedContext || !wantedName) return { ok: false, error: "context and name are required for contextual resolution" };
-  const matches = moduleProjectors.contextScopes(witnesses)
-    .filter(row => row.context === wantedContext && row.name === wantedName);
-  if (matches.length === 0) {
-    return { ok: false, error: `name not visible in context: ${wantedName}` };
+  if (!wantedContext || !wantedName) {
+    return {
+      ok: false,
+      context: wantedContext || null,
+      name: wantedName || null,
+      resolution: "invalid",
+      target: null,
+      targets: [],
+      rows: [],
+      reason: "context and name are required for contextual resolution"
+    };
   }
-  const targets = [...new Set(matches.map(row => row.target).filter(Boolean))];
-  if (targets.length !== 1) {
-    return { ok: false, error: `name resolves ambiguously in context: ${wantedName}` };
+  const resolution = contextNameResolutionRows(witnesses)
+    .find(row => row.context === wantedContext && row.name === wantedName) ?? null;
+  if (!resolution) {
+    return {
+      ok: false,
+      context: wantedContext,
+      name: wantedName,
+      resolution: "missing",
+      target: null,
+      targets: [],
+      rows: [],
+      reason: `name not visible in context: ${wantedName}`
+    };
   }
-  return { ok: true, target: targets[0], row: matches[0] };
+  if (resolution.resolution !== "resolved" || !resolution.target) {
+    return {
+      ok: false,
+      context: wantedContext,
+      name: wantedName,
+      resolution: "ambiguous",
+      target: null,
+      targets: [...resolution.targets],
+      rows: resolution.rows.map(row => ({ ...row })),
+      reason: `name resolves ambiguously in context: ${wantedName}`
+    };
+  }
+  return {
+    ok: true,
+    context: wantedContext,
+    name: wantedName,
+    resolution: resolution.sourceKinds.includes("local") ? "local" : "import",
+    target: resolution.target,
+    targets: [...resolution.targets],
+    rows: resolution.rows.map(row => ({ ...row })),
+    reason: resolution.sourceKinds.includes("local")
+      ? `name resolves through a local binding in context: ${wantedName}`
+      : `name resolves through an imported binding in context: ${wantedName}`
+  };
+}
+
+export function explainContextualTargetVisibility(witnesses, {
+  context,
+  target
+}) {
+  const authoringContext = typeof context === "string" && context.trim() ? context.trim() : "";
+  const canonicalTarget = typeof target === "string" && target.trim() ? target.trim() : "";
+  if (!authoringContext || !canonicalTarget) {
+    return {
+      ok: false,
+      context: authoringContext || null,
+      target: canonicalTarget || null,
+      visible: false,
+      visibility: "invalid",
+      targetContext: null,
+      names: [],
+      rows: [],
+      reason: "context and target are required for visibility explanation"
+    };
+  }
+  if (!projectors.things(witnesses).has(canonicalTarget)) {
+    return {
+      ok: false,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: false,
+      visibility: "missing-target",
+      targetContext: null,
+      names: [],
+      rows: [],
+      reason: `target not found: ${canonicalTarget}`
+    };
+  }
+  const targetContext = moduleProjectors.objectContexts(witnesses).get(canonicalTarget) ?? null;
+  const rows = moduleProjectors.contextScopes(witnesses)
+    .filter(row => row.context === authoringContext && row.target === canonicalTarget)
+    .map(row => ({ ...row }));
+  const names = uniqueSortedStrings(rows.map(row => row.name));
+  if (!targetContext && rows.length) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: rows.some(row => row.sourceKind === "import") ? "import" : "local",
+      targetContext,
+      names,
+      rows,
+      reason: rows.some(row => row.sourceKind === "import")
+        ? `target is visible in context ${authoringContext} through explicit import or binding`
+        : `target is locally bound in context ${authoringContext}`
+    };
+  }
+  if (!targetContext) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: "unscoped",
+      targetContext,
+      names,
+      rows,
+      reason: `target is unscoped and remains canonically visible in context ${authoringContext}`
+    };
+  }
+  if (targetContext === authoringContext) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: rows.some(row => row.sourceKind === "local") ? "local" : "same-context",
+      targetContext,
+      names,
+      rows,
+      reason: rows.some(row => row.sourceKind === "local")
+        ? `target is locally bound in context ${authoringContext}`
+        : `target belongs to authoring context ${authoringContext}`
+    };
+  }
+  if (rows.length) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: "import",
+      targetContext,
+      names,
+      rows,
+      reason: `target is visible in context ${authoringContext} through explicit import or binding`
+    };
+  }
+  return {
+    ok: false,
+    context: authoringContext,
+    target: canonicalTarget,
+    visible: false,
+    visibility: "hidden",
+    targetContext,
+    names,
+    rows,
+    reason: `target ${canonicalTarget} belongs to context ${targetContext} and is not visible in authoring context ${authoringContext}`
+  };
+}
+
+export const CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES = Object.freeze([
+  "same-context-convenience",
+  "imported-target-reference",
+  "legacy-only-path"
+]);
+
+const CONTEXTUAL_CANONICAL_ID_POLICY_CLASS_SET = new Set(CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES);
+
+function normalizeCanonicalIdPolicyClasses(values = null) {
+  if (!Array.isArray(values)) return null;
+  const normalized = [...new Set(values
+    .map(value => String(value || "").trim())
+    .filter(value => CONTEXTUAL_CANONICAL_ID_POLICY_CLASS_SET.has(value)))];
+  return normalized;
+}
+
+export function classifyCanonicalIdPolicy(witnesses, {
+  context,
+  target
+}) {
+  const authoringContext = typeof context === "string" && context.trim() ? context.trim() : "";
+  const canonicalTarget = typeof target === "string" && target.trim() ? target.trim() : "";
+  if (!authoringContext || !canonicalTarget) {
+    return {
+      ok: false,
+      policyClass: null,
+      reason: "context and target are required for canonical-id policy classification"
+    };
+  }
+  const visibility = explainContextualTargetVisibility(witnesses, {
+    context: authoringContext,
+    target: canonicalTarget
+  });
+  if (!visibility.ok) {
+    return {
+      ok: false,
+      policyClass: null,
+      reason: visibility.reason,
+      visibility
+    };
+  }
+  if (visibility.targetContext === authoringContext) {
+    return {
+      ok: true,
+      policyClass: "same-context-convenience",
+      visibility
+    };
+  }
+  if (visibility.targetContext) {
+    return {
+      ok: true,
+      policyClass: "imported-target-reference",
+      visibility
+    };
+  }
+  if (visibility.visibility === "unscoped") {
+    return {
+      ok: true,
+      policyClass: "legacy-only-path",
+      visibility
+    };
+  }
+  return {
+    ok: true,
+    policyClass: null,
+    visibility
+  };
 }
 
 export function resolveContextualRef(witnesses, {
   context,
   id = null,
   ref = null,
-  label = "reference"
+  label = "reference",
+  allowedCanonicalIdPolicyClasses = null
 }) {
   const canonical = typeof id === "string" && id.trim() ? id.trim() : null;
   const contextual = typeof ref === "string" && ref.trim() ? ref.trim() : null;
+  const allowedPolicyClasses = normalizeCanonicalIdPolicyClasses(allowedCanonicalIdPolicyClasses);
   if (canonical && contextual) {
     return { ok: false, error: `provide either ${label} id or ${label} ref, not both` };
   }
   if (canonical) {
     const authoringContext = typeof context === "string" && context.trim() ? context.trim() : null;
     if (!authoringContext) return { ok: true, target: canonical, source: "canonical" };
-    const targetContext = moduleProjectors.objectContexts(witnesses).get(canonical) ?? null;
-    if (!targetContext || targetContext === authoringContext) {
-      return { ok: true, target: canonical, source: "canonical" };
+    if (!projectors.things(witnesses).has(canonical)) {
+      return { ok: true, target: canonical, source: "canonical", canonicalIdPolicyClass: null, visibility: null };
     }
-    const visible = moduleProjectors.contextScopes(witnesses)
-      .some(row => row.context === authoringContext && row.target === canonical);
-    if (visible) return { ok: true, target: canonical, source: "canonical" };
+    const classified = classifyCanonicalIdPolicy(witnesses, {
+      context: authoringContext,
+      target: canonical
+    });
+    if (!classified.ok) {
+      const targetContext = classified.visibility?.targetContext ?? moduleProjectors.objectContexts(witnesses).get(canonical) ?? null;
+      if (targetContext) {
+        return {
+          ok: false,
+          error: `${label} id targets ${canonical} in context ${targetContext} and is not visible in authoring context ${authoringContext}`
+        };
+      }
+      return { ok: false, error: `${label} id ${classified.reason}` };
+    }
+    if (classified.policyClass && Array.isArray(allowedPolicyClasses) && !allowedPolicyClasses.includes(classified.policyClass)) {
+      return {
+        ok: false,
+        error: `${label} id uses canonical-id compatibility class ${classified.policyClass}, which is not allowed here`
+      };
+    }
     return {
-      ok: false,
-      error: `${label} id targets ${canonical} in context ${targetContext} and is not visible in authoring context ${authoringContext}`
+      ok: true,
+      target: canonical,
+      source: "canonical",
+      canonicalIdPolicyClass: classified.policyClass ?? null,
+      visibility: classified.visibility ?? null
     };
   }
   if (!contextual) return { ok: true, target: null, source: "empty" };
@@ -1373,6 +2392,13 @@ export function resolveContextualRef(witnesses, {
   const resolved = resolveContextualName(witnesses, { context, name: contextual });
   if (!resolved.ok) return { ok: false, error: `${label} ref ${resolved.error}` };
   return { ok: true, target: resolved.target, source: "contextual", row: resolved.row };
+}
+
+export function resolveCoveredContextualRef(witnesses, options = {}) {
+  return resolveContextualRef(witnesses, {
+    ...options,
+    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+  });
 }
 
 export function defineRoute(world, { actor, id, path, serves, method = "GET", handler = null, params = null, owner = actor, context = null }) {
@@ -1481,6 +2507,15 @@ export const moduleProjectors = {
       if (row.rel === "inContext") map.set(row.from, row.to);
     }
     return map;
+  },
+
+  contextualTargets(witnesses) {
+    return [...moduleProjectors.objectContexts(witnesses).entries()]
+      .map(([id, context]) => ({ id, context }))
+      .sort((a, b) =>
+        String(a.context).localeCompare(String(b.context))
+        || String(a.id).localeCompare(String(b.id))
+      );
   },
 
   contexts(witnesses) {
@@ -1593,6 +2628,14 @@ export const moduleProjectors = {
     );
   },
 
+  contextNameResolutions(witnesses) {
+    return contextNameResolutionRows(witnesses);
+  },
+
+  contextNameConflicts(witnesses) {
+    return contextNameConflictRows(witnesses);
+  },
+
   stewardships(witnesses) {
     const rows = [];
     const kinds = moduleProjectors.modules(witnesses);
@@ -1624,14 +2667,22 @@ export const moduleProjectors = {
   },
 
   capabilityInstalls(witnesses) {
-    const rows = [];
-    const seen = new Set();
+    const rows = new Map();
     const rels = currentRelations(witnesses);
+    const sourcePriority = new Map([
+      ["explicit", 3],
+      ["legacy-context", 2],
+      ["legacy-host", 1]
+    ]);
     const add = row => {
       const key = `${row.targetKind}\u0000${row.target}\u0000${row.capability}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      rows.push(row);
+      const existing = rows.get(key) ?? null;
+      if (existing) {
+        const existingPriority = sourcePriority.get(existing.source) ?? 0;
+        const nextPriority = sourcePriority.get(row.source) ?? 0;
+        if (existingPriority >= nextPriority) return;
+      }
+      rows.set(key, row);
     };
 
     for (const r of rels) {
@@ -1666,7 +2717,7 @@ export const moduleProjectors = {
         });
       }
     }
-    return rows.sort((a, b) =>
+    return [...rows.values()].sort((a, b) =>
       String(a.targetKind).localeCompare(String(b.targetKind))
       || String(a.target).localeCompare(String(b.target))
       || String(a.capability).localeCompare(String(b.capability))
@@ -1681,6 +2732,23 @@ export const moduleProjectors = {
       ...row,
       installCount: installCounts.get(row.id) ?? 0
     }));
+  },
+
+  capabilityRevisionHistory(witnesses) {
+    return capabilityDefinitionHistoryRows(witnesses);
+  },
+
+  capabilityRevisionHistoryIndex(witnesses) {
+    const rows = moduleProjectors.capabilityRevisionHistory(witnesses);
+    const byCapability = Object.create(null);
+    for (const row of rows) {
+      if (!byCapability[row.capabilityId]) byCapability[row.capabilityId] = [];
+      byCapability[row.capabilityId].push({
+        ...row,
+        definition: structuredClone(row.definition)
+      });
+    }
+    return { rows, byCapability };
   },
 
   runtimePluginInstalls(witnesses) {
@@ -1713,6 +2781,376 @@ export const moduleProjectors = {
       byServerRunnerPlugin[`${row.serverRunner}\u0000${row.plugin}`] = row;
     }
     return { rows, byServerRunner, byServerRunnerPlugin };
+  },
+
+  packages(witnesses) {
+    return [...packageDefinitionsById(witnesses).values()]
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  },
+
+  packageIndex(witnesses) {
+    const rows = moduleProjectors.packages(witnesses);
+    const byId = Object.create(null);
+    for (const row of rows) byId[row.id] = row;
+    return { rows, byId };
+  },
+
+  packageRevisions(witnesses) {
+    return [...packageRevisionDefinitionsById(witnesses).values()]
+      .sort((a, b) =>
+        String(a.package).localeCompare(String(b.package))
+        || String(a.version ?? "").localeCompare(String(b.version ?? ""))
+        || String(a.id).localeCompare(String(b.id))
+      );
+  },
+
+  packageRevisionIndex(witnesses) {
+    const rows = moduleProjectors.packageRevisions(witnesses);
+    const byId = Object.create(null);
+    const byPackage = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      if (!byPackage[row.package]) byPackage[row.package] = [];
+      byPackage[row.package].push(row);
+    }
+    return { rows, byId, byPackage };
+  },
+
+  packagePatches(witnesses) {
+    return [...packagePatchDefinitionsById(witnesses).values()]
+      .sort((a, b) =>
+        String(a.revision).localeCompare(String(b.revision))
+        || Number(a.ordinal ?? 0) - Number(b.ordinal ?? 0)
+        || String(a.path).localeCompare(String(b.path))
+        || String(a.id).localeCompare(String(b.id))
+      );
+  },
+
+  packagePatchIndex(witnesses) {
+    const rows = moduleProjectors.packagePatches(witnesses);
+    const byId = Object.create(null);
+    const byRevision = Object.create(null);
+    const byPackage = Object.create(null);
+    const byTransformer = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      if (!byRevision[row.revision]) byRevision[row.revision] = [];
+      byRevision[row.revision].push(row);
+      if (!byPackage[row.package]) byPackage[row.package] = [];
+      byPackage[row.package].push(row);
+      if (row.transformer) {
+        if (!byTransformer[row.transformer]) byTransformer[row.transformer] = [];
+        byTransformer[row.transformer].push(row);
+      }
+    }
+    return { rows, byId, byRevision, byPackage, byTransformer };
+  },
+
+  packageNamespaces(witnesses) {
+    return [...packageNamespaceDefinitionsById(witnesses).values()]
+      .sort((a, b) =>
+        String(a.context).localeCompare(String(b.context))
+        || String(a.name).localeCompare(String(b.name))
+        || String(a.id).localeCompare(String(b.id))
+      );
+  },
+
+  packageNamespaceIndex(witnesses) {
+    const rows = moduleProjectors.packageNamespaces(witnesses);
+    const byId = Object.create(null);
+    const byContext = Object.create(null);
+    const byContextName = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      if (!byContext[row.context]) byContext[row.context] = [];
+      byContext[row.context].push(row);
+      byContextName[`${row.context}\u0000${row.name}`] = row;
+    }
+    return { rows, byId, byContext, byContextName };
+  },
+
+  packageDependencies(witnesses) {
+    return [...packageDependencyDefinitionsById(witnesses).values()]
+      .sort((a, b) =>
+        String(a.sourceRevision).localeCompare(String(b.sourceRevision))
+        || String(a.targetKind).localeCompare(String(b.targetKind))
+        || String(a.targetId).localeCompare(String(b.targetId))
+        || String(a.id).localeCompare(String(b.id))
+      );
+  },
+
+  packageDependencyIndex(witnesses) {
+    const rows = moduleProjectors.packageDependencies(witnesses);
+    const byId = Object.create(null);
+    const bySourceRevision = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      if (!bySourceRevision[row.sourceRevision]) bySourceRevision[row.sourceRevision] = [];
+      bySourceRevision[row.sourceRevision].push(row);
+    }
+    return { rows, byId, bySourceRevision };
+  },
+
+  packageTransformers(witnesses) {
+    return [...packageTransformerDefinitionsById(witnesses).values()]
+      .sort((a, b) =>
+        String(a.package).localeCompare(String(b.package))
+        || String(a.targetRevision ?? a.targetNamespace ?? "").localeCompare(String(b.targetRevision ?? b.targetNamespace ?? ""))
+        || String(a.sourceRevision ?? a.sourceNamespace ?? "").localeCompare(String(b.sourceRevision ?? b.sourceNamespace ?? ""))
+        || String(a.id).localeCompare(String(b.id))
+      );
+  },
+
+  packageTransformerIndex(witnesses) {
+    const rows = moduleProjectors.packageTransformers(witnesses);
+    const byId = Object.create(null);
+    const byPackage = Object.create(null);
+    const bySourceRevision = Object.create(null);
+    const byTargetRevision = Object.create(null);
+    const bySourceNamespace = Object.create(null);
+    const byTargetNamespace = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      if (!byPackage[row.package]) byPackage[row.package] = [];
+      byPackage[row.package].push(row);
+      if (row.sourceRevision) {
+        if (!bySourceRevision[row.sourceRevision]) bySourceRevision[row.sourceRevision] = [];
+        bySourceRevision[row.sourceRevision].push(row);
+      }
+      if (row.targetRevision) {
+        if (!byTargetRevision[row.targetRevision]) byTargetRevision[row.targetRevision] = [];
+        byTargetRevision[row.targetRevision].push(row);
+      }
+      if (row.sourceNamespace) {
+        if (!bySourceNamespace[row.sourceNamespace]) bySourceNamespace[row.sourceNamespace] = [];
+        bySourceNamespace[row.sourceNamespace].push(row);
+      }
+      if (row.targetNamespace) {
+        if (!byTargetNamespace[row.targetNamespace]) byTargetNamespace[row.targetNamespace] = [];
+        byTargetNamespace[row.targetNamespace].push(row);
+      }
+    }
+    return { rows, byId, byPackage, bySourceRevision, byTargetRevision, bySourceNamespace, byTargetNamespace };
+  },
+
+  packageCoexistence(witnesses) {
+    const packages = moduleProjectors.packages(witnesses);
+    const packageRevisionIndex = moduleProjectors.packageRevisionIndex(witnesses);
+    const packageNamespaces = moduleProjectors.packageNamespaces(witnesses);
+    const namespacesByPackage = Object.create(null);
+    for (const namespace of packageNamespaces) {
+      if (!namespacesByPackage[namespace.package]) namespacesByPackage[namespace.package] = [];
+      namespacesByPackage[namespace.package].push(namespace);
+    }
+    const rows = [];
+    for (const packageRecord of packages) {
+      const revisions = [...(packageRevisionIndex.byPackage[packageRecord.id] ?? [])];
+      const revisionIds = revisions.map(row => row.id);
+      const revisionIdSet = new Set(revisionIds);
+      const namespaces = [...(namespacesByPackage[packageRecord.id] ?? [])].map(namespace => ({
+        id: namespace.id,
+        context: namespace.context,
+        name: namespace.name,
+        package: namespace.package,
+        revision: namespace.revision,
+        visibility: namespace.visibility,
+        explicitRevision: typeof namespace.revision === "string" && namespace.revision.trim().length > 0
+      }));
+      const namespaceSelectionsByRevision = Object.create(null);
+      const floatingNamespaceSelections = [];
+      const unresolvedNamespaceSelections = [];
+      for (const namespace of namespaces) {
+        if (!namespace.revision) {
+          floatingNamespaceSelections.push({ ...namespace });
+          continue;
+        }
+        if (!revisionIdSet.has(namespace.revision)) {
+          unresolvedNamespaceSelections.push({ ...namespace });
+          continue;
+        }
+        if (!namespaceSelectionsByRevision[namespace.revision]) namespaceSelectionsByRevision[namespace.revision] = [];
+        namespaceSelectionsByRevision[namespace.revision].push({ ...namespace });
+      }
+      const supersededBy = Object.create(null);
+      for (const revision of revisions) {
+        for (const predecessor of revision.supersedes ?? []) {
+          if (!supersededBy[predecessor]) supersededBy[predecessor] = [];
+          supersededBy[predecessor].push(revision.id);
+        }
+      }
+      const coexistenceRevisions = revisions.map(revision => {
+        const selectedBy = (namespaceSelectionsByRevision[revision.id] ?? []).map(row => ({ ...row }));
+        return {
+          id: revision.id,
+          package: revision.package,
+          version: revision.version,
+          status: revision.status,
+          supersedes: [...(revision.supersedes ?? [])],
+          supersededBy: uniqueStrings(supersededBy[revision.id] ?? []),
+          emittedBundleHash: revision.emittedBundleHash,
+          manifest: revision.manifest ? structuredClone(revision.manifest) : null,
+          manifestPluginId: packageManifestPluginId(revision.manifest),
+          compatibility: revision.compatibility ? structuredClone(revision.compatibility) : null,
+          selectedByNamespaceIds: selectedBy.map(row => row.id),
+          selectedByContexts: uniqueStrings(selectedBy.map(row => row.context)),
+          selectedByNames: uniqueStrings(selectedBy.map(row => row.name)),
+          selectedBy
+        };
+      });
+      const manifestPluginBuckets = Object.create(null);
+      for (const revision of coexistenceRevisions) {
+        if (!revision.manifestPluginId) continue;
+        if (!manifestPluginBuckets[revision.manifestPluginId]) manifestPluginBuckets[revision.manifestPluginId] = [];
+        manifestPluginBuckets[revision.manifestPluginId].push(revision);
+      }
+      const manifestPluginConflicts = Object.entries(manifestPluginBuckets)
+        .filter(([, revisionRows]) => revisionRows.length > 1)
+        .map(([manifestPluginId, revisionRows]) => {
+          const conflictingRevisionIds = revisionRows.map(row => row.id);
+          const conflictingRevisionIdSet = new Set(conflictingRevisionIds);
+          const namespaceKeys = new Set(
+            namespaces
+              .filter(namespace => namespace.revision && conflictingRevisionIdSet.has(namespace.revision))
+              .map(namespace => `${namespace.context}\u0000${namespace.name}`)
+          );
+          const explicitSupersede = revisionRows.some(row =>
+            row.supersedes.some(target => conflictingRevisionIdSet.has(target))
+            || row.supersededBy.some(target => conflictingRevisionIdSet.has(target))
+          );
+          const truthfulNamespaceSplit = namespaceKeys.size >= 2;
+          return {
+            id: `packageManifestConflict:${packageRecord.id}:${manifestPluginId}`,
+            packageId: packageRecord.id,
+            manifestPluginId,
+            revisionIds: conflictingRevisionIds.sort(),
+            namespaceIds: namespaces
+              .filter(namespace => namespace.revision && conflictingRevisionIdSet.has(namespace.revision))
+              .map(namespace => namespace.id)
+              .sort(),
+            explicitSupersede,
+            truthfulNamespaceSplit,
+            blocked: !explicitSupersede && !truthfulNamespaceSplit
+          };
+        })
+        .sort((left, right) => String(left.manifestPluginId).localeCompare(String(right.manifestPluginId)));
+      rows.push({
+        id: `packageCoexistence:${packageRecord.id}`,
+        packageId: packageRecord.id,
+        packageLabel: packageRecord.label,
+        packageKind: packageRecord.packageKind,
+        defaultNamespace: packageRecord.defaultNamespace,
+        revisionCount: coexistenceRevisions.length,
+        revisionIds: coexistenceRevisions.map(row => row.id),
+        selectedRevisionIds: coexistenceRevisions
+          .filter(row => row.selectedBy.length > 0)
+          .map(row => row.id),
+        coexistenceMode: coexistenceRevisions.length > 1 ? "coexisting" : "single-line",
+        revisions: coexistenceRevisions,
+        namespaceSelections: namespaces,
+        floatingNamespaceSelections,
+        unresolvedNamespaceSelections,
+        manifestPluginConflicts
+      });
+    }
+    return rows.sort((a, b) => String(a.packageId).localeCompare(String(b.packageId)));
+  },
+
+  packageCoexistenceIndex(witnesses) {
+    const rows = moduleProjectors.packageCoexistence(witnesses);
+    const byId = Object.create(null);
+    const byPackage = Object.create(null);
+    const byRevision = Object.create(null);
+    const byNamespace = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      byPackage[row.packageId] = row;
+      for (const revisionId of row.revisionIds ?? []) byRevision[revisionId] = row;
+      for (const namespace of row.namespaceSelections ?? []) byNamespace[namespace.id] = row;
+    }
+    return { rows, byId, byPackage, byRevision, byNamespace };
+  },
+
+  packageConvergence(witnesses) {
+    const coexistenceRows = moduleProjectors.packageCoexistence(witnesses);
+    const packageTransformerIndex = moduleProjectors.packageTransformerIndex(witnesses);
+    const packagePatchIndex = moduleProjectors.packagePatchIndex(witnesses);
+    return coexistenceRows.map(row => {
+      const namespaceIdSet = new Set((row.namespaceSelections ?? []).map(namespace => namespace.id));
+      const revisionIdSet = new Set(row.revisionIds ?? []);
+      const transformers = (packageTransformerIndex.byPackage[row.packageId] ?? [])
+        .filter(transformer =>
+          (transformer.sourceRevision && revisionIdSet.has(transformer.sourceRevision))
+          || (transformer.targetRevision && revisionIdSet.has(transformer.targetRevision))
+          || (transformer.sourceNamespace && namespaceIdSet.has(transformer.sourceNamespace))
+          || (transformer.targetNamespace && namespaceIdSet.has(transformer.targetNamespace))
+        );
+      const convergencePatches = transformers
+        .flatMap(transformer => packagePatchIndex.byTransformer?.[transformer.id] ?? [])
+        .filter((patch, index, rows) => rows.findIndex(candidate => candidate.id === patch.id) === index)
+        .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      const remainingGlue = [];
+      if (row.coexistenceMode === "coexisting" && !transformers.length) {
+        remainingGlue.push({
+          kind: "unplanned",
+          transformerId: null,
+          message: "No authored package transformer maps the divergent revision or namespace lines yet."
+        });
+      }
+      for (const transformer of transformers) {
+        if (!convergencePatches.some(patch => patch.transformer === transformer.id)) {
+          remainingGlue.push({
+            kind: "missing-patches",
+            transformerId: transformer.id,
+            message: "Transformer has no authored convergence patches yet."
+          });
+        }
+        for (const note of transformer.remainingGlue ?? []) {
+          remainingGlue.push({
+            kind: "explicit-glue",
+            transformerId: transformer.id,
+            message: note
+          });
+        }
+      }
+      const status = row.coexistenceMode === "single-line"
+        ? "not-needed"
+        : (!transformers.length
+          ? "unplanned"
+          : (remainingGlue.length ? "glue-required" : "converging"));
+      return {
+        id: `packageConvergence:${row.packageId}`,
+        packageId: row.packageId,
+        packageLabel: row.packageLabel,
+        coexistenceId: row.id,
+        coexistenceMode: row.coexistenceMode,
+        status,
+        transformerIds: transformers.map(transformer => transformer.id),
+        transformers,
+        convergencePatchIds: convergencePatches.map(patch => patch.id),
+        convergencePatches,
+        remainingGlue,
+        explanation: status === "not-needed"
+          ? "Package currently has one effective revision line, so no convergence glue is required."
+          : (status === "unplanned"
+            ? "Divergent package lines exist, but no authored transformer contract explains convergence yet."
+            : (status === "glue-required"
+              ? "A transformer contract exists, but authored glue still remains before convergence is complete."
+              : "Transformer contract and convergence patches are present with no remaining authored glue notes."))
+      };
+    });
+  },
+
+  packageConvergenceIndex(witnesses) {
+    const rows = moduleProjectors.packageConvergence(witnesses);
+    const byId = Object.create(null);
+    const byPackage = Object.create(null);
+    const byTransformer = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      byPackage[row.packageId] = row;
+      for (const transformerId of row.transformerIds ?? []) byTransformer[transformerId] = row;
+    }
+    return { rows, byId, byPackage, byTransformer };
   },
 
   mcpServers: delegatedModuleProjector("mcpServers", emptyRows),
@@ -1769,6 +3207,25 @@ export const moduleProjectors = {
   testSuites: delegatedModuleProjector("testSuites", emptyRows),
 
   testCases: delegatedModuleProjector("testCases", emptyRows),
+
+  testReports: delegatedModuleProjector("testReports", emptyRows),
+
+  testReportIndex: delegatedModuleProjector("testReportIndex", () => ({
+    rows: [],
+    byId: Object.create(null),
+    byRun: Object.create(null),
+    byGate: Object.create(null)
+  })),
+
+  verificationPolicies: delegatedModuleProjector("verificationPolicies", emptyRows),
+
+  verificationFreshness: delegatedModuleProjector("verificationFreshness", emptyRows),
+
+  verificationInvalidations: delegatedModuleProjector("verificationInvalidations", emptyRows),
+
+  verificationQueue: delegatedModuleProjector("verificationQueue", emptyRows),
+
+  verificationExecutions: delegatedModuleProjector("verificationExecutions", emptyRows),
 
   coverageEdges: delegatedModuleProjector("coverageEdges", emptyRows),
 
@@ -1864,7 +3321,11 @@ export const moduleProjectors = {
         storage: w.body.storage && typeof w.body.storage === "object" ? { ...w.body.storage } : null,
         runtimeConfig: w.body.runtimeConfig && typeof w.body.runtimeConfig === "object" ? { ...w.body.runtimeConfig } : null,
         allowActorHeader: w.body.allowActorHeader === true,
-        context: contexts.get(w.body.id) ?? (w.body.context ? String(w.body.context) : null)
+        hosts: normalizeRunnerHosts(w.body.hosts),
+        default: w.body.default === true,
+        requireAuth: w.body.requireAuth === true,
+        context: contexts.get(w.body.id) ?? (w.body.context ? String(w.body.context) : null),
+        values: w.body.values && typeof w.body.values === "object" ? structuredClone(w.body.values) : null
       });
     }
     return [...runnerMap.values()];

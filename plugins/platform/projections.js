@@ -31,6 +31,107 @@ function sortRows(rows, keys) {
   });
 }
 
+function uniqueStrings(values = []) {
+  return [...new Set(values.map(value => String(value || "")).filter(Boolean))];
+}
+
+function numberOrNull(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function activityMoment(row) {
+  return String(row?.finishedAt || row?.startedAt || row?.producedAt || "");
+}
+
+function compareActivityRows(left, right) {
+  return activityMoment(left).localeCompare(activityMoment(right))
+    || String(left?.id || "").localeCompare(String(right?.id || ""));
+}
+
+function primaryStructuredFormat(artifacts = [], suites = []) {
+  const structuredFormats = new Set([
+    ...artifacts.map(artifact => String(artifact?.structuredFormat || "")),
+    ...suites.map(suite => String(suite?.format || ""))
+  ]);
+  if (structuredFormats.has("junit")) return "junit";
+  if (structuredFormats.has("tap")) return "tap";
+  return null;
+}
+
+function formatCountSummary({ suiteCount = 0, caseCount = 0, failedCount = 0, errorCount = 0, skippedCount = 0 } = {}) {
+  const parts = [
+    `${suiteCount} suite${suiteCount === 1 ? "" : "s"}`,
+    `${caseCount} case${caseCount === 1 ? "" : "s"}`
+  ];
+  if (failedCount > 0) parts.push(`${failedCount} failed`);
+  if (errorCount > 0) parts.push(`${errorCount} error${errorCount === 1 ? "" : "s"}`);
+  if (skippedCount > 0) parts.push(`${skippedCount} skipped`);
+  return parts.join(", ");
+}
+
+function inferRegressionStatus(currentDurationMs, baselineDurationMs, {
+  minDeltaMs = 500,
+  minDeltaPct = 25
+} = {}) {
+  if (!Number.isFinite(currentDurationMs) || !Number.isFinite(baselineDurationMs) || baselineDurationMs <= 0) {
+    return {
+      status: "unknown",
+      deltaMs: null,
+      deltaPercent: null
+    };
+  }
+  const deltaMs = currentDurationMs - baselineDurationMs;
+  const deltaPercent = baselineDurationMs === 0 ? null : (deltaMs / baselineDurationMs) * 100;
+  const meaningful = Math.abs(deltaMs) >= Number(minDeltaMs || 0) && Math.abs(deltaPercent ?? 0) >= Number(minDeltaPct || 0);
+  if (meaningful && deltaMs > 0) {
+    return { status: "regressed", deltaMs, deltaPercent };
+  }
+  if (meaningful && deltaMs < 0) {
+    return { status: "improved", deltaMs, deltaPercent };
+  }
+  return { status: "steady", deltaMs, deltaPercent };
+}
+
+function regressionSummaryByRun(runs = []) {
+  const summaries = Object.create(null);
+  const byGateAndEnvironment = Object.create(null);
+  for (const run of [...runs].sort(compareActivityRows)) {
+    const gateId = String(run?.gateId || "");
+    if (!gateId) continue;
+    const environmentIdentityHash = String(run?.cacheIdentity?.environmentIdentityHash || "");
+    const runtimeProfile = String(run?.runtimeProfile || "");
+    const key = `${gateId}\u0000${environmentIdentityHash}\u0000${runtimeProfile}`;
+    pushByKey(byGateAndEnvironment, key, run);
+  }
+  for (const group of Object.values(byGateAndEnvironment)) {
+    let latestPassedBaseline = null;
+    for (const run of group) {
+      const baselineDurationMs = numberOrNull(latestPassedBaseline?.durationMs);
+      const currentDurationMs = numberOrNull(run?.durationMs);
+      const heuristic = inferRegressionStatus(currentDurationMs, baselineDurationMs, {
+        minDeltaMs: Number(run?.verification?.regressionMinDeltaMs || 500),
+        minDeltaPct: Number(run?.verification?.regressionMinDeltaPct || 25)
+      });
+      summaries[run.id] = {
+        id: `regressionSummary:${run.id}`,
+        runId: String(run.id),
+        gateId: String(run.gateId || ""),
+        status: heuristic.status,
+        baselineRunId: latestPassedBaseline ? String(latestPassedBaseline.id) : null,
+        baselineDurationMs,
+        currentDurationMs,
+        deltaMs: heuristic.deltaMs,
+        deltaPercent: heuristic.deltaPercent,
+        regressionMinDeltaMs: Number(run?.verification?.regressionMinDeltaMs || 500),
+        regressionMinDeltaPct: Number(run?.verification?.regressionMinDeltaPct || 25),
+        baselineScope: String(run?.verification?.baselineScope || "gate+environment+runtimeProfile")
+      };
+      if (run.status === "passed" && run.cacheStatus !== "hit") latestPassedBaseline = run;
+    }
+  }
+  return summaries;
+}
+
 function changeSetEditRows(witnesses) {
   const latest = new Map();
   for (const witness of witnesses) {
@@ -175,6 +276,10 @@ function testRunRows(witnesses) {
         cacheHit: body.cacheHit && typeof body.cacheHit === "object"
           ? { ...body.cacheHit }
           : null,
+        serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
+        verification: body.verification && typeof body.verification === "object"
+          ? { ...body.verification }
+          : null,
         actor: body.actor ? String(body.actor) : null,
         session: body.session ? String(body.session) : null,
         runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
@@ -228,6 +333,10 @@ function testRunRows(witnesses) {
         cacheStatus: body.cacheStatus ? String(body.cacheStatus) : "miss",
         cacheHit: body.cacheHit && typeof body.cacheHit === "object"
           ? { ...body.cacheHit }
+          : null,
+        serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
+        verification: body.verification && typeof body.verification === "object"
+          ? { ...body.verification }
           : null,
         actor: body.actor ? String(body.actor) : null,
         session: body.session ? String(body.session) : null,
@@ -296,9 +405,157 @@ function testResultRows(witnesses) {
         cacheHit: result.cacheHit && typeof result.cacheHit === "object"
           ? { ...result.cacheHit }
           : null,
+        serverRunnerId: result.serverRunnerId ? String(result.serverRunnerId) : (witness.body.serverRunnerId ? String(witness.body.serverRunnerId) : null),
+        verification: result.verification && typeof result.verification === "object"
+          ? { ...result.verification }
+          : (witness.body.verification && typeof witness.body.verification === "object" ? { ...witness.body.verification } : null),
         producedAt: result.producedAt ?? witness.body.finishedAt ?? null
       });
     }
+  }
+  return sortRows(rows, ["gateId", "id"]);
+}
+
+function verificationPolicyRows(witnesses) {
+  return sortRows(
+    [...latestBodiesByProcess(witnesses, "platform.verification.policy.resolved").values()].map(body => ({
+      id: String(body.id || ""),
+      serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
+      runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
+      policySource: body.policySource ? String(body.policySource) : null,
+      policyKind: body.policyKind ? String(body.policyKind) : "gate",
+      gateId: body.gateId ? String(body.gateId) : null,
+      gateTitle: body.gateTitle ? String(body.gateTitle) : null,
+      enabled: body.enabled === true,
+      startup: body.startup === true,
+      watch: body.watch === true,
+      onChangeSet: body.onChangeSet === true,
+      priority: Number(body.priority || 0),
+      maxConcurrency: Number(body.maxConcurrency || 0),
+      cpuBudget: Number(body.cpuBudget || 0),
+      regressionMinDeltaMs: Number(body.regressionMinDeltaMs || 0),
+      regressionMinDeltaPct: Number(body.regressionMinDeltaPct || 0),
+      baselineScope: body.baselineScope ? String(body.baselineScope) : null,
+      executionClass: body.executionClass ? String(body.executionClass) : null,
+      exclusive: body.exclusive === true,
+      requiresCleanWorkspace: body.requiresCleanWorkspace === true,
+      timeoutMs: typeof body.timeoutMs === "number" ? body.timeoutMs : null,
+      status: body.status ? String(body.status) : "resolved",
+      diagnostics: Array.isArray(body.diagnostics) ? body.diagnostics.map(row => ({ ...row })) : [],
+      producedAt: body.producedAt ?? null
+    })),
+    ["serverRunnerId", "runtimeProfile", "policyKind", "gateId", "id"]
+  );
+}
+
+function verificationFreshnessRows(witnesses) {
+  return sortRows(
+    [...latestBodiesByProcess(witnesses, "platform.verification.freshness.computed").values()].map(body => ({
+      id: String(body.id || ""),
+      gateId: body.gateId ? String(body.gateId) : null,
+      serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : null,
+      runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
+      status: body.status ? String(body.status) : "missing",
+      latestRunId: body.latestRunId ? String(body.latestRunId) : null,
+      latestPassedRunId: body.latestPassedRunId ? String(body.latestPassedRunId) : null,
+      latestUsableCacheKey: body.latestUsableCacheKey ? String(body.latestUsableCacheKey) : null,
+      reasonKinds: uniqueStrings(body.reasonKinds),
+      reasonSummary: body.reasonSummary ? String(body.reasonSummary) : null,
+      changedPaths: uniqueStrings(body.changedPaths),
+      targetIds: uniqueStrings(body.targetIds),
+      blocking: body.blocking === true,
+      staleSince: body.staleSince ?? null,
+      producedAt: body.producedAt ?? null
+    })),
+    ["serverRunnerId", "runtimeProfile", "gateId", "id"]
+  );
+}
+
+function verificationInvalidationRows(witnesses) {
+  return [...witnesses]
+    .filter(witness => witness.process === "platform.verification.invalidated" && witness.body?.id)
+    .map(witness => ({
+      id: String(witness.body.id || ""),
+      gateId: witness.body.gateId ? String(witness.body.gateId) : null,
+      serverRunnerId: witness.body.serverRunnerId ? String(witness.body.serverRunnerId) : null,
+      runtimeProfile: witness.body.runtimeProfile ? String(witness.body.runtimeProfile) : null,
+      reasonKind: witness.body.reasonKind ? String(witness.body.reasonKind) : "missing_evidence",
+      reasonSummary: witness.body.reasonSummary ? String(witness.body.reasonSummary) : null,
+      changedPaths: uniqueStrings(witness.body.changedPaths),
+      targetIds: uniqueStrings(witness.body.targetIds),
+      previousRunId: witness.body.previousRunId ? String(witness.body.previousRunId) : null,
+      previousCacheKey: witness.body.previousCacheKey ? String(witness.body.previousCacheKey) : null,
+      producedAt: witness.body.producedAt ?? null
+    }))
+    .sort(compareActivityRows);
+}
+
+function verificationQueueRows(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (![
+      "platform.verification.queue.enqueued",
+      "platform.verification.queue.started",
+      "platform.verification.queue.skipped",
+      "platform.verification.queue.finished"
+    ].includes(String(witness.process || "")) || !witness.body?.id) continue;
+    const body = witness.body;
+    const previous = rows.get(String(body.id)) ?? {};
+    rows.set(String(body.id), {
+      ...previous,
+      id: String(body.id),
+      serverRunnerId: body.serverRunnerId ? String(body.serverRunnerId) : previous.serverRunnerId ?? null,
+      runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : previous.runtimeProfile ?? null,
+      gateId: body.gateId ? String(body.gateId) : previous.gateId ?? null,
+      gateTitle: body.gateTitle ? String(body.gateTitle) : previous.gateTitle ?? null,
+      executionClass: body.executionClass ? String(body.executionClass) : previous.executionClass ?? null,
+      exclusive: body.exclusive === true || previous.exclusive === true,
+      requiresCleanWorkspace: body.requiresCleanWorkspace === true || previous.requiresCleanWorkspace === true,
+      priority: Number(body.priority ?? previous.priority ?? 0),
+      triggerKind: body.triggerKind ? String(body.triggerKind) : previous.triggerKind ?? null,
+      trigger: body.trigger ? String(body.trigger) : previous.trigger ?? null,
+      branchId: body.branchId ? String(body.branchId) : previous.branchId ?? null,
+      changeSetId: body.changeSetId ? String(body.changeSetId) : previous.changeSetId ?? null,
+      candidateSnapshotId: body.candidateSnapshotId ? String(body.candidateSnapshotId) : previous.candidateSnapshotId ?? null,
+      sourcePaths: Array.isArray(body.sourcePaths) ? body.sourcePaths.map(String) : (previous.sourcePaths ?? []),
+      status: body.status ? String(body.status) : previous.status ?? "queued",
+      reason: body.reason ? String(body.reason) : previous.reason ?? null,
+      runId: body.runId ? String(body.runId) : previous.runId ?? null,
+      resultStatus: body.resultStatus ? String(body.resultStatus) : previous.resultStatus ?? null,
+      error: body.error ? String(body.error) : previous.error ?? null,
+      queuedAt: body.queuedAt ?? previous.queuedAt ?? null,
+      startedAt: body.startedAt ?? previous.startedAt ?? null,
+      finishedAt: body.finishedAt ?? previous.finishedAt ?? null
+    });
+  }
+  return sortRows([...rows.values()], ["status", "priority", "gateId", "id"]);
+}
+
+function verificationExecutionRows(witnesses) {
+  const rows = [];
+  for (const queueRow of verificationQueueRows(witnesses)) {
+    if (!queueRow.startedAt && queueRow.status !== "running") continue;
+    rows.push({
+      id: `verificationExecution:${queueRow.id}`,
+      queueEntryId: queueRow.id,
+      serverRunnerId: queueRow.serverRunnerId,
+      runtimeProfile: queueRow.runtimeProfile,
+      gateId: queueRow.gateId,
+      gateTitle: queueRow.gateTitle,
+      executionClass: queueRow.executionClass,
+      exclusive: queueRow.exclusive === true,
+      requiresCleanWorkspace: queueRow.requiresCleanWorkspace === true,
+      triggerKind: queueRow.triggerKind,
+      branchId: queueRow.branchId,
+      changeSetId: queueRow.changeSetId,
+      candidateSnapshotId: queueRow.candidateSnapshotId,
+      runId: queueRow.runId ?? null,
+      resultStatus: queueRow.resultStatus ?? null,
+      status: queueRow.status,
+      startedAt: queueRow.startedAt ?? null,
+      finishedAt: queueRow.finishedAt ?? null,
+      error: queueRow.error ?? null
+    });
   }
   return sortRows(rows, ["gateId", "id"]);
 }
@@ -679,6 +936,151 @@ function testCaseRows(witnesses) {
   return sortRows(rows, ["runId", "suiteId", "id"]);
 }
 
+function testReportRows(witnesses) {
+  const runs = platformModuleProjectors.testRuns(witnesses);
+  const results = platformModuleProjectors.testResults(witnesses);
+  const artifacts = platformModuleProjectors.testArtifacts(witnesses);
+  const suites = platformModuleProjectors.testSuites(witnesses);
+  const testCases = platformModuleProjectors.testCases(witnesses);
+  const regressionsByRun = regressionSummaryByRun(runs);
+  const resultsByRun = Object.create(null);
+  const artifactsByRun = Object.create(null);
+  const suitesByRun = Object.create(null);
+  const casesByRun = Object.create(null);
+  for (const row of results) pushByKey(resultsByRun, row.runId, row);
+  for (const row of artifacts) pushByKey(artifactsByRun, row.runId, row);
+  for (const row of suites) pushByKey(suitesByRun, row.runId, row);
+  for (const row of testCases) pushByKey(casesByRun, row.runId, row);
+  const rows = [];
+  for (const run of runs) {
+    const runResults = resultsByRun[run.id] ?? [];
+    const runArtifacts = artifactsByRun[run.id] ?? [];
+    const runSuites = suitesByRun[run.id] ?? [];
+    const runCases = casesByRun[run.id] ?? [];
+    const format = primaryStructuredFormat(runArtifacts, runSuites);
+    const structuredArtifacts = format
+      ? runArtifacts.filter(artifact => artifact.structuredFormat === format)
+      : runArtifacts.filter(artifact => artifact.structuredFormat);
+    const relevantSuites = format
+      ? runSuites.filter(suite => suite.format === format)
+      : runSuites;
+    const relevantCases = format
+      ? runCases.filter(testCase => testCase.format === format)
+      : runCases;
+    const failedCases = relevantCases.filter(testCase => testCase.status === "failed" || testCase.status === "error");
+    const caseStatusCounts = relevantCases.reduce((counts, testCase) => {
+      const status = String(testCase.status || "unknown");
+      counts[status] = (counts[status] ?? 0) + 1;
+      return counts;
+    }, Object.create(null));
+    const suiteStatusCounts = relevantSuites.reduce((counts, suite) => {
+      const status = String(suite.status || "unknown");
+      counts[status] = (counts[status] ?? 0) + 1;
+      return counts;
+    }, Object.create(null));
+    const totalCases = relevantCases.length || relevantSuites.reduce((sum, suite) => sum + Number(suite.total || 0), 0);
+    const passedCount = caseStatusCounts.passed ?? relevantSuites.reduce((sum, suite) => sum + Number(suite.passed || 0), 0);
+    const failedCount = caseStatusCounts.failed ?? relevantSuites.reduce((sum, suite) => sum + Number(suite.failed || 0), 0);
+    const errorCount = caseStatusCounts.error ?? relevantSuites.reduce((sum, suite) => sum + Number(suite.errors || 0), 0);
+    const skippedCount = (caseStatusCounts.skipped ?? 0) + (caseStatusCounts.todo ?? 0)
+      || relevantSuites.reduce((sum, suite) => sum + Number(suite.skipped || 0), 0);
+    const suiteCount = relevantSuites.length;
+    const summarySuffix = run.cacheStatus === "hit" ? ", cached" : "";
+    const baseArtifactIds = runArtifacts.map(artifact => artifact.id);
+    const baseSuiteIds = relevantSuites.map(suite => suite.id);
+    const baseCaseIds = relevantCases.map(testCase => testCase.id);
+    const producedAt = run.finishedAt ?? run.startedAt ?? null;
+    const latestResult = runResults.at(-1) ?? null;
+    const regression = regressionsByRun[run.id] ?? {
+      id: `regressionSummary:${run.id}`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      status: "unknown",
+      baselineRunId: null,
+      baselineDurationMs: null,
+      currentDurationMs: numberOrNull(run.durationMs),
+      deltaMs: null,
+      deltaPercent: null
+    };
+    rows.push({
+      id: `testReport:${run.id}:summary`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "summary",
+      title: "Report Summary",
+      status: String(run.status || latestResult?.status || "unknown"),
+      summary: `${formatCountSummary({ suiteCount, caseCount: totalCases, failedCount, errorCount, skippedCount })}${summarySuffix}`,
+      artifactIds: baseArtifactIds,
+      suiteIds: baseSuiteIds,
+      caseIds: baseCaseIds,
+      producedAt,
+      format: format || null,
+      suiteCount,
+      caseCount: totalCases,
+      passedCount,
+      failedCount,
+      errorCount,
+      skippedCount,
+      cached: run.cacheStatus === "hit"
+    });
+    rows.push({
+      id: `testReport:${run.id}:suites`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "suites",
+      title: "Suite Summary",
+      status: suiteStatusCounts.error ? "error" : (suiteStatusCounts.failed ? "failed" : (suiteCount ? "passed" : "unknown")),
+      summary: suiteCount
+        ? formatCountSummary({ suiteCount, caseCount: totalCases, failedCount, errorCount, skippedCount })
+        : "No structured suites were derived for this run.",
+      artifactIds: structuredArtifacts.map(artifact => artifact.id),
+      suiteIds: baseSuiteIds,
+      caseIds: baseCaseIds,
+      producedAt,
+      format: format || null,
+      suiteCount,
+      caseCount: totalCases,
+      failedCount,
+      errorCount,
+      skippedCount
+    });
+    rows.push({
+      id: `testReport:${run.id}:failures`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "failures",
+      title: "Failing Cases",
+      status: failedCases.length ? (failedCases.some(testCase => testCase.status === "error") ? "error" : "failed") : "passed",
+      summary: failedCases.length
+        ? `${failedCases.length} failing or error case${failedCases.length === 1 ? "" : "s"}`
+        : "No failing or error cases were derived for this run.",
+      artifactIds: uniqueStrings(failedCases.map(testCase => testCase.artifactId)),
+      suiteIds: uniqueStrings(failedCases.map(testCase => testCase.suiteId)),
+      caseIds: failedCases.map(testCase => testCase.id),
+      producedAt,
+      format: format || null,
+      failureCount: failedCases.length
+    });
+    rows.push({
+      id: `testReport:${run.id}:regression`,
+      runId: String(run.id),
+      gateId: String(run.gateId || ""),
+      reportKind: "regression",
+      title: "Regression Summary",
+      status: regression.status,
+      summary: regression.status === "unknown"
+        ? "No valid non-cached passed baseline is available yet."
+        : `${regression.status} vs ${regression.baselineRunId || "baseline"}: ${regression.currentDurationMs ?? "?"} ms vs ${regression.baselineDurationMs ?? "?"} ms (${regression.deltaPercent == null ? "n/a" : `${regression.deltaPercent >= 0 ? "+" : ""}${Math.round(regression.deltaPercent)}%`})`,
+      artifactIds: [],
+      suiteIds: [],
+      caseIds: [],
+      producedAt,
+      regressionSummary: regression
+    });
+  }
+  return sortRows(rows, ["runId", "reportKind", "id"]);
+}
+
 export const platformModuleProjectors = {
   changeSetEdits(witnesses) {
     return changeSetEditRows(witnesses);
@@ -743,6 +1145,43 @@ export const platformModuleProjectors = {
 
   testCases(witnesses) {
     return testCaseRows(witnesses);
+  },
+
+  testReports(witnesses) {
+    return testReportRows(witnesses);
+  },
+
+  testReportIndex(witnesses) {
+    const rows = platformModuleProjectors.testReports(witnesses);
+    const byId = Object.create(null);
+    const byRun = Object.create(null);
+    const byGate = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(byRun, row.runId, row);
+      pushByKey(byGate, row.gateId, row);
+    }
+    return { rows, byId, byRun, byGate };
+  },
+
+  verificationPolicies(witnesses) {
+    return verificationPolicyRows(witnesses);
+  },
+
+  verificationFreshness(witnesses) {
+    return verificationFreshnessRows(witnesses);
+  },
+
+  verificationInvalidations(witnesses) {
+    return verificationInvalidationRows(witnesses);
+  },
+
+  verificationQueue(witnesses) {
+    return verificationQueueRows(witnesses);
+  },
+
+  verificationExecutions(witnesses) {
+    return verificationExecutionRows(witnesses);
   },
 
   testGates(witnesses) {

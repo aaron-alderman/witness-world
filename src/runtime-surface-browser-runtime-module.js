@@ -65,13 +65,12 @@ import {
   waitForSurfaceCapabilityModuleRegistration,
   waitForSurfaceCapabilityModuleSettle
 } from "./runtime-surface-capability-runtime.js";
+import { renderSourceryCompanionShellFactory } from "./runtime-guidance-companion-shell.js";
 import {
   capabilityAssetPresence,
-  createSurfaceDiagnosticsOverlay,
   createSurfaceInspectionPoint,
   createSurfaceRuntimeIssueLedger,
   createSurfaceRuntimeProbe,
-  ensureSurfaceDiagnosticsOverlayStyles,
   installSurfaceInspectionPoint,
   installSurfaceRuntimeBootFailure,
   mountedCapabilityMarkersForSurface,
@@ -162,10 +161,10 @@ function browserHelpersSource() {
     installSurfaceInspectionPoint.toString(),
     surfaceDiagnosticsOverlayEnabled.toString(),
     createSurfaceRuntimeIssueLedger.toString(),
-    surfaceRuntimeIssueSeverityRank.toString(),
-    summarizeSurfaceRuntimeIssues.toString(),
-    ensureSurfaceDiagnosticsOverlayStyles.toString(),
-    createSurfaceDiagnosticsOverlay.toString(),
+    `const { createSurfaceDiagnosticsOverlay } = (() => {
+${renderSourceryCompanionShellFactory()}
+  return { createSurfaceDiagnosticsOverlay };
+})();`,
     installSurfaceRuntimeBootFailure.toString(),
     mountedCapabilityMarkersForSurface.toString(),
     capabilityAssetPresence.toString(),

@@ -70,6 +70,7 @@ export function renderTutorialClientDisabledScopes({
   disabledScopesPanel = null,
   disabledScopesOpen = false,
   tutorialDisabledGuidanceRowsFn = () => [],
+  tutorialScopeInventoryRowsFn = null,
   currentSurfacePage = "",
   tutorialPageLabel = () => "",
   renderTutorialDisabledScopeRowsFn = () => "",
@@ -81,6 +82,7 @@ export function renderTutorialClientDisabledScopes({
     disabledScopesPanel,
     disabledScopesOpen,
     tutorialDisabledGuidanceRowsFn,
+    tutorialScopeInventoryRowsFn,
     currentSurfacePage,
     tutorialPageLabel,
     renderTutorialDisabledScopeRowsFn,
@@ -110,9 +112,11 @@ export function renderTutorialClientOverlay({
   disabledScopesPanel = null,
   disabledScopesOpen = false,
   tutorialDisabledGuidanceRowsFn = () => [],
+  tutorialScopeInventoryRowsFn = null,
   currentSurfacePage = "",
   renderTutorialDisabledScopeRowsFn = () => "",
-  documentTarget = globalThis?.document || null
+  documentTarget = globalThis?.document || null,
+  windowTarget = globalThis?.window || globalThis
 } = {}) {
   return renderTutorialOverlayView({
     progress,
@@ -136,9 +140,11 @@ export function renderTutorialClientOverlay({
     disabledScopesPanel,
     disabledScopesOpen,
     tutorialDisabledGuidanceRowsFn,
+    tutorialScopeInventoryRowsFn,
     currentSurfacePage,
     renderTutorialDisabledScopeRowsFn,
-    document: documentTarget
+    document: documentTarget,
+    windowTarget
   });
 }
 
@@ -160,7 +166,8 @@ export function publishTutorialClientRuntimeSnapshot({
   currentSurfaceRouteId = null,
   currentSurfaceRootWidgetId = null,
   currentSurfaceProgramId = null,
-  tutorialSurfaceStateFn = () => ({ kind: "" })
+  tutorialSurfaceStateFn = () => ({ kind: "" }),
+  tutorialScopeInventoryRowsFn = () => []
 } = {}) {
   return publishTutorialRuntimeState({
     windowTarget,
@@ -180,7 +187,8 @@ export function publishTutorialClientRuntimeSnapshot({
     currentSurfaceRouteId,
     currentSurfaceRootWidgetId,
     currentSurfaceProgramId,
-    tutorialSurfaceStateFn
+    tutorialSurfaceStateFn,
+    tutorialScopeInventoryRowsFn
   });
 }
 
@@ -208,6 +216,7 @@ export function createTutorialClientViewAdapter({
   getDisabledScopesOpen = () => false,
   setDisabledScopesOpen = () => {},
   tutorialDisabledGuidanceRowsFn = () => [],
+  tutorialScopeInventoryRowsFn = null,
   currentSurfacePage = "",
   renderTutorialDisabledScopeRowsFn = () => "",
   documentTarget = globalThis?.document || null,
@@ -231,6 +240,7 @@ export function createTutorialClientViewAdapter({
       disabledScopesPanel,
       disabledScopesOpen: getDisabledScopesOpen(),
       tutorialDisabledGuidanceRowsFn,
+      tutorialScopeInventoryRowsFn,
       currentSurfacePage,
       tutorialPageLabel,
       renderTutorialDisabledScopeRowsFn,
@@ -260,9 +270,11 @@ export function createTutorialClientViewAdapter({
       disabledScopesPanel,
       disabledScopesOpen: getDisabledScopesOpen(),
       tutorialDisabledGuidanceRowsFn,
+      tutorialScopeInventoryRowsFn,
       currentSurfacePage,
       renderTutorialDisabledScopeRowsFn,
-      documentTarget
+      documentTarget,
+      windowTarget
     });
     setLastRenderedStepId(nextViewState.lastRenderedStepId);
     setActiveHighlightTarget(nextViewState.activeHighlightTarget);
@@ -287,7 +299,8 @@ export function createTutorialClientViewAdapter({
     currentSurfaceRouteId,
     currentSurfaceRootWidgetId,
     currentSurfaceProgramId,
-    tutorialSurfaceStateFn: tutorialSurfaceState
+    tutorialSurfaceStateFn: tutorialSurfaceState,
+    tutorialScopeInventoryRowsFn
   });
   return {
     renderDisabledScopes,

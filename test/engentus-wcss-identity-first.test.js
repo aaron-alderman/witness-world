@@ -8,14 +8,17 @@ import {
   buildEngentusPresentationInventory,
   buildEngentusStyleArtifacts,
   composeEngentusStylesheets,
+  deriveEngentusLoweringSidecar,
   loadEngentusGeneratedCssBundle,
   loadEngentusAppliedWcss,
   loadEngentusBrowserDeclarationGroups,
   loadEngentusBrowserLoweringMap,
   loadEngentusCanonicalWcss,
   loadEngentusCanonicalStyleGrammar,
+  loadEngentusLoweringSidecar,
   parseEngentusCanonicalWcss,
   renderOracleStylesheet,
+  serializeEngentusCanonicalWcss,
   validateEngentusCanonicalStyleGrammar,
   verifyEngentusStyleOwnership
 } from "../examples/engentus/app/engentus-style-application.js";
@@ -105,19 +108,39 @@ test("engentus canonical V1 WCSS source declares the expected slice coverage and
 
 test("engentus canonical V1 parser exposes tokens, families, views, and application slices", async () => {
   const canonical = await loadEngentusCanonicalWcss();
+  const loweringSidecar = await loadEngentusLoweringSidecar();
+
+  assert.equal(canonical.kind, "wcss-document");
   assert.equal(canonical.theme, "engentus");
   assert.ok(canonical.tokens.some(token => token.name === "color.chrome.bg"));
   assert.ok(canonical.styles.some(style => style.name === "goodman.bolt_set_card"));
   assert.ok(canonical.styles.some(style => style.name === "platform.notice"));
   assert.ok(canonical.views.some(view => view.name === "desktop"));
   assert.ok(canonical.views.some(view => view.name === "narrow"));
-  assert.equal(canonical.slices.find(slice => slice.name === "platform-config")?.asset, "shell");
-  assert.ok(canonical.lowering.byBackend.browser);
+  assert.equal(canonical.application.slices.find(slice => slice.name === "platform-config")?.asset, "shell");
+  assert.equal(canonical.attachments.loweringSectionPresent, true);
   assert.deepEqual(
-    canonical.lowering.byBackend.browser.assets.map(asset => asset.name),
+    loweringSidecar.byBackend.browser.assets.map(asset => asset.name),
     ["shell", "chart"]
   );
   assert.equal(canonical.grammar?.consistency?.ok, true);
+});
+
+test("engentus canonical WCSS core serializes and reparses deterministically", async () => {
+  const canonical = await loadEngentusCanonicalWcss();
+  const serialized = serializeEngentusCanonicalWcss(canonical);
+  const reparsed = parseEngentusCanonicalWcss(serialized);
+
+  assert.equal(reparsed.kind, "wcss-document");
+  assert.equal(reparsed.theme, canonical.theme);
+  assert.deepEqual(reparsed.tokens.map(token => token.name), canonical.tokens.map(token => token.name));
+  assert.deepEqual(reparsed.styles.map(style => style.name), canonical.styles.map(style => style.name));
+  assert.deepEqual(reparsed.views.map(view => view.name), canonical.views.map(view => view.name));
+  assert.deepEqual(
+    reparsed.application.slices.map(slice => slice.name),
+    canonical.application.slices.map(slice => slice.name)
+  );
+  assert.equal(reparsed.attachments.loweringSectionPresent, false);
 });
 
 test("engentus canonical style grammar formalizes token domains, style domains, and slice contracts", async () => {
@@ -149,7 +172,7 @@ test("engentus canonical style grammar formalizes token domains, style domains, 
 test("engentus canonical style grammar rejects slices whose families or seam names break the formal contract", async () => {
   const canonical = await loadEngentusCanonicalWcss();
   const brokenCanonical = structuredClone(canonical);
-  brokenCanonical.slices = brokenCanonical.slices.map(slice => slice.name === "home"
+  brokenCanonical.application.slices = brokenCanonical.application.slices.map(slice => slice.name === "home"
     ? {
         ...slice,
         families: [...slice.families, "platform.notice"],
@@ -187,35 +210,53 @@ test("engentus canonical V1 parser rejects incomplete style grammar sections wit
     /unknown style family bar/i
   );
   assert.throws(
-    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n`),
-    /missing coverage for slice shell-base/i
-  );
-  assert.throws(
-    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\n  style bar\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n  slice auth\n    asset shell\n    source shell-auth.rvm\n    family bar\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      slice auth\n        group foundation\n        family bar -> foundation\n`),
-    /claims backend group foundation from both shell-base and auth/i
-  );
-  assert.throws(
-    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n`),
-    /without a declaration group/i
-  );
-  assert.throws(
-    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n    seam scalar runtime.size\n      prop style\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n`),
+    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n    seam scalar runtime.size\n      prop style\n`),
     /Scalar seam runtime\.size must declare both min and max bounds/i
   );
   assert.throws(
-    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n    seam unknown runtime.mode\n      prop className\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n`),
+    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n    seam unknown runtime.mode\n      prop className\n`),
     /unsupported kind unknown/i
   );
   assert.throws(
-    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n    seam toggle runtime.mode\n      prop className\n      trait foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n`),
+    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n    seam toggle runtime.mode\n      prop className\n      trait foo\n`),
     /Toggle seam runtime\.mode must declare a token/i
   );
+});
+
+test("engentus lowering sidecar derivation rejects incomplete backend coverage with clear errors", () => {
   assert.throws(
-    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n      group foundation\n        rule body\n          color = blue\n`),
+    () => deriveEngentusLoweringSidecar({
+      text: `theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n`,
+      document: parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n`)
+    }),
+    /missing coverage for slice shell-base/i
+  );
+  assert.throws(
+    () => deriveEngentusLoweringSidecar({
+      text: `theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\n  style bar\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n  slice auth\n    asset shell\n    source shell-auth.rvm\n    family bar\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      slice auth\n        group foundation\n        family bar -> foundation\n`,
+      document: parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\n  style bar\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n  slice auth\n    asset shell\n    source shell-auth.rvm\n    family bar\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      slice auth\n        group foundation\n        family bar -> foundation\n`)
+    }),
+    /claims backend group foundation from both shell-base and auth/i
+  );
+  assert.throws(
+    () => deriveEngentusLoweringSidecar({
+      text: `theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n`,
+      document: parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n`)
+    }),
+    /without a declaration group/i
+  );
+  assert.throws(
+    () => deriveEngentusLoweringSidecar({
+      text: `theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n      group foundation\n        rule body\n          color = blue\n`,
+      document: parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n      group foundation\n        rule body\n          color = blue\n`)
+    }),
     /declares browser group foundation more than once/i
   );
   assert.throws(
-    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        media\n          rule body\n            color = red\n`),
+    () => deriveEngentusLoweringSidecar({
+      text: `theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        media\n          rule body\n            color = red\n`,
+      document: parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        media\n          rule body\n            color = red\n`)
+    }),
     /media block is missing a query/i
   );
 });
@@ -723,9 +764,10 @@ test("engentus can switch mill-force onto the authored native proof lane without
 test("engentus build script writes proof artifacts and css snapshots under tmp", async () => {
   await import(`${BUILD_SCRIPT_URL.href}?t=${Date.now()}`);
 
-  const [inventory, grammar, parity, ownership, shellCss, chartCss] = await Promise.all([
+  const [inventory, grammar, loweringSidecar, parity, ownership, shellCss, chartCss] = await Promise.all([
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-inventory.json"), "utf8"),
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-grammar.json"), "utf8"),
+    readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-lowering-sidecar.json"), "utf8"),
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-parity.json"), "utf8"),
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-ownership.json"), "utf8"),
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-shell.css"), "utf8"),
@@ -737,6 +779,8 @@ test("engentus build script writes proof artifacts and css snapshots under tmp",
   assert.match(grammar, /"allowedDomains": \[/);
   assert.match(grammar, /"sliceFamilyDomainContracts"/);
   assert.match(grammar, /"consistency": \{/);
+  assert.match(loweringSidecar, /"kind": "wcss-renderer-sidecar"/);
+  assert.match(loweringSidecar, /"byBackend": \{/);
   assert.match(parity, /"name": "goodman"/);
   assert.match(parity, /"rawSelectorCount": 0/);
   assert.match(ownership, /"chart-pages"/);

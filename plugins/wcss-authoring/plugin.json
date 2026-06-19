@@ -1,0 +1,27 @@
+{
+  "id": "plugin.wcss-authoring",
+  "version": "0.1.0",
+  "displayName": "WCSS Authoring",
+  "description": "Generic headless WCSS document read and token-preview session APIs for app-owned authoring adapters.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-wcss-authoring"
+  ],
+  "contributes": {
+    "authoringTools": [
+      {
+        "id": "tool.wcss.token-preview",
+        "documentModel": "wcss",
+        "operations": [
+          "document.read",
+          "preview.session.create",
+          "preview.tokens.patch",
+          "preview.session.clear"
+        ]
+      }
+    ]
+  }
+}

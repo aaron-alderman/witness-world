@@ -504,6 +504,106 @@ plugin = "plugin.inspect"
   assert.equal(world.allWitnesses().some(w => w.process === "dsl.source.annotate" && w.body.section === "runtimePluginInstall" && w.body.target === "app_runner"), true);
 });
 
+test("runtime plugin and mcp tool DSL sections lower contextual refs to canonical ids", async () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  await applyWitnessDocsWithRuntimePlugins(world, parseWitnessToml(`
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[mcpServer]]
+actor = "system"
+id = "source_mcp"
+serverRunner = "source_server"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceMcp"
+name = "importedMcp"
+
+[[runtimePluginInstall]]
+actor = "system"
+context = "ctx.target"
+serverRunnerRef = "importedRunner"
+plugin = "plugin.inspect"
+
+[[runtimePluginRemove]]
+actor = "system"
+context = "ctx.target"
+serverRunnerRef = "importedRunner"
+plugin = "plugin.inspect"
+
+[[mcpToolInstall]]
+actor = "system"
+context = "ctx.target"
+serverRef = "importedMcp"
+tool = "world.read"
+
+[[mcpToolRemove]]
+actor = "system"
+context = "ctx.target"
+serverRef = "importedMcp"
+tool = "world.read"
+`), {
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.mcp-authoring"]
+  });
+
+  assert.deepEqual(world.project(moduleProjectors.runtimePluginInstalls), []);
+  const projectedToolInstalls = mcpToolInstalls(world.allWitnesses());
+  assert.deepEqual(projectedToolInstalls, []);
+  assert.equal(world.allWitnesses().some(w => w.process === "installRuntimePlugin" && w.body?.serverRunner === "source_server"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "removeRuntimePlugin" && w.body?.serverRunner === "source_server"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "installMcpTool" && w.body?.server === "source_mcp"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "removeMcpTool" && w.body?.server === "source_mcp"), true);
+});
+
 test("maintained demo entrypoints inherit authored runtime plugin installs without duplicates", async () => {
   const expected = ["plugin.authoring", "plugin.canvas", "plugin.demo", "plugin.inspect"];
   const loadRunnerState = async relativePath => {
@@ -532,7 +632,7 @@ test("context composition DSL sections project bindings and lower contextual ref
   const world = createWorld();
   createThing(world, { actor: "system", id: "backendHost" });
   createThing(world, { actor: "system", id: "frontendHost" });
-  applyWitnessToml(world, `
+  applyWitnessDocs(world, parseWitnessToml(`
 [[context]]
 actor = "system"
 id = "ctx.source"
@@ -671,7 +771,7 @@ actor = "system"
 context = "ctx.target"
 serverRunnerRef = "runnerNode"
 routeRef = "landingRoute"
-`);
+`).map(doc => ({ ...doc, file: "C:/demo/context-composition-covered.wtoml" })));
 
   const program = frontendProgramsProjection(world.allWitnesses()).find(row => row.id === "landing_program");
   assert.ok(program);
@@ -690,6 +790,348 @@ routeRef = "landingRoute"
   assert.equal(world.project(moduleProjectors.servedRoutes).some(row => row.id === "landing_route" && row.serverRunner === "demo_server"), true);
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.sourceKind === "import"), true);
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "homePage"), false);
+  const programAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "frontendProgram"
+    && w.body?.target === "landing_program"
+  );
+  assert.deepEqual(programAnnotation?.body?.refResolutions, [{
+    idField: "rootWidget",
+    refField: "rootWidgetRef",
+    source: "contextual",
+    target: "page_root",
+    canonicalIdPolicyClass: null,
+    targetContext: null
+  }]);
+  const runnerAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "serverRunner"
+    && w.body?.target === "demo_server"
+  );
+  assert.deepEqual(runnerAnnotation?.body?.refResolutions, [
+    {
+      idField: "backendHost",
+      refField: "backendHostRef",
+      source: "contextual",
+      target: "backendHost",
+      canonicalIdPolicyClass: null,
+      targetContext: null
+    },
+    {
+      idField: "frontendHost",
+      refField: "frontendHostRef",
+      source: "contextual",
+      target: "frontendHost",
+      canonicalIdPolicyClass: null,
+      targetContext: null
+    }
+  ]);
+});
+
+test("context composition DSL lowers capability install target refs and rejects hidden canonical targets", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  applyWitnessDocs(world, parseWitnessToml(`
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "local_server"
+context = "ctx.target"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "localRunner"
+target = "local_server"
+
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+placement = ["serverRunner"]
+
+[[capabilityInstall]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx.target"
+targetRef = "localRunner"
+targetKind = "serverRunner"
+
+[[capabilityInstall]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx.target"
+targetRef = "importedRunner"
+targetKind = "serverRunner"
+
+[[capabilityRemove]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx.target"
+targetRef = "importedRunner"
+targetKind = "serverRunner"
+`).map(doc => ({ ...doc, file: "C:/demo/capability-install-context.wtoml" })));
+
+  const installs = world.project(moduleProjectors.capabilityInstalls);
+  assert.equal(installs.some(row =>
+    row.capability === "notes.sidebar"
+    && row.target === "local_server"
+    && row.targetKind === "serverRunner"
+  ), true);
+  assert.equal(installs.some(row =>
+    row.capability === "notes.sidebar"
+    && row.target === "source_server"
+    && row.targetKind === "serverRunner"
+  ), false);
+  assert.equal(world.allWitnesses().some(w =>
+    w.process === "installCapability"
+    && w.body?.capability === "notes.sidebar"
+    && w.body?.target === "source_server"
+  ), true);
+  assert.equal(world.allWitnesses().some(w =>
+    w.process === "removeCapability"
+    && w.body?.capability === "notes.sidebar"
+    && w.body?.target === "source_server"
+  ), true);
+  const capabilityInstallAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "capabilityInstall"
+    && w.body?.target === "notes.sidebar"
+  );
+  assert.deepEqual(capabilityInstallAnnotation?.body?.refResolutions, [{
+    idField: "target",
+    refField: "targetRef",
+    source: "contextual",
+    target: "local_server",
+    canonicalIdPolicyClass: null,
+    targetContext: null
+  }]);
+
+  const blockedWorld = createWorld();
+  createThing(blockedWorld, { actor: "system", id: "backendHost" });
+  createThing(blockedWorld, { actor: "system", id: "frontendHost" });
+  assert.throws(() => {
+    applyWitnessDocs(blockedWorld, parseWitnessToml(`
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+placement = ["serverRunner"]
+
+[[capabilityInstall]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx.target"
+target = "source_server"
+targetKind = "serverRunner"
+`).map(doc => ({ ...doc, file: "C:/demo/capability-install-blocked.wtoml" })));
+  }, /capability install target id targets source_server in context ctx\.source and is not visible in authoring context ctx\.target/);
+});
+
+test("context composition DSL lowers stewardship and proposal target refs and rejects hidden canonical targets", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  applyWitnessDocs(world, parseWitnessToml(`
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+
+[[stewardship]]
+actor = "system"
+steward = "callan"
+context = "ctx.target"
+targetRef = "importedRunner"
+targetKind = "serverRunner"
+
+[[proposal]]
+actor = "system"
+id = "proposal.runtime-plugin.source"
+targetProcess = "runtimePlugin.install"
+targetKind = "serverRunner"
+context = "ctx.target"
+targetIdRef = "importedRunner"
+body = {}
+reason = "Govern the imported runner"
+`).map(doc => ({ ...doc, file: "C:/demo/stewardship-proposal-context.wtoml" })));
+
+  assert.equal(world.project(moduleProjectors.stewardships).some(row =>
+    row.steward === "callan"
+    && row.target === "source_server"
+    && row.targetKind === "serverRunner"
+  ), true);
+  assert.equal(world.project(moduleProjectors.proposals).some(row =>
+    row.id === "proposal.runtime-plugin.source"
+    && row.targetId === "source_server"
+  ), true);
+  const stewardshipAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "stewardship"
+    && w.body?.target === "source_server"
+  );
+  assert.deepEqual(stewardshipAnnotation?.body?.refResolutions, [{
+    idField: "target",
+    refField: "targetRef",
+    source: "contextual",
+    target: "source_server",
+    canonicalIdPolicyClass: null,
+    targetContext: null
+  }]);
+  const proposalAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "proposal"
+    && w.body?.target === "proposal.runtime-plugin.source"
+  );
+  assert.deepEqual(proposalAnnotation?.body?.refResolutions, [{
+    idField: "targetId",
+    refField: "targetIdRef",
+    source: "contextual",
+    target: "source_server",
+    canonicalIdPolicyClass: null,
+    targetContext: null
+  }]);
+
+  const blockedStewardship = createWorld();
+  createThing(blockedStewardship, { actor: "system", id: "backendHost" });
+  createThing(blockedStewardship, { actor: "system", id: "frontendHost" });
+  assert.throws(() => {
+    applyWitnessDocs(blockedStewardship, parseWitnessToml(`
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[stewardship]]
+actor = "system"
+steward = "callan"
+context = "ctx.target"
+target = "source_server"
+targetKind = "serverRunner"
+`).map(doc => ({ ...doc, file: "C:/demo/stewardship-blocked.wtoml" })));
+  }, /stewardship target id targets source_server in context ctx\.source and is not visible in authoring context ctx\.target/);
+
+  const blockedProposal = createWorld();
+  createThing(blockedProposal, { actor: "system", id: "backendHost" });
+  createThing(blockedProposal, { actor: "system", id: "frontendHost" });
+  assert.throws(() => {
+    applyWitnessDocs(blockedProposal, parseWitnessToml(`
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[proposal]]
+actor = "system"
+id = "proposal.runtime-plugin.source"
+targetProcess = "runtimePlugin.install"
+targetKind = "serverRunner"
+context = "ctx.target"
+targetId = "source_server"
+body = {}
+reason = "Hidden canonical target should fail"
+`).map(doc => ({ ...doc, file: "C:/demo/proposal-blocked.wtoml" })));
+  }, /proposal target id targets source_server in context ctx\.source and is not visible in authoring context ctx\.target/);
 });
 
 test("context composition DSL rejects duplicate visible names in one context", () => {
@@ -937,5 +1379,380 @@ rootWidget = "local_page"
   assert.ok(program);
   assert.equal(program.rootWidget, "local_page");
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "legacyShell" && row.target === "legacy_shell" && row.sourceKind === "local"), true);
+});
+
+test("context composition DSL lowers route rootSurface refs and preserves page-surface params without hidden canonical bypasses", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[surface]]
+actor = "system"
+id = "ReplayRoot"
+surfaceKind = "app-root"
+context = "ctx.source"
+
+[[surface]]
+actor = "system"
+id = "HiddenRoot"
+surfaceKind = "auth-screen"
+context = "ctx.source"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replaySurface"
+name = "replaySurface"
+
+[[process]]
+actor = "system"
+id = "ReplayFlow"
+context = "ctx.source"
+state = ["ReplayActiveRoute"]
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replayFlow"
+name = "replayFlow"
+
+[[type]]
+actor = "system"
+id = "ReplayActiveRoute"
+context = "ctx.source"
+role = "state"
+valueType = "text"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "activeRoute"
+name = "activeRoute"
+
+[[route]]
+actor = "system"
+id = "replay_surface_route"
+context = "ctx.target"
+path = "/replay-surface"
+method = "GET"
+handler = "page.surface"
+servesRef = "replaySurface"
+rootSurfaceRef = "replaySurface"
+defaultScreen = "login"
+routeState = { processRef = "replayFlow", stateRef = "activeRoute" }
+excludeWidgetRoles = ["debug"]
+`);
+
+  const route = world.project(moduleProjectors.routes).find(row => row.id === "replay_surface_route");
+  assert.ok(route);
+  assert.equal(route.serves, "ReplayRoot");
+  assert.equal(route.params?.rootSurface, "ReplayRoot");
+  assert.equal(route.params?.defaultScreen, "login");
+  assert.deepEqual(route.params?.routeState, {
+    process: "ReplayFlow",
+    state: "ReplayActiveRoute"
+  });
+  assert.deepEqual(route.params?.excludeWidgetRoles, ["debug"]);
+
+  const blockedWorld = createWorld();
+  assert.throws(() => {
+    applyWitnessToml(blockedWorld, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[surface]]
+actor = "system"
+id = "ReplayRoot"
+surfaceKind = "app-root"
+context = "ctx.source"
+
+[[surface]]
+actor = "system"
+id = "HiddenRoot"
+surfaceKind = "auth-screen"
+context = "ctx.source"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replaySurface"
+name = "replaySurface"
+
+[[route]]
+actor = "system"
+id = "hidden_surface_route"
+context = "ctx.target"
+path = "/hidden-surface"
+method = "GET"
+handler = "page.surface"
+servesRef = "replaySurface"
+rootSurface = "HiddenRoot"
+`);
+  }, /root surface id targets HiddenRoot in context ctx\.source and is not visible in authoring context ctx\.target/);
+});
+
+test("context composition DSL lowers page-home frontend-program, default-root-widget, and route-state refs", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+
+[[widget]]
+actor = "system"
+id = "secret_page"
+kind = "Page"
+context = "ctx.source"
+
+[[frontendProgram]]
+actor = "system"
+id = "landing_program"
+context = "ctx.source"
+rootWidget = "page_root"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "landingPage"
+target = "page_root"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "landingPage"
+target = "page_root"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "landingPage"
+name = "landingPage"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "landingProgram"
+name = "landingProgram"
+
+[[process]]
+actor = "system"
+id = "ReplayFlow"
+context = "ctx.source"
+state = ["ReplayActiveRoute"]
+
+[[type]]
+actor = "system"
+id = "ReplayActiveRoute"
+context = "ctx.source"
+role = "state"
+valueType = "text"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replayFlow"
+target = "ReplayFlow"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "activeRoute"
+target = "ReplayActiveRoute"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replayFlow"
+name = "replayFlow"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "activeRoute"
+name = "activeRoute"
+
+[[route]]
+actor = "system"
+id = "landing_route"
+context = "ctx.target"
+path = "/landing"
+method = "GET"
+handler = "page.home"
+servesRef = "landingProgram"
+frontendProgramRef = "landingProgram"
+defaultRootWidgetRef = "landingPage"
+routeState = { processRef = "replayFlow", stateRef = "activeRoute" }
+`);
+
+  const route = world.project(moduleProjectors.routes).find(row => row.id === "landing_route");
+  assert.ok(route);
+  assert.equal(route.serves, "landing_program");
+  assert.equal(route.params?.rootWidget, "page_root");
+  assert.equal(route.params?.frontendProgram, "landing_program");
+  assert.deepEqual(route.params?.routeState, {
+    process: "ReplayFlow",
+    state: "ReplayActiveRoute"
+  });
+
+  const blockedWorld = createWorld();
+  assert.throws(() => {
+    applyWitnessToml(blockedWorld, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+
+[[widget]]
+actor = "system"
+id = "secret_page"
+kind = "Page"
+context = "ctx.source"
+
+[[frontendProgram]]
+actor = "system"
+id = "landing_program"
+context = "ctx.source"
+rootWidget = "page_root"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "landingProgram"
+target = "landing_program"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "landingProgram"
+name = "landingProgram"
+
+[[route]]
+actor = "system"
+id = "hidden_landing_route"
+context = "ctx.target"
+path = "/hidden-landing"
+method = "GET"
+handler = "page.home"
+servesRef = "landingProgram"
+defaultRootWidget = "secret_page"
+`);
+  }, /default root widget id targets secret_page in context ctx\.source and is not visible in authoring context ctx\.target/);
 });
 

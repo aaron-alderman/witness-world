@@ -2,7 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_REVISION_EVENTS_PATH } from "../../src/app-snapshot-manager.js";
+import { buildCompatibilityBridgeLedger } from "../../src/compatibility-bridges.js";
+import { contextNamingStateFromProject } from "../../src/context-naming-world.js";
 import { moduleProjectors } from "../../src/modules.js";
+import { packageApplyPreviewRowsFromProject } from "../../src/package-authorship-world.js";
+import { buildGovernanceRouteInventory } from "../../src/runtime-governance.js";
+import { buildMutableSurfaceSemanticsLedger } from "../../src/runtime-semantics.js";
+import { parseWitnessToml } from "../../src/dsl.js";
 import {
   platformBranchInsights,
   platformChangeSetInsights,
@@ -35,7 +41,8 @@ const CONTROL_DOCS = new Map([
   ["docs/SHELLS-PERSISTENCE-ECOSYSTEM.md", ["ship", "steward"]],
   ["docs/PIPELINE-FIDELITY-AUDIT.md", ["transform", "verify"]],
   ["docs/AUTHORING-REPLAY-PLAYBOOK.md", ["author", "verify"]],
-  ["docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", ["author", "steward"]]
+  ["docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", ["author", "steward"]],
+  ["docs/intent/knowledge-relations.wtoml", ["author", "steward"]]
 ]);
 
 const GOVERNED_DOC_TARGETS = Object.freeze({
@@ -46,7 +53,8 @@ const GOVERNED_DOC_TARGETS = Object.freeze({
   "docs/SHELLS-PERSISTENCE-ECOSYSTEM.md": Object.freeze(["runtime.core"]),
   "docs/PIPELINE-FIDELITY-AUDIT.md": Object.freeze(["plugin.pipeline-runtime"]),
   "docs/AUTHORING-REPLAY-PLAYBOOK.md": Object.freeze(["plugin.authoring"]),
-  "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md": Object.freeze(["plugin.platform"])
+  "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md": Object.freeze(["plugin.platform"]),
+  "docs/intent/knowledge-relations.wtoml": Object.freeze(["plugin.platform"])
 });
 
 const PLATFORM_AUTHORED_SOURCES = Object.freeze([
@@ -63,6 +71,14 @@ const PLATFORM_AUTHORED_SOURCES = Object.freeze([
     title: "Platform Console WCSS",
     lifecycle: ["author", "observe", "steward"],
     source: "plugins/platform/platform-console.wcss"
+  },
+  {
+    id: "wtoml:docs/intent/knowledge-relations.wtoml",
+    kind: "wtomlSource",
+    title: "Intent Knowledge Relations (doc↔doc / doc↔code)",
+    lifecycle: ["author", "transform", "execute", "steward"],
+    source: "docs/intent/knowledge-relations.wtoml",
+    purpose: "Explicit WTOML model of document/document and document/code relationships for ContextHub and the intent registry."
   }
 ]);
 
@@ -274,23 +290,51 @@ function summarize(nodes, edges, profiles = []) {
   };
 }
 
+function buildLifecycleBoard(nodes = [], lifecycleVocabulary = PLATFORM_LIFECYCLES) {
+  const lanes = lifecycleVocabulary.map(id => ({ id, title: id, nodes: [] }));
+  const byId = Object.fromEntries(lanes.map(lane => [lane.id, lane]));
+  for (const node of nodes) {
+    for (const lifecycle of node.lifecycle ?? []) {
+      const lane = byId[String(lifecycle)] ?? null;
+      if (!lane) continue;
+      lane.nodes.push({
+        id: node.id,
+        title: node.title || node.id,
+        titleLink: { id: node.id, title: node.title || node.id },
+        kind: node.kind || "node"
+      });
+    }
+  }
+  for (const lane of lanes) {
+    lane.nodes.sort((left, right) => String(left.id).localeCompare(String(right.id)));
+    lane.count = lane.nodes.length;
+    lane.countLabel = `${lane.count} object${lane.count === 1 ? "" : "s"}`;
+  }
+  return lanes;
+}
+
 function buildBranchBoard(branches = []) {
   const lanes = PLATFORM_BRANCH_LIFECYCLE_LANES.map(id => ({ id, title: id, branches: [] }));
   const byId = Object.fromEntries(lanes.map(lane => [lane.id, lane]));
   for (const branch of branches) {
+    const changeSetCount = Array.isArray(branch.changeSetIds) ? branch.changeSetIds.length : 0;
+    const reviewProposalCount = Array.isArray(branch.reviewProposalIds) ? branch.reviewProposalIds.length : 0;
     const lane = byId[String(branch.lifecycleLane || "draft")] ?? byId.draft;
     lane.branches.push({
       id: branch.id,
       title: branch.title || branch.id,
+      titleLink: { id: branch.id, title: branch.title || branch.id },
       status: branch.status || "open",
-      changeSetCount: Array.isArray(branch.changeSetIds) ? branch.changeSetIds.length : 0,
-      reviewProposalCount: Array.isArray(branch.reviewProposalIds) ? branch.reviewProposalIds.length : 0,
+      changeSetCount,
+      reviewProposalCount,
+      activitySummary: `change sets ${changeSetCount}${reviewProposalCount ? `, review ${reviewProposalCount}` : ""}`,
       latestCandidateSnapshotId: branch.latestCandidateSnapshotId ?? null
     });
   }
   for (const lane of lanes) {
     lane.branches.sort((left, right) => String(left.id).localeCompare(String(right.id)));
     lane.count = lane.branches.length;
+    lane.countLabel = `${lane.count} branch${lane.count === 1 ? "" : "es"}`;
   }
   return lanes;
 }
@@ -482,6 +526,142 @@ function normalizeSnapshotDiagnostics(appSnapshot = null) {
   };
 }
 
+function normalizeVerificationDiagnostics(testMonitor = null) {
+  if (!testMonitor || typeof testMonitor !== "object") return null;
+  const pendingSourcePaths = Array.isArray(testMonitor.pendingSourcePaths) ? testMonitor.pendingSourcePaths.map(String) : [];
+  const pendingChangeSets = Array.isArray(testMonitor.pendingChangeSets)
+    ? testMonitor.pendingChangeSets.map(row => ({
+        branchId: row?.branchId ? String(row.branchId) : null,
+        changeSetId: row?.changeSetId ? String(row.changeSetId) : null,
+        candidateSnapshotId: row?.candidateSnapshotId ? String(row.candidateSnapshotId) : null,
+        queuedAt: row?.queuedAt ? String(row.queuedAt) : null
+      }))
+    : [];
+  const queue = Array.isArray(testMonitor.queue)
+    ? testMonitor.queue.map(row => ({
+        id: row?.id ? String(row.id) : null,
+        gateId: row?.gateId ? String(row.gateId) : null,
+        executionClass: row?.executionClass ? String(row.executionClass) : null,
+        exclusive: row?.exclusive === true,
+        priority: Number(row?.priority || 0),
+        status: row?.status ? String(row.status) : "queued"
+      }))
+    : [];
+  return {
+    enabled: testMonitor.enabled === true,
+    policySource: testMonitor.policySource ? String(testMonitor.policySource) : null,
+    defaults: testMonitor.defaults && typeof testMonitor.defaults === "object" ? { ...testMonitor.defaults } : null,
+    compatibility: testMonitor.compatibility && typeof testMonitor.compatibility === "object" ? { ...testMonitor.compatibility } : null,
+    diagnostics: Array.isArray(testMonitor.diagnostics) ? testMonitor.diagnostics.map(row => ({ ...row })) : [],
+    status: testMonitor.status ? String(testMonitor.status) : "idle",
+    processing: testMonitor.processing === true,
+    watchFs: testMonitor.watchFs === true,
+    watchDebounceMs: Number(testMonitor.watchDebounceMs || 0),
+    pendingSourcePaths,
+    pendingSourceCount: Number(testMonitor.pendingSourceCount || pendingSourcePaths.length),
+    pendingChangeSets,
+    pendingChangeSetCount: Number(testMonitor.pendingChangeSetCount || pendingChangeSets.length),
+    queue,
+    queueCount: Number(testMonitor.queueCount || queue.length),
+    activeExecution: testMonitor.activeExecution && typeof testMonitor.activeExecution === "object"
+      ? { ...testMonitor.activeExecution }
+      : null
+  };
+}
+
+function normalizeVerificationPersistence(value = null) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    source: value.source ? String(value.source) : "synthesized",
+    verificationRoot: value.verificationRoot ? String(value.verificationRoot) : null,
+    ledgerBackend: value.ledgerBackend && typeof value.ledgerBackend === "object"
+      ? { ...value.ledgerBackend }
+      : null,
+    artifactBackend: value.artifactBackend && typeof value.artifactBackend === "object"
+      ? { ...value.artifactBackend }
+      : null,
+    cacheBackend: value.cacheBackend && typeof value.cacheBackend === "object"
+      ? { ...value.cacheBackend }
+      : null,
+    retention: value.retention && typeof value.retention === "object"
+      ? { ...value.retention }
+      : null,
+    diagnostics: Array.isArray(value.diagnostics) ? value.diagnostics.map(row => ({ ...row })) : []
+  };
+}
+
+function normalizeRuntimeComposition(composition = null) {
+  if (!composition || typeof composition !== "object") return null;
+  const notes = Array.isArray(composition.notes) ? composition.notes.map(String) : [];
+  return {
+    storyId: composition.storyId ? String(composition.storyId) : null,
+    startupMode: composition.startupMode ? String(composition.startupMode) : null,
+    activeRunnerId: composition.activeRunnerId ? String(composition.activeRunnerId) : null,
+    activeRunnerSource: composition.activeRunnerSource ? String(composition.activeRunnerSource) : null,
+    activePluginSource: composition.activePluginSource ? String(composition.activePluginSource) : null,
+    usesAuthoredServerRunner: composition.usesAuthoredServerRunner === true,
+    usesAuthoredRuntimePluginInstalls: composition.usesAuthoredRuntimePluginInstalls === true,
+    explanation: composition.explanation ? String(composition.explanation) : null,
+    notes
+  };
+}
+
+function mergeRowsById(durableRows = [], liveRows = []) {
+  const byId = new Map();
+  for (const row of durableRows) {
+    if (!row?.id) continue;
+    byId.set(String(row.id), { ...(byId.get(String(row.id)) ?? {}), ...row });
+  }
+  for (const row of liveRows) {
+    if (!row?.id) continue;
+    byId.set(String(row.id), { ...(byId.get(String(row.id)) ?? {}), ...row });
+  }
+  return [...byId.values()];
+}
+
+function normalizeGovernanceRoutes(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => ({
+      id: String(row?.id || ""),
+      routeId: String(row?.routeId || ""),
+      method: String(row?.method || "GET").toUpperCase(),
+      matcher: String(row?.matcher || ""),
+      handler: String(row?.handler || ""),
+      operationSemantics: String(row?.operationSemantics || "unknown"),
+      governanceMode: String(row?.governanceMode || "missing"),
+      authorityMechanism: String(row?.authorityMechanism || "missing"),
+      sharedAuthorityPath: row?.sharedAuthorityPath === true,
+      workflowRole: String(row?.workflowRole || "missing"),
+      notes: String(row?.notes || ""),
+      ownerClass: row?.ownerClass ? String(row.ownerClass) : null,
+      ownerBundleId: row?.ownerBundleId ? String(row.ownerBundleId) : null,
+      ownerPluginId: row?.ownerPluginId ? String(row.ownerPluginId) : null
+    }))
+    .filter(row => row.id && row.handler)
+    .sort((left, right) =>
+      left.handler.localeCompare(right.handler)
+      || left.method.localeCompare(right.method)
+      || left.matcher.localeCompare(right.matcher)
+    );
+}
+
+function normalizeProposalTargetGovernance(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => ({
+      id: String(row?.id || ""),
+      targetProcess: String(row?.targetProcess || ""),
+      operationSemantics: String(row?.operationSemantics || "unknown"),
+      governanceMode: String(row?.governanceMode || "missing"),
+      authorityMechanism: String(row?.authorityMechanism || "missing"),
+      sharedAuthorityPath: row?.sharedAuthorityPath === true,
+      workflowRole: String(row?.workflowRole || "missing"),
+      bootstrapSelectable: row?.bootstrapSelectable === true,
+      notes: String(row?.notes || "")
+    }))
+    .filter(row => row.id && row.targetProcess)
+    .sort((left, right) => left.targetProcess.localeCompare(right.targetProcess));
+}
+
 function buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch) {
   if (!snapshotDiagnostics?.appRevision) return [];
   return [{
@@ -559,6 +739,8 @@ function platformObjectKindForId(targetId, nodes) {
   if (value.startsWith("feature:")) return "feature";
   if (value.startsWith("branch:")) return "branch";
   if (value.startsWith("proposal:")) return "proposal";
+  if (value.startsWith("intent:")) return "intent";
+  if (value.startsWith("folder:")) return "folder";
   return "platformObject";
 }
 
@@ -866,11 +1048,24 @@ function buildFilteredDocProjection(model, docs, id = null, { expandByTarget = f
     docReferences,
     docDependencies,
     docsByPlatformObject: buildDocsByPlatformObject(filteredDocs, docDependencies),
+    // First-class knowledge relations (from docs/intent/knowledge-relations.wtoml + model)
+    // exposed for MCP / ContextHub consumers of documentation.
+    knowledgeRelations: (model.knowledgeRelations ?? []).filter(r =>
+      docPaths.has(String(r.from || "").replace(/^doc:/, "")) ||
+      docPaths.has(String(r.to || "").replace(/^doc:/, "")) ||
+      filteredDocs.some(d => d.id === r.from || d.id === r.to || d.path === r.from || d.path === r.to)
+    ),
+    relatedIntents: (model.knowledgeRelations ?? []).filter(r =>
+      (r.from && r.from.startsWith("intent:")) || (r.to && r.to.startsWith("intent:"))
+    ).filter(r =>
+      docIds.has(r.from) || docIds.has(r.to) ||
+      filteredDocs.some(d => d.id === r.from || d.id === r.to)
+    ),
     summaries: model.summaries
   };
 }
 
-function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], testResults = [], testArtifacts = [], testSuites = [], testCases = []) {
+function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], testResults = [], testArtifacts = [], testSuites = [], testCases = [], testReports = []) {
   addNode(nodes, {
     id: TEST_RUNNER_BOUNDARY_ID,
     kind: "boundary",
@@ -978,6 +1173,22 @@ function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], test
     if (testCase.artifactId) addEdge(edges, testCase.artifactId, "describes", testCase.id, "witnesses");
     if (testCase.gateId) addEdge(edges, testCase.id, "targets", testCase.gateId, "witnesses");
     if (testCase.candidateSnapshotId) addEdge(edges, testCase.id, "targets", testCase.candidateSnapshotId, "witnesses");
+  }
+  for (const report of testReports) {
+    addNode(nodes, {
+      id: report.id,
+      kind: "testReport",
+      title: report.title || report.id,
+      lifecycle: ["verify", "observe", "steward"],
+      owner: "plugin.platform",
+      status: report.status || "known",
+      source: "derived"
+    });
+    if (report.runId) addEdge(edges, report.runId, "produces", report.id, "derived");
+    if (report.gateId) addEdge(edges, report.id, "targets", report.gateId, "derived");
+    for (const artifactId of report.artifactIds ?? []) addEdge(edges, report.id, "references", artifactId, "derived");
+    for (const suiteId of report.suiteIds ?? []) addEdge(edges, report.id, "references", suiteId, "derived");
+    for (const caseId of report.caseIds ?? []) addEdge(edges, report.id, "references", caseId, "derived");
   }
 }
 
@@ -1125,6 +1336,65 @@ function projectValue(project, projector, fallback) {
   }
 }
 
+function matchesPackageCoexistenceRow(row, id) {
+  const target = typeof id === "string" && id.trim() ? id.trim() : "";
+  if (!target) return true;
+  const revisionIds = Array.isArray(row?.revisionIds) ? row.revisionIds : [];
+  const selectedRevisionIds = Array.isArray(row?.selectedRevisionIds) ? row.selectedRevisionIds : [];
+  const revisions = Array.isArray(row?.revisions) ? row.revisions : [];
+  const namespaceSelections = Array.isArray(row?.namespaceSelections) ? row.namespaceSelections : [];
+  const manifestPluginConflicts = Array.isArray(row?.manifestPluginConflicts) ? row.manifestPluginConflicts : [];
+  return row.id === target
+    || row.packageId === target
+    || revisionIds.includes(target)
+    || selectedRevisionIds.includes(target)
+    || revisions.some(revision =>
+      revision.id === target
+      || revision.manifestPluginId === target
+    )
+    || namespaceSelections.some(namespace =>
+      namespace.id === target
+      || namespace.context === target
+      || namespace.name === target
+      || `${namespace.context}:${namespace.name}` === target
+      || namespace.revision === target
+    )
+    || manifestPluginConflicts.some(conflict =>
+      conflict.id === target
+      || conflict.manifestPluginId === target
+      || (conflict.revisionIds ?? []).includes(target)
+      || (conflict.namespaceIds ?? []).includes(target)
+    );
+}
+
+function buildPackageApplyPreviewRows(project) {
+  return packageApplyPreviewRowsFromProject(project);
+}
+
+function matchesPackageApplyPreviewRow(row, id) {
+  const target = typeof id === "string" && id.trim() ? id.trim() : "";
+  if (!target) return true;
+  return row.id === target
+    || row.packageId === target
+    || row.revisionId === target
+    || row.coexistenceId === target
+    || row.convergenceId === target
+    || (row.selectedNamespaceIds ?? []).includes(target)
+    || (row.manifestConflictIds ?? []).includes(target)
+    || (row.relatedTransformerIds ?? []).includes(target)
+    || (row.relatedConvergencePatchIds ?? []).includes(target);
+}
+
+function matchesCapabilityRevisionHistoryRow(row, id) {
+  const target = typeof id === "string" && id.trim() ? id.trim() : "";
+  if (!target) return true;
+  return row.capabilityId === target
+    || row.witnessId === target
+    || row.version === target
+    || row.previousVersion === target
+    || row.rollbackFromVersion === target;
+}
+
 function slugify(value) {
   return String(value || "")
     .trim()
@@ -1154,6 +1424,7 @@ function extractAuthoredPlatformWcssSelectors(source = "") {
   let sawTheme = false;
   let section = null;
   let inStyle = false;
+  let sawTokens = false;
   for (const rawLine of String(source || "").split(/\r?\n/)) {
     const trimmed = rawLine.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -1171,15 +1442,24 @@ function extractAuthoredPlatformWcssSelectors(source = "") {
       }
       continue;
     }
+    if (section === "tokens" && indent === 2) {
+      sawTokens = true;
+      continue;
+    }
     if (section !== "styles") continue;
     if (indent === 2 && /^style\s+\S+/.test(trimmed)) {
       inStyle = true;
       continue;
     }
     if (indent === 4 && /^selector\s*=\s*.+$/.test(trimmed) && inStyle) {
-      selectors.push(trimmed.replace(/^selector\s*=\s*/, "").trim());
+      const selectorText = trimmed.replace(/^selector\s*=\s*/, "").trim();
+      for (const selector of selectorText.split(",")) {
+        const splitSelector = selector.trim();
+        if (splitSelector) selectors.push(splitSelector);
+      }
     }
   }
+  if (sawTokens) selectors.push(":root");
   return unique(selectors);
 }
 
@@ -1190,13 +1470,37 @@ function extractRenderedCssSelectors(cssText = "") {
   let match = null;
   while ((match = pattern.exec(stripped))) {
     const selectorText = String(match[2] || "").trim();
-    if (!selectorText) continue;
+    if (!selectorText || selectorText.startsWith("@")) continue;
     for (const selector of selectorText.split(",")) {
       const trimmed = selector.trim();
       if (trimmed) selectors.push(trimmed);
     }
   }
   return unique(selectors);
+}
+
+export function buildPlatformCssDriftGap({
+  authoredWcss = "",
+  generatedCss = "",
+  target = "surface:platform"
+} = {}) {
+  const authoredSelectorList = extractAuthoredPlatformWcssSelectors(authoredWcss);
+  const generatedSelectorList = extractRenderedCssSelectors(generatedCss);
+  const missingInGenerated = authoredSelectorList.filter(selector => !generatedSelectorList.includes(selector));
+  const extraInGenerated = generatedSelectorList.filter(selector => !authoredSelectorList.includes(selector));
+  if (!missingInGenerated.length && !extraInGenerated.length) return null;
+  return {
+    id: `gap.platform-css-drift.${target}`,
+    severity: "low",
+    kind: "platform-css-drift",
+    target,
+    authoredSelectorCount: authoredSelectorList.length,
+    generatedSelectorCount: generatedSelectorList.length,
+    missingInGenerated,
+    extraInGenerated,
+    reason: "Generated platform CSS selector coverage differs from authored plugins/platform/platform-console.wcss.",
+    recommendedProposal: null
+  };
 }
 
 function docRoleForPath(docPath) {
@@ -2243,6 +2547,131 @@ export function parseRoadmapTasks(docPath, source) {
   return tasks;
 }
 
+async function loadKnowledgeRelationsWtoml() {
+  const relPath = "docs/intent/knowledge-relations.wtoml";
+  const source = await readText(relPath, "");
+  if (!source.trim()) return { entities: [], relations: [], sourcePath: relPath };
+  const parsed = parseWitnessToml(source);
+  const entities = parsed
+    .filter(d => d.kind === "entity")
+    .map(d => ({
+      id: d.values.id || d.values.name || null,
+      kind: d.values.kind || "docNode",
+      label: d.values.label || d.values.id || null,
+      path: d.values.path || null,
+      facet: d.values.facet || null,
+      lifecycle: d.values.lifecycle || null,
+      owner: d.values.owner || null,
+      description: d.values.description || null,
+      raw: d.values
+    }))
+    .filter(e => e.id);
+  const relations = parsed
+    .filter(d => d.kind === "relation")
+    .map(d => ({
+      from: d.values.from,
+      rel: d.values.rel,
+      to: d.values.to,
+      meta: d.values.meta || null,
+      actor: d.values.actor || null
+    }))
+    .filter(r => r.from && r.rel && r.to);
+  return { entities, relations, sourcePath: relPath };
+}
+
+async function loadFolderMetas() {
+  // Discover all this.folder.wtoml files (the convention for folder metadata)
+  const folderMetaFiles = await listFiles(repoRoot, (f) =>
+    f.endsWith('this.folder.wtoml')
+  );
+
+  const entities = [];
+  const relations = [];
+
+  for (const absPath of folderMetaFiles) {
+    const relPath = slash(path.relative(repoRoot, absPath));
+    const source = await readText(relPath, '');
+    if (!source.trim()) continue;
+
+    let parsed;
+    try {
+      parsed = parseWitnessToml(source);
+    } catch (e) {
+      // tolerate bad meta files
+      continue;
+    }
+
+    const folderEnts = parsed
+      .filter((d) => d.kind === 'entity' || (d.values?.id && d.values.id.startsWith('folder:')))
+      .map((d) => ({
+        id: d.values.id || d.values.name || null,
+        kind: d.values.kind || 'folder',
+        label: d.values.label || d.values.id || null,
+        path: d.values.path || null,
+        facet: d.values.facet || null,
+        lifecycle: d.values.lifecycle || null,
+        owner: d.values.owner || null,
+        description: d.values.description || null,
+        raw: d.values,
+        source: relPath,
+      }))
+      .filter((e) => e.id);
+
+    const folderRels = parsed
+      .filter((d) => d.kind === 'relation')
+      .map((d) => ({
+        from: d.values.from,
+        rel: d.values.rel,
+        to: d.values.to,
+        meta: d.values.meta || null,
+        actor: d.values.actor || null,
+        source: relPath,
+      }))
+      .filter((r) => r.from && r.rel && r.to);
+
+    entities.push(...folderEnts);
+    relations.push(...folderRels);
+  }
+
+  return { entities, relations };
+}
+
+/**
+ * For full DESIRE pipeline integration (so folder metas become witnessed entities/relations).
+ * Call with applyWitnessDocs or similar to a dedicated knowledge context/world.
+ * This makes folder:* first-class in the witnessed model, not just the JS platform builder.
+ */
+export async function loadFolderMetasAsDesireDocs() {
+  const metas = await loadFolderMetas();
+  // Map to WTOML-like docs that can be compiled to desire (entity + relation kinds)
+  const docs = [];
+  for (const ent of metas.entities) {
+    docs.push({
+      kind: 'entity',
+      values: {
+        id: ent.id,
+        kind: ent.kind,
+        label: ent.label,
+        path: ent.path,
+        facet: ent.facet,
+        // etc.
+      }
+    });
+  }
+  for (const rel of metas.relations) {
+    docs.push({
+      kind: 'relation',
+      values: {
+        from: rel.from,
+        rel: rel.rel,
+        to: rel.to,
+        meta: rel.meta
+      }
+    });
+  }
+  return docs;
+}
+
 function platformTargetNodeId(kind, id) {
   if (!id) return null;
   if (String(id).includes(":")) return String(id);
@@ -2269,11 +2698,17 @@ export async function buildPlatformModel({
   const effectivePlugins = new Set(diagnostics?.plugins?.effectivePluginIds ?? []);
   const serverRunners = projectRows(project, moduleProjectors.serverRunners);
   const runtimePluginInstalls = projectRows(project, moduleProjectors.runtimePluginInstalls);
+  const capabilityDefinitions = projectRows(project, moduleProjectors.capabilities);
   const authoredCapabilities = [
-    ...projectRows(project, moduleProjectors.capabilities),
+    ...capabilityDefinitions,
     ...projectRows(project, moduleProjectors.capabilityCatalog)
   ];
   const capabilityInstalls = projectRows(project, moduleProjectors.capabilityInstalls);
+  const capabilityRevisionHistory = projectRows(project, moduleProjectors.capabilityRevisionHistory);
+  const compatibilityBridges = buildCompatibilityBridgeLedger({
+    capabilities: capabilityDefinitions,
+    capabilityInstalls
+  });
   const proposals = projectRows(project, moduleProjectors.proposals);
   const rawChangeSets = projectRows(project, moduleProjectors.changeSets);
   const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
@@ -2298,17 +2733,57 @@ export async function buildPlatformModel({
     })
   }));
   const candidateSnapshots = projectRows(project, moduleProjectors.candidateSnapshots);
-  const testRuns = projectRows(project, moduleProjectors.testRuns);
-  const testResults = projectRows(project, moduleProjectors.testResults);
-  const testArtifacts = projectRows(project, moduleProjectors.testArtifacts);
-  const testSuites = projectRows(project, moduleProjectors.testSuites);
-  const testCases = projectRows(project, moduleProjectors.testCases);
+  const durableVerificationRows = appContext?.verificationPersistence?.readModelRows?.() ?? {};
+  const testRuns = mergeRowsById(durableVerificationRows.testRuns ?? [], projectRows(project, moduleProjectors.testRuns));
+  const testResults = mergeRowsById(durableVerificationRows.testResults ?? [], projectRows(project, moduleProjectors.testResults));
+  const testArtifacts = mergeRowsById(durableVerificationRows.testArtifacts ?? [], projectRows(project, moduleProjectors.testArtifacts));
+  const testSuites = mergeRowsById(durableVerificationRows.testSuites ?? [], projectRows(project, moduleProjectors.testSuites));
+  const testCases = mergeRowsById(durableVerificationRows.testCases ?? [], projectRows(project, moduleProjectors.testCases));
+  const testReports = mergeRowsById(durableVerificationRows.testReports ?? [], projectRows(project, moduleProjectors.testReports));
+  const verificationPolicies = mergeRowsById(durableVerificationRows.verificationPolicies ?? [], projectRows(project, moduleProjectors.verificationPolicies));
+  const verificationFreshness = mergeRowsById(durableVerificationRows.verificationFreshness ?? [], projectRows(project, moduleProjectors.verificationFreshness));
+  const verificationInvalidations = mergeRowsById(durableVerificationRows.verificationInvalidations ?? [], projectRows(project, moduleProjectors.verificationInvalidations));
+  const verificationQueue = mergeRowsById(durableVerificationRows.verificationQueue ?? [], projectRows(project, moduleProjectors.verificationQueue));
+  const verificationExecutions = mergeRowsById(durableVerificationRows.verificationExecutions ?? [], projectRows(project, moduleProjectors.verificationExecutions));
   const projectedTestGates = projectRows(project, moduleProjectors.testGates);
   const projectedCoverageEdges = projectRows(project, moduleProjectors.coverageEdges);
   const flakeScoresByGate = buildFlakeScoreByGate(testResults);
-  const latestTestResultsProjection = projectValue(project, moduleProjectors.latestTestResultsByGate, { rows: [], byGate: Object.create(null) });
+  const latestTestResultsProjection = {
+    rows: testResults,
+    byGate: Object.fromEntries(
+      Object.entries(
+        testResults.reduce((acc, row) => {
+          const gateId = String(row?.gateId || "");
+          if (!gateId) return acc;
+          const existing = acc[gateId];
+          if (!existing || String(existing.producedAt || "") <= String(row?.producedAt || "")) acc[gateId] = row;
+          return acc;
+        }, Object.create(null))
+      )
+    )
+  };
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
+  const testMonitorDiagnostics = normalizeVerificationDiagnostics(diagnostics?.testMonitor ?? null);
+  const verificationPersistence = normalizeVerificationPersistence(
+    diagnostics?.verificationPersistence ?? appContext?.verificationPersistence?.inspect?.() ?? null
+  );
+  const runtimeComposition = normalizeRuntimeComposition(diagnostics?.composition ?? null);
+  const governanceRoutes = normalizeGovernanceRoutes(
+    diagnostics?.governanceRoutes
+    ?? buildGovernanceRouteInventory(diagnostics?.routes ?? [])
+  );
+  const proposalTargetGovernance = normalizeProposalTargetGovernance(
+    diagnostics?.proposalTargetGovernance
+  );
+  const mutableSurfaceSemantics = buildMutableSurfaceSemanticsLedger();
+  const contextNaming = contextNamingStateFromProject(project);
+  const packagePatches = projectRows(project, moduleProjectors.packagePatches);
+  const packageTransformers = projectRows(project, moduleProjectors.packageTransformers);
+  const packageDependencies = projectRows(project, moduleProjectors.packageDependencies);
+  const packageCoexistence = projectRows(project, moduleProjectors.packageCoexistence);
+  const packageConvergence = projectRows(project, moduleProjectors.packageConvergence);
+  const packageApplyPreviews = buildPackageApplyPreviewRows(project);
   const runtimeRevisions = buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch);
   const activeRuntimeRevision = runtimeRevisions[0] ?? null;
   const snapshotBuilds = buildSnapshotBuildRows(candidateSnapshots);
@@ -2344,11 +2819,83 @@ export async function buildPlatformModel({
     if (row.plugin) addEdge(edges, row.plugin, "owns", row.id, "catalog");
   }
 
-  const profiles = Object.entries(profilesSeed.profiles ?? {}).map(([id, profile]) => ({
-    id,
-    coreBundles: [...(profile.coreBundles ?? [])],
-    plugins: [...(profile.plugins ?? [])]
-  }));
+  for (const bridge of compatibilityBridges) {
+    addNode(nodes, {
+      id: bridge.id,
+      kind: "compatibilityBridge",
+      title: bridge.title,
+      lifecycle: ["steward"],
+      owner: bridge.owner,
+      status: bridge.status,
+      source: "compatibility-ledger"
+    });
+  }
+
+  for (const governanceRoute of governanceRoutes) {
+    addNode(nodes, {
+      id: governanceRoute.id,
+      kind: "governanceRoute",
+      title: `${governanceRoute.method} ${governanceRoute.matcher}`,
+      lifecycle: ["steward"],
+      owner: governanceRoute.ownerPluginId ?? governanceRoute.ownerBundleId ?? governanceRoute.handler,
+      status: governanceRoute.governanceMode,
+      source: "governance-ledger"
+    });
+    if (governanceRoute.routeId) addEdge(edges, governanceRoute.id, "governs", governanceRoute.routeId, "governance-ledger");
+    addEdge(edges, governanceRoute.id, "dispatchesTo", `handler:${governanceRoute.handler}`, "governance-ledger");
+  }
+
+  for (const governanceCommand of proposalTargetGovernance) {
+    addNode(nodes, {
+      id: governanceCommand.id,
+      kind: "governanceCommand",
+      title: governanceCommand.targetProcess,
+      lifecycle: ["steward"],
+      owner: governanceCommand.targetProcess,
+      status: governanceCommand.governanceMode,
+      source: "governance-ledger"
+    });
+  }
+
+  for (const semanticsRow of mutableSurfaceSemantics) {
+    addNode(nodes, {
+      id: semanticsRow.id,
+      kind: "mutableSurface",
+      title: semanticsRow.title,
+      lifecycle: ["observe", "steward"],
+      owner: semanticsRow.surface,
+      status: semanticsRow.sharingClass,
+      source: "semantics-ledger"
+    });
+  }
+
+  const profiles = Object.entries(profilesSeed.profiles ?? {}).map(([id, profile]) => {
+    const status = diagnostics?.activeProfile === id ? "active" : "known";
+    const activeComposition = status === "active" ? runtimeComposition : null;
+    const runnerSummary = activeComposition?.activeRunnerId
+      ? `${activeComposition.activeRunnerId} (${activeComposition.activeRunnerSource ?? "runtime"})`
+      : (status === "active" ? (activeComposition?.activeRunnerSource ?? "runtime") : null);
+    const compositionSummary = status === "active"
+      ? (activeComposition?.explanation ?? "Active runtime composition is not yet described.")
+      : "Inactive profile seed.";
+    return {
+      id,
+      status,
+      coreBundles: [...(profile.coreBundles ?? [])],
+      plugins: [...(profile.plugins ?? [])],
+      storyId: activeComposition?.storyId ?? null,
+      startupMode: activeComposition?.startupMode ?? null,
+      activeRunnerId: activeComposition?.activeRunnerId ?? null,
+      activeRunnerSource: activeComposition?.activeRunnerSource ?? null,
+      activePluginSource: activeComposition?.activePluginSource ?? null,
+      usesAuthoredServerRunner: activeComposition?.usesAuthoredServerRunner === true,
+      usesAuthoredRuntimePluginInstalls: activeComposition?.usesAuthoredRuntimePluginInstalls === true,
+      compositionExplanation: activeComposition?.explanation ?? null,
+      compositionNotes: activeComposition?.notes ?? [],
+      runnerSummary,
+      compositionSummary
+    };
+  });
   for (const profile of profiles) {
     addNode(nodes, {
       id: `profile:${profile.id}`,
@@ -2356,7 +2903,7 @@ export async function buildPlatformModel({
       title: profile.id,
       lifecycle: profile.id === "minimal" ? ["execute", "verify"] : ["execute", "ship"],
       owner: "runtime",
-      status: diagnostics?.activeProfile === profile.id ? "active" : "known",
+      status: profile.status,
       source: "store/seeds/runtime-profiles.json"
     });
     for (const plugin of profile.plugins) addEdge(edges, `profile:${profile.id}`, "activates", plugin, "profile");
@@ -2440,6 +2987,166 @@ export async function buildPlatformModel({
       status: "active",
       source: "runtime.diagnostics"
     });
+  }
+
+  for (const row of capabilityRevisionHistory) {
+    const nodeId = `capabilityRevision:${row.capabilityId}:${row.witnessId}`;
+    addNode(nodes, {
+      id: nodeId,
+      kind: "capabilityRevision",
+      title: row.version ? `${row.capabilityId} ${row.version}` : row.capabilityId,
+      lifecycle: ["author", "steward"],
+      owner: row.actor ?? row.capabilityId,
+      status: row.action,
+      source: row.witnessId || "witnesses"
+    });
+    addEdge(edges, nodeId, "tracks", `capability:${row.capabilityId}`, "witnesses");
+  }
+
+  for (const row of packageCoexistence) {
+    addNode(nodes, {
+      id: row.id,
+      kind: "packageCoexistence",
+      title: row.packageLabel || row.packageId,
+      lifecycle: ["author", "verify", "steward"],
+      owner: row.packageId,
+      status: row.coexistenceMode,
+      source: "witnesses"
+    });
+    addNode(nodes, {
+      id: row.packageId,
+      kind: "package",
+      title: row.packageLabel || row.packageId,
+      lifecycle: ["author", "transform", "execute", "steward"],
+      owner: row.packageId,
+      status: row.coexistenceMode,
+      source: "witnesses"
+    });
+    addEdge(edges, row.id, "tracks", row.packageId, "witnesses");
+    for (const revision of row.revisions ?? []) {
+      addNode(nodes, {
+        id: revision.id,
+        kind: "packageRevision",
+        title: revision.version ? `${row.packageLabel || row.packageId} ${revision.version}` : revision.id,
+        lifecycle: ["author", "transform", "execute", "steward"],
+        owner: row.packageId,
+        status: revision.status || "draft",
+        source: "witnesses"
+      });
+      addEdge(edges, row.packageId, "contains", revision.id, "witnesses");
+      addEdge(edges, row.id, "contains", revision.id, "witnesses");
+      for (const predecessor of revision.supersedes ?? []) addEdge(edges, revision.id, "supersedes", predecessor, "witnesses");
+    }
+    for (const namespace of row.namespaceSelections ?? []) {
+      addNode(nodes, {
+        id: namespace.id,
+        kind: "packageNamespace",
+        title: `${namespace.context}:${namespace.name}`,
+        lifecycle: ["author", "execute", "steward"],
+        owner: namespace.context,
+        status: namespace.explicitRevision ? "selected" : "floating",
+        source: "witnesses"
+      });
+      addEdge(edges, row.id, "records", namespace.id, "witnesses");
+      addEdge(edges, namespace.id, "bindsPackage", row.packageId, "witnesses");
+      if (namespace.revision) addEdge(edges, namespace.id, "selects", namespace.revision, "witnesses");
+    }
+    for (const conflict of row.manifestPluginConflicts ?? []) {
+      addNode(nodes, {
+        id: conflict.id,
+        kind: "packageConflict",
+        title: conflict.manifestPluginId,
+        lifecycle: ["verify", "steward"],
+        owner: row.packageId,
+        status: conflict.blocked ? "blocked" : "split",
+        source: "witnesses"
+      });
+      addEdge(edges, row.id, "detects", conflict.id, "witnesses");
+      for (const revisionId of conflict.revisionIds ?? []) addEdge(edges, conflict.id, "targets", revisionId, "witnesses");
+    }
+  }
+
+  for (const patch of packagePatches) {
+    addNode(nodes, {
+      id: patch.id,
+      kind: "packagePatch",
+      title: patch.path || patch.id,
+      lifecycle: ["author", "transform", "steward"],
+      owner: patch.package,
+      status: patch.operation || "patch",
+      source: "witnesses"
+    });
+    addEdge(edges, patch.package, "contains", patch.id, "witnesses");
+    addEdge(edges, patch.revision, "contains", patch.id, "witnesses");
+    if (patch.transformer) addEdge(edges, patch.id, "convergesVia", patch.transformer, "witnesses");
+  }
+
+  for (const dependency of packageDependencies) {
+    addNode(nodes, {
+      id: dependency.id,
+      kind: "packageDependency",
+      title: `${dependency.targetKind}:${dependency.targetId}`,
+      lifecycle: ["author", "execute", "steward"],
+      owner: dependency.sourcePackage || dependency.sourceRevision,
+      status: dependency.versionRange || "required",
+      source: "witnesses"
+    });
+    if (dependency.sourcePackage) addEdge(edges, dependency.sourcePackage, "contains", dependency.id, "witnesses");
+    addEdge(edges, dependency.sourceRevision, "dependsOn", dependency.id, "witnesses");
+    addEdge(edges, dependency.id, "targets", dependency.targetId, "witnesses");
+  }
+
+  for (const transformer of packageTransformers) {
+    addNode(nodes, {
+      id: transformer.id,
+      kind: "packageTransformer",
+      title: transformer.id,
+      lifecycle: ["author", "transform", "steward"],
+      owner: transformer.package,
+      status: transformer.status || "draft",
+      source: "witnesses"
+    });
+    addEdge(edges, transformer.package, "contains", transformer.id, "witnesses");
+    if (transformer.sourceRevision) addEdge(edges, transformer.id, "mapsFrom", transformer.sourceRevision, "witnesses");
+    if (transformer.targetRevision) addEdge(edges, transformer.id, "mapsTo", transformer.targetRevision, "witnesses");
+    if (transformer.sourceNamespace) addEdge(edges, transformer.id, "mapsFrom", transformer.sourceNamespace, "witnesses");
+    if (transformer.targetNamespace) addEdge(edges, transformer.id, "mapsTo", transformer.targetNamespace, "witnesses");
+  }
+
+  for (const row of packageConvergence) {
+    addNode(nodes, {
+      id: row.id,
+      kind: "packageConvergence",
+      title: row.packageLabel || row.packageId,
+      lifecycle: ["author", "transform", "verify", "steward"],
+      owner: row.packageId,
+      status: row.status,
+      source: "witnesses"
+    });
+    addEdge(edges, row.id, "tracks", row.coexistenceId, "witnesses");
+    addEdge(edges, row.id, "tracks", row.packageId, "witnesses");
+    for (const transformerId of row.transformerIds ?? []) addEdge(edges, row.id, "uses", transformerId, "witnesses");
+    for (const patchId of row.convergencePatchIds ?? []) addEdge(edges, row.id, "includes", patchId, "witnesses");
+  }
+
+  for (const row of packageApplyPreviews) {
+    addNode(nodes, {
+      id: row.id,
+      kind: "packageApplyPreview",
+      title: row.title,
+      lifecycle: ["author", "transform", "verify", "steward"],
+      owner: row.packageId,
+      status: row.status,
+      source: "witnesses"
+    });
+    addEdge(edges, row.id, "tracks", row.packageId, "witnesses");
+    addEdge(edges, row.id, "tracks", row.revisionId, "witnesses");
+    if (row.coexistenceId) addEdge(edges, row.id, "tracks", row.coexistenceId, "witnesses");
+    if (row.convergenceId) addEdge(edges, row.id, "tracks", row.convergenceId, "witnesses");
+    for (const namespaceId of row.selectedNamespaceIds ?? []) addEdge(edges, row.id, "selects", namespaceId, "witnesses");
+    for (const conflictId of row.manifestConflictIds ?? []) addEdge(edges, row.id, "detects", conflictId, "witnesses");
+    for (const transformerId of row.relatedTransformerIds ?? []) addEdge(edges, row.id, "uses", transformerId, "witnesses");
+    for (const patchId of row.relatedConvergencePatchIds ?? []) addEdge(edges, row.id, "includes", patchId, "witnesses");
   }
 
   for (const install of capabilityInstalls) {
@@ -2622,6 +3329,75 @@ export async function buildPlatformModel({
       authoredSource.id,
       "source"
     );
+  }
+
+  // Load and integrate the authored WTOML knowledge relations (doc<->doc, doc<->code)
+  // This makes the explicit relationships from knowledge-relations.wtoml first-class
+  // in the platform graph (for ContextHub, intent registry, knowledge views).
+  const knowledgeRel = await loadKnowledgeRelationsWtoml();
+  for (const ent of knowledgeRel.entities) {
+    let nodeKind = ent.kind || "knowledgeEntity";
+    if (nodeKind === "docNode") nodeKind = "docNode";
+    if (nodeKind === "intent" || ent.id.startsWith("intent:")) nodeKind = "intent";
+    addNode(nodes, {
+      id: ent.id,
+      kind: nodeKind,
+      title: ent.label || ent.id,
+      lifecycle: Array.isArray(ent.lifecycle) ? ent.lifecycle : (ent.lifecycle ? [ent.lifecycle] : ["author", "steward"]),
+      owner: ent.owner || "plugin.platform",
+      status: "authored",
+      source: knowledgeRel.sourcePath,
+      facet: ent.facet,
+      path: ent.path,
+      description: ent.description
+    });
+  }
+  for (const rel of knowledgeRel.relations) {
+    addEdge(edges, rel.from, rel.rel, rel.to, "authored-knowledge-wtoml");
+  }
+
+  // Load folder metas (this.folder.wtoml convention)
+  // Provides folder:* nodes + contains relations for the knowledge graph / ContextHub.
+  const folderMetas = await loadFolderMetas();
+  for (const ent of folderMetas.entities) {
+    addNode(nodes, {
+      id: ent.id,
+      kind: ent.kind || 'folder',
+      title: ent.label || ent.id,
+      lifecycle: Array.isArray(ent.lifecycle) ? ent.lifecycle : (ent.lifecycle ? [ent.lifecycle] : ['author', 'steward']),
+      owner: ent.owner || 'plugin.platform',
+      status: 'authored',
+      source: ent.source || 'folder-meta',
+      facet: ent.facet,
+      path: ent.path,
+      description: ent.description
+    });
+  }
+  for (const rel of folderMetas.relations) {
+    addEdge(edges, rel.from, rel.rel, rel.to, 'folder-meta');
+  }
+
+  // Build maps from authored knowledge relations for merging into docs
+  const authDocLinksByDoc = Object.create(null); // docPath -> {docLinks: [], codeLinks: [], intentLinks: []}
+  for (const rel of knowledgeRel.relations) {
+    const from = String(rel.from || "");
+    const to = String(rel.to || "");
+    // match doc: or direct path for from
+    let docPath = null;
+    if (from.startsWith("doc:")) docPath = from.slice(4);
+    else if (from.includes("/intent/") || from.endsWith(".md")) docPath = from.replace(/^doc:/, "");
+    if (!docPath) continue;
+    const isCode = to.startsWith("code:") || /^(src|plugins|test)\//.test(to);
+    const isDoc = to.startsWith("doc:") || to.endsWith(".md");
+    const isIntent = to.startsWith("intent:");
+    if (!authDocLinksByDoc[docPath]) authDocLinksByDoc[docPath] = { docLinks: [], codeLinks: [], intentLinks: [] };
+    if (isDoc) {
+      authDocLinksByDoc[docPath].docLinks.push({ rel: rel.rel, target: to });
+    } else if (isCode) {
+      authDocLinksByDoc[docPath].codeLinks.push({ rel: rel.rel, target: to });
+    } else if (isIntent) {
+      authDocLinksByDoc[docPath].intentLinks.push({ rel: rel.rel, target: to });
+    }
   }
 
   for (const proposal of proposals) {
@@ -2971,7 +3747,7 @@ export async function buildPlatformModel({
       }))
     : buildCoverageEdgeRows(testGateProjection.rows, nodes);
   addTestGateTelemetryEdges(nodes, edges, testGateProjection.rows);
-  addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts, testSuites, testCases);
+  addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts, testSuites, testCases, testReports);
   for (const coverageEdge of coverageEdges) {
     addNode(nodes, {
       id: coverageEdge.id,
@@ -2989,23 +3765,12 @@ export async function buildPlatformModel({
   }
   const gaps = buildGaps(nodes, edges, { branches, changeSets, testGateProjection });
   const authoredPlatformWcss = await readText("plugins/platform/platform-console.wcss", "");
-  const authoredPlatformSelectors = extractAuthoredPlatformWcssSelectors(authoredPlatformWcss);
-  const generatedPlatformSelectors = extractRenderedCssSelectors(renderPlatformConsoleCss());
-  const missingInGenerated = authoredPlatformSelectors.filter(selector => !generatedPlatformSelectors.includes(selector));
-  const extraInGenerated = generatedPlatformSelectors.filter(selector => !authoredPlatformSelectors.includes(selector));
-  if (missingInGenerated.length || extraInGenerated.length) {
-    gaps.push({
-      id: "gap.platform-css-drift.surface:platform",
-      severity: "low",
-      kind: "platform-css-drift",
-      target: "surface:platform",
-      authoredSelectorCount: authoredPlatformSelectors.length,
-      generatedSelectorCount: generatedPlatformSelectors.length,
-      missingInGenerated,
-      extraInGenerated,
-      reason: "Generated platform CSS selector coverage differs from authored plugins/platform/platform-console.wcss.",
-      recommendedProposal: null
-    });
+  const platformCssDriftGap = buildPlatformCssDriftGap({
+    authoredWcss: authoredPlatformWcss,
+    generatedCss: renderPlatformConsoleCss()
+  });
+  if (platformCssDriftGap) {
+    gaps.push(platformCssDriftGap);
     gaps.sort((a, b) => a.severity.localeCompare(b.severity) || a.id.localeCompare(b.id));
   }
   const docs = parsedDocs.map(doc => ({
@@ -3025,7 +3790,11 @@ export async function buildPlatformModel({
       capabilityIds: [...doc.references.capabilityIds],
       proposalIds: [...(doc.references.proposalIds ?? [])],
       branchIds: [...(doc.references.branchIds ?? [])],
-      routes: [...doc.references.routes]
+      routes: [...doc.references.routes],
+      // explicit authored from knowledge-relations.wtoml (doc/doc + doc/code + doc/intent)
+      authoredDocLinks: (authDocLinksByDoc[doc.path]?.docLinks || []),
+      authoredCodeLinks: (authDocLinksByDoc[doc.path]?.codeLinks || []),
+      authoredIntentLinks: (authDocLinksByDoc[doc.path]?.intentLinks || [])
     }
   }));
   const docSections = parsedDocs.flatMap(doc => doc.sections.map(section => ({ ...section })));
@@ -3118,6 +3887,7 @@ export async function buildPlatformModel({
     lifecycleVocabulary: [...PLATFORM_LIFECYCLES],
     branchLifecycleVocabulary: [...PLATFORM_BRANCH_LIFECYCLE_LANES],
     nodes: [...nodes.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)),
+    lifecycleBoard: buildLifecycleBoard([...nodes.values()], PLATFORM_LIFECYCLES),
     edges: [...edges.values()].sort((a, b) => a.from.localeCompare(b.from) || a.rel.localeCompare(b.rel) || a.to.localeCompare(b.to)),
     summaries: summarize(nodes, edges, profiles),
     gaps,
@@ -3129,12 +3899,42 @@ export async function buildPlatformModel({
     docReferences,
     docDependencies,
     docsByPlatformObject,
+    contextBindings: contextNaming.contextBindings,
+    contextExports: contextNaming.contextExports,
+    contextImports: contextNaming.contextImports,
+    contextScopes: contextNaming.contextScopes,
+    contextualTargets: contextNaming.contextualTargets,
+    contextNameResolutions: contextNaming.contextNameResolutions,
+    contextNameConflicts: contextNaming.contextNameConflicts,
+    packagePatches,
+    packageTransformers,
+    packageDependencies,
+    capabilityRevisionHistory,
+    packageCoexistence,
+    packageConvergence,
+    packageApplyPreviews,
     roadmaps: planning.roadmaps,
     epics: planning.epics,
     features: planning.features,
     branchesByEpic: planning.branchesByEpic,
     defectsByEpic: planning.defectsByEpic,
     testsByFeature: planning.testsByFeature,
+    // Promoted intent tree (from knowledge-relations.wtoml)
+    intents: knowledgeRel.entities.filter(e => e.id && e.id.startsWith("intent:")).map(e => ({
+      id: e.id,
+      title: e.label || e.id,
+      description: e.description,
+      facet: e.facet,
+      lifecycle: e.lifecycle
+    })),
+    // Folder metadata from this.folder.wtoml files across the tree
+    folders: folderMetas.entities.map(e => ({
+      id: e.id,
+      title: e.label || e.id,
+      path: e.path,
+      facet: e.facet,
+      source: e.source
+    })),
     testGates: testGateProjection.rows,
     testGateIndex: testGateProjection.index,
     coverageEdges,
@@ -3151,6 +3951,12 @@ export async function buildPlatformModel({
     testArtifacts: testArtifacts.map(row => ({ ...row })),
     testSuites: testSuites.map(row => ({ ...row })),
     testCases: testCases.map(row => ({ ...row })),
+    testReports: testReports.map(row => ({ ...row })),
+    verificationPolicies: verificationPolicies.map(row => ({ ...row })),
+    verificationFreshness: verificationFreshness.map(row => ({ ...row })),
+    verificationInvalidations: verificationInvalidations.map(row => ({ ...row })),
+    verificationQueue: verificationQueue.map(row => ({ ...row })),
+    verificationExecutions: verificationExecutions.map(row => ({ ...row })),
     latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
     branchTestRedGreen,
     changeSetTestRedGreen,
@@ -3167,14 +3973,272 @@ export async function buildPlatformModel({
     snapshotBuilds,
     snapshotBuildErrors,
     snapshotDiagnostics,
+    testMonitorDiagnostics,
+    verificationPersistence,
+    runtimeComposition,
+    compatibilityBridges,
+    governanceRoutes,
+    proposalTargetGovernance,
+    mutableSurfaceSemantics,
     conflicts: conflicts.map(row => ({ ...row })),
     mergeIntents: mergeIntents.map(row => ({ ...row })),
-    roadmapTasks
+    roadmapTasks,
+    // explicit authored from the knowledge-relations.wtoml (for ContextHub / intent links)
+    knowledgeRelations: knowledgeRel.relations,
+    knowledgeAuthoredEntities: knowledgeRel.entities
   };
 }
 
-export function filterPlatformModel(model, view, id = null) {
-  if (!view || view === "model") return model;
+export function filterPlatformModel(model, view, id = null, options = {}) {
+  const context = typeof options?.context === "string" ? options.context : null;
+  const name = typeof options?.name === "string" ? options.name : null;
+  const visibilityTarget = typeof options?.target === "string" ? options.target : null;
+  if (view === "overview") {
+    return {
+      lifecycleVocabulary: model.lifecycleVocabulary,
+      lifecycleBoard: model.lifecycleBoard,
+      nodes: model.nodes,
+      docs: model.docs,
+      gaps: model.gaps,
+      profiles: model.profiles,
+      changeSets: model.changeSets,
+      testGates: model.testGates,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflow") {
+    return {
+      branches: model.branches,
+      branchBoard: model.branchBoard,
+      branchLifecycleVocabulary: model.branchLifecycleVocabulary,
+      changeSets: model.changeSets,
+      changeSetEdits: model.changeSetEdits,
+      candidateSnapshots: model.candidateSnapshots,
+      proposals: model.proposals,
+      proposalActions: model.proposalActions,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflowOverview") {
+    return {
+      branchBoard: model.branchBoard,
+      branches: model.branches,
+      changeSets: model.changeSets,
+      proposals: model.proposals,
+      candidateSnapshots: model.candidateSnapshots,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflowBranches") {
+    return {
+      branches: model.branches,
+      branchBoard: model.branchBoard,
+      branchLifecycleVocabulary: model.branchLifecycleVocabulary,
+      candidateSnapshots: model.candidateSnapshots,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflowChangeSets") {
+    return {
+      changeSets: model.changeSets,
+      changeSetEdits: model.changeSetEdits,
+      candidateSnapshots: model.candidateSnapshots,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflowProposals") {
+    return {
+      proposals: model.proposals,
+      proposalActions: model.proposalActions,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verification") {
+    return {
+      testGates: model.testGates,
+      testRuns: model.testRuns,
+      testArtifacts: model.testArtifacts,
+      testSuites: model.testSuites,
+      testCases: model.testCases,
+      testReports: model.testReports,
+      verificationPolicies: model.verificationPolicies,
+      verificationFreshness: model.verificationFreshness,
+      verificationInvalidations: model.verificationInvalidations,
+      verificationQueue: model.verificationQueue,
+      verificationExecutions: model.verificationExecutions,
+      runtimeRevisions: model.runtimeRevisions,
+      activeRuntimeRevision: model.activeRuntimeRevision,
+      candidateSnapshots: model.candidateSnapshots,
+      snapshotBuilds: model.snapshotBuilds,
+      snapshotBuildErrors: model.snapshotBuildErrors,
+      snapshotDiagnostics: model.snapshotDiagnostics,
+      testMonitorDiagnostics: model.testMonitorDiagnostics,
+      verificationPersistence: model.verificationPersistence,
+      branchTestRedGreen: model.branchTestRedGreen,
+      changeSetTestRedGreen: model.changeSetTestRedGreen,
+      latestTestResultsByGate: model.latestTestResultsByGate,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verificationOverview") {
+    return {
+      testRuns: model.testRuns,
+      testReports: model.testReports,
+      verificationFreshness: model.verificationFreshness,
+      verificationQueue: model.verificationQueue,
+      branchTestRedGreen: model.branchTestRedGreen,
+      changeSetTestRedGreen: model.changeSetTestRedGreen,
+      latestTestResultsByGate: model.latestTestResultsByGate,
+      activeRuntimeRevision: model.activeRuntimeRevision,
+      testMonitorDiagnostics: model.testMonitorDiagnostics,
+      verificationPersistence: model.verificationPersistence,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verificationStatus") {
+    return {
+      testGates: model.testGates,
+      testRuns: model.testRuns,
+      testReports: model.testReports,
+      verificationPolicies: model.verificationPolicies,
+      verificationFreshness: model.verificationFreshness,
+      verificationInvalidations: model.verificationInvalidations,
+      verificationQueue: model.verificationQueue,
+      verificationExecutions: model.verificationExecutions,
+      latestTestResultsByGate: model.latestTestResultsByGate,
+      activeRuntimeRevision: model.activeRuntimeRevision,
+      testMonitorDiagnostics: model.testMonitorDiagnostics,
+      verificationPersistence: model.verificationPersistence,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verificationRuns") {
+    return {
+      testGates: model.testGates,
+      testRuns: model.testRuns,
+      testArtifacts: model.testArtifacts,
+      testSuites: model.testSuites,
+      testCases: model.testCases,
+      testReports: model.testReports,
+      verificationFreshness: model.verificationFreshness,
+      verificationInvalidations: model.verificationInvalidations,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verificationRuntime") {
+    return {
+      runtimeRevisions: model.runtimeRevisions,
+      activeRuntimeRevision: model.activeRuntimeRevision,
+      candidateSnapshots: model.candidateSnapshots,
+      snapshotBuilds: model.snapshotBuilds,
+      snapshotBuildErrors: model.snapshotBuildErrors,
+      snapshotDiagnostics: model.snapshotDiagnostics,
+      testMonitorDiagnostics: model.testMonitorDiagnostics,
+      verificationPersistence: model.verificationPersistence,
+      summaries: model.summaries
+    };
+  }
+  if (view === "knowledge" || view === "knowledgeOverview") {
+    return {
+      docs: model.docs,
+      folders: model.folders,
+      docTasks: model.docTasks,
+      roadmapTasks: model.roadmapTasks,
+      epics: model.epics,
+      features: model.features,
+      summaries: model.summaries
+    };
+  }
+  if (view === "knowledgeDocs") {
+    return {
+      docs: model.docs,
+      docSections: model.docSections,
+      docTasks: model.docTasks,
+      summaries: model.summaries
+    };
+  }
+  if (view === "knowledgeFolders") {
+    return {
+      folders: model.folders,
+      edges: model.edges,
+      summaries: model.summaries
+    };
+  }
+  if (view === "knowledgeRoadmap") {
+    return {
+      roadmapTasks: model.roadmapTasks,
+      epics: model.epics,
+      features: model.features,
+      summaries: model.summaries
+    };
+  }
+  if (view === "signals" || view === "signalsOverview") {
+    const signalNodes = (model.nodes ?? []).filter(node =>
+      node.kind === "telemetryMetric"
+      || node.kind === "defectCluster"
+      || node.kind === "boundary"
+    );
+    return {
+      gaps: model.gaps,
+      nodes: signalNodes,
+      summaries: model.summaries
+    };
+  }
+  if (view === "signalsGaps") {
+    return {
+      gaps: model.gaps,
+      summaries: model.summaries
+    };
+  }
+  if (view === "signalsCatalog") {
+    const signalNodes = (model.nodes ?? []).filter(node =>
+      node.kind === "telemetryMetric"
+      || node.kind === "defectCluster"
+      || node.kind === "boundary"
+    );
+    const signalIds = new Set(signalNodes.map(node => node.id));
+    return {
+      nodes: signalNodes,
+      edges: (model.edges ?? []).filter(edge => signalIds.has(edge.from) || signalIds.has(edge.to)),
+      summaries: model.summaries
+    };
+  }
+  if (!view) return model;
+  if (view === "model" || view === "modelOverview") {
+    return {
+      nodes: model.nodes,
+      edges: model.edges,
+      profiles: model.profiles,
+      coverageEdges: model.coverageEdges,
+      summaries: model.summaries
+    };
+  }
+  if (view === "modelObjects") {
+    return {
+      nodes: model.nodes,
+      edges: model.edges,
+      summaries: model.summaries
+    };
+  }
+  if (view === "modelProfiles") {
+    return {
+      profiles: model.profiles,
+      summaries: model.summaries
+    };
+  }
+  if (view === "modelCoverage") {
+    return {
+      coverageEdges: model.coverageEdges,
+      summaries: model.summaries
+    };
+  }
+  if (view === "folders") {
+    return {
+      folders: model.folders,
+      // folders participate in general nodes/edges too
+      summaries: model.summaries
+    };
+  }
   if (view === "gaps") return { gaps: model.gaps, summaries: model.summaries };
   if (view === "roadmap") {
     const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
@@ -3324,10 +4388,15 @@ export function filterPlatformModel(model, view, id = null) {
     };
   }
   if (view === "testRuns") {
+    const selectedReport = id
+      ? ((model.testReports ?? []).find(row => row.id === id) ?? null)
+      : null;
     const testRuns = id
       ? model.testRuns.filter(row =>
         row.id === id
+        || row.id === selectedReport?.runId
         || row.gateId === id
+        || row.gateId === selectedReport?.gateId
         || row.branchId === id
         || row.changeSetId === id
         || row.candidateSnapshotId === id
@@ -3385,12 +4454,21 @@ export function filterPlatformModel(model, view, id = null) {
         || row.gateId === id
       )
       : (model.testCases ?? []);
+    const testReports = id
+      ? (model.testReports ?? []).filter(row =>
+        runIds.has(row.runId)
+        || gateIds.has(row.gateId)
+        || row.id === id
+        || row.runId === id
+        || row.gateId === id
+      )
+      : (model.testReports ?? []);
     const latestTestResultsByGate = Object.fromEntries(
       Object.entries(model.latestTestResultsByGate ?? {})
         .filter(([gateId, row]) => !id || gateIds.has(gateId) || runIds.has(row.runId) || gateId === id || row.runId === id)
         .map(([gateId, row]) => [gateId, { ...row }])
     );
-    return { testRuns, testResults, testArtifacts, testSuites, testCases, latestTestResultsByGate, summaries: model.summaries };
+    return { testRuns, testResults, testArtifacts, testSuites, testCases, testReports, latestTestResultsByGate, summaries: model.summaries };
   }
   if (view === "testRedGreen") {
     const branchTestRedGreen = id
@@ -3477,6 +4555,54 @@ export function filterPlatformModel(model, view, id = null) {
       summaries: model.summaries
     };
   }
+  if (view === "packageCoexistence") {
+    const packageCoexistence = id
+      ? (model.packageCoexistence ?? []).filter(row => matchesPackageCoexistenceRow(row, id))
+      : (model.packageCoexistence ?? []);
+    return { packageCoexistence, summaries: model.summaries };
+  }
+  if (view === "contextNaming") {
+    return {
+      contextNaming: contextNamingStateFromProject(projector => {
+        if (projector === moduleProjectors.contextBindings) return model.contextBindings ?? [];
+        if (projector === moduleProjectors.contextExports) return model.contextExports ?? [];
+        if (projector === moduleProjectors.contextImports) return model.contextImports ?? [];
+        if (projector === moduleProjectors.contextScopes) return model.contextScopes ?? [];
+        if (projector === moduleProjectors.contextualTargets) return model.contextualTargets ?? [];
+        if (projector === moduleProjectors.contextNameResolutions) return model.contextNameResolutions ?? [];
+        if (projector === moduleProjectors.contextNameConflicts) return model.contextNameConflicts ?? [];
+        return [];
+      }, {
+        id,
+        context,
+        name,
+        target: visibilityTarget
+      }),
+      summaries: model.summaries
+    };
+  }
+  if (view === "packageConvergence") {
+    const packageConvergence = id
+      ? (model.packageConvergence ?? []).filter(row =>
+        matchesPackageCoexistenceRow(row, id)
+        || (row.transformerIds ?? []).includes(id)
+        || (row.convergencePatchIds ?? []).includes(id)
+      )
+      : (model.packageConvergence ?? []);
+    return { packageConvergence, summaries: model.summaries };
+  }
+  if (view === "packageApplyPreview") {
+    const packageApplyPreviews = id
+      ? (model.packageApplyPreviews ?? []).filter(row => matchesPackageApplyPreviewRow(row, id))
+      : (model.packageApplyPreviews ?? []);
+    return { packageApplyPreviews, summaries: model.summaries };
+  }
+  if (view === "capabilityRevisionHistory") {
+    const capabilityRevisionHistory = id
+      ? (model.capabilityRevisionHistory ?? []).filter(row => matchesCapabilityRevisionHistoryRow(row, id))
+      : (model.capabilityRevisionHistory ?? []);
+    return { capabilityRevisionHistory, summaries: model.summaries };
+  }
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;
     return { candidateSnapshots, summaries: model.summaries };
@@ -3533,6 +4659,59 @@ export function filterPlatformModel(model, view, id = null) {
   if (view === "mergeIntents") {
     const mergeIntents = id ? model.mergeIntents.filter(row => row.id === id || row.branchId === id || row.proposalId === id) : model.mergeIntents;
     return { mergeIntents, summaries: model.summaries };
+  }
+  if (view === "bridges") {
+    const compatibilityBridges = id
+      ? (model.compatibilityBridges ?? []).filter(row =>
+        row.id === id
+        || row.bridgeClass === id
+        || row.owner === id
+        || row.surfaces.includes(id)
+        || row.sampleTargets.includes(id)
+      )
+      : (model.compatibilityBridges ?? []);
+    return { compatibilityBridges, summaries: model.summaries };
+  }
+  if (view === "governance") {
+    const governanceRoutes = id
+      ? (model.governanceRoutes ?? []).filter(row =>
+        row.id === id
+        || row.routeId === id
+        || row.handler === id
+        || row.governanceMode === id
+        || row.authorityMechanism === id
+        || row.ownerBundleId === id
+        || row.ownerPluginId === id
+      )
+      : (model.governanceRoutes ?? []);
+    const proposalTargetGovernance = id
+      ? (model.proposalTargetGovernance ?? []).filter(row =>
+        row.id === id
+        || row.targetProcess === id
+        || row.governanceMode === id
+        || row.authorityMechanism === id
+      )
+      : (model.proposalTargetGovernance ?? []);
+    return { governanceRoutes, proposalTargetGovernance, summaries: model.summaries };
+  }
+  if (view === "semantics") {
+    const mutableSurfaceSemantics = id
+      ? (model.mutableSurfaceSemantics ?? []).filter(row =>
+        row.id === id
+        || row.surface === id
+        || row.sharingClass === id
+        || row.stateClass === id
+        || row.visibilityRule === id
+        || row.authorityRule === id
+        || row.variantOf === id
+        || row.readSurfaces.includes(id)
+        || row.mutationSurfaces.includes(id)
+        || row.witnessProcesses.includes(id)
+        || row.sourceFiles.includes(id)
+        || row.variants.includes(id)
+      )
+      : (model.mutableSurfaceSemantics ?? []);
+    return { mutableSurfaceSemantics, summaries: model.summaries };
   }
   if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "testGate"), summaries: model.summaries };
   if (view === "mcp") return {

@@ -19,6 +19,7 @@ Related direction:
 - [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md)
 - [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md)
 - [docs/BACKEND-SEAMS.md](C:\Users\aaron\Documents\world\docs\BACKEND-SEAMS.md)
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
 
 Terminology used in this roadmap:
 
@@ -355,8 +356,10 @@ Sourcery should evolve from a single guided Todo tutorial into the truthful comp
 - [x] Extend that page-scoped Sourcery slice onto the real `/world` operating surface so the shipped tutorial can end on a real inspection surface instead of stopping at the live app.
 - [x] Make Sourcery contextual at world, page, section, widget, and chapter scope.
 - [x] Support restart-from-here behavior for the relevant scope beyond chapter rewind.
-- [ ] Broaden scope-aware Sourcery authoring beyond the shipped Todo slice so more real surfaces expose authored section/widget anchors, clearer recovery naming, and truthful local scope actions.
-- [ ] Generalize authored scope-anchor catalogs beyond the shipped Todo surfaces so app/world packages can opt into truthful Sourcery recovery and focus without being turned into tutorial steps.
+- [x] Audit guidance actions against real controls, handoffs, and witnessed mutation paths with a regression-tested action registry.
+- [x] Broaden scope-aware Sourcery authoring beyond the shipped Todo slice so bootstrap operator surfaces expose authored section/widget anchors, clearer recovery naming, and truthful local scope actions.
+- [x] Generalize authored scope-anchor catalogs beyond the shipped Todo surfaces so app/world packages can opt into truthful Sourcery recovery and focus without being turned into tutorial steps.
+- [x] Add a cross-surface Sourcery scope inventory that projects active, muted, and completed guidance state across bootstrap, live app, and `/world`.
 - [x] Support per-context enable/disable while keeping disabled guidance visible and recoverable.
 - [x] Introduce concept-aware guidance that reveals ideas as they become relevant.
 - [x] Introduce ambient, truthful curation that can surface good next steps without hiding the machine.
@@ -380,6 +383,10 @@ Current Sourcery slices now include:
 - authored concept metadata revealed progressively on those same surfaces as tutorial progress reaches the relevant steps
 - bootstrap-first next-step suggestions derived from real world/session/tutorial state, wired only to real controls or real surface handoffs, and now keeping disabled-scope recovery visible when it competes with optional fast-path curation
 - a final shipped Todo tutorial handoff into `/world`, with a world-page guidance panel driven by the same persisted tutorial progress model rather than a separate onboarding-only state path
+- a regression-tested guidance action registry that maps suggestion, overlay, disabled-scope, and runtime actions to real controls, handoffs, or witnessed mutation paths
+- bootstrap operator scope anchors on capability, backend-program, runtime-plugin, MCP, and perspective forms plus widget anchors on identity controls, all wired through the same `guidanceTarget` contract as tutorial steps
+- a shared Sourcery scope inventory across bootstrap, live app, and `/world` that shows active, muted, and completed scopes with truthful recovery actions instead of only a disabled-scope list
+- shared scope-anchor builders in `src/runtime-guidance-scope-anchors.js` so app/world packages and future tutorials can opt into truthful focus/recovery by authoring `guidanceTarget` on widgets or declaring bootstrap section anchors without inventing extra tutorial steps
 
 Honest caveats / rollback watch:
 
@@ -474,8 +481,8 @@ Current first authored backend-runtime slice now exists:
 
 Honest caveats / rollback watch:
 
-- Backend orchestration is now authored, but practical leaf behavior still bottoms out in JS handlers such as `todos.readModel`, `todos.createModel`, `todos.updateModel`, `todos.deleteModel`, `privateNotes.readModel`, and `privateNotes.createModel`.
-  That is intentional for this slice, but it is still orchestration-over-leaf-capabilities rather than fully authored backend behavior.
+- Backend orchestration is now authored, and the maintained demo no longer keeps duplicate route wrappers in the demo handler set.
+  Practical leaf behavior still bottoms out in demo-owned JS projectors and process handlers such as `demo.todosReadModel`, `demo.privateNotesReadModel`, `todo.create`, `todo.update`, `todo.delete`, `privateNote.create`, and `widget.define`, so this is still orchestration-over-plugin-owned leaf behavior rather than fully authored backend execution.
 - `serverRunner.handlerSet` is now bundle-provided instead of host-hardcoded, but its long-term role is still unresolved.
   The system still exposes handler-set selection on runners, preserves handler-set produced services in runtime startup, and reports handler-set composition in diagnostics, so this is no longer hidden glue; what remains open is whether it stays a first-class execution boundary or collapses as authored/bundle execution coverage expands.
 - Generic bundle endpoints still exist as fallback routes even though mounted authored routes now win first.
@@ -639,10 +646,11 @@ Current base now exists:
 - [x] Add a first bootstrap runtime-plugin install/remove surface with proposal parity, package availability reads, and runner-scoped install visibility.
 - [x] Deepen runtime-plugin review and operations surfaces beyond the first bootstrap forms: richer dependency/source explanation, composition diffs, and clearer package review/detail affordances.
 - [x] Finish migrating the maintained demo off the remaining runtime-owned `bundle-demo` / `handlerSet = "demo"` compatibility seam so served-example composition is entirely explained by authored installs plus explicit runtime-owned bundle ownership, not hidden example glue.
-- [ ] Remove the remaining demo handler-set model shims from authored backend programs, starting with `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel`, so the pluginized maintained demo no longer routes core app logic back through `src/demo-handler-set.js`.
+- [x] Remove the remaining demo handler-set mutation shims from maintained runtime behavior so the pluginized maintained demo no longer exports dead `todos.*Model`, `privateNotes.createModel`, or `widgets.createModel` compatibility handlers and no longer routes authored backend logic back through `plugins/demo/handler-set.js`.
 - [ ] Bring blank-world bootstrap/tutorial startup onto the same explicit runtime-composition story as the maintained demo so bootstrap can eventually run from a narrow baseline instead of a compatibility-heavy runtime path.
 - [ ] Add runner-scoped runtime-plugin reconcile and repair flows so authored installs that point at missing, invalid, incompatible, or dependency-broken local packages become operable cleanup work instead of only startup failures and review warnings.
 - [ ] Add operator-owned reset/recovery/repair flows beyond replace-only whole-world artifacts, including identity/bootstrap recovery where needed.
+- [ ] Turn continuous verification into a first-class runtime posture instead of a separate CI product: authored gate policy, explicit isolation classes, reverse-DAG invalidation, background scheduling, shared diagnostics, and stronger authority/risk gating across local dev, CI, and prod.
 - [ ] Keep theming visible but subordinate here as a shell/product boundary problem rather than a top-level driver.
 
 This seam is what turns the prototype into something ownable locally, reachable remotely, and extensible across worlds.
@@ -650,6 +658,7 @@ This seam is what turns the prototype into something ownable locally, reachable 
 Current contract and persistence slice detail lives here:
 
 - [docs/SHELLS-PERSISTENCE-ECOSYSTEM.md](C:\Users\aaron\Documents\world\docs\SHELLS-PERSISTENCE-ECOSYSTEM.md)
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
 
 Honest caveats / rollback watch:
 
@@ -679,12 +688,12 @@ Honest caveats / rollback watch:
   Provenance, trust state, compatibility, and execution-boundary reasoning are surfaced now, but remote store mechanics, signature enforcement, review workflows, and update channels still remain future work.
 - Runtime-plugin intent is now real world state and has a first useful product surface, but runtime operations are still incomplete.
   Bootstrap now exposes install/remove/proposal forms plus runner-scoped availability, installed-state, blocked/installable reason badges, and authored-composition review/detail panels for `runtimePlugin.install` / `runtimePlugin.remove`, yet reconcile/repair flows, store/update lifecycle, and broader trust operations still remain future work.
-- The maintained demo project is now pluginized, but blank-world bootstrap is still a separate runtime path.
-  The served example app proves authored plugin composition on `minimal`; bootstrap/tutorial continuity still depends on runtime-owned bundles and remains intentionally outside that migration slice for now.
+- The maintained demo project is now pluginized, and blank-world bootstrap now starts through an explicit bootstrap launcher/profile/plugin path rather than an implicit `full` fallback.
+  The served example app proves authored plugin composition on `minimal`, while blank bootstrap now comes up on the explicit `authoring` profile with `plugin.authoring` plus its first-party dependencies; runtime diagnostics now state that distinction explicitly through `composition.storyId`, runner source, and plugin source fields. What still differs is that bootstrap startup is startup-mode/profile driven rather than an authored `serverRunner` + runtime-plugin-install composition story inside the world.
 - The maintained demo no longer depends on the `handlerSet = "demo"` bundle-activation compatibility seam.
   `plugin.demo` is now authored on `demo_server`; a runner that names `handlerSet = "demo"` without activating `plugin.demo` fails startup instead of silently adding `bundle-demo`.
-- The maintained demo's authored backend programs still rely on a narrower compatibility seam inside that bundle.
-  Several shipped backend-program versions still call demo handler-set model helpers such as `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel` rather than fully bundle-owned or authored executable seams.
+- The maintained demo still keeps demo-owned executable behavior inside `plugin.demo`, but the old demo route wrappers are gone from the handler set.
+  Shipped backend-program versions now lower through `project.read`, `process.request`, and `witness.emit`, and `plugins/demo/handler-set.js` is reduced to visible-witness filtering plus demo job handlers instead of carrying duplicate Todo/private-note/widget/network route behavior.
 
 ---
 

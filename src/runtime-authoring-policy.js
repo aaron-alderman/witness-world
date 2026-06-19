@@ -29,14 +29,24 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "type.create",
   "projection.create",
   "message.create",
+  "package.create",
+  "packageRevision.create",
+  "packageRevision.publish",
+  "packagePatch.create",
+  "packageNamespace.create",
+  "packageDependency.create",
+  "packageTransformer.create",
   "route.create",
   "serve.create",
   "serverRunner.create",
   "runtimePlugin.install",
   "runtimePlugin.remove",
   "capability.create",
+  "capability.update",
   "capability.install",
   "capability.remove",
+  "capability.rollback",
+  "capability.migrateLegacy",
   "mcpServer.create",
   "mcpTool.install",
   "mcpTool.remove"
@@ -60,12 +70,22 @@ export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
   "type.create",
   "projection.create",
   "message.create",
+  "package.create",
+  "packageRevision.create",
+  "packageRevision.publish",
+  "packagePatch.create",
+  "packageNamespace.create",
+  "packageDependency.create",
+  "packageTransformer.create",
   "route.create",
   "serve.create",
   "serverRunner.create",
   "capability.create",
+  "capability.update",
   "capability.install",
   "capability.remove",
+  "capability.rollback",
+  "capability.migrateLegacy",
   "mcpServer.create",
   "mcpTool.install",
   "mcpTool.remove"
@@ -263,7 +283,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       }),
       projection: capabilityState({
         publicAction: "projection.create",
-        runtimeConsumers: [],
+        runtimeConsumers: ["page.surface"],
         status: "supported"
       }),
       type: capabilityState({
@@ -277,8 +297,21 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         status: "supported"
       }),
       capability: capabilityState({
-        publicActions: ["capability.create", "capability.install", "capability.remove"],
+        publicActions: ["capability.create", "capability.update", "capability.install", "capability.remove", "capability.rollback", "capability.migrateLegacy"],
         runtimeConsumers: ["runtime capability resolution"],
+        status: "supported"
+      }),
+      package: capabilityState({
+        publicActions: [
+          "package.create",
+          "packageRevision.create",
+          "packageRevision.publish",
+          "packagePatch.create",
+          "packageNamespace.create",
+          "packageDependency.create",
+          "packageTransformer.create"
+        ],
+        runtimeConsumers: ["plugin and package authorship"],
         status: "supported"
       }),
       widget: capabilityState({
@@ -303,16 +336,16 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
     runtimeConsumers: {
       "page.surface": {
         consumes: ["surface", "process", "projection"],
-        status: "partial",
+        status: "supported",
         staticProjection: "supported",
-        interactiveProjection: "blocked",
+        interactiveProjection: "supported",
         pairings: {
           surface: "supported",
-          process: "blocked",
-          projection: "blocked"
+          process: "supported",
+          projection: "supported"
         },
-        limitationType: "platform",
-        reason: "page.surface now supports static authored projection plus route-selected alternate authored output; route-state equivalence and interactive execution remain blocked",
+        limitationType: null,
+        reason: "page.surface now supports authored surface, process, and projection pairings on canonical routes",
         pathwaySemantics: {
           blockedResetHost: pathwaySemanticState({
             status: "supported",
@@ -329,35 +362,40 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
             limitationType: null,
             reason: "page.surface can now serve alternate authored surface output by route through the canonical authoring pathway probe"
           }),
+          surfaceProjectionPairing: pathwaySemanticState({
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now consumes authored projection bindings during canonical route projection through shared runtime rules"
+          }),
           urlToRouteState: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "page.surface does not yet provide a canonical generic consumer that synchronizes URL state into authored route state"
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now synchronizes direct route entry URL state into authored route state on canonical served routes"
           }),
           interactionToRouteState: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "page.surface does not yet provide a clean generic interaction consumer that transitions authored route state"
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now delivers authored interactions that transition route state through shared runtime rules"
           }),
           routeStateToUrl: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "page.surface does not yet synchronize authored route state back into URL state"
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now synchronizes authored route-state transitions back into browser URL state"
           }),
           sameDocumentSurfaceRefresh: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "page.surface does not yet perform same-document surface refresh after authored route-state transitions"
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now refreshes authored route-selected output after route-state changes without losing same-document runtime state"
           }),
           interactiveSurfaceExecution: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "interactive page.surface execution remains unavailable after removal of the false-authority renderer"
+            status: "supported",
+            limitationType: null,
+            reason: "interactive page.surface execution is now pathway-proven through authored process rules and live route transitions"
           }),
           routingCluster: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "the routing cluster remains blocked until URL-to-state, interaction-driven route-state transitions, reverse URL sync, and same-document refresh are all pathway-proven"
+            status: "supported",
+            limitationType: null,
+            reason: "the routing cluster is now pathway-proven end to end on canonical page.surface routes"
           })
         }
       },
@@ -376,11 +414,18 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         reason: "page.surface supports static authored projection and route-selected alternate authored output"
       },
       {
-        authoring: ["surface", "process", "projection"],
+        authoring: ["surface", "process"],
         runtime: "page.surface",
-        status: "blocked",
-        limitationType: "platform",
-        reason: "page.surface does not yet consume process or projection semantics on the canonical authoring pathway probe"
+        status: "supported",
+        limitationType: null,
+        reason: "page.surface now executes authored process-driven surface interactions and routing on canonical routes"
+      },
+      {
+        authoring: ["surface", "projection"],
+        runtime: "page.surface",
+        status: "supported",
+        limitationType: null,
+        reason: "page.surface now projects authored projection-bound surface output on canonical routes through shared runtime rules"
       },
       {
         authoring: ["widget", "frontendProgram", "frontendStep"],

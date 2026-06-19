@@ -442,8 +442,9 @@ Current molecules:
 - explicit local alias rows through `contextBinding`
 - explicit cross-context export/import rows through `contextExport` and `contextImport`
 - explanatory `contextScopes` read models showing local vs imported visibility
+- grouped `contextNameResolutions` and `contextNameConflicts` read models so visible names and ambiguous collisions are inspectable
 - shared contextual resolution and first-slice scope validation on the bootstrap/DSL authoring paths while preserving canonical stored ids
-  Covered first-slice refs are `parentRef`, `rootWidgetRef`, `servesRef`, `serverRunnerRef`, `routeRef`, `backendHostRef`, and `frontendHostRef`.
+  Covered first-slice refs are `parentRef`, `rootWidgetRef`, `rootSurfaceRef`, `servesRef`, `backendProgramSoulRef`, `serverRunnerRef`, `serverRef`, `routeRef`, `backendHostRef`, `frontendHostRef`, `targetRef`, and `targetIdRef`.
 - covered bootstrap/DSL authoring surfaces now reject direct canonical references to foreign scoped targets that are not explicitly visible in the authoring context
 
 Missing molecules:
@@ -467,12 +468,14 @@ Honest caveats:
 - Imports are named-import only and visibility is intentionally explicit rather than automatic.
 - The current slice only lowers contextual refs for a bounded set of authoring fields.
 - Canonical-id authoring is still a compatibility path on those covered surfaces, but it no longer bypasses hidden foreign scoped targets.
+  Validation now classifies those canonical-id paths explicitly as `same-context convenience`, `imported-target reference`, or `legacy-only path`.
   The parallel canonical id fields remain valid for same-context targets, unscoped legacy targets, and foreign targets that are already explicitly visible through import/binding until the platform decides whether to narrow compatibility further.
 - The low-level JS helper functions still expose permissive witness emitters.
   The honest guardrails for duplicate names, bad exports, and bad imports live on the bootstrap and DSL authoring paths rather than every internal helper call.
 - Some read surfaces still lag behind the write semantics.
-  Widget parenting can now be authored through `parentRef`, but the bootstrap widget read model is still mostly a flat list rather than a full attachment/placement explanation surface.
-- Capability installs, proposal targets, stewardship targets, and most app-specific runtime actions still primarily use canonical ids.
+  Widget parenting can now be authored through `parentRef`, and contextual naming now has grouped resolution/conflict rows, but the bootstrap widget read model is still mostly a flat list rather than a full attachment/placement explanation surface.
+- Most app-specific runtime actions still primarily use canonical ids.
+  Capability install/remove targets, route root-surface and backend-program attachments, runtime plugin attachment targets, MCP tool attachment targets, stewardship targets, and proposal target ids now also lower through the shared contextual visibility rules when authored with `targetRef`, `rootSurfaceRef`, `backendProgramSoulRef`, `serverRunnerRef`, `serverRef`, and `targetIdRef`.
 
 ### 4.3 Authority, delegation, stewardship, proposals
 
@@ -803,7 +806,7 @@ Current molecules:
 - metadata-first local plugin package discovery and validation through `plugins/<plugin-id>/plugin.json`
 - runtime and bootstrap read models that expose package validity, compatibility, installability-in-principle, and declared capability sources
 - startup-local plugin activation through `PluginManifest.activatesBundles`, repeatable CLI `--runtime-plugin <id>`, and `RUNTIME_PLUGINS=plugin.a,plugin.b`
-- authored `serverRunner` plugin installs through witnessed `runtimePlugin.install` / `runtimePlugin.remove`, with proposal parity and additive operator overlay
+- authored `serverRunner` plugin installs through witnessed `runtimePlugin.install` / `runtimePlugin.remove`, with direct-route proposal fallback, proposal parity, and additive operator overlay
 - bootstrap runtime-plugin install/remove/proposal forms plus runner-scoped availability rows that show authored installability, missing dependencies, and metadata-only packages without pretending CLI/env overlays are durable world state
 - runtime-owned review reads plus bootstrap plugin detail panels that preview authored runner composition, no-op installs, reverse dependencies, and declared-vs-resolved plugin contributions before mutation
 - runtime composition reads that expose requested, eligible, active, rejected, resolved-bundle, and resolved-runtime-contribution state for local plugin packages
@@ -894,8 +897,8 @@ Status: `partial`
 
 What it is:
 
-- today: bootstrap tutorial, live-app overlay, and world-page guidance panel, with persisted chapter restart, step-level restart-from-here replay pins, page-aware continuation across those real surfaces, and per-page disable/re-enable on those real surfaces
-- intended: contextual guide across world/page/section/widget/chapter scopes
+- today: bootstrap tutorial, live-app overlay, and world-page guidance panel, with persisted chapter restart, scope-aware continuation across world/page/section/widget/chapter scopes, per-scope and per-context disable/re-enable, a cross-surface scope inventory, and a regression-tested guidance action registry
+- intended: contextual guide across broader product surfaces with the same truthful scope model
 
 Why it accelerates:
 
@@ -903,34 +906,38 @@ Why it accelerates:
 
 Current molecules:
 
-- page-aware continuation between bootstrap, the live app, and the real `/world` operating surface
-- per-page disable/re-enable on those three shipped surfaces
-- bootstrap-visible disabled-surface rows so guidance that was turned off elsewhere stays visible and recoverable without resetting progress
-- authored-step replay pins for restart-from-here on those same surfaces
+- scope-aware continuation across bootstrap, the live app, and the real `/world` operating surface
+- per-scope and per-context disable/re-enable on those shipped surfaces, with disabled guidance still visible and recoverable
+- bootstrap-visible, live-app-visible, and world-visible scope inventory rows for active, muted, and completed guidance state
+- authored-step and authored-scope replay pins for restart-from-here on those same surfaces
 - a shipped Todo tutorial path that now ends on the real `/world` surface with a world-page guidance panel driven by the same persisted tutorial progress state
+- authored non-step scope anchors on shipped app/world widgets plus bootstrap operator forms, wired through the shared `guidanceTarget` contract
+- shared scope-anchor builders in `src/runtime-guidance-scope-anchors.js` so packages can opt into truthful focus/recovery without inventing extra tutorial steps
+- a regression-tested guidance action registry that maps suggestion, overlay, disabled-scope, and runtime actions to real controls, handoffs, or witnessed mutation paths
 
 Missing molecules:
 
-- broader per-scope enable/disable beyond the current bootstrap/app/world page slice
-- restart from current context beyond authored-step replay
-- section-aware/widget-aware/world-aware state
-- world-level "where is Sourcery active/disabled" view
+- broader scope-anchor coverage on remaining bootstrap operator surfaces such as proposal, scoped binding, and remove forms
+- restart from current context beyond authored guidance replay
+- generalized scope-anchor adoption across arbitrary app/world packages beyond the shipped Todo/bootstrap surfaces
 
 Do:
 
 - keep Sourcery truthful and optional
+- opt packages into scope anchors explicitly through authored `guidanceTarget` metadata or declared bootstrap section anchors
 
 Do not:
 
 - let it become a fake simplified product that users later "graduate out of"
+- infer scope anchors automatically from page names or hidden heuristics
 
 Honest caveats:
 
-- The current contextual slice is page-aware only for the real bootstrap, live-app, and `/world` surfaces.
-- It can now say "this step belongs on the other page" and can disable guidance per page on those surfaces, but it still does not understand section/widget/world-as-scope semantics.
-- Bootstrap can now show disabled guidance surfaces and re-enable them directly, but this is still recovery around page-disabled state, not a richer general scope model.
-- Restart now supports chapter rewind plus authored-step replay pins on the shipped surfaces.
-  That replay is guidance-only, does not roll back app/world state, and does not yet imply true page-level, section-level, or widget-level restart-from-here semantics.
+- The current contextual slice is scope-aware where steps and surfaces are explicitly authored with real scope anchors.
+  The shipped Todo slice now covers `world`, `page`, `section`, `widget`, and `chapter` scope across bootstrap, the live app, and `/world`, but broader tutorials and product surfaces still need more authored scope metadata instead of inference theatre.
+- Bootstrap can now show disabled guidance scopes and re-enable them directly through the shared scope inventory, but finer-grained bootstrap widget/control anchors remain future work rather than something Sourcery should infer.
+- Restart now supports chapter rewind plus authored-scope replay pins on the shipped surfaces.
+  That replay is guidance-only, does not roll back app/world state, and does not yet imply true state rollback semantics for arbitrary scopes.
 
 ### 7.2 Concept-aware guidance
 
@@ -1041,7 +1048,7 @@ Current molecules:
 
 - browser-hosted operation through `serverRunner`
 - first local MCP server model through authored `mcpServer`
-- per-server tool exposure, acting mode, and local scope through authored `mcpToolInstall`
+- per-server tool exposure, acting mode, and local scope through authored `mcpToolInstall`, with direct `mcpServer.define` / `mcpTool.install` / `mcpTool.remove` routes now proposing instead of dead-ending when target authority is missing
 - stdio and local-first HTTP MCP transports over the real witnessed host/tool surface
 - delegated versus service identity execution instead of one implicit global automation identity
 - a real `desktop` startup mode over the same runtime/profile/operator seams
@@ -1169,7 +1176,7 @@ If the question is "what most accelerates everything from here?", the highest-le
 3. editable-everywhere page grammar
 4. search/command surface
 5. live editable inspector
-6. contextual Sourcery beyond the one tutorial
+6. broader scope-anchor adoption beyond the shipped Todo/bootstrap slice
 7. capability catalog/store
 8. multi-shell contract with explicit desktop capabilities
 

@@ -14,6 +14,7 @@ export function bindSurfaceInspectorActions({
   updateSurfaceInspectorUi = () => {},
   invalidateSurfaceInspectorGraph = () => {},
   invalidateSurfaceInspectorWidgets = () => {},
+  invalidateSurfaceInspectorRuntimeDiagnostics = () => {},
   selectSurfaceInspectorWidget = async () => {},
   worldSurfaceHref = () => "",
   selectedSurfaceInspectorProcessSelection = () => null,
@@ -59,6 +60,7 @@ export function bindSurfaceInspectorActions({
       if (!selectedSurfaceWidgetId()) {
         invalidateSurfaceInspectorGraph();
         invalidateSurfaceInspectorWidgets();
+        invalidateSurfaceInspectorRuntimeDiagnostics();
         setSurfaceInspectorStatus("Inspector metadata refreshed.", "ok");
         updateSurfaceInspectorUi();
         return;
@@ -82,6 +84,22 @@ export function bindSurfaceInspectorActions({
       const widgetId = selectedSurfaceWidgetId();
       if (!widgetId) return;
       windowTarget?.location?.assign?.(worldSurfaceHref({ select: widgetId }));
+    });
+  });
+  overlay?.querySelectorAll?.("[data-surface-inspector-world-select]")?.forEach?.(node => {
+    node.addEventListener?.("click", event => {
+      event.preventDefault?.();
+      const select = node.getAttribute?.("data-surface-inspector-world-select") || "";
+      if (!select) return;
+      windowTarget?.location?.assign?.(worldSurfaceHref({ select }));
+    });
+  });
+  overlay?.querySelectorAll?.("[data-surface-inspector-runtime-select]")?.forEach?.(node => {
+    node.addEventListener?.("click", event => {
+      event.preventDefault?.();
+      const select = node.getAttribute?.("data-surface-inspector-runtime-select") || "";
+      if (!select) return;
+      windowTarget?.location?.assign?.(worldSurfaceHref({ select }));
     });
   });
   overlay?.querySelectorAll?.("[data-surface-inspector-world-mode]")?.forEach?.(node => {

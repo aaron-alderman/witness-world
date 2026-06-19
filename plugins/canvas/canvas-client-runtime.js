@@ -2,18 +2,20 @@ export async function startCanvasClientRuntime({
   documentTarget = globalThis?.document || null,
   localStorageTarget = globalThis?.localStorage || null
 } = {}) {
-  const core = __canvasCore;
-  const MIN_W = 40, MIN_H = 24;
-  const FLUSH_DELAY_MS = 1500;
-  const PLAY_INTERVAL_MS = 150;
-  const el = id => documentTarget?.getElementById?.(id) || null;
-  const canvas = el("canvas-surface");
-  const ctx = canvas.getContext("2d");
-  const stage = el("canvas-stage");
-  const overlayInput = el("overlay-input");
-  const statusEl = el("status");
+  core = __canvasCore;
+  MIN_W = 40;
+  MIN_H = 24;
+  FLUSH_DELAY_MS = 1500;
+  PLAY_INTERVAL_MS = 150;
+  flushDelayMs = FLUSH_DELAY_MS;
+  el = id => documentTarget?.getElementById?.(id) || null;
+  canvas = el("canvas-surface");
+  ctx = canvas.getContext("2d");
+  stage = el("canvas-stage");
+  overlayInput = el("overlay-input");
+  statusEl = el("status");
 
-  const state = {
+  state = {
     session: { authenticated: false, identity: null, actor: null, label: null, perspective: null },
     perspective: localStorageTarget?.getItem?.("witness.canvasPerspective") || "",
     model: null,
@@ -30,40 +32,40 @@ export async function startCanvasClientRuntime({
     history: core.createReplayState(),
     assetPreviewCache: new Map()
   };
-  const outbox = { perspective: "", moves: new Map(), styles: new Map(), camera: null, grid: null };
-  let flushTimer = null;
-  let flushInFlight = null;
-  let overlayCommit = null;
-  let projectionModule = null;
-  let dropDepth = 0;
+  outbox = { perspective: "", moves: new Map(), styles: new Map(), camera: null, grid: null };
+  flushTimer = null;
+  flushInFlight = null;
+  overlayCommit = null;
+  projectionModule = null;
+  dropDepth = 0;
 
-  const isLive = () => state.history.playhead === null;
+  isLive = () => state.history.playhead === null;
 
-  const setStatus = text => { statusEl.textContent = text || ""; };
-  const markDirty = () => { state.dirty = true; };
-  const snapValue = v => state.grid.snap ? Math.round(v / state.grid.size) * state.grid.size : Math.round(v);
+  setStatus = text => { statusEl.textContent = text || ""; };
+  markDirty = () => { state.dirty = true; };
+  snapValue = v => state.grid.snap ? Math.round(v / state.grid.size) * state.grid.size : Math.round(v);
 
-  const selectionSize = () => state.selected.size;
-  const clearSelection = () => { state.selected = new Set(); state.selectedConnector = null; };
-  const selectOnly = id => { state.selected = new Set([id]); state.selectedConnector = null; };
-  const toggleSelected = id => {
+  selectionSize = () => state.selected.size;
+  clearSelection = () => { state.selected = new Set(); state.selectedConnector = null; };
+  selectOnly = id => { state.selected = new Set([id]); state.selectedConnector = null; };
+  toggleSelected = id => {
     state.selectedConnector = null;
     if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id);
   };
-  const soleSelected = () => selectionSize() === 1 ? findInstance([...state.selected][0]) : null;
+  soleSelected = () => selectionSize() === 1 ? findInstance([...state.selected][0]) : null;
 
-  const currentActor = () => state.session?.actor || "";
-  const isAuthenticated = () => Boolean(state.session?.authenticated && currentActor());
-  const headers = () => ({ "content-type": "application/json" });
+  currentActor = () => state.session?.actor || "";
+  isAuthenticated = () => Boolean(state.session?.authenticated && currentActor());
+  headers = () => ({ "content-type": "application/json" });
 
-  const canAcceptFileDrop = () => isLive() && isAuthenticated() && Boolean(state.perspective);
+  canAcceptFileDrop = () => isLive() && isAuthenticated() && Boolean(state.perspective);
 
-  function updateDropState(active) {
+  updateDropState = function updateDropState(active) {
     stage.classList.toggle("drop-ready", active && canAcceptFileDrop());
     stage.classList.toggle("drop-disabled", active && !canAcceptFileDrop());
-  }
+  };
 
-  function adoptModel(model, adoptCamera) {
+  adoptModel = function adoptModel(model, adoptCamera) {
     state.model = model;
     if (!model) { updateUndoButtons(); renderInspector(); markDirty(); return; }
     if (adoptCamera) {
@@ -96,24 +98,24 @@ export async function startCanvasClientRuntime({
     updateUndoButtons();
     renderInspector();
     markDirty();
-  }
+  };
 
-  const refresh = () => loadCanvas();
-  const findInstance = id => (state.model ? state.model.instances.find(i => i.id === id) : null);
-  const connectorKey = c => core.connectorKey(c);
-  const findConnector = key => (state.model ? state.model.connectors.find(c => connectorKey(c) === key) : null);
+  refresh = () => loadCanvas();
+  findInstance = id => (state.model ? state.model.instances.find(i => i.id === id) : null);
+  connectorKey = c => core.connectorKey(c);
+  findConnector = key => (state.model ? state.model.connectors.find(c => connectorKey(c) === key) : null);
 
-  const outboxSize = () => outbox.moves.size + outbox.styles.size + (outbox.camera ? 1 : 0) + (outbox.grid ? 1 : 0);
+  outboxSize = () => outbox.moves.size + outbox.styles.size + (outbox.camera ? 1 : 0) + (outbox.grid ? 1 : 0);
 
-  function updateUndoButtons() {
+  updateUndoButtons = function updateUndoButtons() {
     const enabled = isLive() && isAuthenticated() && !!state.perspective;
     el("undo-btn").disabled = !enabled;
     el("redo-btn").disabled = !enabled;
-  }
+  };
 
-  const screenToWorld = (px, py) => core.screenToWorld(state.camera, px, py);
+  screenToWorld = (px, py) => core.screenToWorld(state.camera, px, py);
 
-  const center = n => core.centerOfRect(n);
+  center = n => core.centerOfRect(n);
 
   bindCanvasKeepaliveRuntime();
   await loadCanvasProjectionModule();
@@ -163,6 +165,12 @@ export async function startCanvasClientRuntime({
 
 export function renderCanvasClientRuntimePrelude() {
   return String.raw`
+    let core, MIN_W, MIN_H, FLUSH_DELAY_MS, PLAY_INTERVAL_MS, flushDelayMs;
+    let el, canvas, ctx, stage, overlayInput, statusEl;
+    let state, outbox, flushTimer, flushInFlight, overlayCommit, projectionModule, dropDepth;
+    let isLive, setStatus, markDirty, snapValue, selectionSize, clearSelection, selectOnly, toggleSelected, soleSelected;
+    let currentActor, isAuthenticated, headers, canAcceptFileDrop, refresh, findInstance, connectorKey, findConnector, outboxSize;
+    let updateDropState, adoptModel, updateUndoButtons, screenToWorld, center;
     const startCanvasClientRuntime = ${startCanvasClientRuntime.toString()};
   `;
 }

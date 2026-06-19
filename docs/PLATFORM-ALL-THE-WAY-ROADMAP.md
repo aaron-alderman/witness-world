@@ -21,6 +21,12 @@ intent
 
 The platform must dogfood itself. RVM, WCSS, proposals, MCP, docs, runtime diagnostics, tests, telemetry, and branches should not be peripheral tooling. They should be modeled objects with provenance, ownership, dependencies, and executable gates.
 
+Related follow-on:
+
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
+- [docs/INTENT-REGISTRY-ROADMAP.md](C:\Users\aaron\Documents\world\docs\INTENT-REGISTRY-ROADMAP.md)
+- [docs/CONTEXTHUB-SPEC.md](C:\Users\aaron\Documents\world\docs\CONTEXTHUB-SPEC.md)
+
 ## Status Key
 
 - [X] Complete.
@@ -35,215 +41,216 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### What Exists Now
 
-- [ ] Treat `plugin.platform` as the existing home for this work.
-- [ ] Treat `/platform` as the human surface for platform self-inspection.
-- [ ] Treat `/api/platform-model` as the existing read API for the platform graph.
-- [ ] Treat `/api/platform-gaps` as the existing read API for platform gaps.
-- [ ] Treat `/api/platform-proposals` as the existing mutation entry point for supported platform proposals.
-- [ ] Treat `platform.read` as the existing MCP read lane.
-- [ ] Treat `platform.proposal` as the existing MCP proposal lane.
-- [ ] Treat `platform.self` as the capability that gates platform MCP availability.
-- [ ] Treat `full` as the profile where platform self-modeling is exposed.
-- [ ] Treat `minimal` as the profile that must stay free of platform console/routes.
-- [ ] Treat `plugins/platform/platform-console.rvm` as the authored RVM source for the console.
-- [ ] Treat `plugins/platform/platform-console.wcss` as the authored WCSS source for the console.
-- [ ] Treat `plugins/platform/platform-style.js` as the current WCSS lowering bridge.
-- [ ] Treat `plugins/platform/platform-page.js` as the current HTML/JS console renderer.
-- [ ] Treat `plugins/platform/platform-model.js` as the current platform graph builder.
-- [ ] Treat `plugins/platform/platform-proposals.js` as the current proposal body builder/template registry.
-- [ ] Treat `plugins/platform/handlers.js` as the current platform HTTP handler implementation.
-- [ ] Treat `plugins/platform/runtime.js` as the current route/surface/capability registration point.
-- [ ] Treat `plugins/platform/handler-catalog.js` as the handler ownership/catalog contract.
-- [ ] Treat `plugins/platform/plugin.json` as the plugin manifest.
-- [ ] Treat `plugins/platform/platform.test.js` as the co-located platform test suite.
-- [ ] Treat `plugins/mcp/mcp-tools.js` as the current MCP tool declaration/execution surface.
-- [ ] Treat `plugins/mcp/mcp-support-services.js` as the current MCP capability availability gate.
-- [ ] Treat `plugins/mcp/mcp.test.js` as the current MCP test suite.
-- [ ] Treat `store/seeds/runtime-profiles.json` as the runtime profile seed source.
-- [ ] Treat `store/seeds/first-party-plugin-catalog.json` as the first-party plugin catalog source.
-- [ ] Treat `src/app-snapshot-manager.js` as the existing app snapshot and source-change detection mechanism.
-- [ ] Treat `src/runtime-server.js` as the current runtime server composition point.
-- [ ] Treat `test/runtime-profile.test.js` as the profile isolation/exposure test suite.
-- [ ] Treat `test/app-snapshot-manager.test.js` as the app snapshot manager test suite.
+- Treat `plugin.platform` as the existing home for this work.
+- Treat `/platform` as the human surface for platform self-inspection.
+- Treat `/api/platform-model` as the existing read API for the platform graph.
+- Treat `/api/platform-gaps` as the existing read API for platform gaps.
+- Treat `/api/platform-proposals` as the existing mutation entry point for supported platform proposals.
+- Treat `platform.read` as the existing MCP read lane.
+- Treat `platform.proposal` as the existing MCP proposal lane.
+- Treat `platform.self` as the capability that gates platform MCP availability.
+- Treat `full` as the profile where platform self-modeling is exposed.
+- Treat `minimal` as the profile that must stay free of platform console/routes.
+- Treat `plugins/platform/platform-console.rvm` as the authored RVM source for the console.
+- Treat `plugins/platform/platform-console.wcss` as the authored WCSS source for the console.
+- Treat `plugins/platform/platform-style.js` as the current WCSS lowering bridge.
+- Treat `plugins/platform/platform-page.js` as the current HTML/JS console renderer.
+- Treat `plugins/platform/platform-model.js` as the current platform graph builder.
+- Treat `plugins/platform/platform-proposals.js` as the current proposal body builder/template registry.
+- Treat `plugins/platform/handlers.js` as the current platform HTTP handler implementation.
+- Treat `plugins/platform/runtime.js` as the current route/surface/capability registration point.
+- Treat `plugins/platform/handler-catalog.js` as the handler ownership/catalog contract.
+- Treat `plugins/platform/plugin.json` as the plugin manifest.
+- Treat `plugins/platform/platform.test.js` as the co-located platform test suite.
+- Treat `plugins/mcp/mcp-tools.js` as the current MCP tool declaration/execution surface.
+- Treat `plugins/mcp/mcp-support-services.js` as the current MCP capability availability gate.
+- Treat `plugins/mcp/mcp.test.js` as the current MCP test suite.
+- Treat `store/seeds/runtime-profiles.json` as the runtime profile seed source.
+- Treat `store/seeds/first-party-plugin-catalog.json` as the first-party plugin catalog source.
+- Treat `src/app-snapshot-manager.js` as the existing app snapshot and source-change detection mechanism.
+- Treat `src/runtime-server.js` as the current runtime server composition point.
+- Treat `test/runtime-profile.test.js` as the profile isolation/exposure test suite.
+- Treat `test/app-snapshot-manager.test.js` as the app snapshot manager test suite.
 
 ### Do Not Build The Wrong Thing
 
-- [ ] Do not create a second platform console outside `plugin.platform`.
-- [ ] Do not add privileged direct-write APIs for platform state.
-- [ ] Do not bypass proposal, change-set, or explicit operator authority paths.
-- [ ] Do not expose platform routes from `minimal`.
-- [ ] Do not make MCP more powerful than the human proposal path.
-- [ ] Do not add MCP-only mutation backdoors.
-- [ ] Do not treat Git as the source of truth for the internal platform model.
-- [ ] Do not run tests from ad hoc external fixtures when the roadmap calls for in-platform execution.
-- [ ] Do not model docs as an unstructured blob once doc nodes are introduced.
-- [ ] Do not give runtime code ambient handles to external boundaries.
-- [ ] Do not mutate live runtime composition before candidate validation succeeds.
-- [ ] Do not let failed validation replace the last good active runtime revision.
-- [ ] Do not hand-roll a parallel dependency graph if existing projections, manifests, diagnostics, and app snapshot data can be reused.
-- [ ] Do not move platform work into an unrelated plugin unless there is a specific boundary reason and route/profile tests prove it.
-- [ ] Do not collapse RVM/WCSS back into opaque hand-authored HTML/CSS.
-- [ ] Do not remove current platform tests while extending the model.
+- Do not create a second platform console outside `plugin.platform`.
+- Do not add privileged direct-write APIs for platform state.
+- Do not bypass proposal, change-set, or explicit operator authority paths.
+- Do not expose platform routes from `minimal`.
+- Do not make MCP more powerful than the human proposal path.
+- Do not add MCP-only mutation backdoors.
+- Do not treat Git as the source of truth for the internal platform model.
+- Do not run tests from ad hoc external fixtures when the roadmap calls for in-platform execution.
+- Do not model docs as an unstructured blob once doc nodes are introduced.
+- Do not give runtime code ambient handles to external boundaries.
+- Do not mutate live runtime composition before candidate validation succeeds.
+- Do not let failed validation replace the last good active runtime revision.
+- Do not hand-roll a parallel dependency graph if existing projections, manifests, diagnostics, and app snapshot data can be reused.
+- Do not move platform work into an unrelated plugin unless there is a specific boundary reason and route/pre tests prove it.
+- Do not collapse RVM/WCSS back into opaque hand-authored HTML/CSS.
+- Do not remove current platform tests while extending the model.
 
 ### First Files To Read
 
-- [ ] Read `plugins/platform/plugin.json`.
-- [ ] Read `plugins/platform/runtime.js`.
-- [ ] Read `plugins/platform/handlers.js`.
-- [ ] Read `plugins/platform/platform-model.js`.
-- [ ] Read `plugins/platform/platform-proposals.js`.
-- [ ] Read `plugins/platform/platform-page.js`.
-- [ ] Read `plugins/platform/platform-console.rvm`.
-- [ ] Read `plugins/platform/platform-console.wcss`.
-- [ ] Read `plugins/platform/platform.test.js`.
-- [ ] Read `plugins/mcp/mcp-tools.js`.
-- [ ] Read `plugins/mcp/mcp-support-services.js`.
-- [ ] Read `plugins/mcp/mcp.test.js`.
-- [ ] Read `store/seeds/runtime-profiles.json`.
-- [ ] Read `store/seeds/first-party-plugin-catalog.json`.
-- [ ] Read `src/app-snapshot-manager.js`.
-- [ ] Read `test/runtime-profile.test.js`.
+- Read `plugins/platform/plugin.json`.
+- Read `plugins/platform/runtime.js`.
+- Read `plugins/platform/handlers.js`.
+- Read `plugins/platform/platform-model.js`.
+- Read `plugins/platform/platform-proposals.js`.
+- Read `plugins/platform/platform-page.js`.
+- Read `plugins/platform/platform-console.rvm`.
+- Read `plugins/platform/platform-console.wcss`.
+- Read `plugins/platform/platform.test.js`.
+- Read `plugins/mcp/mcp-tools.js`.
+- Read `plugins/mcp/mcp-support-services.js`.
+- Read `plugins/mcp/mcp.test.js`.
+- Read `store/seeds/runtime-profiles.json`.
+- Read `store/seeds/first-party-plugin-catalog.json`.
+- Read `src/app-snapshot-manager.js`.
+- Read `test/runtime-profile.test.js`.
 
 ### Current Test Commands
 
-- [ ] Run the platform/MCP/profile smoke suite before changing behavior:
-  - [ ] `node --test plugins/platform/platform.test.js plugins/mcp/mcp.test.js test/runtime-profile.test.js`
-- [ ] Run app snapshot tests before changing reload/snapshot behavior:
-  - [ ] `node --test test/app-snapshot-manager.test.js`
-- [ ] Run runtime profile tests before changing plugin/profile exposure:
-  - [ ] `node --test test/runtime-profile.test.js`
-- [ ] Run MCP tests before changing `platform.read`, `platform.proposal`, or future platform MCP tools:
-  - [ ] `node --test plugins/mcp/mcp.test.js`
-- [ ] Run platform tests before changing platform model, proposals, console, RVM, or WCSS:
-  - [ ] `node --test plugins/platform/platform.test.js`
-- [ ] Add narrower tests first when behavior is ambiguous, then implement against those tests.
+- Run the platform/MCP/profile smoke suite before changing behavior:
+  - `node --test plugins/platform/platform.test.js plugins/mcp/mcp.test.js test/runtime-profile.test.js`
+- Run app snapshot tests before changing reload/snapshot behavior:
+  - `node --test test/app-snapshot-manager.test.js`
+- Run runtime profile tests before changing plugin/profile exposure:
+  - `node --test test/runtime-profile.test.js`
+- Run MCP tests before changing `platform.read`, `platform.proposal`, or future platform MCP tools:
+  - `node --test plugins/mcp/mcp.test.js`
+- Run platform tests before changing platform model, proposals, console, RVM, or WCSS:
+  - `node --test plugins/platform/platform.test.js`
+- Add narrower tests first when behavior is ambiguous, then implement against those tests.
 
 ### Current Implemented Behaviors To Preserve
 
-- [ ] Preserve `plugin.platform` manifest identity.
-- [ ] Preserve `platform.self` capability declaration.
-- [ ] Preserve `/platform` rendering from the active platform plugin.
-- [ ] Preserve `/api/platform-model` JSON response.
-- [ ] Preserve `/api/platform-gaps` JSON response.
-- [ ] Preserve `/api/platform-proposals` create behavior.
-- [ ] Preserve platform proposal approve/reject behavior.
-- [ ] Preserve MCP `platform.read` using existing route handlers.
-- [ ] Preserve MCP `platform.proposal` using existing route handlers.
-- [ ] Preserve platform tool availability gating through `platform.self`.
-- [ ] Preserve `full` profile exposure.
-- [ ] Preserve `minimal` profile isolation.
-- [ ] Preserve RVM/WCSS source nodes in the platform model.
-- [ ] Preserve test coverage proving RVM identity and WCSS lowering.
-- [ ] Preserve proposal support only for existing target processes.
-- [ ] Preserve unsupported gaps as read-only recommendations.
+- Preserve `plugin.platform` manifest identity.
+- Preserve `platform.self` capability declaration.
+- Preserve `/platform` rendering from the active platform plugin.
+- Preserve `/api/platform-model` JSON response.
+- Preserve `/api/platform-gaps` JSON response.
+- Preserve `/api/platform-proposals` create behavior.
+- Preserve platform proposal approve/reject behavior.
+- Preserve MCP `platform.read` using existing route handlers.
+- Preserve MCP `platform.proposal` using existing route handlers.
+- Preserve platform tool availability gating through `platform.self`.
+- Preserve `full` profile exposure.
+- Preserve `minimal` profile isolation.
+- Preserve RVM/WCSS source nodes in the platform model.
+- Preserve test coverage proving RVM identity and WCSS lowering.
+- Preserve proposal support only for existing target processes.
+- Preserve unsupported gaps as read-only recommendations.
 
 ### Recommended First Slice For A New Agent
 
-- [ ] Start with the `First Concrete Implementation Slice` at the bottom of this document.
-- [ ] Implement `changeSet`, `changeSetEdit`, `branch`, and `candidateSnapshot` as projected platform objects first.
-- [ ] Keep the first slice in `plugin.platform` unless a boundary requires a small subordinate plugin.
-- [ ] Add read-model nodes and edges before adding mutation UI.
-- [ ] Add proposal body generation before adding approval/application.
-- [ ] Add API tests before console wiring.
-- [ ] Add MCP parity after the HTTP proposal path exists.
-- [ ] Add console panels last, consuming the same APIs as MCP.
-- [ ] Keep validation model-only until there is a candidate snapshot path.
-- [ ] Avoid JS/plugin hot swap in the first slice; begin with RVM/WCSS/WTOML/JSON overlay validation.
+- Start with the `First Concrete Implementation Slice` at the bottom of this document.
+- Implement `changeSet`, `changeSetEdit`, `branch`, and `candidateSnapshot` as projected platform objects first.
+- Keep the first slice in `plugin.platform` unless a boundary requires a small subordinate plugin.
+- Add read-model nodes and edges before adding mutation UI.
+- Add proposal body generation before adding approval/application.
+- Add API tests before console wiring.
+- Add MCP parity after the HTTP proposal path exists.
+- Add console panels last, consuming the same APIs as MCP.
+- Keep validation model-only until there is a candidate snapshot path.
+- Avoid JS/plugin hot swap in the first slice; begin with RVM/WCSS/WTOML/JSON overlay validation.
 
 ### Expected Architecture Shape
 
-- [ ] Human console and MCP tools must converge on the same route handlers.
-- [ ] Platform routes must be declared by the platform runtime entry.
-- [ ] Handler ownership must be visible in the handler catalog.
-- [ ] Profile exposure must be tested from the actual runtime profile seeds.
-- [ ] Platform model nodes must have stable IDs.
-- [ ] Platform model edges must explain ownership, authorship, governance, dependency, or runtime exposure.
-- [ ] Gaps must be deterministic.
-- [ ] Gaps must include a supported `recommendedProposal` only when that proposal can actually be created.
-- [ ] Proposals must produce reviewable bodies, not direct writes.
-- [ ] Approvals must delegate to already-supported target processes.
-- [ ] Candidate snapshots must compile and validate before activation.
-- [ ] Runtime revision activation must be atomic from the perspective of new requests.
-- [ ] In-flight work must keep its original runtime revision.
-- [ ] Tests must become platform executions, but local test commands remain acceptable while building that substrate.
+- Human console and MCP tools must converge on the same route handlers.
+- Platform routes must be declared by the platform runtime entry.
+- Handler ownership must be visible in the handler catalog.
+- Profile exposure must be tested from the actual runtime profile seeds.
+- Platform model nodes must have stable IDs.
+- Platform model edges must explain ownership, authorship, governance, dependency, or runtime exposure.
+- Gaps must be deterministic.
+- Gaps must include a supported `recommendedProposal` only when that proposal can actually be created.
+- Proposals must produce reviewable bodies, not direct writes.
+- Approvals must delegate to already-supported target processes.
+- Candidate snapshots must compile and validate before activation.
+- Runtime revision activation must be atomic from the perspective of new requests.
+- In-flight work must keep its original runtime revision.
+- Tests must become platform executions, but local test commands remain acceptable while building that substrate.
 
 ### How To Decide Where A New Feature Goes
 
-- [ ] If it is a platform self-inspection view, put it in `plugin.platform`.
-- [ ] If it is a platform mutation request, put it behind proposals/change sets.
-- [ ] If it is a human view, expose it through `/platform` and platform APIs.
-- [ ] If it is an agent/tool view, expose it through MCP using the same platform APIs.
-- [ ] If it changes plugin/profile availability, update runtime profile/catalog seeds and profile tests.
-- [ ] If it changes MCP behavior, update MCP tool declarations, support services, and MCP tests.
-- [ ] If it changes RVM/WCSS authored source, update source identity/lowering tests.
-- [ ] If it touches external systems, model the boundary, authority, lease, execution, and artifact.
-- [ ] If it produces evidence, store or model it as an artifact.
-- [ ] If it observes failure, model it as a defect or meta-defect.
-- [ ] If it affects docs, create or update doc nodes and freshness edges.
+- If it is a platform self-inspection view, put it in `plugin.platform`.
+- If it is a platform mutation request, put it behind proposals/change sets.
+- If it is a human view, expose it through `/platform` and platform APIs.
+- If it is an agent/tool view, expose it through MCP using the same platform APIs.
+- If it changes plugin/profile availability, update runtime profile/catalog seeds and profile tests.
+- If it changes MCP behavior, update MCP tool declarations, support services, and MCP tests.
+- If it changes RVM/WCSS authored source, update source identity/lowering tests.
+- If it touches external systems, model the boundary, authority, lease, execution, and artifact.
+- If it produces evidence, store or model it as an artifact.
+- If it observes failure, model it as a defect or meta-defect.
+- If it affects docs, create or update doc nodes and freshness edges.
 
 ### Minimum Bar For Each Pull Of Work
 
-- [ ] Identify the platform object kinds involved.
-- [ ] Identify the lifecycle phases involved: `author`, `transform`, `execute`, `observe`, `verify`, `ship`, `steward`.
-- [ ] Identify the profile exposure impact.
-- [ ] Identify whether the change needs MCP parity.
-- [ ] Identify whether the change needs a human console panel.
-- [ ] Identify whether the change needs a proposal path.
-- [ ] Identify whether the change needs a candidate snapshot.
-- [ ] Identify which tests prove `minimal` remains clean.
-- [ ] Identify which tests prove `full` exposes the new behavior.
-- [ ] Identify which docs become stale or need new ownership.
-- [ ] Identify which defects/gaps should be emitted when the behavior is incomplete.
+- Identify the platform object kinds involved.
+- Identify the lifecycle phases involved: `author`, `transform`, `execute`, `observe`, `verify`, `ship`, `steward`.
+- Identify the profile exposure impact.
+- Identify whether the change needs MCP parity.
+- Identify whether the change needs a human console panel.
+- Identify whether the change needs a proposal path.
+- Identify whether the change needs a candidate snapshot.
+- Identify which tests prove `minimal` remains clean.
+- Identify which tests prove `full` exposes the new behavior.
+- Identify which docs become stale or need new ownership.
+- Identify which defects/gaps should be emitted when the behavior is incomplete.
 
 ## Current Baseline
 
-- [ ] Confirm `plugin.platform` is active in the `full` runtime profile and absent from `minimal`.
-- [ ] Confirm `/platform`, `/api/platform-model`, `/api/platform-gaps`, and `/api/platform-proposals` are owned by `plugin.platform`.
-- [ ] Confirm `platform.read` and `platform.proposal` are available only when `platform.self` is active and installed on the MCP server.
-- [ ] Confirm the Platform Console has authored source artifacts:
-  - [ ] `plugins/platform/platform-console.rvm`
-  - [ ] `plugins/platform/platform-console.wcss`
-  - [ ] `plugins/platform/platform-style.js`
-- [ ] Confirm the platform model exposes RVM/WCSS authored source nodes:
-  - [ ] `rvm:plugins/platform/platform-console.rvm`
-  - [ ] `wcss:plugins/platform/platform-console.wcss`
-- [ ] Confirm existing app snapshot reload works for `.rvm` and `.wtoml` app sources through `AppSnapshotManager`.
-- [ ] Confirm current proposal machinery can create, approve, and reject guarded target-process mutations.
-- [ ] Confirm runtime diagnostics expose active profile, active bundles, routes, surfaces, handlers, capabilities, and plugins.
+- Confirm `plugin.platform` is active in the `full` runtime profile and absent from `minimal`.
+- Confirm `/platform`, `/api/platform-model`, `/api/platform-gaps`, and `/api/platform-proposals` are owned by `plugin.platform`.
+- Confirm `platform.read` and `platform.proposal` are available only when `platform.self` is active and installed on the MCP server.
+- Confirm the Platform Console has authored source artifacts:
+  - `plugins/platform/platform-console.rvm`
+  - `plugins/platform/platform-console.wcss`
+  - `plugins/platform/platform-style.js`
+- Confirm the platform model exposes RVM/WCSS authored source nodes:
+  - `rvm:plugins/platform/platform-console.rvm`
+  - `wcss:plugins/platform/platform-console.wcss`
+- Confirm existing app snapshot reload works for `.rvm` and `.wtoml` app sources through `AppSnapshotManager`.
+- Confirm current proposal machinery can create, approve, and reject guarded target-process mutations.
+- Confirm runtime diagnostics expose active profile, active bundles, routes, surfaces, handlers, capabilities, and plugins.
 
 ## Guiding Invariants
 
-- [ ] No privileged direct-write paths for platform mutations.
-- [ ] Every mutation enters through a proposal, change set, execution command, or explicit operator authority path.
-- [ ] Multi-file edits apply atomically to a candidate snapshot before becoming active.
-- [ ] Failed validation preserves the last good active snapshot.
-- [ ] In-flight requests continue on the runtime revision they started with.
-- [ ] New requests use the newest valid active runtime revision.
-- [ ] External boundaries are addressed by capability-scoped commands, not ambient handles.
-- [ ] Tests, docs, telemetry, and defects are first-class platform objects.
-- [ ] Git can mirror platform state, but internal platform state is the product source of truth.
-- [ ] All objects have provenance: actor/session, source, branch/change set, proposal, execution, timestamp.
-- [ ] Dependency analysis explains why a gate, doc, test, or subsystem is affected.
-- [ ] The platform can inspect its own blind spots as meta-defects.
+- No privileged direct-write paths for platform mutations.
+- Every mutation enters through a proposal, change set, execution command, or explicit operator authority path.
+- Multi-file edits apply atomically to a candidate snapshot before becoming active.
+- Failed validation preserves the last good active snapshot.
+- In-flight requests continue on the runtime revision they started with.
+- New requests use the newest valid active runtime revision.
+- External boundaries are addressed by capability-scoped commands, not ambient handles.
+- Tests, docs, telemetry, and defects are first-class platform objects.
+- Git can mirror platform state, but internal platform state is the product source of truth.
+- All objects have provenance: actor/session, source, branch/change set, proposal, execution, timestamp.
+- Dependency analysis explains why a gate, doc, test, or subsystem is affected.
+- The platform can inspect its own blind spots as meta-defects.
 
 ## Core Vocabulary
 
-- [ ] Define `intent`: a human or LLM goal statement that starts platform work.
-- [ ] Define `proposal`: a reviewable request to mutate platform state.
-- [ ] Define `changeSet`: a multi-file and multi-object staged change.
-- [ ] Define `branch`: an isolated platform work line backed by a change set graph.
-- [ ] Define `candidateSnapshot`: a compiled and validated runtime candidate.
-- [ ] Define `runtimeRevision`: the active backend/runtime composition revision.
-- [ ] Define `docNode`: a governed document with scope, freshness, and dependencies.
-- [ ] Define `testGate`: an executable verification contract.
-- [ ] Define `execution`: a runtime command, test run, build, LLM turn, or boundary effect.
-- [ ] Define `defect`: an observed product/design/logic/runtime failure.
-- [ ] Define `metaDefect`: a defect in the platform's own understanding or process.
-- [ ] Define `telemetrySample`: live measurement linked to platform objects.
-- [ ] Define `boundary`: an external resource or effect actor.
-- [ ] Define `lease`: temporary authority to use a boundary.
-- [ ] Define `artifact`: output of execution, validation, test, docs, screenshots, traces, logs, or generated files.
-- [ ] Define `shipRecord`: durable evidence that a branch was applied, pushed, released, or deployed.
+- Define `intent`: a human or LLM goal statement that starts platform work.
+- Define `intentRegistryEntry`: the canonical classified registry row for an intent, with scope, actors, linked docs, linked tests, linked features, and freshness evidence.
+- Define `proposal`: a reviewable request to mutate platform state.
+- Define `changeSet`: a multi-file and multi-object staged change.
+- Define `branch`: an isolated platform work line backed by a change set graph.
+- Define `candidateSnapshot`: a compiled and validated runtime candidate.
+- Define `runtimeRevision`: the active backend/runtime composition revision.
+- Define `docNode`: a governed document with scope, freshness, and dependencies.
+- Define `testGate`: an executable verification contract.
+- Define `execution`: a runtime command, test run, build, LLM turn, or boundary effect.
+- Define `defect`: an observed product/design/logic/runtime failure.
+- Define `metaDefect`: a defect in the platform's own understanding or process.
+- Define `telemetrySample`: live measurement linked to platform objects.
+- Define `boundary`: an external resource or effect actor.
+- Define `lease`: temporary authority to use a boundary.
+- Define `artifact`: output of execution, validation, test, docs, screenshots, traces, logs, or generated files.
+- Define `shipRecord`: durable evidence that a branch was applied, pushed, released, or deployed.
 
 ## Phase 1: Platform Branch And Change Set Kernel
 
@@ -507,10 +514,14 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] API
   - [ ] operations
   - [ ] test strategy
+  - [ ] product
+  - [ ] developer
+  - [ ] system
+  - [ ] admin
+  - [ ] actor-facing
   - [X] migration
   - [X] roadmap
   - [X] runbook
-  - [ ] product
   - [ ] rationale
 - [ ] Add stable doc IDs independent of file paths.
 - [X] Add doc ownership metadata.
@@ -569,6 +580,19 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add MCP helper to request doc obligations for current branch.
 - [ ] Add tests that platform proposes doc updates for changed public routes.
 - [ ] Add tests that branch cannot ship while required docs are stale unless explicitly waived.
+
+### 3.5 Intent Registry And Knowledge Facets
+
+- [ ] Add `intentRegistryEntry` projector rows derived from authored docs, roadmap tasks, branch metadata, and later explicit intent records.
+- [ ] Classify each registry row by context, actor, lifecycle, and knowledge facet instead of forcing one flat docs list.
+- [ ] Support linked facets such as product docs, developer docs, system docs, admin docs, test reports, roadmap tasks, and operator runbooks.
+- [ ] Add stable intent IDs independent of file paths.
+- [ ] Prefer doc ids and platform concept ids over brittle absolute file references inside generated knowledge scaffolds.
+- [ ] Generate lightweight templates and gap reports when an intent lacks nearby docs, tests, owner, or feature linkage.
+- [ ] Allow partial drift but surface it as freshness or alignment debt rather than pretending the registry is canonical truth.
+- [ ] Add `/platform` knowledge views that can pivot by intent, actor, and facet.
+- [ ] Add MCP read support for intent-registry slices on the same handler lane.
+- [ ] Add tests for intent-to-doc, intent-to-test, and intent-to-feature linkage.
 
 ## Phase 4: External Boundaries As Managed Actors
 
@@ -1177,6 +1201,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add Boundaries view.
 - [X] Add Meta-System view.
 - [L] `/platform` no longer tries to load the entire human console as one giant page. It now exposes functional page views for `overview`, `workflow`, `verification`, `knowledge`, `signals`, and `model` through the same `/platform` surface, with server-rendered navigation links so operators can load one area at a time.
+- [L] The knowledge console split is now narrower too: the authored page tree exposes `knowledge` as a landing page plus dedicated `knowledgeDocs`, `knowledgeFolders`, and `knowledgeRoadmap` pages, governed-doc concept links now route to the docs page, `folder:*` concept links now route to the folders page, roadmap/epic/feature/task concept links now route to the roadmap page, and each page carries only the page-scoped model slice it needs instead of reloading the old combined knowledge detail screen.
+- [L] The signals console split is now narrower too: the authored page tree exposes `signals` as a landing page plus dedicated `signalsGaps` and `signalsCatalog` pages, gap concept links now route to the gaps page, telemetry/defect-cluster/boundary concept links now route to the signal-catalog page, and each page carries only the page-scoped signal slice it needs instead of reloading the old combined signals screen.
 - [L] The current human console renderer now replaces raw JSON dumps with paginated list tables plus property cards and linkable resource references where the target is already modeled. It is still the same `plugin.platform` console and handler lane, just split into lighter page-sized surfaces instead of one monolithic screen.
 - [L] The current defect-cluster view is backed by existing `defectCluster` graph nodes and their relationships to branches, features, epics, and historically relevant gates. It does not claim the later full `defect` / `defectObservation` / `rootCauseHypothesis` model is complete.
 - [L] The current telemetry view is backed by existing `telemetryMetric` graph nodes plus linked `verifies` / `verifiedBy` relationships and branch/change-set telemetry-impact hints. It does not claim the later live `telemetrySample` / `telemetryWindow` / detector model from Phase 8 is complete.
@@ -1187,18 +1213,83 @@ This section is the execution contract for a fresh agent. Read it before startin
 ### 12.2 RVM/WCSS Dogfooding
 
 - [~] Move more Platform Console structure into `platform-console.rvm`.
-- [ ] Move all Platform Console styles into `platform-console.wcss`.
+- [X] Move all Platform Console styles into `platform-console.wcss`.
 - [~] Build a renderer that can consume RVM surface declarations for internal platform pages.
-- [ ] Replace hand-authored HTML sections with rendered RVM surface tree.
+- [~] Replace hand-authored HTML sections with rendered RVM surface tree.
 - [X] Keep tests proving RVM identity and WCSS lowering.
 - [X] Add platform gap when a platform page lacks RVM/WCSS source.
 - [X] Add platform gap when generated CSS differs from WCSS source.
 - [L] `plugins/platform/platform.test.js` now keeps an explicit proof that the console still compiles from `platform-console.rvm` and that the current lowering bridge still renders CSS with the `Generated from plugins/platform/platform-console.wcss` banner.
-- [L] Current RVM dogfooding is partial but real: `plugins/platform/platform-console.rvm` now authors the platform page split itself through `PlatformOverviewPage`, `PlatformWorkflowPage`, `PlatformVerificationPage`, `PlatformKnowledgePage`, `PlatformSignalsPage`, and `PlatformModelPage`, each with authored `pageId`, `title`, `summary`, and child-surface membership.
-- [L] `plugins/platform/platform-console-layout.js` now compiles that authored page tree into a stable read model, and `plugins/platform/platform-page.js` consumes the authored page list first when choosing `/platform` navigation, page titles/subtitles, and surface-tree ownership. Detailed tables, forms, pagination behavior, and most section bodies remain hand-authored in `platform-page.js`, so this is still not full generic rendered-RVM replacement.
-- [L] Current WCSS proof is bridge-backed rather than fully file-driven: `platform-page.js` renders CSS from `platform-style.js`, and `platform-style.js` currently constructs the stylesheet in JS before rendering it. That is enough to keep identity/lowering coverage honest, but it does not mean all console styles have already been moved into authored `platform-console.wcss` or that generated-CSS parity with the file is solved.
+- [L] Current RVM dogfooding is partial but real: `plugins/platform/platform-console.rvm` now authors the platform page split itself through `PlatformOverviewPage`, `PlatformWorkflowPage`, `PlatformVerificationPage`, `PlatformKnowledgePage`, `PlatformSignalsPage`, and `PlatformModelPage`, each with authored `pageId`, `title`, `summary`, and child-surface membership, and the heavier knowledge/signals/model areas now also declare narrower authored subpages for docs/folders/roadmap, gaps/catalog, and objects/profiles/coverage.
+- [L] The authored page tree now also owns the current supplemental platform pages: `PlatformBridgesPage`, `PlatformGovernancePage`, `PlatformSemanticsPage`, `PlatformPackageCoexistencePage`, `PlatformPackageConvergencePage`, and `PlatformPackageApplyPreviewPage` now declare their `pageId`, `modelView`, title, summary, and `supplementalPageSource` in `plugins/platform/platform-console.rvm`, so `/platform` navigation and page selection no longer depend on a JS-only supplemental page registry.
+- [L] Those supplemental pages now also own more of their visible schema in RVM: the same page surfaces author their current `columns`, `rowFields`, `primaryFields`, detail titles, long-tail titles, empty states, and page size, and `plugins/platform/platform-page.js` now renders those bridge/governance/semantics/package tables and detail cards from authored props instead of a JS-only header/field inventory.
+- [L] The supplemental pages now also own their visible section split in RVM: each of `PlatformBridgesPage`, `PlatformGovernancePage`, `PlatformSemanticsPage`, `PlatformPackageCoexistencePage`, and `PlatformPackageConvergencePage` now authors page-level `summaryCards` plus explicit list/detail child surfaces in `plugins/platform/platform-console.rvm`, and those child surfaces now declare the same generic `listSource` / `detailSource` props used elsewhere in the console instead of relying on separate supplemental-only renderer props.
+- [L] The authored page tree now also owns more of the visible section split instead of just top-level tabs. Overview includes authored summary/tree/map/profile sections, workflow includes authored branch/proposal/change-set command panels, verification includes authored stream/red-green/test-run panels, knowledge is split into authored landing/docs/folders/roadmap pages, signals is split into authored landing/gaps/catalog pages, and model is split into authored landing/objects/profiles/coverage pages.
+- [L] The authored surface-tree region is now more RVM-owned too: `PlatformAuthoredSurfaceTree` authors `surfaceFields`, and `plugins/platform/platform-page.js` now renders each top-level page card from those authored fields instead of hardcoding the visible `Process` / `Projection` / `Sections` lines in a bespoke JS block.
+- [L] `plugins/platform/platform-console-layout.js` now compiles that authored page tree into a stable read model, and `plugins/platform/platform-page.js` walks the authored `childSurfaces` when choosing `/platform` navigation, page titles/subtitles, section ordering, and whether authored operator forms need client behavior. Many rendered section shells, including the generic workflow/verification/knowledge/signal/model detail regions, now also take their visible titles, summaries, classes, and identity attributes from those authored surfaces.
+- [L] Workflow, verification, knowledge, signal, and model detail are now more RVM-owned internally as well: `PlatformWorkflowDetail` authors nested `PlatformWorkflowPrimaryPanel`, `PlatformWorkflowRelatedPanel`, `PlatformWorkflowSnapshotHistory`, and `PlatformWorkflowEditHistory` child surfaces; `PlatformVerificationDetail` authors nested `PlatformVerificationPrimaryPanel`, `PlatformVerificationRelatedPanel`, `PlatformVerificationRunHistory`, `PlatformVerificationBuildHistory`, and `PlatformVerificationBuildErrors`; `PlatformKnowledgeDetail` authors nested `PlatformKnowledgePrimaryPanel`, `PlatformKnowledgeRelatedPanel`, `PlatformKnowledgeSections`, and `PlatformKnowledgeTasks`; `PlatformSignalDetail` authors nested `PlatformSignalPrimaryPanel`, `PlatformSignalRelatedPanel`, and `PlatformSignalRelationships`; and `PlatformModelDetail` authors nested `PlatformModelPrimaryPanel` and `PlatformModelRelationships`. The renderer now uses those authored nested surfaces for the visible workflow, verification, knowledge, signal, and model detail subregions.
+- [L] The main top-level table surfaces now also carry more authored behavior than before: `plugins/platform/platform-console.rvm` declares `columns` and `emptyState` props for map/profile/workflow/verification/knowledge/signals/model/gap/coverage/red-green tables, `plugins/platform/platform-console-layout.js` preserves arbitrary authored props in the surface read model, and `plugins/platform/platform-page.js` uses those authored props when rendering table headers and empty states.
+- [L] Top-level row-window and default page-size policy are now more authored too: the current console RVM declares `rowLimit` for non-paginated tables and `pageSize` for paginated list surfaces, and the renderer now uses those props instead of hardcoded `12` / `20` defaults when no explicit `limit` query is supplied.
+- [L] Detail-table metadata now follows the same pattern for the currently modeled child tables: workflow snapshot/edit history, verification run/build/error history, knowledge sections/tasks, and signal/model relationships now declare authored `columns`, `emptyState`, and `rowLimit` props in `plugins/platform/platform-console.rvm`, and the renderer consumes those props instead of hardcoded detail-table defaults.
+- [L] Workflow detail cards are now more RVM-owned as well: `PlatformWorkflowPrimaryPanel` authors the visible branch/change-set/proposal property-card titles and field schemas, while `PlatformWorkflowRelatedPanel` authors the related-resource card titles and source lists for branch/change-set/proposal detail. The renderer now consumes those surface props instead of hardcoded workflow detail card schemas.
+- [L] Verification detail cards are now more RVM-owned too: `PlatformVerificationPrimaryPanel` authors the visible gate/runtime-revision/candidate-snapshot/test-run property-card titles and field schemas, while `PlatformVerificationRelatedPanel` authors the gate/runtime-revision/candidate-snapshot/test-run related-card titles and source lists that the current verification renderer can support directly. Verification stream phrasing is now authored too: `@href` property rows can consume authored `{ href, title }` link objects, so the visible backend/test stream link text no longer falls back to a generic renderer label.
+- [L] The current verification surface truth now includes the newer authored policy/queue/execution and persistence/cache metadata too: `PlatformVerificationPage` summary cards count `verificationPolicies`, `verificationQueue`, and `verificationExecutions`; `PlatformVerificationStatusBanner` authors queue/policy/persistence backend fields; and the existing verification detail surfaces now also cover authored verification-policy, verification-execution, persistence, verification-status, and cache-hit fields through the shared page renderer path.
+- [L] The standalone verification-streams region is now more RVM-owned too: `PlatformVerificationStreams` authors its property-card title and field schema, and the renderer binds the shared test-run/backend stream link record through that authored surface instead of hardcoding a bespoke table.
+- [L] Knowledge detail cards are now more RVM-owned too: `PlatformKnowledgePrimaryPanel` authors the visible document/roadmap-task/epic/feature property-card titles and field schemas, while `PlatformKnowledgeRelatedPanel` authors the related-resource card titles and source lists for document references, linked roadmap targets, and epic/feature resource links.
+- [L] Signal and model detail cards are now more RVM-owned too: `PlatformSignalPrimaryPanel` authors the visible gap/signal property-card titles and field schemas, `PlatformSignalRelatedPanel` authors the gap follow-up/selector-drift card titles and source lists, and `PlatformModelPrimaryPanel` authors the platform-object property-card title and field schema. The signal/model relationship tables remain separately authored child surfaces.
+- [L] Knowledge and signal detail selection order are now a bit more RVM-owned too: `PlatformKnowledgeDetail` authors `detailSelectionSources = "docs|roadmapTasks|epics|features"` and `PlatformSignalDetail` authors `detailSelectionSources = "gaps|telemetryMetric|defectCluster|boundary"`, and `plugins/platform/platform-page.js` now resolves the default or requested record by walking those authored source lists instead of hardcoding the current knowledge/signal lookup order in JS.
+- [L] Workflow and verification detail selection order are now more RVM-owned too: `PlatformWorkflowDetail` authors `detailSelectionSources = "branches|changeSets|proposals"` and `PlatformVerificationDetail` authors `detailSelectionSources = "verificationPolicies|verificationQueue|verificationExecutions|testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots"`, and `plugins/platform/platform-page.js` now routes both pages through the same authored source-walk helper instead of keeping dedicated `findWorkflowDetail(...)` / `findVerificationDetail(...)` selectors with hardcoded order in JS.
+- [L] Model detail selection now uses that same authored path too: `PlatformModelDetail` authors `detailSelectionSources = "nodes"`, and the renderer now resolves the selected platform object through the shared authored source-walk helper instead of leaving `model` on a separate `findModelDetail(...)` JS path.
+- [L] Static form-select options are now a bit more RVM-owned too: authored form surfaces can declare `${source}Options` maps for `@select:...` fields, `plugins/platform/platform-page.js` resolves those before falling back to dynamic model-backed option sources, and `PlatformChangeSetLifecyclePanel` now authors `lifecycleActionsOptions = "Reject=reject|Abandon=abandon"` instead of leaving that static menu in a JS switch.
+- [L] Dynamic form-select options are now more RVM-owned too: authored form surfaces can declare `${source}Source`, `${source}ValuePath`, `${source}LabelPath`, optional `${source}Where`, and `${source}AttrFields` props for `@select:...` fields, and `plugins/platform/platform-page.js` now resolves those model-backed options before falling back to the older JS switch. The current change-set, proposal-review, proposal-action, and test-gate selectors now author their option records in `plugins/platform/platform-console.rvm`, including the proposal action `data-sample-body` attribute used by the client-side JSON scaffold sync.
+- [L] Simple JSON submit forms are now a bit more RVM-owned too: authored form surfaces can declare `submitPath`, `submitMethod`, `submitBodyFields`, `requiredFieldMessages`, `successMessage`, and `errorMessage`, and `plugins/platform/platform-page.js` now emits one generic `data-platform-submit-spec` binder for those forms instead of keeping separate JS submit handlers for every simple branch/change-set mutation. The current branch-create, change-set-create, change-set-edit, and change-set-apply panels now author their request shape in `plugins/platform/platform-console.rvm`.
+- [L] Response-driven submit forms now use that authored submit-spec path too: authored form surfaces can declare `successMessageTemplate` placeholders that read response JSON and form values, and the generic binder now drives the current change-set validate/lifecycle and test-run panels instead of keeping separate JS handlers for those paths. Proposal create/review remain bespoke because they still need extra JSON-scaffold and submitter-specific behavior.
+- [L] Proposal create/review now use the same authored submit/spec path too: authored form surfaces can declare `invalidFieldMessages` plus `fieldSyncs`, and the generic binder now handles JSON body parsing, select-to-textarea scaffold sync, and submitter-aware paths for the current proposal create/review panels. That removed the last bespoke platform form submit handlers from `plugins/platform/platform-page.js`.
+- [L] Client-script activation is now a bit less JS-tag-driven too: the platform page binder now scans for authored `data-platform-submit-spec` / `data-platform-field-syncs` forms, and `surfaceNeedsClientScript(...)` keys off authored submit/sync metadata instead of treating `clientAction` as the thing that makes a form interactive. The current RVM still keeps `clientAction` as descriptive metadata, but it is no longer the behavioral switch.
+- [L] Current local verification for these console-only tranches sometimes needs to be narrower than `node --test plugins/platform/platform.test.js`: the broader suite in this worktree can fail in unrelated verification/model or temp-workspace areas while the authored console rendering path is still green. When that happens, keep the failing assertions documented and verify the current RVM console slice with targeted page/layout tests rather than pretending the wider failure is caused by the console change.
+- [L] Current local Git hygiene for console tranches can also be messier than ideal: if `plugins/platform/platform-page.js` already carries unrelated in-flight edits, even a path-limited commit on that file can bundle adjacent work that is not strictly part of the tiny console slice you meant to land. Treat that file as shared in-flight state, audit `git diff HEAD~1 HEAD -- plugins/platform/platform-page.js` after each commit, and document when a tranche commit absorbed nearby work beyond the narrowly intended change.
+- [L] Computed property regions are now a bit more RVM-owned too: `PlatformVerificationStatusBanner` now authors `propertyRecordSource = "verificationStatus"`, and `plugins/platform/platform-page.js` renders that through one computed property-section path instead of a bespoke `verificationPanelKind=statusBanner` branch. The current computed-record catalog is still tiny, but the section now follows the same property-card shape as the other authored regions.
+- [L] Primary detail surfaces now also author the long-tail property card title through `longTailCardTitle`, and the renderer consumes that prop instead of hardcoding the fallback `Properties` heading for leftover scalar fields.
+- [L] The currently active long-tail exclusion rules are now more RVM-owned too: workflow, verification, knowledge, and gap detail primary surfaces author the extra object-specific field names that should stay out of the generic long-tail card, and the renderer consumes those props instead of hardcoding those exclusion lists by surface name.
+- [L] The scalar-only long-tail filter policy is now more RVM-owned too: primary detail surfaces author `longTailValueKinds`, and the renderer consumes that prop instead of hardcoding the current scalar/scalar-list inclusion rule for leftover property values.
+- [L] The current modeled related-resource cards now render directly from authored card specs too: workflow, verification, knowledge, and signal detail panels no longer fall back to hardcoded list/text card compositions when the current RVM props are present.
+- [L] The current modeled property-card field selection now renders directly from authored field schemas too: workflow, verification, knowledge, signal, and model detail cards no longer duplicate their visible field lists in JS fallback arrays, leaving JS responsible for record shaping but not the current field inventory/order.
+- [L] The current authored property-card value resolution is now a bit less JS-shaped too: schema paths can fall back across `a||b` alternatives and `statusExit` can format the current gate result inline, which removed the live `lastResultLabel` and `evidenceSummary` helper fields from the current detail-card record shaping path.
+- [L] Top-level paginated list surfaces are now more RVM-owned too: workflow, verification, knowledge, signals, and model list surfaces author `rowFields`, `sortOptions`, and `defaultSort` props, and the renderer uses those props both for row extraction and for query-driven `sort` / `dir` behavior that is preserved through pagination links. The current sort controls are still a simple generated link strip rather than a richer authored widget.
+- [L] The authored page split now also drives page-scoped platform-model slices: each top-level page authors a `modelView` prop in `plugins/platform/platform-console.rvm`, `filterPlatformModel` exposes matching `overview` / `workflow` / `verification` / `knowledge` / `signals` / `model` page projections, and `renderPlatformPage` now renders `/platform?view=...` from that page slice instead of always carrying the full console model object into every page render.
+- [L] Workflow is now split more aggressively through the authored page tree too: `PlatformWorkflowPage` is a lighter landing page, while `PlatformWorkflowBranchesPage`, `PlatformWorkflowChangeSetsPage`, and `PlatformWorkflowProposalsPage` each author their own `pageId`, `modelView`, summary cards, and child surfaces in `plugins/platform/platform-console.rvm`; `filterPlatformModel` now serves those narrower slices, and concept links route branches, change sets, and proposals to the matching authored workflow page instead of one catch-all workflow screen.
+- [L] Verification is now split more aggressively through the authored page tree too: `PlatformVerificationPage` is a lighter landing page, while `PlatformVerificationStatusPage`, `PlatformVerificationRunsPage`, and `PlatformVerificationRuntimePage` each author their own `pageId`, `modelView`, summary cards, and child surfaces in `plugins/platform/platform-console.rvm`; `filterPlatformModel` now serves those narrower slices, and concept links route gates/policies/freshness, runs/reports, and runtime revisions/snapshots to the matching authored verification page instead of one catch-all verification screen.
+- [L] The top-of-page summary strip is now more RVM-owned too: top-level page surfaces author `summaryCards` schemas in `plugins/platform/platform-console.rvm`, `plugins/platform/platform-page.js` renders those metrics through generic `count`, `countKind`, and `countWhere` summary modes instead of a hardcoded page-id switch, and the overview `PlatformConsoleSummary` region now points back at the authored overview summary via `summaryPageId` instead of duplicating a JS summary table.
+- [L] More authored tables now point straight at stable concept ids instead of JS-built `{ id, title }` wrappers: the map and top-level paginated list surfaces now render `id@concept` directly, and the current workflow snapshot history, verification run/build histories, branch/change-set red-green tables, knowledge task table, and signal/model relationship tables now render authored `...Id@concept` / `from@concept` / `to@concept` fields without per-row link-wrapper shaping in `plugins/platform/platform-page.js`.
+- [L] More authored verification/coverage links now avoid bespoke wrapper objects too: runtime revision detail now renders `id@concept` directly, coverage rows now render `gateId@concept` and `targetId||targetLabel@concept`, and the current verification stream/property cards now author plain URL fields. `plugins/platform/platform-page.js` now lets string `@href` values use the authored field label as link text, which removed the remaining verification stream and coverage link-wrapper objects from the current renderer path.
+- [L] The slower top-level inventory tables are now more RVM-owned and more paginated too: map/profile/gap/coverage/branch-red-green/change-set-red-green surfaces now author `listSource`, `rowFields`, `sortOptions`, `defaultSort`, and `pageSize` in `plugins/platform/platform-console.rvm`, and `plugins/platform/platform-page.js` renders them through the same shared paginated list path as the other split console pages instead of keeping a separate non-paginated `tableSource` lane.
+- [L] Nested history and relationship tables are now more RVM-owned too: workflow snapshot/edit history, verification run/build/error history, knowledge sections/tasks, and signal/model relationship surfaces now author `rowFields`, and the detail renderers normalize records into those authored schemas instead of hardcoded per-table row extraction.
+- [L] Current table headers and empty-state phrasing are now a bit more RVM-owned too: the current top-level lists/tables and nested history/relationship tables now render through authored `columns` and `emptyState` props instead of still passing duplicate fallback header/empty-message strings from `plugins/platform/platform-page.js`, and the shared workflow snapshot table now also authors a `changeSetEmptyState` variant so both branch and change-set detail reuse the same table surface without leaving that context text stranded in JS.
+- [L] While extending that detail-table path, a stray `relationshipsSurface` reference in the knowledge roadmap-task detail branch was removed. The bug was not user-visible in the current page tests because that branch does not render a relationships table today, but it would have thrown on that selection path.
+- [L] The top-level lifecycle and branch boards are now more RVM-owned too: `PlatformLifecycleBoard` and `PlatformBranchBoard` author their board source, lane metadata fields, chip title paths, chip field schemas, per-lane item limits, and empty-state phrasing in `plugins/platform/platform-console.rvm`; `plugins/platform/platform-model.js` now projects a `lifecycleBoard` alongside `branchBoard`; and `plugins/platform/platform-page.js` renders both regions through one generic authored board path instead of per-surface hardcoded chip composition.
+- [L] Related-resource list cards are now a bit more RVM-owned too: workflow, verification, knowledge, and signal related panels author `cardItemLimit` plus per-card empty-state phrasing maps in `plugins/platform/platform-console.rvm`, and `plugins/platform/platform-page.js` now uses those props to cap rendered list length, show overflow summaries, and avoid the remaining generic `No linked resources.` / `No entries.` fallback strings for the currently authored cards.
+- [L] Knowledge relation cards are now more RVM-owned too: `PlatformKnowledgeRelatedPanel` can author typed document/code relation cards such as `references.authoredDocLinks@authoredLink` and `references.authoredCodeLinks@authoredLink`, and the shared link-card renderer now accepts authored `{ id, label }` entries so WTOML-authored knowledge relations render as labeled, linkable platform cards instead of falling back to opaque strings.
+- [L] Knowledge related-panel composition is now RVM-first too: `PlatformKnowledgeRelatedPanel` now declares explicit child surfaces for document, roadmap-task, epic, and feature card groups, and `plugins/platform/platform-page.js` selects those card groups by authored `detailKinds` metadata instead of switching across `documentLinkCards` / `roadmapTaskLinkCards` / `epicLinkCards` / `featureLinkCards` prop names on one JS-shaped container.
+- [L] Empty-detail fallback cards are now a bit more RVM-owned too: workflow, verification, knowledge, signal, and model detail surfaces now author `emptyTitle` / `emptyState` props in `plugins/platform/platform-console.rvm`, and `plugins/platform/platform-page.js` renders those no-selection cards through a shared helper instead of leaving those messages hardcoded in the detail branches.
+- [L] Detail region layout is now a bit less JS-owned too: workflow, verification, knowledge, signal, and model detail renderers now pass rendered child sections through one shared `renderAuthoredDetailLayout(...)` helper that follows the authored child-surface order from `plugins/platform/platform-console.rvm` instead of hardcoding each detail page’s split-column and stacked-section layout separately. The current change-set workflow detail now follows that authored order too, so `Candidate Snapshots` renders before `Staged Edits` because the RVM surface declares it first.
+- [L] Those same detail renderers are now a bit more RVM-first about section metadata too: `plugins/platform/platform-page.js` resolves workflow, verification, knowledge, signal, and model detail subpanels by authored child-surface name and relies on the RVM-authored titles, summaries, and kinds already declared in `plugins/platform/platform-console.rvm` instead of duplicating that visible copy inline in JS.
+- [L] Inner detail panel lookup is now a bit more RVM-first too: the workflow, verification, knowledge, signal, and model detail child surfaces now author `detailPanelRole` in `plugins/platform/platform-console.rvm`, and `plugins/platform/platform-page.js` resolves the current primary/related/history/relationship sections by those authored roles instead of hardcoding specific child-surface names as the behavioral selector.
+- [L] Detail section applicability is now a bit more RVM-first too: those same workflow, verification, knowledge, signal, and model detail child surfaces now author `detailKinds` in `plugins/platform/platform-console.rvm`, and `plugins/platform/platform-page.js` plus the current detail-rendering tests now filter rendered child sections by that authored applicability metadata instead of keeping the current per-kind section allowlists as JS or test name lists.
+- [L] Top-level paginated list regions are now a bit less JS-owned too: workflow, verification, knowledge, signal, and model list surfaces now author a `listSource` prop in `plugins/platform/platform-console.rvm`, and `plugins/platform/platform-page.js` renders them through one shared `renderAuthoredListSection(...)` helper that resolves the authored source, applies the already-authored sort/pagination semantics, and renders rows through the existing `rowFields` schema instead of maintaining five separate list renderers.
+- [L] The simpler operator panels are now a bit more RVM-owned too: branch creation, change-set create/edit/validate/apply/lifecycle, and verification test-run forms now author `formId`, `statusId`, `submitLabel`, `formFields`, and related default/placeholder/row metadata in `plugins/platform/platform-console.rvm`, and `plugins/platform/platform-page.js` renders them through one shared authored form path that preserves the existing field names and form ids for the current client handlers.
+- [L] The more complex proposal/review forms are now more RVM-owned too: proposal creation and review surfaces now author their form ids, field schemas, placeholders/defaults, and review-button metadata in `plugins/platform/platform-console.rvm`; the shared form renderer now supports sourced option attributes and multi-button submit strips; and the existing client script still reuses the authored form ids/names for proposal body syncing and approve/reject handling instead of relying on bespoke HTML assembly.
+- [L] Those authored operator forms now also declare their current client behavior in `plugins/platform/platform-console.rvm` via `clientAction`, and `plugins/platform/platform-page.js` now decides whether to attach the platform authoring script by walking authored form metadata instead of a hardcoded surface-name allowlist. The request payload shaping is still handler-specific, but RVM now decides which current forms need client wiring.
+- [L] Some of the remaining non-detail region dispatch is now less surface-name-bound too: the current overview summary strip, authored surface tree, lifecycle/branch boards, and verification stream card now render because their authored surfaces declare `summaryPageId`, `surfaceFields`, `boardSource`, or authored property-card props/values, rather than because `plugins/platform/platform-page.js` recognizes those specific surface names first.
+- [L] The main detail-region entry routing is now less surface-name-bound too: workflow, verification, knowledge, signal, and model detail surfaces declare `detailSource` in `plugins/platform/platform-console.rvm`, and `plugins/platform/platform-page.js` now enters those detail renderers from authored props rather than a hardcoded `Platform*Detail` name switch. The inner detail helpers still shape records by current object kind, so this is dispatch cleanup rather than full generic detail rendering.
+- [L] The standalone verification-stream panel is now more RVM-owned too: `PlatformVerificationStreams` no longer relies on a `propertySource` branch in `plugins/platform/platform-page.js`; instead it authors `propertyCardTitle`, `propertyFields`, and static `propertyValues` in `plugins/platform/platform-console.rvm`, and the shared renderer now turns those authored values into the visible event-stream card.
+- [L] Workflow and verification detail-kind selection are now a bit more RVM-owned too: `PlatformWorkflowDetail` and `PlatformVerificationDetail` author the current id-prefix taxonomy they use to recognize branch/change-set/proposal and gate/runtime-revision/candidate-snapshot/test-run selections, and `plugins/platform/platform-page.js` now reads those authored prefix lists instead of hardcoding the same strings inline. The later record-shaping and fallback behavior are still JS-owned.
+- [L] Knowledge and signal detail-kind selection are now a bit more RVM-owned too: `PlatformKnowledgeDetail` now authors the current document/task/epic/feature discriminator fields/prefixes, and `PlatformSignalDetail` now authors the current gap prefix plus supported signal node kinds. `plugins/platform/platform-page.js` now reads those authored selectors instead of hardcoding the same strings inline, while the later detail record shaping remains JS-owned.
+- [L] Those same detail selectors now also rely less on shadow JS defaults: the current workflow/verification/knowledge/signal/model detail entry path now expects the authored `detailSelectionSources`, id-prefix props, and discriminator fields already declared in `plugins/platform/platform-console.rvm`, rather than quietly carrying duplicate fallback source lists and selector strings in `plugins/platform/platform-page.js` for the currently supported console surfaces.
+- [L] Some region-specific layouts and renderer dispatch still remain JS-backed by surface name, and a smaller set of authored cards still rely on JS helper shaping where the current renderer needs non-concept object formatting or richer aggregations than the current generic modes cover (for example `statusExit` objects and future richer link-label or summary computations), so this is still not full generic rendered-RVM replacement.
+- [L] Platform console styling is now file-backed for the current supported subset: `plugins/platform/platform-style.js` reads `plugins/platform/platform-console.wcss`, lowers authored tokens/style selectors/media blocks through `plugins/platform/wcss-source.js`, and renders CSS from that authored file instead of constructing the console stylesheet in JS.
 - [L] The current gap is intentionally narrow: it applies to modeled platform surfaces with ids beginning `surface:platform` and checks for attached `rvmSource` and `wcssSource` graph edges (`authoredBy` / `styledBy`). It catches platform pages that drift away from authored source ownership without claiming the later rendered-RVM or generated-CSS parity work is done.
-- [L] The current generated-CSS drift gap is selector-coverage-backed: it compares selectors declared in `plugins/platform/platform-console.wcss` against selectors emitted by the current `platform-style.js` bridge and emits a `platform-css-drift` gap when they differ. It truthfully catches the current bridge/file mismatch, but declaration/value parity and file-driven lowering remain later work.
+- [L] The current generated-CSS drift gap is selector-coverage-backed: it compares selectors declared in `plugins/platform/platform-console.wcss` against selectors emitted by the current file-backed lowering path and emits a `platform-css-drift` gap when they differ. The live console no longer carries the earlier selector drift, but the check remains in place to catch future authored/rendered divergence.
+- [L] The current WCSS lowering path is intentionally narrow rather than a full generic compiler: `plugins/platform/wcss-source.js` supports the subset the platform console now uses (`theme`, `tokens`, flat `style` declarations, and `media` blocks with nested styles). If wider WCSS language features land later, that parser will need to expand or be replaced by a shared compiler.
 
 ### 12.3 MCP Parity
 

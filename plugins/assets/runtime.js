@@ -63,8 +63,11 @@ export const providers = Object.freeze([
           Object.freeze({ id: "local-disk", label: "Local disk", status: "shipped", default: true })
         ]),
         witnessContract: Object.freeze({
-          externalRefs: Object.freeze(["storageKey", "contentUrl", "textRef", "thumbnailRef", "thumbnailUrl"])
-        })
+          externalRefs: Object.freeze(["storageKey", "contentUrl", "textRef", "thumbnailRef", "thumbnailUrl"]),
+          failure: Object.freeze(["asset.upload.failed", "asset.ingest.failed", "asset.attach.failed"])
+        }),
+        authority: Object.freeze([]),
+        config: Object.freeze([])
       })
     ])
   },

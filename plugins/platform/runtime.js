@@ -1,6 +1,7 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { platformModuleProjectors } from "./projections.js";
 import { createPlatformHandlers } from "./handlers.js";
+import { createPlatformTestMonitorRuntime } from "./provider-runtime.js";
 
 export const bundleId = "bundle-platform";
 export { handlerCatalog };
@@ -56,6 +57,7 @@ export const routes = Object.freeze([
   exactRoute("POST", "/api/platform-test-runs", "platform.testRun.create"),
   exactRoute("GET", "/api/platform-test-runs/events", "platform.testRun.events"),
   patternRoute("GET", /^\/api\/platform-test-runs\/([^/]+)$/, "platform.testRun.read", Object.freeze(["id"])),
+  patternRoute("GET", /^\/api\/platform-test-artifacts\/([^/]+)\/content$/, "platform.testArtifact.content", Object.freeze(["id"])),
   exactRoute("POST", "/api/platform-proposals", "platform.proposal.create"),
   patternRoute("POST", /^\/api\/platform-proposals\/([^/]+)\/approve$/, "platform.proposal.approve", Object.freeze(["id"])),
   patternRoute("POST", /^\/api\/platform-proposals\/([^/]+)\/reject$/, "platform.proposal.reject", Object.freeze(["id"]))
@@ -78,6 +80,11 @@ export const providers = Object.freeze([
     kind: "moduleProjectors",
     id: "platform.projections",
     projectors: platformModuleProjectors
+  },
+  {
+    kind: "providerRuntimeFactory",
+    id: "platform.testMonitor",
+    factory: createPlatformTestMonitorRuntime
   }
 ]);
 

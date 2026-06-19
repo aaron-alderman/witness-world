@@ -7,8 +7,8 @@ export function renderBootstrapAppAuthoringSubmitFactory() {
     const bootstrapAppAuthoringSubmitContractsByFamily = ${JSON.stringify(bootstrapAppAuthoringSubmitContractsByFamily)};
     const coerceInteger = ${coerceInteger.toString()};
     const firstNonBlank = ${firstNonBlank.toString()};
-    const omitBlankStringFields = ${omitBlankStringFields.toString()};
-    const contractForFamily = ${contractForFamily.toString()};
+    const bootstrapAppAuthoringOmitBlankStringFields = ${bootstrapAppAuthoringOmitBlankStringFields.toString()};
+    const bootstrapAppAuthoringContractForFamily = ${bootstrapAppAuthoringContractForFamily.toString()};
     const checkboxesModeForFamily = ${checkboxesModeForFamily.toString()};
     const applyBootstrapAppAuthoringSubmitFieldRule = ${applyBootstrapAppAuthoringSubmitFieldRule.toString()};
     const readBootstrapAuthoringFormDataFromDocument = ${readBootstrapAuthoringFormDataFromDocument.toString()};
@@ -31,19 +31,19 @@ function firstNonBlank(values = []) {
   return undefined;
 }
 
-function omitBlankStringFields(record = {}) {
+function bootstrapAppAuthoringOmitBlankStringFields(record = {}) {
   return Object.fromEntries(
     Object.entries(record).filter(([, value]) => value !== "")
   );
 }
 
-function contractForFamily(family = "", contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily) {
+function bootstrapAppAuthoringContractForFamily(family = "", contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   return key ? (contractsByFamily[key] || null) : null;
 }
 
 function checkboxesModeForFamily(family = "", contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily) {
-  return contractForFamily(family, contractsByFamily)?.checkboxes || null;
+  return bootstrapAppAuthoringContractForFamily(family, contractsByFamily)?.checkboxes || null;
 }
 
 function applyBootstrapAppAuthoringSubmitFieldRule({
@@ -67,6 +67,22 @@ function applyBootstrapAppAuthoringSubmitFieldRule({
   }
   if (strategy === "boolean") {
     body[name] = data?.[source] === true;
+    return body;
+  }
+  if (strategy === "routeStateDescriptor") {
+    const process = firstNonBlank([data?.[rule.processSource || "routeStateProcess"]]);
+    const processRef = firstNonBlank([data?.[rule.processRefSource || "routeStateProcessRef"]]);
+    const state = firstNonBlank([data?.[rule.stateSource || "routeStateState"]]);
+    const stateRef = firstNonBlank([data?.[rule.stateRefSource || "routeStateStateRef"]]);
+    if (process === undefined && processRef === undefined && state === undefined && stateRef === undefined) {
+      return body;
+    }
+    body[name] = {
+      ...(process !== undefined ? { process } : {}),
+      ...(processRef !== undefined ? { processRef } : {}),
+      ...(state !== undefined ? { state } : {}),
+      ...(stateRef !== undefined ? { stateRef } : {})
+    };
     return body;
   }
   body[name] = data?.[source];
@@ -96,11 +112,11 @@ export function buildBootstrapAppAuthoringSubmitRequest({
   data = {},
   contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, contractsByFamily);
+  const contract = bootstrapAppAuthoringContractForFamily(detail.family, contractsByFamily);
   if (!contract) return null;
   let body = { ...(data || {}) };
   if (contract.omitBlankStrings === true) {
-    body = omitBlankStringFields(body);
+    body = bootstrapAppAuthoringOmitBlankStringFields(body);
   }
   for (const field of contract.dropFields || []) {
     delete body[field];

@@ -489,15 +489,21 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.equal(page.status, 200);
     const pageHtml = await page.text();
     assert.match(pageHtml, /Platform Console/);
-    assert.match(pageHtml, /Backend Revision Stream/);
-    assert.match(pageHtml, /Governed Docs/);
-    assert.match(pageHtml, /platform-runtime-revision-select/);
-    assert.match(pageHtml, /\/api\/platform-model\?view=runtimeRevisions/);
-    assert.match(pageHtml, /\/api\/runtime\/backend-revisions\/events/);
+    assert.match(pageHtml, /Pages/);
+    assert.match(pageHtml, /Verification Runtime/);
+    assert.match(pageHtml, /Knowledge/);
+    assert.match(pageHtml, /Platform Map/);
+    assert.match(pageHtml, /\/platform\?view=verificationRuntime/);
+    assert.match(pageHtml, /\/platform\?view=knowledge/);
+    assert.match(pageHtml, /authored-server-runner/);
+    assert.match(pageHtml, /server_runner/);
     assert.equal(model.nodes.some(node => node.id === "plugin.platform"), true);
     assert.equal(model.nodes.some(node => node.id === "surface:platform"), true);
     assert.equal(model.nodes.some(node => node.kind === "task" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
-    assert.equal(model.proposalActions.some(action => action.action === "runtimePlugin.install"), true);
+    assert.equal(model.profiles.find(row => row.id === "full")?.activeRunnerSource, "authored-server-runner");
+    assert.equal(model.profiles.find(row => row.id === "full")?.activePluginSource, "profile-or-operator-defaults");
+    assert.match(model.profiles.find(row => row.id === "full")?.compositionSummary ?? "", /authored runner server_runner/);
+    assert.equal(Array.isArray(model.coverageEdges), true);
     assert.equal(Array.isArray(gaps.gaps), true);
     assert.notEqual(branchListRoute.status, 404);
     assert.notEqual(branchCreateRoute.status, 404);
@@ -1132,14 +1138,43 @@ test("runtime diagnostics endpoint exposes truthful minimal composition", async 
     assert.equal(body.activeProfile, "minimal");
     assert.deepEqual(body.availableProfiles, ["minimal", "authoring", "inspect", "practical-backend", "full"]);
     assert.deepEqual(body.activeBundles.map(bundle => bundle.id), ["bundle-core-runtime"]);
+    assert.equal(body.activeBundles.every(bundle => bundle.ownerClass === "generic-host"), true);
     assert.equal(body.routes.some(route => route.matcher === "/api/runtime/diagnostics" && route.handler === "runtime.diagnostics.read"), true);
+    assert.equal(body.routes.find(route => route.handler === "runtime.diagnostics.read")?.ownerClass, "generic-host");
     assert.equal(body.handlerMetadata["backendProgram.run"].routeKind, "backendProgram");
+    assert.equal(body.handlerMetadata["backendProgram.run"].ownerClass, "backend-program");
     assert.deepEqual(body.handlerMetadata["page.home"].methods, ["GET"]);
+    assert.equal(body.handlerMetadata["page.home"].ownerClass, "generic-host");
     assert.deepEqual(body.installedHostCapabilities.backend, ["http.serve", "runtime.config"]);
     assert.deepEqual(body.installedHostCapabilities.frontend, ["dom.render", "http.fetch"]);
     assert.equal(body.surfaces.some(surface => surface.id === "surface:bootstrap"), false);
+    assert.equal(body.surfaces.find(surface => surface.id === "surface:home")?.ownerClass, "generic-host");
     assert.equal(body.shells.shells.some(shell => shell.id === "browser" && shell.active === true), true);
+    assert.equal(body.shells.shells.find(shell => shell.id === "browser")?.ownerClass, "shell");
     assert.equal(body.shells.shells.some(shell => shell.id === "desktop" && shell.status === "present"), true);
+    assert.equal(body.composition.storyId, "authored-runner-driven");
+    assert.equal(body.composition.activeRunnerSource, "authored-server-runner");
+    assert.equal(body.composition.activePluginSource, "core-profile-only");
+    assert.equal(body.composition.usesAuthoredServerRunner, true);
+    assert.equal(body.composition.usesAuthoredRuntimePluginInstalls, false);
+    assert.equal(body.mountedRoutes.find(route => route.id === "home_route")?.ownerClass, "generic-host");
+    assert.deepEqual(body.mountedRoutes.find(route => route.id === "home_route")?.ownerChain, [
+      {
+        class: "route",
+        routeId: "home_route",
+        method: "GET",
+        path: "/",
+        serves: "page",
+        note: "Visible behavior enters through mounted route home_route."
+      },
+      {
+        class: "generic-host",
+        bundleId: "bundle-core-runtime",
+        pluginId: null,
+        handlerId: "page.home",
+        note: "Runtime behavior is owned by shared host/runtime code."
+      }
+    ]);
     assert.equal(typeof body.operator.directories.runtimeRoot, "string");
     assert.equal(body.plugins.validCount >= 5, true);
     assert.equal(body.plugins.activePluginIds.length, 0);
@@ -1172,11 +1207,19 @@ test("runtime diagnostics endpoint exposes full-profile bundle and handler-set c
 
     assert.equal(body.activeProfile, "full");
     assert.equal(body.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
+    assert.equal(body.activeBundles.find(bundle => bundle.id === "bundle-demo")?.ownerClass, "runtime-plugin");
     assert.equal(body.surfaces.some(surface => surface.id === "surface:world"), true);
+    assert.equal(body.surfaces.find(surface => surface.id === "surface:world")?.ownerClass, "runtime-plugin");
     assert.equal(body.providedCapabilities.includes("db.sql"), true);
     assert.equal(body.handlerSets.some(entry => entry.id === "demo"), true);
+    assert.equal(body.handlerSets.find(entry => entry.id === "demo")?.ownerClass, "handler-set");
+    assert.equal(body.handlerSets.find(entry => entry.id === "demo")?.ownerPluginId, "plugin.demo");
     assert.equal(body.handlerMetadata["events.stream"].routeKind, "stream");
+    assert.equal(body.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
     assert.deepEqual(body.handlerMetadata["events.stream"].methods, ["GET"]);
+    assert.equal(body.routes.find(route => route.handler === "page.platform")?.ownerClass, "runtime-plugin");
+    assert.equal(body.routes.find(route => route.handler === "page.platform")?.ownerPluginId, "plugin.platform");
+    assert.equal(body.mountedRoutes.find(route => route.id === "home_route")?.ownerClass, "generic-host");
     assert.equal(body.plugins.validCount >= 5, true);
     assert.equal(body.plugins.compatibleCount >= 1, true);
     assert.equal(body.plugins.trustStateCounts.local >= 1 || body.plugins.trustStateCounts.unsigned >= 1, true);
@@ -1229,6 +1272,9 @@ test("runtime plugins endpoint exposes local plugin package metadata and activat
     assert.equal(inspectPlugin.resolvedBundles.some(row => row.id === "bundle-inspect"), true);
     assert.equal(inspectPlugin.resolvedRuntimeContributions.surfaces.some(row => row.id === "surface:world"), true);
     assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].routeKind, "stream");
+    assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
+    assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].ownerPluginId, "plugin.inspect");
+    assert.equal(inspectPlugin.resolvedRuntimeContributions.routes.find(route => route.handler === "events.stream")?.ownerClass, "runtime-plugin");
     assert.deepEqual(inspectPlugin.resolvedRuntimeContributions.routes.find(route => route.handler === "events.stream")?.handlerMetadata?.methods, ["GET"]);
     const pluginPackage = body.packages.find(row => row.id === "plugin.notes-sidebar");
     assert.equal(Boolean(pluginPackage), true);

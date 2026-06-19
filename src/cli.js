@@ -570,8 +570,9 @@ function reportStartup({
   const handlerMetadata = runtimeComposition?.handlerMetadata ?? {};
   console.log(`${label}: ${server.url}`);
   for (const line of extras) console.log(line);
+  console.log(`Active profile: ${runtimeComposition?.profile ?? runtimeProfileInfo.id}`);
   console.log(`Active bundles: ${activeBundleIds.join(", ")}`);
-  console.log(`Bundle counts: capabilities=${activeBundles.reduce((sum, bundle) => sum + (bundle.capabilityCount ?? bundle.contributes.capabilities.length), 0)} routes=${activeBundles.reduce((sum, bundle) => sum + (bundle.routeCount ?? bundle.contributes.routes.length), 0)} surfaces=${activeBundles.reduce((sum, bundle) => sum + (bundle.surfaceCount ?? bundle.contributes.surfaces.length), 0)}`);
+  console.log(`Bundle counts: capabilities=${activeBundles.reduce((sum, bundle) => sum + (bundle.capabilityCount ?? bundle.contributes?.capabilities?.length ?? 0), 0)} routes=${activeBundles.reduce((sum, bundle) => sum + (bundle.routeCount ?? bundle.contributes?.routes?.length ?? 0), 0)} surfaces=${activeBundles.reduce((sum, bundle) => sum + (bundle.surfaceCount ?? bundle.contributes?.surfaces?.length ?? 0), 0)}`);
   const routeKinds = Object.values(handlerMetadata).reduce((counts, entry) => {
     const routeKind = typeof entry?.routeKind === "string" && entry.routeKind.trim() ? entry.routeKind.trim() : null;
     if (!routeKind) return counts;
@@ -588,10 +589,17 @@ function reportStartup({
   if (runtimePluginCatalog) {
     console.log(`Authored runtime plugins: ${(runtimePluginCatalog.authoredPluginIds ?? []).join(", ") || "(none)"}`);
     console.log(`Operator runtime plugins: ${(runtimePluginCatalog.operatorPluginIds ?? []).join(", ") || "(none)"}`);
-    console.log(`Effective runtime plugins: ${(runtimePluginCatalog.effectivePluginIds ?? []).join(", ") || "(none)"}`);
-    console.log(`Configured runtime plugins: ${(runtimePluginCatalog.configuredPluginIds ?? []).join(", ") || "(none)"}`);
     console.log(`Activated runtime plugins: ${(runtimePluginCatalog.activePluginIds ?? []).join(", ") || "(none)"}`);
-    console.log(`Plugin-added bundles: ${(runtimePluginCatalog.addedBundleIds ?? []).join(", ") || "(none)"}`);
+    const pluginToBundleMap = runtimePluginCatalog.selection?.pluginToBundleMap ?? {};
+    const addedEntries = Object.entries(pluginToBundleMap);
+    if (addedEntries.length) {
+      console.log("Plugin-added bundles:");
+      for (const [pluginId, bundleIds] of addedEntries) {
+        console.log(`  ${pluginId} -> ${bundleIds.join(", ")}`);
+      }
+    } else {
+      console.log("Plugin-added bundles: (none)");
+    }
   }
   console.log(`Runtime diagnostics: ${server.url}/api/runtime/diagnostics`);
   console.log(`Witness log: ${witnessLogPath}`);

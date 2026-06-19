@@ -412,9 +412,9 @@ strategy = "compatible"
 actor = "aaron"
 version = "todo.todos.list.v1"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "todos.readModel", method = "GET", path = "/api/todos", into = "todoResponse" }
+params = { projector = "demo.todosReadModel", into = "todoResponse" }
 
 [[backendStep]]
 actor = "aaron"
@@ -428,9 +428,9 @@ params = { from = "todoResponse" }
 actor = "aaron"
 version = "todo.todos.list.v2"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "todos.readModel", method = "GET", path = "/api/todos", into = "todoResponse" }
+params = { projector = "demo.todosReadModel", into = "todoResponse" }
 
 [[backendStep]]
 actor = "aaron"
@@ -468,9 +468,9 @@ params = { into = "draftTodo" }
 actor = "aaron"
 version = "todo.todos.create.v1"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 1
-params = { handler = "todos.createModel", method = "POST", path = "/api/todos", from = "draftTodo", into = "createResult", allowFailure = true }
+params = { process = "todo.create", from = "draftTodo", into = "createResult", allowFailure = true }
 
 [[backendStep]]
 actor = "aaron"
@@ -510,9 +510,9 @@ params = { into = "draftTodo" }
 actor = "aaron"
 version = "todo.todos.create.v2"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 1
-params = { handler = "todos.createModel", method = "POST", path = "/api/todos", from = "draftTodo", into = "createResult", allowFailure = true }
+params = { process = "todo.create", from = "draftTodo", into = "createResult", allowFailure = true }
 
 [[backendStep]]
 actor = "aaron"
@@ -568,9 +568,9 @@ params = { into = "todoPatch.id", from = "request.params.id" }
 actor = "aaron"
 version = "todo.todos.update.v1"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 2
-params = { handler = "todos.updateModel", method = "PATCH", path = "/api/todos/${state.request.params.id}", from = "todoPatch", into = "updateResult", allowFailure = true, params = { id = "${state.request.params.id}" } }
+params = { process = "todo.update", from = "todoPatch", into = "updateResult", allowFailure = true, options = { todoId = "${state.request.params.id}" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -618,9 +618,9 @@ params = { into = "todoPatch.id", from = "request.params.id" }
 actor = "aaron"
 version = "todo.todos.update.v2"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 2
-params = { handler = "todos.updateModel", method = "PATCH", path = "/api/todos/${state.request.params.id}", from = "todoPatch", into = "updateResult", allowFailure = true, params = { id = "${state.request.params.id}" } }
+params = { process = "todo.update", from = "todoPatch", into = "updateResult", allowFailure = true, options = { todoId = "${state.request.params.id}" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -660,9 +660,9 @@ params = { statusFrom = "updateResult.status", messageFrom = "updateResult.error
 actor = "aaron"
 version = "todo.todos.delete.v1"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 0
-params = { handler = "todos.deleteModel", method = "DELETE", path = "/api/todos/${state.request.params.id}", into = "deleteResult", allowFailure = true, params = { id = "${state.request.params.id}" } }
+params = { process = "todo.delete", body = { id = "${state.request.params.id}" }, into = "deleteResult", allowFailure = true, options = { todoId = "${state.request.params.id}" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -694,9 +694,9 @@ params = { statusFrom = "deleteResult.status", messageFrom = "deleteResult.error
 actor = "aaron"
 version = "todo.todos.delete.v2"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 0
-params = { handler = "todos.deleteModel", method = "DELETE", path = "/api/todos/${state.request.params.id}", into = "deleteResult", allowFailure = true, params = { id = "${state.request.params.id}" } }
+params = { process = "todo.delete", body = { id = "${state.request.params.id}" }, into = "deleteResult", allowFailure = true, options = { todoId = "${state.request.params.id}" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -736,9 +736,9 @@ params = { statusFrom = "deleteResult.status", messageFrom = "deleteResult.error
 actor = "aaron"
 version = "todo.privateNotes.list.v1"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "privateNotes.readModel", method = "GET", path = "/api/private-notes", into = "privateNotesResponse" }
+params = { projector = "demo.privateNotesReadModel", into = "privateNotesResponse" }
 
 [[backendStep]]
 actor = "aaron"
@@ -752,9 +752,9 @@ params = { from = "privateNotesResponse" }
 actor = "aaron"
 version = "todo.privateNotes.list.v2"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "privateNotes.readModel", method = "GET", path = "/api/private-notes", into = "privateNotesResponse" }
+params = { projector = "demo.privateNotesReadModel", into = "privateNotesResponse" }
 
 [[backendStep]]
 actor = "aaron"
@@ -792,9 +792,9 @@ params = { into = "privateNoteDraft" }
 actor = "aaron"
 version = "todo.privateNotes.create.v1"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 1
-params = { handler = "privateNotes.createModel", method = "POST", path = "/api/private-notes", from = "privateNoteDraft", into = "privateNoteResult", allowFailure = true }
+params = { process = "privateNote.create", from = "privateNoteDraft", into = "privateNoteResult", allowFailure = true }
 
 [[backendStep]]
 actor = "aaron"
@@ -834,9 +834,9 @@ params = { into = "privateNoteDraft" }
 actor = "aaron"
 version = "todo.privateNotes.create.v2"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 1
-params = { handler = "privateNotes.createModel", method = "POST", path = "/api/private-notes", from = "privateNoteDraft", into = "privateNoteResult", allowFailure = true }
+params = { process = "privateNote.create", from = "privateNoteDraft", into = "privateNoteResult", allowFailure = true }
 
 [[backendStep]]
 actor = "aaron"
@@ -892,9 +892,9 @@ params = { into = "widgetDraft.parent", value = "todo_app_widget" }
 actor = "aaron"
 version = "todo.widgets.create.v1"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 2
-params = { handler = "widgets.createModel", method = "POST", path = "/api/widgets", from = "widgetDraft", into = "widgetCreateResult", allowFailure = true, params = { rootWidget = "todo_app_widget", context = "frontend" } }
+params = { process = "widget.define", from = "widgetDraft", into = "widgetCreateResult", allowFailure = true, options = { defaultParent = "todo_app_widget", rootWidget = "todo_app_widget", defaultContext = "frontend", context = "frontend" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -942,9 +942,9 @@ params = { into = "widgetDraft.parent", value = "todo_app_widget" }
 actor = "aaron"
 version = "todo.widgets.create.v2"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 2
-params = { handler = "widgets.createModel", method = "POST", path = "/api/widgets", from = "widgetDraft", into = "widgetCreateResult", allowFailure = true, params = { rootWidget = "todo_app_widget", context = "frontend" } }
+params = { process = "widget.define", from = "widgetDraft", into = "widgetCreateResult", allowFailure = true, options = { defaultParent = "todo_app_widget", rootWidget = "todo_app_widget", defaultContext = "frontend", context = "frontend" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -984,9 +984,9 @@ params = { statusFrom = "widgetCreateResult.status", messageFrom = "widgetCreate
 actor = "aaron"
 version = "todo.witnesses.list.v1"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "witnesses.list", method = "GET", path = "/api/witnesses", query = "${state.request.query}", into = "witnessResponse" }
+params = { projector = "inspect.witnessesReadModel", into = "witnessResponse", options = { query = "${state.request.query}" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -1000,9 +1000,9 @@ params = { from = "witnessResponse" }
 actor = "aaron"
 version = "todo.witnesses.list.v2"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "witnesses.list", method = "GET", path = "/api/witnesses", query = "${state.request.query}", into = "witnessResponse" }
+params = { projector = "inspect.witnessesReadModel", into = "witnessResponse", options = { query = "${state.request.query}" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -1032,9 +1032,9 @@ params = { from = "witnessResponse" }
 actor = "aaron"
 version = "todo.network.simulateError.v1"
 event = "request"
-op = "handler.invoke"
+op = "witness.emit"
 order = 0
-params = { handler = "network.simulateModel", method = "GET", path = "/api/simulate-network-error", into = "networkFailure", allowFailure = true }
+params = { process = "network.simulated.failed", body = { reason = "simulated network error", status = 503 } }
 
 [[backendStep]]
 actor = "aaron"
@@ -1042,15 +1042,15 @@ version = "todo.network.simulateError.v1"
 event = "request"
 op = "response.error"
 order = 1
-params = { statusFrom = "networkFailure.status", messageFrom = "networkFailure.error", bodyFrom = "networkFailure.payload" }
+params = { status = 503, message = "simulated network error" }
 
 [[backendStep]]
 actor = "aaron"
 version = "todo.network.simulateError.v2"
 event = "request"
-op = "handler.invoke"
+op = "witness.emit"
 order = 0
-params = { handler = "network.simulateModel", method = "GET", path = "/api/simulate-network-error", into = "networkFailure", allowFailure = true }
+params = { process = "network.simulated.failed", body = { reason = "simulated network error", status = 503 } }
 
 [[backendStep]]
 actor = "aaron"
@@ -1074,15 +1074,15 @@ version = "todo.network.simulateError.v2"
 event = "respond"
 op = "response.error"
 order = 0
-params = { statusFrom = "networkFailure.status", messageFrom = "networkFailure.error", bodyFrom = "networkFailure.payload" }
+params = { status = 503, message = "simulated network error" }
 
 [[backendStep]]
 actor = "aaron"
 version = "todo.worldGraph.read.v1"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "worldGraph.read", method = "GET", path = "/api/world-graph", into = "worldGraphResponse" }
+params = { projector = "inspect.worldGraphReadModel", into = "worldGraphResponse" }
 
 [[backendStep]]
 actor = "aaron"
@@ -1096,9 +1096,9 @@ params = { from = "worldGraphResponse" }
 actor = "aaron"
 version = "todo.worldGraph.read.v2"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "worldGraph.read", method = "GET", path = "/api/world-graph", into = "worldGraphResponse" }
+params = { projector = "inspect.worldGraphReadModel", into = "worldGraphResponse" }
 
 [[backendStep]]
 actor = "aaron"
@@ -1128,9 +1128,9 @@ params = { from = "worldGraphResponse" }
 actor = "aaron"
 version = "todo.processView.read.v1"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "processView.read", method = "GET", path = "/api/process-view", query = "${state.request.query}", into = "processViewResponse" }
+params = { projector = "inspect.processViewReadModel", into = "processViewResponse", options = { query = "${state.request.query}" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -1144,9 +1144,9 @@ params = { from = "processViewResponse" }
 actor = "aaron"
 version = "todo.processView.read.v2"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "processView.read", method = "GET", path = "/api/process-view", query = "${state.request.query}", into = "processViewResponse" }
+params = { projector = "inspect.processViewReadModel", into = "processViewResponse", options = { query = "${state.request.query}" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -1176,25 +1176,43 @@ params = { from = "processViewResponse" }
 actor = "aaron"
 version = "todo.processRun.read.v1"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "processRun.read", method = "GET", path = "/api/process-runs/${state.request.params.runId}", query = "${state.request.query}", into = "processRunResponse", params = { runId = "${state.request.params.runId}" } }
+params = { projector = "inspect.processRunReadModel", into = "processRunResponse", options = { runId = "${state.request.params.runId}", query = "${state.request.query}" } }
 
 [[backendStep]]
 actor = "aaron"
 version = "todo.processRun.read.v1"
 event = "request"
-op = "response.json"
+op = "run"
 order = 1
-params = { from = "processRunResponse" }
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processRun.read.v1"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "processRunResponse.ok", truthy = true }
+params = { from = "processRunResponse.body", statusFrom = "processRunResponse.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processRun.read.v1"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "processRunResponse.ok", falsy = true }
+params = { statusFrom = "processRunResponse.status", messageFrom = "processRunResponse.error", bodyFrom = "processRunResponse.body" }
 
 [[backendStep]]
 actor = "aaron"
 version = "todo.processRun.read.v2"
 event = "request"
-op = "handler.invoke"
+op = "project.read"
 order = 0
-params = { handler = "processRun.read", method = "GET", path = "/api/process-runs/${state.request.params.runId}", query = "${state.request.query}", into = "processRunResponse", params = { runId = "${state.request.params.runId}" } }
+params = { projector = "inspect.processRunReadModel", into = "processRunResponse", options = { runId = "${state.request.params.runId}", query = "${state.request.query}" } }
 
 [[backendStep]]
 actor = "aaron"
@@ -1218,7 +1236,17 @@ version = "todo.processRun.read.v2"
 event = "respond"
 op = "response.json"
 order = 0
-params = { from = "processRunResponse" }
+when = { path = "processRunResponse.ok", truthy = true }
+params = { from = "processRunResponse.body", statusFrom = "processRunResponse.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processRun.read.v2"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "processRunResponse.ok", falsy = true }
+params = { statusFrom = "processRunResponse.status", messageFrom = "processRunResponse.error", bodyFrom = "processRunResponse.body" }
 
 [[backendStep]]
 actor = "aaron"
@@ -1232,9 +1260,9 @@ params = { into = "traceEvent" }
 actor = "aaron"
 version = "todo.processEvents.record.v1"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 1
-params = { handler = "processEvents.record", method = "POST", path = "/api/process-events", from = "traceEvent", into = "processEventResult", allowFailure = true }
+params = { process = "inspect.processEventRecord", from = "traceEvent", into = "processEventResult", allowFailure = true }
 
 [[backendStep]]
 actor = "aaron"
@@ -1251,7 +1279,7 @@ event = "respond"
 op = "response.json"
 order = 0
 when = { path = "processEventResult.ok", truthy = true }
-params = { from = "processEventResult" }
+params = { from = "processEventResult.payload", statusFrom = "processEventResult.status" }
 
 [[backendStep]]
 actor = "aaron"
@@ -1260,7 +1288,7 @@ event = "respond"
 op = "response.error"
 order = 1
 when = { path = "processEventResult.ok", falsy = true }
-params = { messageFrom = "processEventResult.error", bodyFrom = "processEventResult" }
+params = { statusFrom = "processEventResult.status", messageFrom = "processEventResult.error", bodyFrom = "processEventResult.payload" }
 
 [[backendStep]]
 actor = "aaron"
@@ -1274,9 +1302,9 @@ params = { into = "traceEvent" }
 actor = "aaron"
 version = "todo.processEvents.record.v2"
 event = "request"
-op = "handler.invoke"
+op = "process.request"
 order = 1
-params = { handler = "processEvents.record", method = "POST", path = "/api/process-events", from = "traceEvent", into = "processEventResult", allowFailure = true }
+params = { process = "inspect.processEventRecord", from = "traceEvent", into = "processEventResult", allowFailure = true }
 
 [[backendStep]]
 actor = "aaron"
@@ -1301,7 +1329,7 @@ event = "respond"
 op = "response.json"
 order = 0
 when = { path = "processEventResult.ok", truthy = true }
-params = { from = "processEventResult" }
+params = { from = "processEventResult.payload", statusFrom = "processEventResult.status" }
 
 [[backendStep]]
 actor = "aaron"
@@ -1310,7 +1338,7 @@ event = "respond"
 op = "response.error"
 order = 1
 when = { path = "processEventResult.ok", falsy = true }
-params = { messageFrom = "processEventResult.error", bodyFrom = "processEventResult" }
+params = { statusFrom = "processEventResult.status", messageFrom = "processEventResult.error", bodyFrom = "processEventResult.payload" }
 
 [[activateBackendProgramVersion]]
 actor = "aaron"

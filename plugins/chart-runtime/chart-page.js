@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { appendQueryParamsToHref } from "../../src/runtime-url-utils.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -224,6 +225,9 @@ export function chartRuntimeAssets({
 
 export function renderChartHtml({ title = "Chart", spec, pageProps = {} } = {}) {
   const page = normalizePageProps(pageProps);
+  const stylesheetQuery = pageProps?.stylesheetQuery && typeof pageProps.stylesheetQuery === "object"
+    ? pageProps.stylesheetQuery
+    : null;
   const assets = chartRuntimeAssets({
     pagePropsList: [pageProps],
     standalone: true
@@ -234,7 +238,7 @@ export function renderChartHtml({ title = "Chart", spec, pageProps = {} } = {}) 
 <meta charset="UTF-8">
 <title>${escapeHtml(title)}</title>
 ${assets.scriptSrcs.map(src => `<script src="${escapeAttr(src)}"></script>`).join("\n")}
-${assets.stylesheetHrefs.map(href => `<link rel="stylesheet" href="${escapeAttr(href)}">`).join("\n")}
+${assets.stylesheetHrefs.map(href => `<link rel="stylesheet" href="${escapeAttr(appendQueryParamsToHref(href, stylesheetQuery ?? {}))}">`).join("\n")}
 <style>
   body{background:${page.pageBackground || "transparent"};color:${page.textColor || "#475569"};font-family:-apple-system,Segoe UI,sans-serif}
   [data-chart-page-viewport]{position:relative;width:100%;height:100%;overflow:hidden}

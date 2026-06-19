@@ -69,36 +69,33 @@ async function createEdenVersionProposalRequest(surface, proposal, deps) {
     render,
     requestJson,
     setVersionStatus,
-    state,
     versionsRuntime
   } = deps;
-  const { processName, version = null, reason, statusText } = proposal;
+  const { processName, version = null, statusText } = proposal;
   const runtime = versionsRuntime(surface);
-  const body = {
-    surfaceId: runtime.surfaceId || surface.id,
-    soul: runtime.soul || surface.versionSoul || ""
+  const routeByProcess = {
+    "edenVersions.activate": "/api/eden/versions/activate",
+    "edenVersions.rollback": "/api/eden/versions/rollback",
+    "edenVersions.publish": "/api/eden/versions/publish"
   };
+  const body = {};
+  setVersionStatus(statusText + " as proposal.", "ok");
+  render();
   if (version) body.version = version;
-  if (runtime.publishedVersion) body.publishedVersion = runtime.publishedVersion;
-  if (runtime.draftVersion) body.draftVersion = runtime.draftVersion;
-  const response = await requestJson("/api/proposals", {
+  const response = await requestJson(routeByProcess[processName] || "/api/eden/versions/publish", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      id: buildEdenVersionProposalId(state, processName, runtime, version || processName),
-      targetProcess: processName,
-      targetKind: "widgetVersion",
-      targetId: runtime.soul || surface.versionSoul || "",
-      bodyJson: JSON.stringify(body),
-      reason
-    })
+    body: JSON.stringify(body)
   });
   if (!response.ok) {
     setVersionStatus(response.body?.error || "version proposal creation failed", "error");
     render();
     return false;
   }
-  setVersionStatus(statusText + " as " + (response.body?.proposal?.id || "proposal") + ".", "ok");
+  if (response.body?.versionState && typeof response.body.versionState === "object") {
+    surface.runtime = response.body.versionState;
+  }
+  setVersionStatus(statusText + " as proposal.", "ok");
   return true;
 }
 
@@ -110,38 +107,26 @@ function buildEdenCapabilityInstallProposalId(state, runtime, capability) {
 }
 
 async function createEdenCapabilityInstallProposalRequest(surface, row, deps) {
-  const {
-    capabilityInstallRuntime,
-    render,
-    requestJson,
-    setCapabilityStatus,
-    state
-  } = deps;
+  const { capabilityInstallRuntime, render, requestJson, setCapabilityStatus } = deps;
   const runtime = capabilityInstallRuntime(surface);
   const targetLabel = runtime.targetLabel || runtime.target || "this target";
   const capabilityLabel = row.label || row.id;
-  const response = await requestJson("/api/proposals", {
+  setCapabilityStatus("Proposed installing " + capabilityLabel + " on " + targetLabel + " as proposal.", "ok");
+  render();
+  const response = await requestJson("/api/eden/capability-installs", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      id: buildEdenCapabilityInstallProposalId(state, runtime, row.id),
-      targetProcess: "capability.install",
-      targetKind: runtime.targetKind || "context",
-      targetId: runtime.target || "",
-      bodyJson: JSON.stringify({
-        capability: row.id,
-        target: runtime.target || "",
-        targetKind: runtime.targetKind || "context"
-      }),
-      reason: "Install " + capabilityLabel + " on " + targetLabel + " through proposal review"
-    })
+    body: JSON.stringify({ capability: row.id })
   });
   if (!response.ok) {
     setCapabilityStatus(response.body?.error || ("proposal creation failed for " + capabilityLabel), "error");
     render();
     return false;
   }
-  setCapabilityStatus("Proposed installing " + capabilityLabel + " on " + targetLabel + " as " + (response.body?.proposal?.id || "proposal") + ".", "ok");
+  if (response.body?.capabilityState && typeof response.body.capabilityState === "object") {
+    surface.runtime = response.body.capabilityState;
+  }
+  setCapabilityStatus("Proposed installing " + capabilityLabel + " on " + targetLabel + " as proposal.", "ok");
   return true;
 }
 

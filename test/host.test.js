@@ -1334,6 +1334,39 @@ test("simulate network error route runs through authored backend programs and pr
   }
 });
 
+test("maintained demo backend source defines simulate network error through authored witness.emit steps", async () => {
+  const backendSource = await fs.readFile(path.join(process.cwd(), "examples", "_lib", "demo-todo", "backend.wtoml"), "utf8");
+
+  assert.equal(backendSource.includes('version = "todo.network.simulateError.v1"\nevent = "request"\nop = "witness.emit"'), true);
+  assert.equal(backendSource.includes('version = "todo.network.simulateError.v2"\nevent = "request"\nop = "witness.emit"'), true);
+  assert.equal(backendSource.includes('handler = "network.simulateModel"'), false);
+});
+
+test("maintained demo backend source defines inspect-backed reads through project.read", async () => {
+  const backendSource = await fs.readFile(path.join(process.cwd(), "examples", "_lib", "demo-todo", "backend.wtoml"), "utf8");
+
+  assert.equal(backendSource.includes('version = "todo.witnesses.list.v1"\nevent = "request"\nop = "project.read"'), true);
+  assert.equal(backendSource.includes('projector = "inspect.witnessesReadModel"'), true);
+  assert.equal(backendSource.includes('version = "todo.worldGraph.read.v1"\nevent = "request"\nop = "project.read"'), true);
+  assert.equal(backendSource.includes('projector = "inspect.worldGraphReadModel"'), true);
+  assert.equal(backendSource.includes('version = "todo.processView.read.v1"\nevent = "request"\nop = "project.read"'), true);
+  assert.equal(backendSource.includes('projector = "inspect.processViewReadModel"'), true);
+  assert.equal(backendSource.includes('version = "todo.processRun.read.v1"\nevent = "request"\nop = "project.read"'), true);
+  assert.equal(backendSource.includes('projector = "inspect.processRunReadModel"'), true);
+  assert.equal(backendSource.includes('handler = "witnesses.list"'), false);
+  assert.equal(backendSource.includes('handler = "worldGraph.read"'), false);
+  assert.equal(backendSource.includes('handler = "processView.read"'), false);
+  assert.equal(backendSource.includes('handler = "processRun.read"'), false);
+});
+
+test("maintained demo backend source defines trace recording through inspect-owned process.request", async () => {
+  const backendSource = await fs.readFile(path.join(process.cwd(), "examples", "_lib", "demo-todo", "backend.wtoml"), "utf8");
+
+  assert.equal(backendSource.includes('version = "todo.processEvents.record.v1"\nevent = "request"\nop = "process.request"'), true);
+  assert.equal(backendSource.includes('process = "inspect.processEventRecord"'), true);
+  assert.equal(backendSource.includes('handler = "processEvents.record"'), false);
+});
+
 test("world graph route runs through authored backend programs and preserves the projected graph contract live", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
@@ -1415,8 +1448,8 @@ test("process view route runs through authored backend programs and preserves ba
       assert.equal(body.selection.event, "request");
       assert.equal(Array.isArray(body.catalog), true);
       assert.equal(Array.isArray(body.runs), true);
-      assert.equal(body.run.requests.some(request => request.handler === "todos.readModel"), true);
-      assert.equal(body.run.requests.some(request => request.url === "/api/todos"), true);
+      assert.equal(body.run.requests.some(request => request.projector === "demo.todosReadModel"), true);
+      assert.equal(body.run.requests.some(request => request.url === "project:demo.todosReadModel"), true);
     };
 
     await fetch(`${server.url}/api/todos`).then(r => r.json());
@@ -1481,8 +1514,8 @@ test("process run route runs through authored backend programs and preserves rep
     const assertProcessRunShape = body => {
       assert.equal(body.run.program, "todo.todos.list.v1");
       assert.equal(body.run.event, "request");
-      assert.equal(body.run.requests.some(request => request.handler === "todos.readModel"), true);
-      assert.equal(body.run.requests.some(request => request.url === "/api/todos"), true);
+      assert.equal(body.run.requests.some(request => request.projector === "demo.todosReadModel"), true);
+      assert.equal(body.run.requests.some(request => request.url === "project:demo.todosReadModel"), true);
       assert.equal(body.replay.cursor, 1);
       assert.equal(body.replay.max >= 1, true);
     };
@@ -2300,11 +2333,13 @@ test("shared widget version APIs return proposals for signed-in unauthorized act
 
   try {
     const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const activateReason = "Promote the shared banner draft";
+    const rollbackReason = "Restore the previous shared banner";
 
     const activate = await fetch(`${server.url}/api/widget-versions/todo_versioned_banner/activate`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: callan.cookie },
-      body: JSON.stringify({ version: "todo_versioned_banner_v2" })
+      body: JSON.stringify({ version: "todo_versioned_banner_v2", reason: activateReason })
     });
     assert.equal(activate.status, 202);
     const activateBody = await activate.json();
@@ -2312,10 +2347,12 @@ test("shared widget version APIs return proposals for signed-in unauthorized act
     assert.equal(activateBody.statusMessage, "Proposed widget version activation for review.");
     assert.equal(activateBody.proposal?.targetProcess, "widgetVersion.activate");
     assert.equal(activateBody.proposal?.targetId, "todo_versioned_banner");
+    assert.equal(activateBody.proposal?.reason, activateReason);
 
     const rollback = await fetch(`${server.url}/api/widget-versions/todo_versioned_banner/rollback`, {
       method: "POST",
-      headers: { cookie: callan.cookie }
+      headers: { "content-type": "application/json", cookie: callan.cookie },
+      body: JSON.stringify({ reason: rollbackReason })
     });
     assert.equal(rollback.status, 202);
     const rollbackBody = await rollback.json();
@@ -2323,6 +2360,7 @@ test("shared widget version APIs return proposals for signed-in unauthorized act
     assert.equal(rollbackBody.statusMessage, "Proposed widget version rollback for review.");
     assert.equal(rollbackBody.proposal?.targetProcess, "widgetVersion.rollback");
     assert.equal(rollbackBody.proposal?.targetId, "todo_versioned_banner");
+    assert.equal(rollbackBody.proposal?.reason, rollbackReason);
 
     assert.equal(world.allWitnesses().some(w => w.process === "activateWidgetVersion" && w.actor === "callan"), false);
     assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.rollback" && w.actor === "callan"), false);

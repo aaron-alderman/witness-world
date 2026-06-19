@@ -7,6 +7,7 @@ import { parseWitnessToml } from "../../src/dsl.js";
 import { createThing, projectors, relation } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
 import { platformBranchInsights } from "./branch-insights.js";
+import { parseWcssSource } from "./wcss-source.js";
 
 const pluginDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(pluginDir, "..", "..");
@@ -110,71 +111,8 @@ function ensureThing(world, actor, id, owner = actor) {
   createThing(world, { actor, id, owner });
 }
 
-function validateAssignment(trimmed, label) {
-  const match = trimmed.match(/^([^=]+?)\s*=\s*(.+)$/);
-  if (!match || !match[1]?.trim() || !match[2]?.trim()) {
-    throw new Error(`${label} must be an assignment`);
-  }
-}
-
 export function validateWcssSource(source, { file = "inline.wcss" } = {}) {
-  const lines = String(source ?? "").replace(/\r\n/g, "\n").split("\n");
-  let section = null;
-  let sawTheme = false;
-  let inStyle = false;
-  let inStyleGroup = false;
-  for (let index = 0; index < lines.length; index += 1) {
-    const raw = lines[index];
-    const trimmed = raw.trim();
-    if (!trimmed) continue;
-    if (raw.includes("\t")) {
-      throw new Error(`${file}:${index + 1} WCSS indentation must use spaces`);
-    }
-    const indent = raw.match(/^ */)?.[0]?.length ?? 0;
-    if (indent % 2 !== 0) {
-      throw new Error(`${file}:${index + 1} WCSS indentation must be multiples of two spaces`);
-    }
-    if (indent === 0) {
-      inStyle = false;
-      inStyleGroup = false;
-      if (/^theme\s+\S+/.test(trimmed)) {
-        sawTheme = true;
-        section = null;
-        continue;
-      }
-      if (trimmed === "tokens" || trimmed === "styles") {
-        if (!sawTheme) throw new Error(`${file}:${index + 1} WCSS must declare a theme before sections`);
-        section = trimmed;
-        continue;
-      }
-      throw new Error(`${file}:${index + 1} unsupported top-level WCSS statement`);
-    }
-    if (section === "tokens") {
-      if (indent !== 2) throw new Error(`${file}:${index + 1} token assignments must be indented by two spaces`);
-      validateAssignment(trimmed, `${file}:${index + 1} token`);
-      continue;
-    }
-    if (section === "styles") {
-      if (indent === 2 && /^style\s+\S+/.test(trimmed)) {
-        inStyle = true;
-        inStyleGroup = false;
-        continue;
-      }
-      if (!inStyle) throw new Error(`${file}:${index + 1} WCSS style content must start with a style declaration`);
-      if (indent === 4 && /^selector\s*=\s*.+$/.test(trimmed)) continue;
-      if (indent === 4 && /^[a-z][a-z0-9.-]*$/i.test(trimmed)) {
-        inStyleGroup = true;
-        continue;
-      }
-      if (indent === 6 && inStyleGroup) {
-        validateAssignment(trimmed, `${file}:${index + 1} style property`);
-        continue;
-      }
-      throw new Error(`${file}:${index + 1} unsupported WCSS style statement`);
-    }
-    throw new Error(`${file}:${index + 1} WCSS content is outside a supported section`);
-  }
-  if (!sawTheme) throw new Error(`${file} WCSS must declare a theme`);
+  parseWcssSource(source, { file });
 }
 
 export function validateOverlaySource(relativePath, content) {

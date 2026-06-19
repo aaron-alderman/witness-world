@@ -1,0 +1,81 @@
+# this.folder.wtoml
+#
+# Auto-generated structural baseline (initial).
+# 
+# - Contains the folder entity and direct "contains" relations.
+# - This is the starting point for folder metadata.
+# - Hand-edit to add richer knowledge (facets, custom relations to intents/docs/code, etc.).
+# - Future runs of the generator (or smarter variants) can refresh the structural "contains" section
+#   while preserving other human/automation-added content.
+# - Staleness is tolerated: if children change, re-generate or use reapers to manage debt.
+# - Aligns with project: append-only friendly, visible drift, multi-source (auto + hand + server).
+#
+# Ids follow platform conventions (see platform-model.js and knowledge-relations.wtoml).
+#
+
+[folder]
+id = "folder:plugins/backend-seams"
+path = "plugins/backend-seams"
+label = "backend-seams"
+summary = "Auto-generated folder metadata for plugins/backend-seams."
+facet = ["system"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+# --- Structural containment (auto-generated baseline) ---
+# Direct children at generation time.
+# Re-run generator to update this section (preserves hand-maintained content).
+
+[[relation]]
+from = "folder:plugins/backend-seams"
+rel = "contains"
+to = "file:plugins/backend-seams/backend-seams-page.js"
+
+[[relation]]
+from = "folder:plugins/backend-seams"
+rel = "contains"
+to = "wtoml:plugins/backend-seams/backend-seams-page.wtoml"
+
+[[relation]]
+from = "folder:plugins/backend-seams"
+rel = "contains"
+to = "file:plugins/backend-seams/backend-seams.test.js"
+
+[[relation]]
+from = "folder:plugins/backend-seams"
+rel = "contains"
+to = "file:plugins/backend-seams/handler-catalog.js"
+
+[[relation]]
+from = "folder:plugins/backend-seams"
+rel = "contains"
+to = "file:plugins/backend-seams/handlers.js"
+
+[[relation]]
+from = "folder:plugins/backend-seams"
+rel = "contains"
+to = "json:plugins/backend-seams/plugin.json"
+
+[[relation]]
+from = "folder:plugins/backend-seams"
+rel = "contains"
+to = "file:plugins/backend-seams/runtime.js"
+
+[[relation]]
+from = "folder:plugins/backend-seams"
+rel = "contains"
+to = "file:plugins/backend-seams/support-services.js"
+
+[[relation]]
+from = "folder:plugins/backend-seams"
+rel = "contains"
+to = "wtoml:plugins/backend-seams/this.folder.wtoml"
+
+# --- End of auto-generated structural section ---
+
+# Add hand-maintained or other automation relations below this line.
+# Example:
+# [[relation]]
+# from = "folder:plugins/backend-seams"
+# rel = "describedBy"
+# to = "doc:..."

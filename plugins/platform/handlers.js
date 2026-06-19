@@ -1,5 +1,6 @@
 import path from "node:path";
 import { relation } from "../../src/kernel.js";
+import { diagnosticsFromPlatformAppContext } from "./app-context-diagnostics.js";
 import {
   requestBootstrapProposalApprove,
   requestBootstrapProposalCreate,
@@ -51,52 +52,6 @@ function platformTestRunEventPayload(witness) {
     timedOut: body.timedOut === true,
     error: body.error ?? null,
     resultIds: results.map(result => String(result?.id || "")).filter(Boolean)
-  };
-}
-
-function diagnosticsFromAppContext(appContext) {
-  const summary = appContext?.runtimeBundleSummary ?? {};
-  const snapshotManager = appContext?.appSnapshotManager ?? null;
-  const snapshotDiagnostics = snapshotManager?.diagnostics?.() ?? null;
-  const activeSnapshot = snapshotManager?.getActiveSnapshot?.() ?? null;
-  const lastRevisionEvent = snapshotManager?.getLastRevisionEvent?.() ?? null;
-  const lastGoodSnapshot = snapshotManager?.lastGoodSnapshot ?? activeSnapshot ?? null;
-  return {
-    activeProfile: appContext?.runtimeProfile ?? summary.profile ?? null,
-    activeBundles: (summary.bundles ?? []).map(bundle => ({
-      id: bundle.id,
-      kind: bundle.kind,
-      displayName: bundle.displayName,
-      description: bundle.description
-    })),
-    providedCapabilities: [...(summary.capabilities ?? [])],
-    routes: (summary.routes ?? []).map(route => ({ ...route })),
-    surfaces: (summary.surfaces ?? appContext?.runtimeSurfaceEntries ?? []).map(surface => ({ ...surface })),
-    plugins: {
-      activePluginIds: [...(appContext?.activeRuntimePluginIds ?? appContext?.runtimePluginCatalog?.activePluginIds ?? [])],
-      effectivePluginIds: [...(appContext?.effectiveRuntimePluginIds ?? appContext?.runtimePluginCatalog?.effectivePluginIds ?? [])],
-      rejectedPlugins: [...(appContext?.runtimePluginCatalog?.rejectedPlugins ?? [])]
-    },
-    appSnapshot: snapshotDiagnostics
-      ? {
-          ...snapshotDiagnostics,
-          lastGoodAppRevision: Number(lastGoodSnapshot?.appRevision || snapshotDiagnostics.appRevision || 0),
-          activeSourceIds: Array.isArray(activeSnapshot?.sourceIndex)
-            ? activeSnapshot.sourceIndex.map(row => String(row.sourceId || row.filePath || ""))
-            : [],
-          lastRevisionEvent: lastRevisionEvent
-            ? {
-                revision: Number(lastRevisionEvent.revision || lastRevisionEvent.appRevision || 0),
-                appRevision: Number(lastRevisionEvent.appRevision || 0),
-                changedSources: Array.isArray(lastRevisionEvent.changedSources) ? lastRevisionEvent.changedSources.map(String) : [],
-                trigger: String(lastRevisionEvent.trigger || "initial"),
-                status: String(lastRevisionEvent.status || "active"),
-                branchId: lastRevisionEvent.branchId ? String(lastRevisionEvent.branchId) : null,
-                changeSetId: lastRevisionEvent.changeSetId ? String(lastRevisionEvent.changeSetId) : null
-              }
-            : null
-        }
-      : null
   };
 }
 
@@ -177,7 +132,7 @@ async function refreshSnapshotAfterPlatformApply(snapshotManager, appliedFiles =
 async function platformModelFor(appContext) {
   return buildPlatformModel({
     appContext,
-    diagnostics: diagnosticsFromAppContext(appContext),
+    diagnostics: diagnosticsFromPlatformAppContext(appContext),
     project: appContext?.project ?? null
   });
 }
@@ -209,13 +164,16 @@ export function createPlatformHandlers({
       const model = await platformModelFor(appContext);
       const view = requestUrl?.searchParams?.get("view") || "model";
       const id = requestUrl?.searchParams?.get("id") || null;
+      const context = requestUrl?.searchParams?.get("context") || null;
+      const name = requestUrl?.searchParams?.get("name") || null;
+      const target = requestUrl?.searchParams?.get("target") || null;
       world.observe({
         process: "backend.readPlatformModel",
         actor: requestActor || backendHost,
         claims: [relation(backendHost, "projected", "platformModel")],
         body: { view, nodes: model.nodes.length, gaps: model.gaps.length }
       });
-      sendJson(res, 200, filterPlatformModel(model, view, id));
+      sendJson(res, 200, filterPlatformModel(model, view, id, { context, name, target }));
     },
 
     "platform.gaps.read": async ({ res, requestActor, appContext }) => {
@@ -362,7 +320,7 @@ export function createPlatformHandlers({
       });
     },
 
-    "platform.changeSet.validate": async ({ res, params, requestActor, requestSession }) => {
+    "platform.changeSet.validate": async ({ res, params, requestActor, requestSession, appContext }) => {
       const actor = requirePlatformMutationActor(res, requestActor);
       if (!actor) return;
       const result = await validatePlatformChangeSet(world, {
@@ -380,6 +338,12 @@ export function createPlatformHandlers({
         activeCandidateSnapshotId: result.activeCandidateSnapshotId,
         witness: result.witness,
         revisionEvent: result.revisionEvent
+      });
+      appContext?.providerRuntimes?.["platform.testMonitor"]?.scheduleChangeSetValidation?.({
+        branchId: result.changeSet?.branchId ?? null,
+        changeSetId: result.changeSet?.id ?? null,
+        candidateSnapshotId: result.candidateSnapshot?.id ?? null,
+        status: result.candidateSnapshot?.status ?? null
       });
     },
 
@@ -486,7 +450,9 @@ export function createPlatformHandlers({
           candidateSnapshotId: body?.candidateSnapshotId ?? null,
           session: requestSession ?? null,
           runtimeProfile: appContext?.runtimeProfile ?? null,
-          runCommand: platformTestRunner
+          runCommand: platformTestRunner,
+          verificationPersistence: appContext?.verificationPersistence ?? null,
+          appContext
         });
         if (!result.ok) {
           sendJson(res, result.status || 400, { error: result.error });
@@ -498,6 +464,8 @@ export function createPlatformHandlers({
           testArtifacts: result.testArtifacts,
           testSuites: result.testSuites,
           testCases: result.testCases,
+          testReports: result.testReports,
+          regressionSummary: result.regressionSummary,
           latestResult: result.latestResult,
           startWitness: result.startWitness,
           finishWitness: result.finishWitness
@@ -558,7 +526,9 @@ export function createPlatformHandlers({
           candidateSnapshotId: gateCandidateSnapshotId,
           session: requestSession ?? null,
           runtimeProfile: appContext?.runtimeProfile ?? null,
-          runCommand: platformTestRunner
+          runCommand: platformTestRunner,
+          verificationPersistence: appContext?.verificationPersistence ?? null,
+          appContext
         });
         if (!result.ok) {
           sendJson(res, result.status || 400, {
@@ -589,7 +559,11 @@ export function createPlatformHandlers({
         testResults: results.flatMap(result => result.testResults ?? []),
         testArtifacts: results.flatMap(result => result.testArtifacts ?? []),
         testSuites: results.flatMap(result => result.testSuites ?? []),
-        testCases: results.flatMap(result => result.testCases ?? [])
+        testCases: results.flatMap(result => result.testCases ?? []),
+        testReports: results.flatMap(result => result.testReports ?? []),
+        regressionSummaries: results
+          .map(result => result.regressionSummary)
+          .filter(Boolean)
       });
     },
 
@@ -619,8 +593,10 @@ export function createPlatformHandlers({
       });
     },
 
-    "platform.testRun.read": async ({ res, params }) => {
-      const result = readPlatformTestRun(world, params.id || "");
+    "platform.testRun.read": async ({ res, params, appContext }) => {
+      const result = await readPlatformTestRun(world, params.id || "", {
+        verificationPersistence: appContext?.verificationPersistence ?? null
+      });
       if (!result.ok) {
         sendJson(res, result.status || 404, { error: result.error });
         return;
@@ -631,8 +607,27 @@ export function createPlatformHandlers({
         testArtifacts: result.testArtifacts,
         testSuites: result.testSuites,
         testCases: result.testCases,
-        latestResult: result.latestResult
+        testReports: result.testReports,
+        regressionSummary: result.regressionSummary,
+        latestResult: result.latestResult,
+        freshnessAtRead: result.freshnessAtRead,
+        invalidationReasons: result.invalidationReasons
       });
+    },
+
+    "platform.testArtifact.content": async ({ res, params, appContext }) => {
+      const artifactId = params.id || "";
+      const persisted = await appContext?.verificationPersistence?.readArtifactContent?.(artifactId);
+      if (persisted?.ok) {
+        send(res, 200, persisted.contentType || "text/plain; charset=utf-8", persisted.content);
+        return;
+      }
+      const artifact = world.project(moduleProjectors.testArtifacts)?.find?.(row => String(row?.id || "") === String(artifactId)) ?? null;
+      if (!artifact?.content) {
+        sendJson(res, 404, { error: "artifact content not found" });
+        return;
+      }
+      send(res, 200, artifact.contentType || "text/plain; charset=utf-8", artifact.content);
     },
 
     "platform.proposal.create": async ({ req, res, requestActor }) => {

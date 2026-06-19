@@ -9,16 +9,15 @@ export function renderBootstrapProposalAdjacentFactory() {
 export function runtimePluginProposalBody({ id, serverRunner, plugin, reason }, action) {
   return {
     id,
-    targetProcess: "runtimePlugin." + action,
-    targetKind: "serverRunner",
-    targetId: serverRunner,
-    bodyJson: JSON.stringify({ serverRunner, plugin }),
+    serverRunner,
+    plugin,
     reason: reason || ""
   };
 }
 
 export function mcpServerProposalBody({ id, serverId, label, serverRunner, context, serviceIdentity, transportsJson, reason }) {
   const body = {
+    proposalId: id,
     id: serverId,
     label: label || serverId,
     serverRunner,
@@ -28,27 +27,22 @@ export function mcpServerProposalBody({ id, serverId, label, serverRunner, conte
   if (serviceIdentity) body.serviceIdentity = serviceIdentity;
   return {
     id,
-    targetProcess: "mcpServer.define",
-    targetKind: "serverRunner",
-    targetId: serverRunner,
-    bodyJson: JSON.stringify(body),
+    ...body,
     reason: reason || ""
   };
 }
 
 export function mcpToolProposalBody({ id, server, serverRunner, tool, actingMode, scopeContextsJson, scopeTargetsJson, reason }, action) {
-  return {
+  const body = {
     id,
-    targetProcess: "mcpTool." + action,
-    targetKind: "serverRunner",
-    targetId: serverRunner || server,
-    bodyJson: JSON.stringify({
-      server,
-      tool,
-      actingMode: actingMode || "delegated",
-      scopeContextsJson: scopeContextsJson || "[]",
-      scopeTargetsJson: scopeTargetsJson || "[]"
-    }),
+    server,
+    tool,
     reason: reason || ""
   };
+  if (action === "install") {
+    body.actingMode = actingMode || "delegated";
+    body.scopeContextsJson = scopeContextsJson || "[]";
+    body.scopeTargetsJson = scopeTargetsJson || "[]";
+  }
+  return body;
 }

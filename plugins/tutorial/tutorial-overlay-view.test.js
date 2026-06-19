@@ -126,7 +126,7 @@ test("tutorial overlay view helper renders offpage and active overlay branches t
     document
   });
 
-  assert.equal(resumeButton.hidden, false);
+  assert.equal(resumeButton.hidden, true);
   assert.equal(resumeButton.textContent, "Continue On Bootstrap");
   assert.equal(offpageState.disabledScopesOpen, false);
   assert.equal(document.getElementById("tutorial-disable-context").hidden, true);
