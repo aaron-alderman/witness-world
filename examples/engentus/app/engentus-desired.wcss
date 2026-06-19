@@ -80,7 +80,7 @@ views
             paint
               background =
                 linear-gradient(160deg, rgba(12,20,42,0.91) 0%, rgba(36,54,90,0.86) 55%, rgba(18,28,55,0.93) 100%),
-                image("../img/main.png", cover, center)
+                image("/app-static/img/main.png", cover, center)
               overlay.grid = rgba(140,196,212,.035) @ 44px 44px
 
             part brand

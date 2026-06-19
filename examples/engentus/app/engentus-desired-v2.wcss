@@ -554,7 +554,7 @@ views
             paint
               background =
                 linear-gradient(160deg, rgba(12,20,42,0.91) 0%, rgba(36,54,90,0.86) 55%, rgba(18,28,55,0.93) 100%),
-                image("../img/main.png", cover, center)
+                image("/app-static/img/main.png", cover, center)
               overlay.grid = rgba(140,196,212,.035) @ 44px 44px
 
             part brand
@@ -2204,7 +2204,7 @@ lowering
           background = linear-gradient(to right, rgba(0,0,0,.6) 0%, rgba(0,0,0,.15) 18%, transparent 45%)
         rule trait auth-left
           flex = 0 0 55%
-          background = linear-gradient(160deg, rgba(12,20,42,0.91) 0%, rgba(36,54,90,0.86) 55%, rgba(18,28,55,0.93) 100%), url(../img/main.png) center / cover no-repeat
+          background = linear-gradient(160deg, rgba(12,20,42,0.91) 0%, rgba(36,54,90,0.86) 55%, rgba(18,28,55,0.93) 100%), url(/app-static/img/main.png) center / cover no-repeat
           display = flex
           flex-direction = column
           padding = 32px 40px
@@ -2892,12 +2892,6 @@ lowering
           justify-content = center
           padding = 16px
           min-width = 0
-        rule identity MillChargeCanvasWrap tag canvas
-          width = 100%
-          height = 100%
-          display = block
-          border = 0
-          border-radius = 10px
         rule identity MillChargeMetrics
           width = 190px
           min-width = 190px

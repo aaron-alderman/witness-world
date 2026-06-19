@@ -15,6 +15,16 @@ import { startBlankRuntime } from "./runtime-local-launcher.js";
 import { createLogger } from "./logger.js";
 import { loadAppProject, resolveMcpTarget, resolveServeTarget } from "./app-project.js";
 import { startAppRuntime } from "./app-runtime.js";
+import { createStartupTelemetry } from "./startup-telemetry.js";
+
+const ANSI = Object.freeze({
+  red: "\x1b[31m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  green: "\x1b[32m",
+  dim: "\x1b[90m",
+  reset: "\x1b[0m"
+});
 
 const [command, ...rest] = process.argv.slice(2);
 
@@ -41,8 +51,11 @@ async function runServe(args) {
   }
   let appProject = null;
   let selection = null;
+  const startupTelemetry = createStartupTelemetry({ mode: "serve" });
   try {
-    appProject = await loadAppProject(parsed.appPath);
+    appProject = await startupTelemetry.runPhase("app.project.load", () => loadAppProject(parsed.appPath), {
+      label: "Load app project"
+    });
     selection = resolveServeTarget(appProject, { serverRunnerId: parsed.serverRunnerId });
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -62,7 +75,8 @@ async function runServe(args) {
       devMode: parsed.devMode,
       worldHome: parsed.worldHome,
       cwd: process.cwd(),
-      env: process.env
+      env: process.env,
+      startupTelemetry
     });
   } catch (error) {
     reportStartupFailure(error);
@@ -92,12 +106,17 @@ async function runServe(args) {
     ],
     runtimeProfileInfo,
     runtimeComposition: server.runtimeBundleSummary,
-    runtimePluginCatalog: server.runtimePluginCatalog
+    runtimePluginCatalog: server.runtimePluginCatalog,
+    startupTelemetry: parsed.startupTelemetry ? {
+      snapshot: () => server.getStartupTelemetry?.() ?? startupTelemetry.snapshot(),
+      subscribe: server.subscribeStartupTelemetry?.bind(server) ?? null
+    } : null
   });
 }
 
 async function runBootstrap(args) {
   const parsed = parseBootstrapArgs(args);
+  const startupTelemetry = createStartupTelemetry({ mode: "bootstrap" });
   let launched = null;
   try {
     launched = await startBlankRuntime({
@@ -108,7 +127,8 @@ async function runBootstrap(args) {
       runtimePluginIds: parsed.runtimePluginIds,
       cwd: process.cwd(),
       env: process.env,
-      port: parsed.port
+      port: parsed.port,
+      startupTelemetry
     });
   } catch (error) {
     if (error?.code === "RUNTIME_PROFILE_UNKNOWN") {
@@ -147,7 +167,11 @@ async function runBootstrap(args) {
     ],
     runtimeProfileInfo,
     runtimeComposition: server.runtimeBundleSummary,
-    runtimePluginCatalog: server.runtimePluginCatalog
+    runtimePluginCatalog: server.runtimePluginCatalog,
+    startupTelemetry: parsed.startupTelemetry ? {
+      snapshot: () => server.getStartupTelemetry?.() ?? startupTelemetry.snapshot(),
+      subscribe: server.subscribeStartupTelemetry?.bind(server) ?? null
+    } : null
   });
 }
 
@@ -159,8 +183,11 @@ async function runMcp(args) {
   }
   let appProject = null;
   let selection = null;
+  const startupTelemetry = createStartupTelemetry({ mode: "mcp" });
   try {
-    appProject = await loadAppProject(parsed.appPath);
+    appProject = await startupTelemetry.runPhase("app.project.load", () => loadAppProject(parsed.appPath), {
+      label: "Load app project"
+    });
     selection = resolveMcpTarget(appProject, { mcpServerId: parsed.mcpServerId });
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -185,7 +212,8 @@ async function runMcp(args) {
         runtimePluginIds: parsed.runtimePluginIds,
         worldHome: parsed.worldHome,
         cwd: process.cwd(),
-        env: process.env
+        env: process.env,
+        startupTelemetry
       });
     } catch (error) {
       reportStartupFailure(error);
@@ -213,7 +241,11 @@ async function runMcp(args) {
       ],
       runtimeProfileInfo,
       runtimeComposition: server.runtimeBundleSummary,
-      runtimePluginCatalog: server.runtimePluginCatalog
+      runtimePluginCatalog: server.runtimePluginCatalog,
+      startupTelemetry: parsed.startupTelemetry ? {
+        snapshot: () => server.getStartupTelemetry?.() ?? startupTelemetry.snapshot(),
+        subscribe: server.subscribeStartupTelemetry?.bind(server) ?? null
+      } : null
     });
     return;
   }
@@ -233,7 +265,8 @@ async function runMcp(args) {
       cwd: process.cwd(),
       env: process.env,
       logger: createLogger({ level: "silent" }),
-      mcpInternalToken: internalToken
+      mcpInternalToken: internalToken,
+      startupTelemetry
     });
   } catch (error) {
     reportStartupFailure(error);
@@ -402,7 +435,7 @@ async function runOperator(args) {
 }
 
 function parseServeArgs(args) {
-  const result = { appPath: null, serverRunnerId: null, port: 3000, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], devMode: true };
+  const result = { appPath: null, serverRunnerId: null, port: 3000, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], devMode: true, startupTelemetry: false };
   const queue = [...args];
   if (queue.length && !queue[0].startsWith("--")) result.appPath = queue.shift();
   while (queue.length) {
@@ -437,12 +470,15 @@ function parseServeArgs(args) {
       result.devMode = false;
       continue;
     }
+    if (token === "--startup-telemetry") {
+      result.startupTelemetry = true;
+    }
   }
   return result;
 }
 
 function parseBootstrapArgs(args) {
-  const result = { port: 3000, worldHome: null, runtimeProfile: DEFAULT_BOOTSTRAP_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [] };
+  const result = { port: 3000, worldHome: null, runtimeProfile: DEFAULT_BOOTSTRAP_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], startupTelemetry: false };
   const queue = [...args];
   while (queue.length) {
     const token = queue.shift();
@@ -462,13 +498,17 @@ function parseBootstrapArgs(args) {
     if (token === "--runtime-plugin") {
       const pluginId = queue.shift() ?? "";
       if (pluginId) result.runtimePluginIds.push(pluginId);
+      continue;
+    }
+    if (token === "--startup-telemetry") {
+      result.startupTelemetry = true;
     }
   }
   return result;
 }
 
 function parseMcpArgs(args) {
-  const result = { appPath: null, serverRunnerId: null, mcpServerId: null, port: 3000, transport: "stdio", actor: null, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [] };
+  const result = { appPath: null, serverRunnerId: null, mcpServerId: null, port: 3000, transport: "stdio", actor: null, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], startupTelemetry: false };
   const queue = [...args];
   if (queue.length && !queue[0].startsWith("--")) result.appPath = queue.shift();
   while (queue.length) {
@@ -505,6 +545,10 @@ function parseMcpArgs(args) {
     if (token === "--runtime-plugin") {
       const pluginId = queue.shift() ?? "";
       if (pluginId) result.runtimePluginIds.push(pluginId);
+      continue;
+    }
+    if (token === "--startup-telemetry") {
+      result.startupTelemetry = true;
     }
   }
   return result;
@@ -555,6 +599,77 @@ function resolveCliRuntimeProfile({ runtimeProfile, explicit }) {
   process.exit(1);
 }
 
+function supportsAnsiColor() {
+  return process.stdout?.isTTY === true && process.env.NO_COLOR == null;
+}
+
+function colorize(text, color) {
+  if (!supportsAnsiColor()) return text;
+  return `${color}${text}${ANSI.reset}`;
+}
+
+function formatDurationMs(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0ms";
+  return `${Math.round(numeric * 10) / 10}ms`;
+}
+
+function phaseHasWarnings(phase) {
+  const warningCount = Number(phase?.detail?.warningCount ?? 0);
+  if (Number.isFinite(warningCount) && warningCount > 0) return true;
+  return Array.isArray(phase?.detail?.warnings) && phase.detail.warnings.length > 0;
+}
+
+function phaseStatusDescriptor(phase) {
+  if (phase?.status === "failed") return { label: "ERROR", color: ANSI.red };
+  if (phaseHasWarnings(phase)) return { label: "WARN", color: ANSI.yellow };
+  if (phase?.status === "pending") return { label: "LOADING", color: ANSI.blue };
+  return { label: "READY", color: ANSI.green };
+}
+
+function formatStartupPhaseLine(phase) {
+  const status = phaseStatusDescriptor(phase);
+  const lane = phase?.blocking ? "blocking" : "background";
+  const detailBits = [];
+  if (phase?.detail?.lazy === true) detailBits.push("lazy");
+  if (phase?.detail?.maxDelayExceeded === true) detailBits.push("forced");
+  const detailSuffix = detailBits.length ? ` ${colorize(`[${detailBits.join(", ")}]`, ANSI.dim)}` : "";
+  return `  ${colorize(status.label.padEnd(7), status.color)} ${phase.label} ${colorize(`(${lane}, ${formatDurationMs(phase.durationMs)})`, ANSI.dim)}${detailSuffix}`;
+}
+
+function printStartupTelemetry(snapshot) {
+  if (!snapshot?.phases?.length) return;
+  console.log(`Startup totals: meaningful-ready=${formatDurationMs(snapshot.meaningfulReadyAtMs ?? snapshot.totalMs)} total=${formatDurationMs(snapshot.totalMs)} background-pending=${snapshot.backgroundPendingCount ?? 0}`);
+  console.log("Startup services:");
+  for (const phase of snapshot.phases) {
+    console.log(formatStartupPhaseLine(phase));
+  }
+}
+
+function attachStartupTelemetryUpdates(startupTelemetrySource, initialSnapshot) {
+  if (typeof startupTelemetrySource?.subscribe !== "function") return () => {};
+  const rendered = new Map(
+    (initialSnapshot?.phases ?? []).map(phase => [
+      phase.id,
+      `${phase.status}|${formatDurationMs(phase.durationMs)}|${phaseHasWarnings(phase) ? "warn" : "ok"}`
+    ])
+  );
+  let backgroundSettled = (initialSnapshot?.backgroundPendingCount ?? 0) === 0;
+  return startupTelemetrySource.subscribe(snapshot => {
+    for (const phase of snapshot?.phases ?? []) {
+      const signature = `${phase.status}|${formatDurationMs(phase.durationMs)}|${phaseHasWarnings(phase) ? "warn" : "ok"}`;
+      if (rendered.get(phase.id) === signature) continue;
+      rendered.set(phase.id, signature);
+      if (phase.status === "pending") continue;
+      console.log(`Startup update: ${formatStartupPhaseLine(phase).slice(2)}`);
+    }
+    if (!backgroundSettled && (snapshot?.backgroundPendingCount ?? 0) === 0) {
+      backgroundSettled = true;
+      console.log(`Startup background settled: total=${formatDurationMs(snapshot.totalMs)}`);
+    }
+  });
+}
+
 function reportStartup({
   label,
   server,
@@ -563,8 +678,12 @@ function reportStartup({
   extras = [],
   runtimeProfileInfo = resolveRuntimeProfile(DEFAULT_RUNTIME_PROFILE),
   runtimeComposition = null,
-  runtimePluginCatalog = null
+  runtimePluginCatalog = null,
+  startupTelemetry = null
 }) {
+  const startupTelemetrySnapshot = typeof startupTelemetry?.snapshot === "function"
+    ? startupTelemetry.snapshot()
+    : startupTelemetry;
   const activeBundleIds = runtimeComposition?.bundleIds ?? runtimeProfileInfo.bundleIds;
   const activeBundles = runtimeComposition?.bundles ?? runtimeProfileInfo.bundles;
   const handlerMetadata = runtimeComposition?.handlerMetadata ?? {};
@@ -601,12 +720,15 @@ function reportStartup({
       console.log("Plugin-added bundles: (none)");
     }
   }
+  printStartupTelemetry(startupTelemetrySnapshot);
   console.log(`Runtime diagnostics: ${server.url}/api/runtime/diagnostics`);
   console.log(`Witness log: ${witnessLogPath}`);
   console.log(`Observation log: ${observationLogPath}`);
   console.log("Press Ctrl+C to stop.");
+  const detachStartupUpdates = attachStartupTelemetryUpdates(startupTelemetry, startupTelemetrySnapshot);
 
   process.on("SIGINT", async () => {
+    detachStartupUpdates();
     await server.close();
     console.log("\nStopped.");
     process.exit(0);
@@ -677,10 +799,10 @@ function reportOperatorReplace({
 function usageText() {
   return [
     "Usage:",
-    "  node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--release]",
-    "  node src/cli.js bootstrap [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
+    "  node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--release] [--startup-telemetry]",
+    "  node src/cli.js bootstrap [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]",
     "  node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
-    "  node src/cli.js mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
+    "  node src/cli.js mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]",
     "  node src/cli.js operator backup --world-home <path> [--label <text>] [--include-derived]",
     "  node src/cli.js operator export --world-home <path> [--label <text>]",
     "  node src/cli.js operator restore --world-home <path> --artifact <artifact-dir> [--preserve-current]",

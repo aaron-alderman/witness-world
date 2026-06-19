@@ -179,3 +179,56 @@ test("process runtime command rules can invoke bound adapter routes", async () =
   assert.equal(runtime.value("LoadNotice"), "loaded");
   assert.match(runtime.value("LoadSummary"), /"ok": true/);
 });
+
+test("process runtime option rules branch from runtime config truthiness", async () => {
+  const world = [
+    {
+      process: "desire.defineType",
+      body: { id: "ShellStatus", role: "state", initial: "idle", valueType: "text" }
+    },
+    {
+      process: "desire.defineMessage",
+      body: { id: "BeginFlow", role: "event", writes: {} }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "ShellProcess",
+        state: ["ShellStatus"],
+        handles: ["BeginFlow"],
+        emits: [],
+        rules: [
+          {
+            trigger: "BeginFlow",
+            steps: [
+              {
+                kind: "option",
+                config: "features.fastPath",
+                real: [{ kind: "setState", state: "ShellStatus", value: "real" }],
+                else: [{ kind: "setState", state: "ShellStatus", value: "else" }]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ];
+
+  const enabled = createProcessRuntime(world, {
+    config: { features: { fastPath: true } }
+  });
+  await enabled.deliverAuthored("BeginFlow");
+  assert.equal(enabled.value("ShellStatus"), "real");
+
+  const disabled = createProcessRuntime(world, {
+    config: { features: { fastPath: false } }
+  });
+  await disabled.deliverAuthored("BeginFlow");
+  assert.equal(disabled.value("ShellStatus"), "else");
+
+  const stringFalse = createProcessRuntime(world, {
+    config: { features: { fastPath: "false" } }
+  });
+  await stringFalse.deliverAuthored("BeginFlow");
+  assert.equal(stringFalse.value("ShellStatus"), "else");
+});

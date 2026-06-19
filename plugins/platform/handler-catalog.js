@@ -16,6 +16,7 @@ function platformHandlerMetadata({ routeKind, responseKind, methods = [] }) {
 
 export const handlerCatalog = Object.freeze({
   authorableHandlers: freezeStrings([
+    "platform.page.read",
     "platform.model.read",
     "platform.gaps.read",
     "platform.branch.list",
@@ -41,6 +42,7 @@ export const handlerCatalog = Object.freeze({
   ]),
   pageHandlers: freezeStrings(["page.platform"]),
   dispatchHandlers: freezeStrings([
+    "platform.page.read",
     "platform.model.read",
     "platform.gaps.read",
     "platform.branch.list",
@@ -65,6 +67,7 @@ export const handlerCatalog = Object.freeze({
     "page.platform"
   ]),
   handlerMetadata: Object.freeze({
+    "platform.page.read": platformHandlerMetadata({ routeKind: "content", responseKind: "content", methods: ["GET"] }),
     "platform.model.read": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
     "platform.gaps.read": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
     "platform.branch.list": platformHandlerMetadata({ routeKind: "json", responseKind: "json", methods: ["GET"] }),

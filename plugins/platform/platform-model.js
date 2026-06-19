@@ -32,6 +32,35 @@ export const PLATFORM_LIFECYCLES = Object.freeze([
 
 const pluginDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(pluginDir, "..", "..");
+const PLATFORM_DEFAULT_BUILD_REQUIREMENTS = Object.freeze({
+  docs: true,
+  folders: true,
+  knowledgeRelations: true,
+  testInventory: true,
+  pluginManifests: true
+});
+const PLATFORM_SLICE_REQUIREMENTS = Object.freeze({
+  overview: PLATFORM_DEFAULT_BUILD_REQUIREMENTS,
+  change: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  verification: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false }),
+  knowledgeDocs: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, folders: false, testInventory: false }),
+  knowledgeFolders: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, knowledgeRelations: false, testInventory: false }),
+  knowledgeRoadmap: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, folders: false, testInventory: false }),
+  advancedModel: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  advancedCoverage: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false }),
+  advancedGovernance: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  advancedBridges: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  advancedSemantics: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  advancedPackages: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  advancedContext: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  advancedRevisionHistory: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false }),
+  advancedConflicts: Object.freeze({ ...PLATFORM_DEFAULT_BUILD_REQUIREMENTS, docs: false, folders: false, knowledgeRelations: false, testInventory: false })
+});
+const pluginManifestCache = new Map();
+let markdownDocInventoryCache = null;
+let knowledgeRelationsCache = null;
+let folderMetasCache = null;
+let testFileInventoryCache = null;
 
 const CONTROL_DOCS = new Map([
   ["docs/CAPABILITIES.md", ["author", "steward"]],
@@ -98,6 +127,21 @@ const TEST_ENVIRONMENT_TITLES = Object.freeze(
 
 function slash(value) {
   return String(value || "").replace(/\\/g, "/");
+}
+
+function normalizePlatformBuildRequirements(requirements = null) {
+  if (!requirements || typeof requirements !== "object") return PLATFORM_DEFAULT_BUILD_REQUIREMENTS;
+  return {
+    docs: requirements.docs !== false,
+    folders: requirements.folders !== false,
+    knowledgeRelations: requirements.knowledgeRelations !== false,
+    testInventory: requirements.testInventory !== false,
+    pluginManifests: requirements.pluginManifests !== false
+  };
+}
+
+export function requirementsForPlatformSlice(sliceKey) {
+  return PLATFORM_SLICE_REQUIREMENTS[String(sliceKey || "")] || PLATFORM_DEFAULT_BUILD_REQUIREMENTS;
 }
 
 function unique(values = []) {
@@ -229,6 +273,72 @@ async function listFiles(root, predicate) {
     }
   }
   return out;
+}
+
+async function relativePathStat(relativePath) {
+  try {
+    return await fs.stat(path.join(repoRoot, relativePath));
+  } catch {
+    return null;
+  }
+}
+
+async function sourceTokenForRelativePaths(relativePaths = []) {
+  const normalized = [...new Set(relativePaths.map(slash).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+  const parts = await Promise.all(normalized.map(async relativePath => {
+    const stat = await relativePathStat(relativePath);
+    return `${relativePath}:${stat ? stat.mtimeMs : "missing"}`;
+  }));
+  return parts.join("|");
+}
+
+async function readCachedPluginManifest(relativePath) {
+  const token = await sourceTokenForRelativePaths([relativePath]);
+  const cached = pluginManifestCache.get(relativePath);
+  if (cached?.token === token) return cached.value;
+  const value = await readJson(relativePath, {});
+  pluginManifestCache.set(relativePath, { token, value });
+  return value;
+}
+
+async function loadMarkdownDocInventory() {
+  const docPaths = await listMarkdownDocs();
+  const token = await sourceTokenForRelativePaths(docPaths);
+  if (markdownDocInventoryCache?.token === token) return markdownDocInventoryCache.value;
+  const docs = await Promise.all(docPaths.map(async docPath => {
+    const source = await readText(docPath, "");
+    const stat = await relativePathStat(docPath);
+    return {
+      id: `doc:${docPath}`,
+      path: docPath,
+      role: docRoleForPath(docPath),
+      owner: docOwnerForPath(docPath),
+      lifecycle: docLifecycleForPath(docPath),
+      updatedAt: stat ? stat.mtime.toISOString() : null,
+      source,
+      sections: parseMarkdownSections(docPath, source),
+      tasks: parseRoadmapTasks(docPath, source),
+      references: extractMarkdownReferences(source)
+    };
+  }));
+  markdownDocInventoryCache = { token, value: docs };
+  return docs;
+}
+
+async function loadTestFileInventory() {
+  const testFiles = await listFiles(path.join(repoRoot, "test"), file => file.endsWith(".test.js"));
+  const pluginTestFiles = await listFiles(path.join(repoRoot, "plugins"), file => file.endsWith(".test.js"));
+  const relativePaths = [...testFiles, ...pluginTestFiles]
+    .map(file => slash(path.relative(repoRoot, file)))
+    .sort((left, right) => left.localeCompare(right));
+  const token = await sourceTokenForRelativePaths(relativePaths);
+  if (testFileInventoryCache?.token === token) return testFileInventoryCache.value;
+  const rows = await Promise.all(relativePaths.map(async relativePath => ({
+    relativePath,
+    source: await readText(relativePath, "")
+  })));
+  testFileInventoryCache = { token, value: rows };
+  return rows;
 }
 
 function lifecycleForPlugin(id, manifest = {}) {
@@ -2549,91 +2659,96 @@ export function parseRoadmapTasks(docPath, source) {
 
 async function loadKnowledgeRelationsWtoml() {
   const relPath = "docs/intent/knowledge-relations.wtoml";
+  const token = await sourceTokenForRelativePaths([relPath]);
+  if (knowledgeRelationsCache?.token === token) return knowledgeRelationsCache.value;
   const source = await readText(relPath, "");
-  if (!source.trim()) return { entities: [], relations: [], sourcePath: relPath };
+  if (!source.trim()) {
+    const empty = { entities: [], relations: [], sourcePath: relPath };
+    knowledgeRelationsCache = { token, value: empty };
+    return empty;
+  }
   const parsed = parseWitnessToml(source);
-  const entities = parsed
-    .filter(d => d.kind === "entity")
-    .map(d => ({
-      id: d.values.id || d.values.name || null,
-      kind: d.values.kind || "docNode",
-      label: d.values.label || d.values.id || null,
-      path: d.values.path || null,
-      facet: d.values.facet || null,
-      lifecycle: d.values.lifecycle || null,
-      owner: d.values.owner || null,
-      description: d.values.description || null,
-      raw: d.values
-    }))
-    .filter(e => e.id);
-  const relations = parsed
-    .filter(d => d.kind === "relation")
-    .map(d => ({
-      from: d.values.from,
-      rel: d.values.rel,
-      to: d.values.to,
-      meta: d.values.meta || null,
-      actor: d.values.actor || null
-    }))
-    .filter(r => r.from && r.rel && r.to);
-  return { entities, relations, sourcePath: relPath };
-}
-
-async function loadFolderMetas() {
-  // Discover all this.folder.wtoml files (the convention for folder metadata)
-  const folderMetaFiles = await listFiles(repoRoot, (f) =>
-    f.endsWith('this.folder.wtoml')
-  );
-
-  const entities = [];
-  const relations = [];
-
-  for (const absPath of folderMetaFiles) {
-    const relPath = slash(path.relative(repoRoot, absPath));
-    const source = await readText(relPath, '');
-    if (!source.trim()) continue;
-
-    let parsed;
-    try {
-      parsed = parseWitnessToml(source);
-    } catch (e) {
-      // tolerate bad meta files
-      continue;
-    }
-
-    const folderEnts = parsed
-      .filter((d) => d.kind === 'entity' || (d.values?.id && d.values.id.startsWith('folder:')))
-      .map((d) => ({
+  const value = {
+    entities: parsed
+      .filter(d => d.kind === "entity")
+      .map(d => ({
         id: d.values.id || d.values.name || null,
-        kind: d.values.kind || 'folder',
+        kind: d.values.kind || "docNode",
         label: d.values.label || d.values.id || null,
         path: d.values.path || null,
         facet: d.values.facet || null,
         lifecycle: d.values.lifecycle || null,
         owner: d.values.owner || null,
         description: d.values.description || null,
-        raw: d.values,
-        source: relPath,
+        raw: d.values
       }))
-      .filter((e) => e.id);
-
-    const folderRels = parsed
-      .filter((d) => d.kind === 'relation')
-      .map((d) => ({
+      .filter(e => e.id),
+    relations: parsed
+      .filter(d => d.kind === "relation")
+      .map(d => ({
         from: d.values.from,
         rel: d.values.rel,
         to: d.values.to,
         meta: d.values.meta || null,
-        actor: d.values.actor || null,
-        source: relPath,
+        actor: d.values.actor || null
       }))
-      .filter((r) => r.from && r.rel && r.to);
+      .filter(r => r.from && r.rel && r.to),
+    sourcePath: relPath
+  };
+  knowledgeRelationsCache = { token, value };
+  return value;
+}
 
-    entities.push(...folderEnts);
-    relations.push(...folderRels);
+async function loadFolderMetas() {
+  const folderMetaFiles = await listFiles(repoRoot, file => file.endsWith("this.folder.wtoml"));
+  const relativePaths = folderMetaFiles.map(absPath => slash(path.relative(repoRoot, absPath)));
+  const token = await sourceTokenForRelativePaths(relativePaths);
+  if (folderMetasCache?.token === token) return folderMetasCache.value;
+
+  const entities = [];
+  const relations = [];
+  for (const relPath of relativePaths) {
+    const source = await readText(relPath, "");
+    if (!source.trim()) continue;
+    let parsed;
+    try {
+      parsed = parseWitnessToml(source);
+    } catch {
+      continue;
+    }
+    const folderEntities = parsed
+      .filter(doc => doc.kind === "entity" || (doc.values?.id && doc.values.id.startsWith("folder:")))
+      .map(doc => ({
+        id: doc.values.id || doc.values.name || null,
+        kind: doc.values.kind || "folder",
+        label: doc.values.label || doc.values.id || null,
+        path: doc.values.path || null,
+        facet: doc.values.facet || null,
+        lifecycle: doc.values.lifecycle || null,
+        owner: doc.values.owner || null,
+        description: doc.values.description || null,
+        raw: doc.values,
+        source: relPath
+      }))
+      .filter(entity => entity.id);
+    const folderRelations = parsed
+      .filter(doc => doc.kind === "relation")
+      .map(doc => ({
+        from: doc.values.from,
+        rel: doc.values.rel,
+        to: doc.values.to,
+        meta: doc.values.meta || null,
+        actor: doc.values.actor || null,
+        source: relPath
+      }))
+      .filter(relation => relation.from && relation.rel && relation.to);
+    entities.push(...folderEntities);
+    relations.push(...folderRelations);
   }
 
-  return { entities, relations };
+  const value = { entities, relations };
+  folderMetasCache = { token, value };
+  return value;
 }
 
 /**
@@ -2681,11 +2796,27 @@ function platformTargetNodeId(kind, id) {
   return `${kind || "target"}:${id}`;
 }
 
-export async function buildPlatformModel({
+export async function buildPlatformSlice({
+  sliceKey = "overview",
   appContext = null,
   diagnostics = null,
   project = null
 } = {}) {
+  return buildPlatformModel({
+    appContext,
+    diagnostics,
+    project,
+    requirements: requirementsForPlatformSlice(sliceKey)
+  });
+}
+
+export async function buildPlatformModel({
+  appContext = null,
+  diagnostics = null,
+  project = null,
+  requirements = null
+} = {}) {
+  const platformRequirements = normalizePlatformBuildRequirements(requirements);
   const nodes = new Map();
   const edges = new Map();
   const catalog = await readJson("store/seeds/first-party-plugin-catalog.json", { packages: [], bundles: [] });
@@ -2788,11 +2919,12 @@ export async function buildPlatformModel({
   const activeRuntimeRevision = runtimeRevisions[0] ?? null;
   const snapshotBuilds = buildSnapshotBuildRows(candidateSnapshots);
   const snapshotBuildErrors = buildSnapshotBuildErrorRows(candidateSnapshots);
-  const markdownDocPaths = await listMarkdownDocs();
   const parsedDocs = [];
 
   for (const row of pluginPackages) {
-    const manifest = await readJson(`plugins/${row.directory}/plugin.json`, {});
+    const manifest = platformRequirements.pluginManifests
+      ? await readCachedPluginManifest(`plugins/${row.directory}/plugin.json`)
+      : await readJson(`plugins/${row.directory}/plugin.json`, {});
     const id = row.id || manifest.id;
     const status = activePlugins.has(id) ? "active" : (effectivePlugins.has(id) ? "effective" : "inactive");
     addNode(nodes, {
@@ -3204,89 +3336,72 @@ export async function buildPlatformModel({
     addEdge(edges, `mcp:${install.server}`, "exposes", `mcpTool:${install.tool}`, "witnesses");
   }
 
-  for (const docPath of markdownDocPaths) {
-    const fullPath = path.join(repoRoot, docPath);
-    const source = await readText(docPath, "");
-    let updatedAt = null;
-    try {
-      updatedAt = (await fs.stat(fullPath)).mtime.toISOString();
-    } catch {}
-    const sections = parseMarkdownSections(docPath, source);
-    const tasks = parseRoadmapTasks(docPath, source);
-    const references = extractMarkdownReferences(source);
-    const staleBranches = branches
-      .filter(branch => (branch.docsFreshness?.missingDocs ?? []).includes(docPath))
-      .map(branch => String(branch.id));
-    const touchedBranches = branches
-      .filter(branch => (branch.docsFreshness?.touchedDocs ?? []).includes(docPath))
-      .map(branch => String(branch.id));
-    const requiredBranches = branches
-      .filter(branch => (branch.docsFreshness?.requiredDocs ?? []).includes(docPath))
-      .map(branch => String(branch.id));
-    const status = staleBranches.length ? "stale" : (requiredBranches.length ? "fresh" : "reference");
-    const freshness = {
-      status,
-      staleBranches: unique(staleBranches),
-      touchedBranches: unique(touchedBranches),
-      requiredBranches: unique(requiredBranches),
-      summary: staleBranches.length
-        ? `Stale for branches ${unique(staleBranches).join(", ")}.`
-        : (requiredBranches.length
-          ? `Fresh for branches ${unique(requiredBranches).join(", ")}.`
-          : "Reference doc with no active freshness pressure.")
-    };
-    const docRow = {
-      id: `doc:${docPath}`,
-      path: docPath,
-      role: docRoleForPath(docPath),
-      owner: docOwnerForPath(docPath),
-      lifecycle: docLifecycleForPath(docPath),
-      status,
-      updatedAt,
-      freshness,
-      sectionCount: sections.length,
-      taskCount: tasks.length,
-      references
-    };
-    parsedDocs.push({
-      ...docRow,
-      source,
-      sections,
-      tasks
-    });
-    addNode(nodes, {
-      id: docRow.id,
-      kind: "doc",
-      title: docPath,
-      lifecycle: docRow.lifecycle,
-      owner: docRow.owner,
-      status: docRow.status,
-      source: docPath
-    });
-    for (const section of sections) {
+  if (platformRequirements.docs) {
+    const markdownDocs = await loadMarkdownDocInventory();
+    for (const doc of markdownDocs) {
+      const staleBranches = branches
+        .filter(branch => (branch.docsFreshness?.missingDocs ?? []).includes(doc.path))
+        .map(branch => String(branch.id));
+      const touchedBranches = branches
+        .filter(branch => (branch.docsFreshness?.touchedDocs ?? []).includes(doc.path))
+        .map(branch => String(branch.id));
+      const requiredBranches = branches
+        .filter(branch => (branch.docsFreshness?.requiredDocs ?? []).includes(doc.path))
+        .map(branch => String(branch.id));
+      const status = staleBranches.length ? "stale" : (requiredBranches.length ? "fresh" : "reference");
+      const freshness = {
+        status,
+        staleBranches: unique(staleBranches),
+        touchedBranches: unique(touchedBranches),
+        requiredBranches: unique(requiredBranches),
+        summary: staleBranches.length
+          ? `Stale for branches ${unique(staleBranches).join(", ")}.`
+          : (requiredBranches.length
+            ? `Fresh for branches ${unique(requiredBranches).join(", ")}.`
+            : "Reference doc with no active freshness pressure.")
+      };
+      const docRow = {
+        ...doc,
+        status,
+        freshness,
+        sectionCount: doc.sections.length,
+        taskCount: doc.tasks.length
+      };
+      parsedDocs.push(docRow);
       addNode(nodes, {
-        id: section.id,
-        kind: "docSection",
-        title: section.title,
-        lifecycle: ["author", "steward"],
-        owner: docRow.owner,
-        status: "known",
-        source: `${docPath}:${section.line}`
+        id: docRow.id,
+        kind: "doc",
+        title: doc.path,
+        lifecycle: doc.lifecycle,
+        owner: doc.owner,
+        status: docRow.status,
+        source: doc.path
       });
-      addEdge(edges, docRow.id, "hasSection", section.id, "docs");
-      if (section.parentSectionId) addEdge(edges, section.parentSectionId, "contains", section.id, "docs");
-    }
-    for (const task of tasks) {
-      addNode(nodes, {
-        id: task.id,
-        kind: "task",
-        title: task.title,
-        lifecycle: ["author", "steward"],
-        owner: docRow.owner,
-        status: task.status,
-        source: `${task.doc}:${task.line}`
-      });
-      addEdge(edges, docRow.id, "describes", task.id, "roadmap");
+      for (const section of doc.sections) {
+        addNode(nodes, {
+          id: section.id,
+          kind: "docSection",
+          title: section.title,
+          lifecycle: ["author", "steward"],
+          owner: doc.owner,
+          status: "known",
+          source: `${doc.path}:${section.line}`
+        });
+        addEdge(edges, docRow.id, "hasSection", section.id, "docs");
+        if (section.parentSectionId) addEdge(edges, section.parentSectionId, "contains", section.id, "docs");
+      }
+      for (const task of doc.tasks) {
+        addNode(nodes, {
+          id: task.id,
+          kind: "task",
+          title: task.title,
+          lifecycle: ["author", "steward"],
+          owner: doc.owner,
+          status: task.status,
+          source: `${task.doc}:${task.line}`
+        });
+        addEdge(edges, docRow.id, "describes", task.id, "roadmap");
+      }
     }
   }
 
@@ -3334,7 +3449,9 @@ export async function buildPlatformModel({
   // Load and integrate the authored WTOML knowledge relations (doc<->doc, doc<->code)
   // This makes the explicit relationships from knowledge-relations.wtoml first-class
   // in the platform graph (for ContextHub, intent registry, knowledge views).
-  const knowledgeRel = await loadKnowledgeRelationsWtoml();
+  const knowledgeRel = platformRequirements.knowledgeRelations
+    ? await loadKnowledgeRelationsWtoml()
+    : { entities: [], relations: [], sourcePath: "docs/intent/knowledge-relations.wtoml" };
   for (const ent of knowledgeRel.entities) {
     let nodeKind = ent.kind || "knowledgeEntity";
     if (nodeKind === "docNode") nodeKind = "docNode";
@@ -3358,7 +3475,9 @@ export async function buildPlatformModel({
 
   // Load folder metas (this.folder.wtoml convention)
   // Provides folder:* nodes + contains relations for the knowledge graph / ContextHub.
-  const folderMetas = await loadFolderMetas();
+  const folderMetas = platformRequirements.folders
+    ? await loadFolderMetas()
+    : { entities: [], relations: [] };
   for (const ent of folderMetas.entities) {
     addNode(nodes, {
       id: ent.id,
@@ -3653,13 +3772,11 @@ export async function buildPlatformModel({
     }
   }
 
-  const testFiles = await listFiles(path.join(repoRoot, "test"), file => file.endsWith(".test.js"));
-  const pluginTestFiles = await listFiles(path.join(repoRoot, "plugins"), file => file.endsWith(".test.js"));
-  for (const file of [...testFiles, ...pluginTestFiles]) {
-    const relative = slash(path.relative(repoRoot, file));
+  const testFileInventory = platformRequirements.testInventory ? await loadTestFileInventory() : [];
+  for (const file of testFileInventory) {
+    const relative = file.relativePath;
     const id = `gate:${relative}`;
-    const source = await readText(relative, "");
-    const hints = buildTestGateSourceHints(relative, source, nodes, routeIdsByMatcher);
+    const hints = buildTestGateSourceHints(relative, file.source, nodes, routeIdsByMatcher);
       addNode(nodes, {
         id,
         kind: "testGate",
@@ -4561,6 +4678,22 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       : (model.packageCoexistence ?? []);
     return { packageCoexistence, summaries: model.summaries };
   }
+  if (view === "advancedPackages") {
+    const packageCoexistence = id
+      ? (model.packageCoexistence ?? []).filter(row => matchesPackageCoexistenceRow(row, id))
+      : (model.packageCoexistence ?? []);
+    const packageConvergence = id
+      ? (model.packageConvergence ?? []).filter(row =>
+        matchesPackageCoexistenceRow(row, id)
+        || (row.transformerIds ?? []).includes(id)
+        || (row.convergencePatchIds ?? []).includes(id)
+      )
+      : (model.packageConvergence ?? []);
+    const packageApplyPreviews = id
+      ? (model.packageApplyPreviews ?? []).filter(row => matchesPackageApplyPreviewRow(row, id))
+      : (model.packageApplyPreviews ?? []);
+    return { packageCoexistence, packageConvergence, packageApplyPreviews, summaries: model.summaries };
+  }
   if (view === "contextNaming") {
     return {
       contextNaming: contextNamingStateFromProject(projector => {
@@ -4659,6 +4792,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
   if (view === "mergeIntents") {
     const mergeIntents = id ? model.mergeIntents.filter(row => row.id === id || row.branchId === id || row.proposalId === id) : model.mergeIntents;
     return { mergeIntents, summaries: model.summaries };
+  }
+  if (view === "advancedConflicts") {
+    const conflicts = id ? model.conflicts.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.conflicts;
+    const mergeIntents = id ? model.mergeIntents.filter(row => row.id === id || row.branchId === id || row.proposalId === id) : model.mergeIntents;
+    return { conflicts, mergeIntents, summaries: model.summaries };
   }
   if (view === "bridges") {
     const compatibilityBridges = id

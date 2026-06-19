@@ -10,6 +10,7 @@ backendHost = "backendHost"
 frontendHost = "frontendHost"
 default = true
 allowActorHeader = false
+runtimeConfig = { "mcp.engentus_mcp.token" = { value = "engentus-dev-token" } }
 
 [[runtimePluginInstall]]
 actor = "aaron"
@@ -44,7 +45,37 @@ plugin = "plugin.pipeline-runtime"
 [[runtimePluginInstall]]
 actor = "aaron"
 serverRunner = "engentus_server"
+plugin = "plugin.mcp"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
+plugin = "plugin.mcp-authoring"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
 plugin = "plugin.engentus-dev-diagnostics"
+
+[[mcpServer]]
+actor = "aaron"
+id = "engentus_mcp"
+label = "Engentus MCP"
+serverRunner = "engentus_server"
+serviceIdentity = "aaron"
+transports = ["stdio", "http"]
+
+[[mcpToolInstall]]
+actor = "aaron"
+server = "engentus_mcp"
+tool = "world.read"
+actingMode = "service"
+
+[[mcpToolInstall]]
+actor = "aaron"
+server = "engentus_mcp"
+tool = "authoring.write"
+actingMode = "service"
 
 [[authRole]]
 actor = "aaron"

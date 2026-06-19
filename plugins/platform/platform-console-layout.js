@@ -3,6 +3,7 @@ import { compileRvmToDesirePlus } from "../../src/desire/index.js";
 
 const PLATFORM_CONSOLE_RVM_FILE = "plugins/platform/platform-console.rvm";
 const PLATFORM_CONSOLE_RVM_URL = new URL("./platform-console.rvm", import.meta.url);
+let platformConsoleLayoutCache = null;
 
 const FALLBACK_LAYOUT = Object.freeze({
   sourceFile: PLATFORM_CONSOLE_RVM_FILE,
@@ -403,6 +404,11 @@ function readSurfaceTree(name, surfaceByName, routeByName, fallbackByName, seen 
 
 export function readPlatformConsoleLayout() {
   try {
+    const stat = fs.statSync(PLATFORM_CONSOLE_RVM_URL);
+    const cacheToken = `${PLATFORM_CONSOLE_RVM_FILE}:${stat.mtimeMs}`;
+    if (platformConsoleLayoutCache?.token === cacheToken && platformConsoleLayoutCache.value) {
+      return platformConsoleLayoutCache.value;
+    }
     const source = fs.readFileSync(PLATFORM_CONSOLE_RVM_URL, "utf8");
     const desirePlus = compileRvmToDesirePlus(source, { file: PLATFORM_CONSOLE_RVM_FILE });
     const routeByName = new Map();
@@ -431,12 +437,14 @@ export function readPlatformConsoleLayout() {
     const children = Object.freeze(childNames.map(name =>
       readSurfaceTree(name, surfaceByName, routeByName, fallbackByName)
     ));
-    return {
+    const layout = {
       sourceFile: PLATFORM_CONSOLE_RVM_FILE,
       page,
       children,
       error: null
     };
+    platformConsoleLayoutCache = { token: cacheToken, value: layout };
+    return layout;
   } catch (error) {
     return {
       ...FALLBACK_LAYOUT,

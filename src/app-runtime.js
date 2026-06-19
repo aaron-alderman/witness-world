@@ -4,6 +4,7 @@ import { applyDesire } from "./desire/index.js";
 import { declareBackendHost, declareFrontendHost, resolveServerRunner, startServer } from "./host.js";
 import { resolveRuntimeOperatorPaths } from "./runtime-operator-contract.js";
 import { resolveCliRuntimeProfile } from "./runtime-local-launcher.js";
+import { createStartupTelemetry } from "./startup-telemetry.js";
 
 export async function startAppRuntime({
   appProject,
@@ -18,19 +19,22 @@ export async function startAppRuntime({
   cwd = process.cwd(),
   env = process.env,
   logger = null,
-  mcpInternalToken = null
+  mcpInternalToken = null,
+  startupTelemetry = createStartupTelemetry({ mode: startupMode })
 } = {}) {
   const runtimeProfileInfo = resolveCliRuntimeProfile({
     runtimeProfile,
     explicit: runtimeProfileExplicit
   });
-  const operatorContract = await resolveRuntimeOperatorPaths({
+  const operatorContract = await startupTelemetry.runPhase("operator.paths", () => resolveRuntimeOperatorPaths({
     startupMode,
     cwd,
     env: {
       ...env,
       ...(worldHome ? { WORLD_HOME: worldHome } : {})
     }
+  }), {
+    label: "Resolve operator paths"
   });
   const witnessLogPath = operatorContract.canonicalTruth.witnessLogPath;
   const observationLogPath = operatorContract.canonicalTruth.observationLogPath;
@@ -44,12 +48,27 @@ export async function startAppRuntime({
   });
 
   try {
-    await applyWitnessDocsWithRuntimePlugins(world, appProject.witnessDocs, {
+    await startupTelemetry.runPhase("world.applyWitnessDocs", () => applyWitnessDocsWithRuntimePlugins(world, appProject.witnessDocs, {
       runtimeProfile: runtimeProfileInfo.id,
       runtimePluginIds: runtimePluginIds.length ? runtimePluginIds : null,
       env
+    }), {
+      label: "Apply witness docs"
     });
-    for (const desire of appProject.authoredDesireDocs) applyDesire(world, desire);
+    const applyDesirePhase = startupTelemetry.beginPhase("world.applyDesireDocs", {
+      label: "Apply authored desire docs"
+    });
+    try {
+      for (const desire of appProject.authoredDesireDocs) applyDesire(world, desire);
+      applyDesirePhase.complete({
+        desireDocCount: appProject.authoredDesireDocs.length
+      });
+    } catch (error) {
+      applyDesirePhase.fail(error, {
+        desireDocCount: appProject.authoredDesireDocs.length
+      });
+      throw error;
+    }
   } catch (error) {
     if (error?.runtimePluginCatalog) {
       error.operatorContract = operatorContract;
@@ -87,7 +106,7 @@ export async function startAppRuntime({
     runtimeProfile: runtimeProfileInfo.id
   });
 
-  const server = await startServer(world, {
+  const server = await startupTelemetry.runPhase("server.start", () => startServer(world, {
     actor: "system",
     serverRunnerId: runner.id,
     port,
@@ -99,7 +118,10 @@ export async function startAppRuntime({
     runtimePluginIds: runtimePluginIds.length ? runtimePluginIds : null,
     runtimeStartupMode: startupMode,
     runtimeOperatorContract: operatorContract,
-    devMode: devMode ?? (startupMode === "serve")
+    devMode: devMode ?? (startupMode === "serve"),
+    startupTelemetry
+  }), {
+    label: "Start runtime server"
   });
 
   return {
@@ -111,6 +133,7 @@ export async function startAppRuntime({
     runtimeProfile: runtimeProfileInfo.id,
     runtimeProfileInfo,
     witnessLogPath,
-    observationLogPath
+    observationLogPath,
+    startupTelemetry
   };
 }

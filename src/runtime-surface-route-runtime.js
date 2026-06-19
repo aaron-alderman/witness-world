@@ -128,11 +128,19 @@ export function parseRouteSurfacePage({ document, window, html, rootId = null } 
 
 export async function loadRouteSurfacePage({ document, window, manifest, surfaceById, target, requireManifest = false } = {}) {
   if (!target?.surfaceId || !target?.path) return null;
+  const pageMatchesTarget = page => {
+    const targetPath = trimString(target?.path);
+    if (!targetPath) return true;
+    const requestPathname = trimString(page?.manifest?.requestPathname);
+    if (!requestPathname) return true;
+    const normalizePath = pathname => String(pathname || "/").replace(/\/+$/, "") || "/";
+    return normalizePath(requestPathname) === normalizePath(targetPath);
+  };
   const cacheKey = trimString(target.key) || trimString(target.surfaceId);
   if (!manifest.__routeSurfacePageCache) manifest.__routeSurfacePageCache = {};
   if (cacheKey && manifest.__routeSurfacePageCache[cacheKey]) {
     const cached = manifest.__routeSurfacePageCache[cacheKey];
-    if (!requireManifest || cached?.manifest?.surfaces) return cached;
+    if ((!requireManifest || cached?.manifest?.surfaces) && pageMatchesTarget(cached)) return cached;
   }
   const fetchImpl = typeof window?.fetch === "function"
     ? window.fetch.bind(window)
@@ -159,7 +167,9 @@ export async function loadRouteSurfacePage({ document, window, manifest, surface
   if (requireManifest && !page?.manifest?.surfaces) {
     page = await loadAttempt();
   }
-  if (cacheKey && page?.fragment) manifest.__routeSurfacePageCache[cacheKey] = page;
+  if (cacheKey && page?.fragment && pageMatchesTarget(page)) {
+    manifest.__routeSurfacePageCache[cacheKey] = page;
+  }
   return page;
 }
 

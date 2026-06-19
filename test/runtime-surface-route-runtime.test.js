@@ -248,6 +248,85 @@ test("loadRouteSurfacePage caches the parsed fragment by route key", async () =>
   assert.ok(manifest.__routeSurfacePageCache.route);
 });
 
+test("loadRouteSurfacePage does not cache or reuse an alternate manifest pathname under the target route key", async () => {
+  let fetchCount = 0;
+  const window = {
+    async fetch() {
+      fetchCount += 1;
+      const requestPathname = fetchCount === 1 ? "/engentus/login" : "/engentus/route";
+      const label = fetchCount === 1 ? "Login instead" : "Real route";
+      return {
+        ok: true,
+        async text() {
+          return `
+            <html>
+              <body>
+                <div id="route-root">${label}</div>
+                <script type="application/json" id="surface-runtime-manifest">${JSON.stringify({
+                  requestPathname,
+                  surfaces: [{ id: "Surface.Route" }]
+                })}</script>
+              </body>
+            </html>
+          `;
+        }
+      };
+    },
+    DOMParser: class {
+      parseFromString(html) {
+        const requestPathname = html.includes("/engentus/login") ? "/engentus/login" : "/engentus/route";
+        const label = requestPathname === "/engentus/login" ? "Login instead" : "Real route";
+        return {
+          getElementById(id) {
+            if (id === "surface-runtime-manifest") {
+              return { textContent: JSON.stringify({ requestPathname, surfaces: [{ id: "Surface.Route" }] }) };
+            }
+            if (id === "route-root") {
+              return { outerHTML: `<div id="route-root">${label}</div>` };
+            }
+            return null;
+          },
+          body: {
+            firstElementChild: { outerHTML: `<div id="route-root">${label}</div>` }
+          }
+        };
+      }
+    }
+  };
+  const manifest = {};
+  const surfaceById = new Map([
+    ["Surface.Route", { id: "Surface.Route", view: { rootId: "route-root" } }]
+  ]);
+  const target = { key: "route", path: "/engentus/route", surfaceId: "Surface.Route" };
+
+  const first = await loadRouteSurfacePage({
+    document: {},
+    window,
+    manifest,
+    surfaceById,
+    target,
+    requireManifest: true
+  });
+  assert.equal(manifest.__routeSurfacePageCache.route, undefined);
+  const second = await loadRouteSurfacePage({
+    document: {},
+    window,
+    manifest,
+    surfaceById,
+    target,
+    requireManifest: true
+  });
+
+  assert.equal(first.fragment, '<div id="route-root">Login instead</div>');
+  assert.equal(second.fragment, '<div id="route-root">Real route</div>');
+  assert.equal(fetchCount, 2);
+  assert.deepEqual(second.manifest, {
+    requestPathname: "/engentus/route",
+    surfaces: [{ id: "Surface.Route" }]
+  });
+  assert.ok(manifest.__routeSurfacePageCache.route);
+});
+
 test("loadRouteSurfacePage refetches the full document when a fragment response lacks a manifest and manifest is required", async () => {
   const responses = [];
   const window = {

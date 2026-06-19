@@ -10,7 +10,7 @@ import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js"
 import { compileRvmToDesirePlus } from "../../src/desire/index.js";
 import { bundleId, capabilities, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
 import { buildPlatformCssDriftGap, buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LIFECYCLES } from "./platform-model.js";
-import { renderPlatformPage, sortRecordsForSurface } from "./platform-page.js";
+import { renderPlatformPage, renderPlatformPageFragment, renderPlatformShellPage, sortRecordsForSurface } from "./platform-page.js";
 import { readPlatformConsoleLayout } from "./platform-console-layout.js";
 import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./platform-proposals.js";
 import { executePlatformProposalTarget } from "./platform-proposal-targets.js";
@@ -62,6 +62,7 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(manifest.id, "plugin.platform");
   assert.equal(bundleId, "bundle-platform");
   assert.deepEqual(capabilities, ["platform.self"]);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.page.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.model.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.gaps.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.branch.list"), true);
@@ -81,6 +82,7 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.reject"), true);
   assert.equal(handlerCatalog.pageHandlers.includes("page.platform"), true);
   assert.equal(routes.some(route => route.path === "/platform" && route.handler === "page.platform"), true);
+  assert.equal(routes.some(route => route.path === "/api/platform-page" && route.handler === "platform.page.read"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-model" && route.handler === "platform.model.read"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-branches" && route.handler === "platform.branch.list"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-branches" && route.handler === "platform.branch.create"), true);
@@ -103,6 +105,7 @@ test("platform plugin exposes platform bundle ownership", async () => {
 
 test("platform runtime declares every change-set route with owned handler metadata", () => {
   const expectedRoutes = [
+    { method: "GET", path: "/api/platform-page", handler: "platform.page.read" },
     { method: "GET", path: "/api/platform-change-sets", handler: "platform.changeSet.list" },
     { method: "GET", handler: "platform.changeSet.read", pattern: /^\/api\/platform-change-sets\/([^/]+)$/, paramNames: ["id"] },
     { method: "POST", path: "/api/platform-change-sets", handler: "platform.changeSet.create" },
@@ -6467,6 +6470,8 @@ test("platform page renders required operating views", async () => {
   const verificationExecutionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=verificationExecution:demo") });
   const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuntime&id=runtimeRevision:demo") });
   const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:demo") });
+  const verificationRunFragmentHtml = renderPlatformPageFragment(model, { requestUrl: new URL("http://platform.local/api/platform-page?view=verificationRuns&id=testRun:demo") });
+  const verificationRunShellHtml = renderPlatformShellPage({ requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:demo") });
   const knowledgeLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge") });
   const knowledgeDocsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledgeDocs&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
   const knowledgeFoldersHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledgeFolders&id=folder:docs") });
@@ -6606,6 +6611,13 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationRunHtml, /enableVerificationLiveUpdates: true/);
   assert.match(verificationRunHtml, /new EventSource\(platformPageState\.testRunEventsHref\)/);
   assert.match(verificationRunHtml, /new EventSource\(platformPageState\.backendRevisionEventsHref\)/);
+  assert.match(verificationRunFragmentHtml, /Verification Run Items/);
+  assert.match(verificationRunFragmentHtml, /\?view=verificationStatus&amp;id=gate%3Ademo/);
+  assert.doesNotMatch(verificationRunFragmentHtml, /<!doctype html>/);
+  assert.doesNotMatch(verificationRunFragmentHtml, /enableVerificationLiveUpdates: true/);
+  assert.match(verificationRunShellHtml, /Loading platform content/);
+  assert.match(verificationRunShellHtml, /\/api\/platform-page\?view=verificationRuns&amp;id=testRun%3Ademo/);
+  assert.doesNotMatch(verificationRunShellHtml, /Selected Test Run/);
 
   assert.match(knowledgeLandingHtml, /Platform Console - Knowledge/);
   assert.match(knowledgeLandingHtml, /Governed Docs/);

@@ -266,6 +266,144 @@ test("runtime server composes authored runtime plugin installs with operator plu
   await server.close();
 });
 
+test("runtime server exposes startup telemetry and defers app snapshot boot behind listen", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let resolveSnapshotManager = null;
+  let testMonitorInitialized = false;
+  const createdSnapshotManager = {
+    appRevision: 7,
+    diagnostics() {
+      return { sourceCount: 3 };
+    },
+    close() {}
+  };
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    appProject: {
+      appRoot: "C:/app",
+      manifestPath: "C:/app/app.wtoml"
+    },
+    backgroundStartupPolicy: {
+      verificationPersistence: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 },
+      testMonitor: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 },
+      appSnapshotInitialBuild: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 }
+    },
+    logger: { info() {}, error() {} },
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: (_world, hostId) => hostId === "backendHost"
+      ? new Set(["http.serve", "runtime.config"])
+      : new Set(["dom.render", "http.fetch"]),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: () => {},
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    readRuntimePluginCatalog: async input => ({
+      pluginRoot: input.pluginRoot,
+      activeProfile: input.runtimeProfile,
+      packages: [],
+      summary: {},
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: [],
+      configuredPluginIds: [],
+      activePluginIds: [],
+      rejectedPlugins: [],
+      addedBundleIds: [],
+      selection: { hasBlockingErrors: false }
+    }),
+    loadRuntimePluginModules: async () => ({
+      bundleOverrides: {},
+      failures: [],
+      hasBlockingErrors: false
+    }),
+    applyRuntimePluginLoadState: catalog => catalog,
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: [] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render", "http.fetch"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      runtimeConfig: {},
+      providerRuntimes: {
+        "platform.testMonitor": {
+          async initialize() {
+            testMonitorInitialized = true;
+          },
+          close() {}
+        }
+      },
+      close() {},
+      visibleWitnesses: () => []
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map(),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    createRuntimeVerificationPersistence: async () => ({
+      inspect: () => ({ diagnostics: [{ code: "verification-ready" }] }),
+      close() {}
+    }),
+    AppSnapshotManagerClass: {
+      create: () => new Promise(resolve => {
+        resolveSnapshotManager = resolve;
+      })
+    },
+    httpModule: {
+      createServer() {
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(server.runtimeContext.appSnapshotManager, null);
+  assert.equal(testMonitorInitialized, false);
+  assert.equal(server.getStartupTelemetry().listenReadyAtMs != null, true);
+  assert.equal(server.getStartupTelemetry().backgroundPendingCount > 0, true);
+
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(typeof resolveSnapshotManager, "function");
+  resolveSnapshotManager(createdSnapshotManager);
+  const startup = await server.startupReady;
+  assert.equal(testMonitorInitialized, true);
+  assert.equal(server.runtimeContext.appSnapshotManager, createdSnapshotManager);
+  assert.equal(startup.phases.find(phase => phase.id === "runtime.appSnapshot.initialBuild")?.status, "completed");
+  assert.equal(startup.phases.find(phase => phase.id === "runtime.verificationPersistence")?.status, "completed");
+
+  await server.close();
+});
+
 test("runtime server attaches active plugin module projectors to the runtime world", async () => {
   const world = createWorld();
   const runner = {

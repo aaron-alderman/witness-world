@@ -1300,8 +1300,8 @@ test("the module shells declare process and capability dependencies semantically
   assert.equal("dependsOnCapabilities" in (goodman?.body?.props ?? {}), false);
 
   assert.equal(millCharge?.body?.processRef, "EngentusShellNavigation");
-  assert.deepEqual(millCharge?.body?.capabilityRefs, []);
-  assert.deepEqual(millChargeCanvas?.body?.capabilityRefs, ["chart.render"]);
+  assert.deepEqual(millCharge?.body?.capabilityRefs, ["chart.render"]);
+  assert.deepEqual(millChargeCanvas?.body?.capabilityRefs, []);
   assert.equal("dependsOnCapabilities" in (millCharge?.body?.props ?? {}), false);
 
   assert.equal(millForce?.body?.processRef, "EngentusShellNavigation");

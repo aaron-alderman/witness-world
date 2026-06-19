@@ -62,6 +62,7 @@ import { collectActiveRuntimeContributions } from "./runtime-active-contribution
 import { buildRuntimeOperatorContract } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService } from "./runtime-operator-service.js";
 import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.js";
+import { createStartupTelemetry } from "./startup-telemetry.js";
 
 export async function startRuntimeServer(world, {
   actor,
@@ -77,7 +78,9 @@ export async function startRuntimeServer(world, {
   runtimeAuthoringMode = null,
   runtimeOperatorContract = null,
   devMode = null,
-  env = process.env
+  env = process.env,
+  backgroundStartupPolicy = null,
+  startupTelemetry = createStartupTelemetry({ mode: runtimeStartupMode })
 }, deps) {
   const {
     createGenericRouteHandlers,
@@ -111,8 +114,11 @@ export async function startRuntimeServer(world, {
     defaultHostCapabilitiesForProfile: defaultHostCapabilitiesForProfileImpl = defaultHostCapabilitiesForProfile,
     loadRuntimePluginModules: loadRuntimePluginModulesImpl = loadRuntimePluginModules,
     applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState,
-    collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions
+    collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions,
+    createRuntimeVerificationPersistence: createRuntimeVerificationPersistenceImpl = createRuntimeVerificationPersistence,
+    AppSnapshotManagerClass = AppSnapshotManager
   } = deps;
+  startupTelemetry ??= createStartupTelemetry({ mode: runtimeStartupMode });
 
   const handleProfileGatedAbsence = async ({ req, res, appContext, pathname, method }) => {
     const isHtml = String(req.headers["accept"] || "").includes("text/html");
@@ -177,6 +183,33 @@ export async function startRuntimeServer(world, {
     return scoped;
   };
   const activeDevMode = devMode ?? (runtimeStartupMode === "serve" && appProject != null);
+  const resolveBackgroundPhasePolicy = (configured, fallback) => {
+    const minDelayMs = Number(configured?.minDelayMs);
+    const quietWindowMs = Number(configured?.quietWindowMs);
+    const maxDelayMs = Number(configured?.maxDelayMs);
+    return {
+      minDelayMs: Number.isFinite(minDelayMs) ? Math.max(0, minDelayMs) : fallback.minDelayMs,
+      quietWindowMs: Number.isFinite(quietWindowMs) ? Math.max(0, quietWindowMs) : fallback.quietWindowMs,
+      maxDelayMs: Number.isFinite(maxDelayMs) ? Math.max(0, maxDelayMs) : fallback.maxDelayMs
+    };
+  };
+  const effectiveBackgroundStartupPolicy = {
+    verificationPersistence: resolveBackgroundPhasePolicy(backgroundStartupPolicy?.verificationPersistence, {
+      minDelayMs: 150,
+      quietWindowMs: 250,
+      maxDelayMs: 1500
+    }),
+    testMonitor: resolveBackgroundPhasePolicy(backgroundStartupPolicy?.testMonitor, {
+      minDelayMs: 1000,
+      quietWindowMs: 1000,
+      maxDelayMs: 5000
+    }),
+    appSnapshotInitialBuild: resolveBackgroundPhasePolicy(backgroundStartupPolicy?.appSnapshotInitialBuild, {
+      minDelayMs: activeDevMode === true ? 2500 : 5000,
+      quietWindowMs: 1500,
+      maxDelayMs: activeDevMode === true ? 12000 : 20000
+    })
+  };
 
   const runtimePluginRoot = resolveRuntimePluginRootImpl({ env });
   const configuredRuntimePluginIds = resolveConfiguredRuntimePluginIdsImpl({ env, runtimePluginIds });
@@ -200,11 +233,13 @@ export async function startRuntimeServer(world, {
   const authoredRuntimePluginIds = [...new Set(
     (runtimePluginInstallIndex?.rows ?? []).map(row => row.plugin)
   )];
-  const runtimePluginCatalog = await readRuntimePluginCatalogImpl({
+  const runtimePluginCatalog = await startupTelemetry.runPhase("runtime.plugins.catalog", () => readRuntimePluginCatalogImpl({
     pluginRoot: runtimePluginRoot,
     runtimeProfile,
     configuredPluginIds: configuredRuntimePluginIds,
     authoredPluginIds: authoredRuntimePluginIds
+  }), {
+    label: "Read runtime plugin catalog"
   });
   if (runtimePluginCatalog.selection.hasBlockingErrors) {
     world.emit({
@@ -223,8 +258,10 @@ export async function startRuntimeServer(world, {
     });
     return { ok: false, reason: "runtime plugins unresolved", runtimePluginCatalog };
   }
-  const runtimePluginLoadResult = await loadRuntimePluginModulesImpl({
+  const runtimePluginLoadResult = await startupTelemetry.runPhase("runtime.plugins.load", () => loadRuntimePluginModulesImpl({
     pluginCatalog: runtimePluginCatalog
+  }), {
+    label: "Load runtime plugin modules"
   });
   const effectiveRuntimePluginCatalog = applyRuntimePluginLoadStateImpl(runtimePluginCatalog, runtimePluginLoadResult);
   if (runtimePluginLoadResult.hasBlockingErrors) {
@@ -257,12 +294,21 @@ export async function startRuntimeServer(world, {
   let projectionContext;
   let removeWorldProjectionContext = () => {};
   try {
-    runtimeContributions = collectActiveRuntimeContributionsImpl({
-      bundles: resolvedRuntime.bundles ?? []
+    const runtimeContributionsPhase = startupTelemetry.beginPhase("runtime.contributions", {
+      label: "Collect runtime contributions"
     });
-    projectionContext = createModuleProjectorContext(runtimeContributions.moduleProjectors ?? {}, {
-      owner: `runtime.activePlugins:${serverRunner.id}`
-    });
+    try {
+      runtimeContributions = collectActiveRuntimeContributionsImpl({
+        bundles: resolvedRuntime.bundles ?? []
+      });
+      projectionContext = createModuleProjectorContext(runtimeContributions.moduleProjectors ?? {}, {
+        owner: `runtime.activePlugins:${serverRunner.id}`
+      });
+      runtimeContributionsPhase.complete();
+    } catch (error) {
+      runtimeContributionsPhase.fail(error);
+      throw error;
+    }
     removeWorldProjectionContext = world._pushProjectionContext?.(projectionContext) ?? (() => {});
   } catch (error) {
     world.emit({
@@ -339,11 +385,20 @@ export async function startRuntimeServer(world, {
   const activeDispatchHandlers = new Set(resolvedRuntime.dispatchHandlers ?? dispatchHandlerIdsForProfileImpl(activeRuntimeProfile, compositionOptions));
   const handlerSetFactories = handlerSetFactoriesForProfileImpl(activeRuntimeProfile, compositionOptions);
   const handlerSetDefinitions = handlerSetDefinitionsForProfileImpl(activeRuntimeProfile, compositionOptions);
-  ensureRuntimeBuiltinsImpl(world, {
-    capabilityIds: providedCapabilityIdsForProfileImpl(activeRuntimeProfile, compositionOptions),
-    capabilityDefinitions: runtimeCapabilityDefinitionsForProfileImpl(activeRuntimeProfile, compositionOptions),
-    seedContributions: runtimeBuiltinSeedContributionsForProfileImpl(activeRuntimeProfile, compositionOptions)
+  const ensureRuntimeBuiltinsPhase = startupTelemetry.beginPhase("runtime.builtins", {
+    label: "Ensure runtime builtins"
   });
+  try {
+    ensureRuntimeBuiltinsImpl(world, {
+      capabilityIds: providedCapabilityIdsForProfileImpl(activeRuntimeProfile, compositionOptions),
+      capabilityDefinitions: runtimeCapabilityDefinitionsForProfileImpl(activeRuntimeProfile, compositionOptions),
+      seedContributions: runtimeBuiltinSeedContributionsForProfileImpl(activeRuntimeProfile, compositionOptions)
+    });
+    ensureRuntimeBuiltinsPhase.complete();
+  } catch (error) {
+    ensureRuntimeBuiltinsPhase.fail(error);
+    throw error;
+  }
   const backendHost = serverRunner.backendHost;
   const frontendHost = serverRunner.frontendHost;
   if (!backendHost || !frontendHost) {
@@ -413,7 +468,7 @@ export async function startRuntimeServer(world, {
     return { ok: false, reason: "runtime config unresolved" };
   }
 
-  const appContext = await createRuntimeAppContextForRunnerImpl({
+  const appContext = await startupTelemetry.runPhase("runtime.appContext", () => createRuntimeAppContextForRunnerImpl({
     world,
     serverRunner,
     runtimeRoot,
@@ -427,6 +482,8 @@ export async function startRuntimeServer(world, {
     resolveRuntimeConfig,
     env,
     createRuntimeAppContext: createRuntimeAppContextImpl
+  }), {
+    label: "Create runtime app context"
   });
   if (!appContext.ok) {
     removeWorldProjectionContext();
@@ -455,6 +512,7 @@ export async function startRuntimeServer(world, {
   appContext.operatorRuntimePluginIds = effectiveRuntimePluginCatalog.operatorPluginIds;
   appContext.effectiveRuntimePluginIds = effectiveRuntimePluginCatalog.effectivePluginIds;
   appContext.activeRuntimePluginIds = effectiveRuntimePluginCatalog.activePluginIds;
+  appContext.startupTelemetry = startupTelemetry;
   const verificationPolicy = resolveRunnerVerificationPolicy({
     serverRunner,
     runtimeProfile: activeRuntimeProfile,
@@ -463,30 +521,8 @@ export async function startRuntimeServer(world, {
   appContext.verificationPolicy = verificationPolicy;
   appContext.verificationPolicySource = verificationPolicy.source;
   appContext.verificationPolicyDiagnostics = verificationPolicy.diagnostics ?? [];
-  appContext.verificationPersistence = await createRuntimeVerificationPersistence({
-    serverRunner,
-    appProject,
-    runtimeRoot,
-    runtimeOperatorContract,
-    runtimeProfile: activeRuntimeProfile
-  });
-  appContext.verificationPersistenceDiagnostics = appContext.verificationPersistence?.inspect?.().diagnostics ?? [];
-  const closeVerificationPersistence = () => {
-    try {
-      appContext.verificationPersistence?.close?.();
-    } catch {}
-  };
-  if (typeof appContext.close === "function") {
-    const priorClose = appContext.close.bind(appContext);
-    appContext.close = async () => {
-      try {
-        await priorClose();
-      } finally {
-        closeVerificationPersistence();
-      }
-    };
-  }
-  await appContext.providerRuntimes?.["platform.testMonitor"]?.initialize?.();
+  appContext.verificationPersistence = null;
+  appContext.verificationPersistenceDiagnostics = [];
   const currentWitnessCount = () => typeof world?.witnessCount === "function"
     ? Number(world.witnessCount() || 0)
     : Number(world?.allWitnesses?.().length || 0);
@@ -526,23 +562,7 @@ export async function startRuntimeServer(world, {
   appContext.handlerSet = serverRunner.handlerSet ?? null;
   appContext.bootstrapOnly = serverRunner.bootstrapOnly === true;
   appContext.devMode = activeDevMode === true;
-  if (appProject) {
-    const appSnapshotManager = await AppSnapshotManager.create({
-      appProject,
-      runtimeProfile: activeRuntimeProfile,
-      runtimePluginIds: configuredRuntimePluginIds,
-      env,
-      devMode: activeDevMode === true,
-      logger,
-      fsModule
-    });
-    appContext.appSnapshotManager = appSnapshotManager;
-    const priorClose = typeof appContext.close === "function" ? appContext.close.bind(appContext) : null;
-    appContext.close = () => {
-      appSnapshotManager.close();
-      priorClose?.();
-    };
-  }
+  appContext.appSnapshotManager = null;
   const storage = appContext.storage;
 
   const sessionStore = new Map();
@@ -564,6 +584,110 @@ export async function startRuntimeServer(world, {
     appSnapshotManager: appContext.appSnapshotManager ?? null,
     currentAppRenderWorld: () => appContext.appSnapshotManager?.getActiveSnapshot()?.world ?? world
   });
+  const backgroundStartupTasks = [];
+  const deferredClosers = [];
+  let serverClosing = false;
+  let activeRequestCount = 0;
+  let lastRequestActivityAt = Date.now();
+  const registerDeferredCloser = closer => {
+    if (typeof closer === "function") deferredClosers.push(closer);
+  };
+  const waitForMs = delayMs => new Promise(resolve => setTimeout(resolve, Math.max(0, Number(delayMs) || 0)));
+  const waitForRequestPriorityWindow = async ({
+    minDelayMs = 0,
+    quietWindowMs = 0,
+    maxDelayMs = 0
+  } = {}) => {
+    const waitStartedAt = Date.now();
+    if (minDelayMs > 0) await waitForMs(minDelayMs);
+    while (!serverClosing) {
+      const elapsedMs = Date.now() - waitStartedAt;
+      const idleForMs = Date.now() - lastRequestActivityAt;
+      if (activeRequestCount === 0 && idleForMs >= quietWindowMs) {
+        return {
+          waitedMs: elapsedMs,
+          idleForMs,
+          maxDelayExceeded: false
+        };
+      }
+      if (maxDelayMs > 0 && elapsedMs >= maxDelayMs) {
+        return {
+          waitedMs: elapsedMs,
+          idleForMs,
+          maxDelayExceeded: true
+        };
+      }
+      const remainingQuietMs = Math.max(0, quietWindowMs - idleForMs);
+      const remainingMaxMs = maxDelayMs > 0 ? Math.max(0, maxDelayMs - elapsedMs) : 250;
+      const nextWaitMs = Math.max(25, Math.min(
+        remainingQuietMs || 25,
+        remainingMaxMs || 25,
+        250
+      ));
+      await waitForMs(nextWaitMs);
+    }
+    return {
+      waitedMs: Date.now() - waitStartedAt,
+      idleForMs: Date.now() - lastRequestActivityAt,
+      maxDelayExceeded: false
+    };
+  };
+  const trackBackgroundStartup = (id, label, work, { detail = null } = {}) => {
+    const phase = startupTelemetry.beginPhase(id, {
+      label,
+      blocking: false,
+      detail
+    });
+    const task = Promise.resolve()
+      .then(work)
+      .then(detail => {
+        phase.complete(detail && typeof detail === "object" ? detail : null);
+        return detail;
+      })
+      .catch(error => {
+        phase.fail(error);
+        logError("startup.background.failed", {
+          serverRunner: serverRunner.id,
+          phase: id,
+          error
+        });
+        world.observe({
+          process: "server.start.background.failed",
+          actor,
+          claims: [],
+          body: {
+            serverRunner: serverRunner.id,
+            phase: id,
+            message: error instanceof Error ? error.message : String(error)
+          }
+        });
+        return null;
+      });
+    backgroundStartupTasks.push(task);
+    return task;
+  };
+  const scheduleBackgroundStartup = (id, label, policy, work) => trackBackgroundStartup(
+    id,
+    label,
+    async () => {
+      const gate = await waitForRequestPriorityWindow(policy);
+      const result = await work();
+      return {
+        waitedMs: gate.waitedMs,
+        idleForMs: gate.idleForMs,
+        maxDelayExceeded: gate.maxDelayExceeded,
+        ...(result && typeof result === "object" ? result : {})
+      };
+    },
+    {
+      detail: {
+        lazy: true,
+        minDelayMs: policy.minDelayMs,
+        quietWindowMs: policy.quietWindowMs,
+        maxDelayMs: policy.maxDelayMs
+      }
+    }
+  );
   const mountedRoutesCache = new WeakMap();
   const mountedRoutesFor = (runnerId, runtimeContext = null) => {
     const routeWorld = runtimeContext?.appSnapshotManager?.getActiveSnapshot()?.world ?? world;
@@ -701,6 +825,8 @@ export async function startRuntimeServer(world, {
   sseWatcher.unref?.();
 
   const server = httpModule.createServer(async (req, res) => {
+    activeRequestCount += 1;
+    lastRequestActivityAt = Date.now();
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const runtime = await resolveActiveRuntime(req.headers?.host ?? null);
@@ -958,6 +1084,8 @@ export async function startRuntimeServer(world, {
       });
       sendJson(res, 500, { error: "internal error", requestId });
     } finally {
+      activeRequestCount = Math.max(0, activeRequestCount - 1);
+      lastRequestActivityAt = Date.now();
       const emittedWitnesses = witnessesSince(witnessCountBefore);
       const failedWitnesses = emittedWitnesses.filter(witness => witness.process.endsWith(".failed") || witness.process.endsWith(".blocked"));
       world.observe({
@@ -981,9 +1109,87 @@ export async function startRuntimeServer(world, {
     }
   });
 
-  await new Promise(resolve => server.listen(port, "127.0.0.1", resolve));
+  await startupTelemetry.runPhase("runtime.listen", () => new Promise(resolve => server.listen(port, "127.0.0.1", resolve)), {
+    label: "Bind HTTP listener"
+  });
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}`;
+  startupTelemetry.mark("listenReady", { url, serverRunner: serverRunner.id });
+  startupTelemetry.mark("meaningfulReady", { url, serverRunner: serverRunner.id });
+
+  const verificationPersistenceReady = scheduleBackgroundStartup(
+    "runtime.verificationPersistence",
+    "Initialize verification persistence",
+    effectiveBackgroundStartupPolicy.verificationPersistence,
+    async () => {
+      const verificationPersistence = await createRuntimeVerificationPersistenceImpl({
+        serverRunner,
+        appProject,
+        runtimeRoot,
+        runtimeOperatorContract,
+        runtimeProfile: activeRuntimeProfile
+      });
+      if (serverClosing) {
+        try {
+          verificationPersistence?.close?.();
+        } catch {}
+        return { closedBeforeAttach: true };
+      }
+      appContext.verificationPersistence = verificationPersistence;
+      appContext.verificationPersistenceDiagnostics = verificationPersistence?.inspect?.().diagnostics ?? [];
+      registerDeferredCloser(() => {
+        try {
+          verificationPersistence?.close?.();
+        } catch {}
+      });
+      return {
+        diagnosticsCount: appContext.verificationPersistenceDiagnostics.length
+      };
+    }
+  );
+
+  scheduleBackgroundStartup(
+    "runtime.testMonitor.initialize",
+    "Initialize platform test monitor",
+    effectiveBackgroundStartupPolicy.testMonitor,
+    async () => {
+      await verificationPersistenceReady;
+      await appContext.providerRuntimes?.["platform.testMonitor"]?.initialize?.();
+      return { initialized: true };
+    }
+  );
+
+  if (appProject) {
+    scheduleBackgroundStartup(
+      "runtime.appSnapshot.initialBuild",
+      "Build initial app snapshot",
+      effectiveBackgroundStartupPolicy.appSnapshotInitialBuild,
+      async () => {
+        const appSnapshotManager = await AppSnapshotManagerClass.create({
+          appProject,
+          runtimeProfile: activeRuntimeProfile,
+          runtimePluginIds: configuredRuntimePluginIds,
+          env,
+          devMode: activeDevMode === true,
+          logger,
+          fsModule
+        });
+        if (serverClosing) {
+          appSnapshotManager.close();
+          return { closedBeforeAttach: true };
+        }
+        appContext.appSnapshotManager = appSnapshotManager;
+        registerDeferredCloser(() => appSnapshotManager.close());
+        return {
+          appRevision: Number(appSnapshotManager.appRevision || 0),
+          sourceCount: Number(appSnapshotManager.diagnostics?.().sourceCount || 0),
+          devMode: activeDevMode === true
+        };
+      }
+    );
+  }
+
+  const startupReady = Promise.allSettled(backgroundStartupTasks).then(() => startupTelemetry.snapshot());
 
   world.emit({
     process: "server.start",
@@ -1012,11 +1218,24 @@ export async function startRuntimeServer(world, {
     runtimeBundleSummary: resolvedRuntime,
     runtimePluginCatalog: effectiveRuntimePluginCatalog,
     runtimeContext: appContext,
-    close: () => {
+    getStartupTelemetry: () => startupTelemetry.snapshot(),
+    subscribeStartupTelemetry: listener => startupTelemetry.subscribe?.(listener) ?? (() => {}),
+    startupReady,
+    close: async () => {
+      serverClosing = true;
       clearInterval(sseWatcher);
       for (const client of sseClients) client.end();
       sseClients.clear();
       for (const context of new Set(runtimeContexts.values())) context?.close?.();
+      const appContextClose = typeof appContext.close === "function" ? appContext.close.bind(appContext) : null;
+      await appContextClose?.();
+      await Promise.allSettled(backgroundStartupTasks);
+      while (deferredClosers.length) {
+        const closer = deferredClosers.pop();
+        try {
+          closer?.();
+        } catch {}
+      }
       removeWorldProjectionContext();
       server.closeAllConnections?.();
       return new Promise(resolve => server.close(resolve));

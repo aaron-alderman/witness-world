@@ -64,7 +64,8 @@ function parsePlatformPageRequest(requestUrl) {
   const limitParam = optionalText(url.searchParams.get("limit"));
   return {
     url,
-    requestedView: optionalText(url.searchParams.get("view")) || "overview",
+    requestedArea: optionalText(url.searchParams.get("area")) || "overview",
+    requestedSection: optionalText(url.searchParams.get("section")),
     id: optionalText(url.searchParams.get("id")),
     context: optionalText(url.searchParams.get("context")),
     name: optionalText(url.searchParams.get("name")),
@@ -73,6 +74,270 @@ function parsePlatformPageRequest(requestUrl) {
     limit: limitParam ? clampPageSize(limitParam) : null,
     sort: optionalText(url.searchParams.get("sort")),
     dir: optionalText(url.searchParams.get("dir")) === "desc" ? "desc" : "asc"
+  };
+}
+
+const PLATFORM_IA = Object.freeze([
+  Object.freeze({
+    id: "overview",
+    title: "Overview",
+    defaultSection: "summary",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "summary",
+        title: "Summary",
+        subtitle: "Global platform summary, quick links, and high-signal status.",
+        pageIds: Object.freeze(["overview"]),
+        modelView: "overview",
+        sliceKey: "overview",
+        emptyDetailTitle: "Overview Detail",
+        emptyDetailMessage: "Overview focuses on summary state rather than record detail."
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "change",
+    title: "Change",
+    defaultSection: "branches",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "branches",
+        title: "Branches",
+        subtitle: "Branch lifecycle, candidate snapshots, and branch detail.",
+        pageIds: Object.freeze(["workflowBranches"]),
+        modelView: "workflowBranches",
+        sliceKey: "change",
+        emptyDetailTitle: "Branch Detail",
+        emptyDetailMessage: "Select a branch to inspect its lifecycle, snapshots, and linked work."
+      }),
+      Object.freeze({
+        id: "changesets",
+        title: "Change Sets",
+        subtitle: "Staged edits, validation state, and change-set detail.",
+        pageIds: Object.freeze(["workflowChangeSets"]),
+        modelView: "workflowChangeSets",
+        sliceKey: "change",
+        emptyDetailTitle: "Change Set Detail",
+        emptyDetailMessage: "Select a change set to inspect edits, validation results, and apply state."
+      }),
+      Object.freeze({
+        id: "proposals",
+        title: "Proposals",
+        subtitle: "Proposal intake, review, and proposal detail.",
+        pageIds: Object.freeze(["workflowProposals"]),
+        modelView: "workflowProposals",
+        sliceKey: "change",
+        emptyDetailTitle: "Proposal Detail",
+        emptyDetailMessage: "Select a proposal to inspect its target, state, and review actions."
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "verification",
+    title: "Verification",
+    defaultSection: "status",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "status",
+        title: "Status",
+        subtitle: "Policies, freshness, invalidations, queue state, and gate detail.",
+        pageIds: Object.freeze(["verificationStatus"]),
+        modelView: "verificationStatus",
+        sliceKey: "verification",
+        emptyDetailTitle: "Verification Detail",
+        emptyDetailMessage: "Select a gate, policy, or execution row to inspect verification detail."
+      }),
+      Object.freeze({
+        id: "runs",
+        title: "Runs",
+        subtitle: "Runs, reports, artifacts, suites, cases, and run detail.",
+        pageIds: Object.freeze(["verificationRuns"]),
+        modelView: "verificationRuns",
+        sliceKey: "verification",
+        emptyDetailTitle: "Run Detail",
+        emptyDetailMessage: "Select a run, report, or artifact to inspect verification outputs."
+      }),
+      Object.freeze({
+        id: "runtime",
+        title: "Runtime",
+        subtitle: "Runtime revisions, candidate snapshots, build status, and runtime detail.",
+        pageIds: Object.freeze(["verificationRuntime"]),
+        modelView: "verificationRuntime",
+        sliceKey: "verification",
+        emptyDetailTitle: "Runtime Detail",
+        emptyDetailMessage: "Select a runtime revision or candidate snapshot to inspect runtime state."
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "knowledge",
+    title: "Knowledge",
+    defaultSection: "docs",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "docs",
+        title: "Docs",
+        subtitle: "Governed documents, references, tasks, and document detail.",
+        pageIds: Object.freeze(["knowledgeDocs"]),
+        modelView: "knowledgeDocs",
+        sliceKey: "knowledgeDocs",
+        emptyDetailTitle: "Document Detail",
+        emptyDetailMessage: "Select a document to inspect freshness, sections, tasks, and references."
+      }),
+      Object.freeze({
+        id: "folders",
+        title: "Folders",
+        subtitle: "Folder metadata, relations, and folder detail.",
+        pageIds: Object.freeze(["knowledgeFolders"]),
+        modelView: "knowledgeFolders",
+        sliceKey: "knowledgeFolders",
+        emptyDetailTitle: "Folder Detail",
+        emptyDetailMessage: "Select a folder to inspect metadata and linked platform concepts."
+      }),
+      Object.freeze({
+        id: "roadmap",
+        title: "Roadmap",
+        subtitle: "Roadmap tasks, epics, features, and roadmap detail.",
+        pageIds: Object.freeze(["knowledgeRoadmap"]),
+        modelView: "knowledgeRoadmap",
+        sliceKey: "knowledgeRoadmap",
+        emptyDetailTitle: "Roadmap Detail",
+        emptyDetailMessage: "Select a roadmap task, epic, or feature to inspect planning detail."
+      })
+    ])
+  }),
+  Object.freeze({
+    id: "advanced",
+    title: "Advanced",
+    defaultSection: "model",
+    sections: Object.freeze([
+      Object.freeze({
+        id: "model",
+        title: "Model",
+        subtitle: "Platform objects, relationships, and object detail.",
+        pageIds: Object.freeze(["modelObjects"]),
+        modelView: "modelObjects",
+        sliceKey: "advancedModel",
+        emptyDetailTitle: "Object Detail",
+        emptyDetailMessage: "Select a platform object to inspect its properties and relationships."
+      }),
+      Object.freeze({
+        id: "coverage",
+        title: "Coverage",
+        subtitle: "Coverage edges between gates and protected targets.",
+        pageIds: Object.freeze(["modelCoverage"]),
+        modelView: "modelCoverage",
+        sliceKey: "advancedCoverage",
+        emptyDetailTitle: "Coverage Detail",
+        emptyDetailMessage: "Select a coverage edge target or gate to inspect verification coverage."
+      }),
+      Object.freeze({
+        id: "governance",
+        title: "Governance",
+        subtitle: "Governance routes and proposal-target coverage.",
+        pageIds: Object.freeze(["governance"]),
+        modelView: "governance",
+        sliceKey: "advancedGovernance",
+        emptyDetailTitle: "Governance Detail",
+        emptyDetailMessage: "Select a governance object to inspect mutating platform seams."
+      }),
+      Object.freeze({
+        id: "bridges",
+        title: "Bridges",
+        subtitle: "Compatibility bridge inventory and detail.",
+        pageIds: Object.freeze(["bridges"]),
+        modelView: "bridges",
+        sliceKey: "advancedBridges",
+        emptyDetailTitle: "Bridge Detail",
+        emptyDetailMessage: "Select a compatibility bridge to inspect its role and scope."
+      }),
+      Object.freeze({
+        id: "semantics",
+        title: "Semantics",
+        subtitle: "Mutable-surface semantics and detail.",
+        pageIds: Object.freeze(["semantics"]),
+        modelView: "semantics",
+        sliceKey: "advancedSemantics",
+        emptyDetailTitle: "Semantics Detail",
+        emptyDetailMessage: "Select a mutable surface to inspect its sharing and authority rules."
+      }),
+      Object.freeze({
+        id: "packages",
+        title: "Packages",
+        subtitle: "Package coexistence, convergence, apply preview, and package detail.",
+        pageIds: Object.freeze(["packageCoexistence", "packageConvergence", "packageApplyPreview"]),
+        modelView: "advancedPackages",
+        sliceKey: "advancedPackages",
+        emptyDetailTitle: "Package Detail",
+        emptyDetailMessage: "Select a package or revision to inspect coexistence, convergence, or apply preview detail."
+      }),
+      Object.freeze({
+        id: "context",
+        title: "Context",
+        subtitle: "Context naming state, bindings, scopes, and resolution detail.",
+        pageIds: Object.freeze([]),
+        modelView: "contextNaming",
+        sliceKey: "advancedContext",
+        emptyDetailTitle: "Context Detail",
+        emptyDetailMessage: "Select a binding, scope, or resolution row to inspect context naming detail."
+      }),
+      Object.freeze({
+        id: "revision-history",
+        title: "Revision History",
+        subtitle: "Capability revision history and capability detail.",
+        pageIds: Object.freeze([]),
+        modelView: "capabilityRevisionHistory",
+        sliceKey: "advancedRevisionHistory",
+        emptyDetailTitle: "Revision Detail",
+        emptyDetailMessage: "Select a capability revision row to inspect revision history detail."
+      }),
+      Object.freeze({
+        id: "conflicts",
+        title: "Conflicts",
+        subtitle: "Conflicts, merge intents, and conflict detail.",
+        pageIds: Object.freeze([]),
+        modelView: "advancedConflicts",
+        sliceKey: "advancedConflicts",
+        emptyDetailTitle: "Conflict Detail",
+        emptyDetailMessage: "Select a conflict or merge intent to inspect conflict detail."
+      })
+    ])
+  })
+]);
+
+const PLATFORM_AREAS_BY_ID = Object.freeze(Object.fromEntries(PLATFORM_IA.map(area => [area.id, area])));
+const PLATFORM_SECTION_BY_KEY = Object.freeze(Object.fromEntries(
+  PLATFORM_IA.flatMap(area => area.sections.map(section => [`${area.id}:${section.id}`, { area, section }]))
+));
+
+function platformSectionConfig(areaId, sectionId = null) {
+  const area = PLATFORM_AREAS_BY_ID[areaId] || PLATFORM_IA[0];
+  const section = area.sections.find(candidate => candidate.id === sectionId) || area.sections[0];
+  return { area, section };
+}
+
+export function resolvePlatformLocation(requestUrl) {
+  const consoleLayout = readPlatformConsoleLayout();
+  const rawCtx = parsePlatformPageRequest(requestUrl);
+  const fallbackDestination = rawCtx.id ? conceptDestination(rawCtx.id) : null;
+  const resolvedArea = rawCtx.requestedArea || fallbackDestination?.area || "overview";
+  const resolvedSection = rawCtx.requestedSection || fallbackDestination?.section || null;
+  const { area, section } = platformSectionConfig(resolvedArea, resolvedSection);
+  const ctx = {
+    ...rawCtx,
+    area: area.id,
+    section: section.id,
+    id: fallbackDestination?.id ?? rawCtx.id,
+    view: section.modelView
+  };
+  const pages = section.pageIds.map(pageId => pageSurfaceById(consoleLayout, pageId)).filter(Boolean);
+  return {
+    consoleLayout,
+    consolePage: consoleLayout.page ?? { title: "Platform Console", summary: "" },
+    area,
+    section,
+    pages,
+    ctx
   };
 }
 
@@ -102,10 +367,14 @@ function pageViewModelView(pageView) {
   return optionalText(pageView?.modelView) || surfaceModelView(pageView?.surface);
 }
 
-function platformHref(ctx, view, params = {}) {
-  const url = new URL(ctx?.url?.pathname || "/platform", "http://platform.local");
-  if (view && view !== "overview") url.searchParams.set("view", view);
+function platformHref(ctx, destination = null, params = {}) {
+  const targetArea = typeof destination === "object" && destination ? destination.area : (ctx?.area || "overview");
+  const targetSection = typeof destination === "object" && destination ? destination.section : (ctx?.section || "summary");
+  const url = new URL("/platform", "http://platform.local");
+  url.searchParams.set("area", targetArea);
+  url.searchParams.set("section", targetSection);
   for (const [key, rawValue] of Object.entries({
+    id: typeof destination === "object" && destination ? destination.id : ctx?.id,
     context: ctx?.context,
     name: ctx?.name,
     target: ctx?.target,
@@ -119,6 +388,27 @@ function platformHref(ctx, view, params = {}) {
   }
   const query = url.searchParams.toString();
   return query ? `${url.pathname}?${query}` : url.pathname;
+}
+
+function platformFragmentHref(ctx, params = {}) {
+  const url = new URL("/api/platform-page", "http://platform.local");
+  for (const [key, rawValue] of Object.entries({
+    area: ctx?.area,
+    section: ctx?.section,
+    id: ctx?.id,
+    context: ctx?.context,
+    name: ctx?.name,
+    target: ctx?.target,
+    sort: ctx?.sort,
+    dir: ctx?.dir,
+    limit: ctx?.limit,
+    offset: ctx?.offset,
+    ...params
+  })) {
+    if (rawValue === undefined || rawValue === null || rawValue === "" || (key === "offset" && Number(rawValue) === 0)) continue;
+    url.searchParams.set(key, String(rawValue));
+  }
+  return `${url.pathname}?${url.searchParams.toString()}`;
 }
 
 function humanizeKey(key) {
@@ -236,48 +526,51 @@ function uniqueLinkEntries(values = []) {
 function conceptDestination(value) {
   const raw = optionalText(value);
   if (!raw) return null;
-  if (raw.startsWith("branch:")) return { view: "workflowBranches", id: raw };
-  if (raw.startsWith("changeSet:") || raw.startsWith("changeset.")) return { view: "workflowChangeSets", id: raw };
-  if (raw.startsWith("proposal:")) return { view: "workflowProposals", id: raw };
-  if (raw.startsWith("candidateSnapshot:")) return { view: "verificationRuntime", id: raw };
+  if (raw.startsWith("branch:")) return { area: "change", section: "branches", id: raw };
+  if (raw.startsWith("changeSet:") || raw.startsWith("changeset.")) return { area: "change", section: "changesets", id: raw };
+  if (raw.startsWith("proposal:")) return { area: "change", section: "proposals", id: raw };
+  if (raw.startsWith("candidateSnapshot:")) return { area: "verification", section: "runtime", id: raw };
   if (raw.startsWith("runtimeRevision:") || raw.startsWith("backendRevision:") || raw.startsWith("frontendRevision:") || raw.startsWith("snapshotBuild:") || raw.startsWith("snapshotBuildError:")) {
-    return { view: "verificationRuntime", id: raw };
+    return { area: "verification", section: "runtime", id: raw };
   }
   if (raw.startsWith("gate:") || raw.startsWith("testRun:") || raw.startsWith("testResult:") || raw.startsWith("testArtifact:") || raw.startsWith("testSuite:") || raw.startsWith("testCase:") || raw.startsWith("testReport:")) {
     return raw.startsWith("gate:")
-      ? { view: "verificationStatus", id: raw }
-      : { view: "verificationRuns", id: raw };
+      ? { area: "verification", section: "status", id: raw }
+      : { area: "verification", section: "runs", id: raw };
   }
   if (raw.startsWith("verificationPolicy:") || raw.startsWith("verificationFreshness:") || raw.startsWith("verificationInvalidation:") || raw.startsWith("verificationQueue:") || raw.startsWith("verificationExecution:")) {
-    return { view: "verificationStatus", id: raw };
+    return { area: "verification", section: "status", id: raw };
   }
   if (raw.startsWith("roadmap:") || raw.startsWith("epic:") || raw.startsWith("feature:") || raw.startsWith("roadmapTask:") || raw.startsWith("docTask:")) {
-    return { view: "knowledgeRoadmap", id: raw };
+    return { area: "knowledge", section: "roadmap", id: raw };
   }
-  if (raw.startsWith("folder:")) return { view: "knowledgeFolders", id: raw };
-  if (raw.startsWith("doc:")) return { view: "knowledgeDocs", id: raw.slice(4) };
-  if (raw.endsWith(".md")) return { view: "knowledgeDocs", id: raw };
-  if (raw.startsWith("gap.")) {
-    return { view: "signalsGaps", id: raw };
-  }
-  if (raw.startsWith("telemetryMetric:") || raw.startsWith("defectCluster:") || raw.startsWith("boundary:")) {
-    return { view: "signalsCatalog", id: raw };
-  }
-  if (raw.startsWith("compatibilityBridge:")) return { view: "bridges", id: raw };
-  if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return { view: "governance", id: raw };
-  if (raw.startsWith("mutableSurface:")) return { view: "semantics", id: raw };
-  if (raw.startsWith("packageCoexistence:")) return { view: "packageCoexistence", id: raw };
-  if (raw.startsWith("packageConvergence:")) return { view: "packageConvergence", id: raw };
-  if (raw.startsWith("packageApplyPreview:")) return { view: "packageApplyPreview", id: raw };
-  if (raw.startsWith("packageTransformer:") || raw.startsWith("packageTransformer.")) return { view: "packageConvergence", id: raw };
-  if (raw.startsWith("packagePatch:")) return { view: "packageConvergence", id: raw };
-  if (raw.startsWith("packageDependency:")) return { view: "modelObjects", id: raw };
-  if (raw.startsWith("code:")) return { view: "modelObjects", id: raw };
+  if (raw.startsWith("folder:")) return { area: "knowledge", section: "folders", id: raw };
+  if (raw.startsWith("doc:")) return { area: "knowledge", section: "docs", id: raw.slice(4) };
+  if (raw.endsWith(".md")) return { area: "knowledge", section: "docs", id: raw };
+  if (raw.startsWith("gap.")) return { area: "overview", section: "summary", id: raw };
+  if (raw.startsWith("telemetryMetric:") || raw.startsWith("defectCluster:") || raw.startsWith("boundary:")) return { area: "advanced", section: "model", id: raw };
+  if (raw.startsWith("compatibilityBridge:")) return { area: "advanced", section: "bridges", id: raw };
+  if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return { area: "advanced", section: "governance", id: raw };
+  if (raw.startsWith("mutableSurface:")) return { area: "advanced", section: "semantics", id: raw };
+  if (raw.startsWith("packageCoexistence:")) return { area: "advanced", section: "packages", id: raw };
+  if (raw.startsWith("packageConvergence:")) return { area: "advanced", section: "packages", id: raw };
+  if (raw.startsWith("packageApplyPreview:")) return { area: "advanced", section: "packages", id: raw };
+  if (raw.startsWith("packageTransformer:") || raw.startsWith("packageTransformer.")) return { area: "advanced", section: "packages", id: raw };
+  if (raw.startsWith("packagePatch:")) return { area: "advanced", section: "packages", id: raw };
+  if (raw.startsWith("packageDependency:")) return { area: "advanced", section: "model", id: raw };
+  if (raw.startsWith("code:")) return { area: "advanced", section: "model", id: raw };
   if (raw.startsWith("package.") || raw.startsWith("packageRevision.") || raw.startsWith("packageNamespace:") || raw.startsWith("packageConflict:")) {
-    return { view: "packageCoexistence", id: raw };
+    return { area: "advanced", section: "packages", id: raw };
   }
   if (raw.startsWith("route:") || raw.startsWith("handler:") || raw.startsWith("surface:") || raw.startsWith("capability:") || raw.startsWith("plugin.") || raw.startsWith("bundle:") || raw.startsWith("rvm:") || raw.startsWith("wcss:") || raw.startsWith("wtoml:") || raw.startsWith("json:") || raw.startsWith("file:")) {
-    return { view: "modelObjects", id: raw };
+    if (raw.startsWith("capabilityRevision:")) return { area: "advanced", section: "revision-history", id: raw };
+    return { area: "advanced", section: "model", id: raw };
+  }
+  if (raw.startsWith("conflict:") || raw.startsWith("mergeIntent:")) {
+    return { area: "advanced", section: "conflicts", id: raw };
+  }
+  if (raw.startsWith("context:") || raw.startsWith("contextBinding:") || raw.startsWith("contextExport:") || raw.startsWith("contextImport:") || raw.startsWith("contextScope:") || raw.startsWith("contextTarget:") || raw.startsWith("contextResolution:") || raw.startsWith("contextConflict:")) {
+    return { area: "advanced", section: "context", id: raw };
   }
   return null;
 }
@@ -288,36 +581,34 @@ function conceptApiHref(value) {
   if (raw.startsWith("branch:")) return `/api/platform-branches/${encodeURIComponent(raw)}`;
   if (raw.startsWith("changeSet:") || raw.startsWith("changeset.")) return `/api/platform-change-sets/${encodeURIComponent(raw)}`;
   if (raw.startsWith("candidateSnapshot:") || raw.startsWith("runtimeRevision:") || raw.startsWith("backendRevision:") || raw.startsWith("frontendRevision:") || raw.startsWith("snapshotBuild:") || raw.startsWith("snapshotBuildError:")) {
-    return `/api/platform-model?view=runtimeRevisions&id=${encodeURIComponent(raw)}`;
+    return `/api/platform-model?area=verification&section=runtime&id=${encodeURIComponent(raw)}`;
   }
-  if (raw.startsWith("gate:")) return `/api/platform-model?view=testGates&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("gate:")) return `/api/platform-model?area=verification&section=status&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("testRun:")) return `/api/platform-test-runs/${encodeURIComponent(raw)}`;
   if (raw.startsWith("testResult:") || raw.startsWith("testArtifact:") || raw.startsWith("testSuite:") || raw.startsWith("testCase:") || raw.startsWith("testReport:")) {
-    return `/api/platform-model?view=testRuns&id=${encodeURIComponent(raw)}`;
+    return `/api/platform-model?area=verification&section=runs&id=${encodeURIComponent(raw)}`;
   }
   if (raw.startsWith("roadmap:") || raw.startsWith("epic:") || raw.startsWith("feature:") || raw.startsWith("roadmapTask:") || raw.startsWith("docTask:")) {
-    return `/api/platform-model?view=roadmap&id=${encodeURIComponent(raw)}`;
+    return `/api/platform-model?area=knowledge&section=roadmap&id=${encodeURIComponent(raw)}`;
   }
-  if (raw.startsWith("folder:")) return `/api/platform-model?view=folders&id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("doc:")) return `/api/platform-model?view=docs&id=${encodeURIComponent(raw.slice(4))}`;
-  if (raw.endsWith(".md")) return `/api/platform-model?view=docs&id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("telemetryMetric:")) return `/api/platform-model?view=telemetry&id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("compatibilityBridge:")) return `/api/platform-model?view=bridges&id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return `/api/platform-model?view=governance&id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("mutableSurface:")) return `/api/platform-model?view=semantics&id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("packageCoexistence:")) return `/api/platform-model?view=packageCoexistence&id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("packageConvergence:")) return `/api/platform-model?view=packageConvergence&id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("packageApplyPreview:")) return `/api/platform-model?view=packageApplyPreview&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("folder:")) return `/api/platform-model?area=knowledge&section=folders&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("doc:")) return `/api/platform-model?area=knowledge&section=docs&id=${encodeURIComponent(raw.slice(4))}`;
+  if (raw.endsWith(".md")) return `/api/platform-model?area=knowledge&section=docs&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("telemetryMetric:")) return `/api/platform-model?area=advanced&section=model&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("compatibilityBridge:")) return `/api/platform-model?area=advanced&section=bridges&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return `/api/platform-model?area=advanced&section=governance&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("mutableSurface:")) return `/api/platform-model?area=advanced&section=semantics&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("packageCoexistence:") || raw.startsWith("packageConvergence:") || raw.startsWith("packageApplyPreview:")) return `/api/platform-model?area=advanced&section=packages&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("packageTransformer:") || raw.startsWith("packageTransformer.") || raw.startsWith("packagePatch:")) {
-    return `/api/platform-model?view=packageConvergence&id=${encodeURIComponent(raw)}`;
+    return `/api/platform-model?area=advanced&section=packages&id=${encodeURIComponent(raw)}`;
   }
-  if (raw.startsWith("packageDependency:")) return `/api/platform-model?id=${encodeURIComponent(raw)}`;
-  if (raw.startsWith("code:")) return `/api/platform-model?id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("packageDependency:")) return `/api/platform-model?area=advanced&section=model&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("code:")) return `/api/platform-model?area=advanced&section=model&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("package.") || raw.startsWith("packageRevision.") || raw.startsWith("packageNamespace:") || raw.startsWith("packageConflict:")) {
-    return `/api/platform-model?view=packageCoexistence&id=${encodeURIComponent(raw)}`;
+    return `/api/platform-model?area=advanced&section=packages&id=${encodeURIComponent(raw)}`;
   }
-  if (raw.startsWith("gap.")) return "/api/platform-gaps";
-  if (raw.startsWith("proposal:")) return "/api/platform-model?view=proposals";
+  if (raw.startsWith("gap.")) return "/api/platform-model?area=overview&section=summary";
+  if (raw.startsWith("proposal:")) return "/api/platform-model?area=change&section=proposals";
   return "/api/platform-model";
 }
 
@@ -327,7 +618,7 @@ function renderConceptLink(ctx, value, label = null) {
   const destination = conceptDestination(raw);
   const display = label || raw;
   if (!destination) return esc(display);
-  return `<a href="${esc(platformHref(ctx, destination.view, { id: destination.id }))}">${esc(display)}</a>`;
+  return `<a href="${esc(platformHref(ctx, destination))}">${esc(display)}</a>`;
 }
 
 function renderApiLink(value) {
@@ -614,19 +905,441 @@ function pageSurfaceById(consoleLayout, pageId) {
   return (consoleLayout?.children ?? []).find(surface => surface.pageId === pageId) || null;
 }
 
-function renderNav(ctx, pageViews) {
+function renderNav(ctx, area, section) {
+  const areaCards = PLATFORM_IA.map(candidate => {
+    const isSelected = candidate.id === area.id;
+    return `
+      <a class="platform-nav-link${isSelected ? " selected" : ""}" href="${esc(platformHref(ctx, { area: candidate.id, section: candidate.defaultSection }))}">
+        <strong>${esc(candidate.title)}</strong>
+      </a>
+    `;
+  }).join("");
+  const sectionLinks = area.sections.map(candidate => {
+    const isSelected = candidate.id === section.id;
+    return `
+      <a class="platform-section-link${isSelected ? " selected" : ""}" href="${esc(platformHref(ctx, { area: area.id, section: candidate.id }))}">
+        <span>${esc(candidate.title)}</span>
+        <span class="muted">${esc(candidate.subtitle)}</span>
+      </a>
+    `;
+  }).join("");
   return `
-    <nav class="card" aria-label="Platform pages">
-      <h2>Pages</h2>
-      <div class="summary">
-        ${pageViews.map(view => `
-          <div class="card">
-            <div><strong><a href="${esc(platformHref(ctx, view.id))}">${esc(view.title)}</a></strong></div>
-            <div class="muted">${esc(view.subtitle)}</div>
-          </div>
-        `).join("")}
+    <aside class="platform-console-nav card" aria-label="Platform navigation">
+      <div class="platform-console-nav-header">
+        <h2>Areas</h2>
+        <div class="muted">${esc(area.title)}</div>
       </div>
-    </nav>
+      <div class="platform-nav-list">${areaCards}</div>
+      <div class="platform-console-nav-header">
+        <h2>Sections</h2>
+        <div class="muted">${esc(section.subtitle)}</div>
+      </div>
+      <div class="platform-section-list">${sectionLinks}</div>
+    </aside>
+  `;
+}
+
+function renderPlatformIaCss() {
+  return `
+    .platform-console-shell {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: minmax(15rem, 19rem) minmax(0, 1fr);
+      align-items: start;
+    }
+    .platform-console-nav,
+    .platform-console-pane {
+      position: sticky;
+      top: 1rem;
+    }
+    .platform-console-nav {
+      display: grid;
+      gap: 1rem;
+    }
+    .platform-console-nav-header {
+      display: grid;
+      gap: 0.25rem;
+    }
+    .platform-nav-list,
+    .platform-section-list {
+      display: grid;
+      gap: 0.5rem;
+    }
+    .platform-nav-link,
+    .platform-section-link {
+      display: grid;
+      gap: 0.2rem;
+      padding: 0.8rem 0.9rem;
+      border-radius: 0.8rem;
+      text-decoration: none;
+      color: inherit;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .platform-nav-link.selected,
+    .platform-section-link.selected {
+      border-color: rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .platform-console-content {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.9fr);
+      align-items: start;
+    }
+    .platform-console-pane {
+      display: grid;
+      gap: 1rem;
+    }
+    .platform-console-pane-main,
+    .platform-console-pane-detail {
+      min-width: 0;
+    }
+    .platform-pane-group {
+      display: grid;
+      gap: 1rem;
+    }
+    .platform-pane-header {
+      display: grid;
+      gap: 0.35rem;
+    }
+    .platform-pane-placeholder {
+      min-height: 12rem;
+      align-content: start;
+    }
+    @media (max-width: 980px) {
+      .platform-console-shell,
+      .platform-console-content {
+        grid-template-columns: 1fr;
+      }
+      .platform-console-nav,
+      .platform-console-pane {
+        position: static;
+      }
+      .platform-nav-list {
+        grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+      }
+    }
+  `;
+}
+
+function renderPlatformPaneHeader(title, subtitle = "") {
+  return `
+    <div class="platform-pane-header">
+      <h2>${esc(title)}</h2>
+      ${subtitle ? `<div class="muted">${esc(subtitle)}</div>` : ""}
+    </div>
+  `;
+}
+
+function platformLocationTitle(area, section) {
+  if (!area || !section) return "Platform Console";
+  return area.id === "overview" && section.id === "summary"
+    ? area.title
+    : `${area.title} / ${section.title}`;
+}
+
+function surfaceBelongsToDetailPane(surface) {
+  const name = String(surface?.name || "");
+  return name.includes("Detail") || name.includes("Selected");
+}
+
+function renderSectionSurfaceGroups(pages, model, ctx, consoleLayout, predicate, {
+  includeSummaryCards = false
+} = {}) {
+  return pages.map(pageSurface => {
+    const sections = (pageSurface?.childSurfaces ?? [])
+      .filter(predicate)
+      .map(surface => renderSurfaceSection(surface, model, ctx, consoleLayout))
+      .join("");
+    const summaryCards = includeSummaryCards ? renderSummaryCardsFromSurface(pageSurface, model) : "";
+    if (!summaryCards && !sections) return "";
+    return `
+      <section class="platform-pane-group" data-platform-page="${esc(pageSurface?.pageId || pageSurface?.name || "page")}">
+        ${summaryCards}
+        ${sections}
+      </section>
+    `;
+  }).join("");
+}
+
+function genericRecordDetailMatch(record, id) {
+  if (!record || !id) return false;
+  const directKeys = ["id", "path", "packageId", "revisionId", "coexistenceId", "convergenceId", "capabilityId", "witnessId", "branchId", "changeSetId", "proposalId", "routeId", "gateId", "runId", "resultId", "targetId"];
+  for (const key of directKeys) {
+    if (optionalText(record?.[key]) === id) return true;
+  }
+  const listKeys = ["revisionIds", "selectedRevisionIds", "transformerIds", "convergencePatchIds", "selectedNamespaceIds", "manifestConflictIds", "relatedTransformerIds", "relatedConvergencePatchIds", "sampleTargets", "surfaces", "routes"];
+  for (const key of listKeys) {
+    if (Array.isArray(record?.[key]) && record[key].map(String).includes(id)) return true;
+  }
+  if (Array.isArray(record?.namespaceSelections) && record.namespaceSelections.some(namespace =>
+    namespace?.id === id
+    || namespace?.revision === id
+    || `${namespace?.context}:${namespace?.name}` === id
+  )) {
+    return true;
+  }
+  return false;
+}
+
+function sectionDetailRecords(section, model) {
+  switch (section.modelView) {
+    case "workflowBranches":
+      return model.branches ?? [];
+    case "workflowChangeSets":
+      return model.changeSets ?? [];
+    case "workflowProposals":
+      return model.proposals ?? [];
+    case "verificationStatus":
+      return [
+        ...(model.testGates ?? []),
+        ...(model.verificationPolicies ?? []),
+        ...(model.verificationFreshness ?? []),
+        ...(model.verificationInvalidations ?? []),
+        ...(model.verificationQueue ?? []),
+        ...(model.verificationExecutions ?? [])
+      ];
+    case "verificationRuns":
+      return [
+        ...(model.testRuns ?? []),
+        ...(model.testReports ?? []),
+        ...(model.testArtifacts ?? []),
+        ...(model.testSuites ?? []),
+        ...(model.testCases ?? [])
+      ];
+    case "verificationRuntime":
+      return [
+        ...(model.runtimeRevisions ?? []),
+        ...(model.candidateSnapshots ?? []),
+        ...(model.snapshotBuilds ?? []),
+        ...(model.snapshotBuildErrors ?? [])
+      ];
+    case "knowledgeDocs":
+      return model.docs ?? [];
+    case "knowledgeFolders":
+      return model.folders ?? [];
+    case "knowledgeRoadmap":
+      return [
+        ...(model.roadmapTasks ?? []),
+        ...(model.epics ?? []),
+        ...(model.features ?? [])
+      ];
+    case "modelObjects":
+      return model.nodes ?? [];
+    case "modelCoverage":
+      return model.coverageEdges ?? [];
+    case "governance":
+      return [
+        ...(model.governanceRoutes ?? []),
+        ...(model.proposalTargetGovernance ?? [])
+      ];
+    case "bridges":
+      return model.compatibilityBridges ?? [];
+    case "semantics":
+      return model.mutableSurfaceSemantics ?? [];
+    case "advancedPackages":
+      return [
+        ...(model.packageCoexistence ?? []),
+        ...(model.packageConvergence ?? []),
+        ...(model.packageApplyPreviews ?? [])
+      ];
+    case "contextNaming": {
+      const naming = model.contextNaming ?? {};
+      return [
+        ...(naming.contextBindings ?? []),
+        ...(naming.contextScopes ?? []),
+        ...(naming.contextNameResolutions ?? []),
+        ...(naming.contextNameConflicts ?? []),
+        ...(naming.contextExports ?? []),
+        ...(naming.contextImports ?? []),
+        ...(naming.contextualTargets ?? [])
+      ];
+    }
+    case "capabilityRevisionHistory":
+      return model.capabilityRevisionHistory ?? [];
+    case "advancedConflicts":
+      return [
+        ...(model.conflicts ?? []),
+        ...(model.mergeIntents ?? [])
+      ];
+    default:
+      return [];
+  }
+}
+
+function selectedSectionRecord(section, model, id) {
+  if (!id) return null;
+  return sectionDetailRecords(section, model).find(record => genericRecordDetailMatch(record, id)) ?? null;
+}
+
+function renderGenericRecordRows(records, ctx, columns) {
+  return records.map(record => `
+    <tr>
+      ${columns.map(column => {
+        const value = typeof column.value === "function" ? column.value(record) : record?.[column.value];
+        const html = column.link
+          ? renderConceptLink(ctx, typeof column.link === "function" ? column.link(record) : value, value)
+          : renderValue(ctx, value);
+        return `<td>${html}</td>`;
+      }).join("")}
+    </tr>
+  `);
+}
+
+function renderAdvancedContextSection(model, ctx) {
+  const naming = model.contextNaming ?? {};
+  return [
+    renderDataTable(
+      "Bindings",
+      ["Binding", "Context", "Name", "Target"],
+      renderGenericRecordRows(naming.contextBindings ?? [], ctx, [
+        { value: row => row.id || row.bindingId || row.name, link: row => row.id || row.bindingId || row.name },
+        { value: "context" },
+        { value: "name" },
+        { value: "target" }
+      ]),
+      "No context bindings."
+    ),
+    renderDataTable(
+      "Resolutions",
+      ["Resolution", "Context", "Name", "Status"],
+      renderGenericRecordRows(naming.contextNameResolutions ?? [], ctx, [
+        { value: row => row.id || row.name, link: row => row.id || row.name },
+        { value: "context" },
+        { value: "name" },
+        { value: "status" }
+      ]),
+      "No context resolutions."
+    ),
+    renderDataTable(
+      "Conflicts",
+      ["Conflict", "Context", "Name", "Summary"],
+      renderGenericRecordRows(naming.contextNameConflicts ?? [], ctx, [
+        { value: row => row.id || row.name, link: row => row.id || row.name },
+        { value: "context" },
+        { value: "name" },
+        { value: row => row.summary || row.reason || "" }
+      ]),
+      "No context naming conflicts."
+    )
+  ].join("");
+}
+
+function renderAdvancedRevisionHistorySection(model, ctx) {
+  return renderDataTable(
+    "Capability Revisions",
+    ["Capability", "Version", "Action", "Witness"],
+    renderGenericRecordRows(model.capabilityRevisionHistory ?? [], ctx, [
+      { value: row => row.capabilityId || row.id, link: row => row.id || row.capabilityId },
+      { value: "version" },
+      { value: "action" },
+      { value: "witnessId" }
+    ]),
+    "No capability revisions."
+  );
+}
+
+function renderAdvancedConflictsSection(model, ctx) {
+  return [
+    renderDataTable(
+      "Conflicts",
+      ["Conflict", "Branch", "Change Set", "Status"],
+      renderGenericRecordRows(model.conflicts ?? [], ctx, [
+        { value: row => row.id || row.path, link: row => row.id || row.path },
+        { value: "branchId" },
+        { value: "changeSetId" },
+        { value: "status" }
+      ]),
+      "No conflicts."
+    ),
+    renderDataTable(
+      "Merge Intents",
+      ["Intent", "Branch", "Proposal", "Status"],
+      renderGenericRecordRows(model.mergeIntents ?? [], ctx, [
+        { value: row => row.id || row.mode, link: row => row.id || row.mode },
+        { value: "branchId" },
+        { value: "proposalId" },
+        { value: "status" }
+      ]),
+      "No merge intents."
+    )
+  ].join("");
+}
+
+function renderCustomSectionCenter(section, model, ctx) {
+  switch (section.modelView) {
+    case "contextNaming":
+      return renderAdvancedContextSection(model, ctx);
+    case "capabilityRevisionHistory":
+      return renderAdvancedRevisionHistorySection(model, ctx);
+    case "advancedConflicts":
+      return renderAdvancedConflictsSection(model, ctx);
+    default:
+      return "";
+  }
+}
+
+function renderGenericSectionDetail(section, model, ctx) {
+  const record = selectedSectionRecord(section, model, ctx.id);
+  if (!record) {
+    return `
+      <section class="card platform-pane-placeholder">
+        <h2>${esc(section.emptyDetailTitle)}</h2>
+        <div class="muted">${esc(section.emptyDetailMessage)}</div>
+      </section>
+    `;
+  }
+  const title = record.title || record.label || record.id || section.emptyDetailTitle;
+  return `
+    <section class="card">
+      <h2>${esc(title)}</h2>
+      <div class="grid2">
+        <div>${renderRecordPropertyTable(ctx, section.emptyDetailTitle, record, [
+          { key: "id", label: "ID" },
+          { key: "kind", label: "Kind" },
+          { key: "status", label: "Status" },
+          { key: "title", label: "Title" }
+        ])}</div>
+        <div>${renderRecordLongTailTable(ctx, "Properties", record, ["id", "kind", "status", "title"])}</div>
+      </div>
+    </section>
+  `;
+}
+
+function renderSectionFragment(section, pages, model, ctx, consoleLayout) {
+  const centerAuthored = renderSectionSurfaceGroups(
+    pages,
+    model,
+    ctx,
+    consoleLayout,
+    surface => !surfaceBelongsToDetailPane(surface),
+    { includeSummaryCards: true }
+  );
+  const detailAuthored = renderSectionSurfaceGroups(
+    pages,
+    model,
+    ctx,
+    consoleLayout,
+    surface => surfaceBelongsToDetailPane(surface)
+  );
+  const centerCustom = renderCustomSectionCenter(section, model, ctx);
+  const detailCustom = renderGenericSectionDetail(section, model, ctx);
+  const centerHtml = centerAuthored || centerCustom || `
+    <section class="card platform-pane-placeholder">
+      <h2>${esc(section.title)}</h2>
+      <div class="muted">${esc(section.subtitle)}</div>
+    </section>
+  `;
+  return `
+    <section class="platform-console-pane platform-console-pane-main">
+      ${renderPlatformPaneHeader(section.title, section.subtitle)}
+      ${centerHtml}
+    </section>
+    <aside class="platform-console-pane platform-console-pane-detail">
+      ${renderPlatformPaneHeader("Detail", ctx.id ? `Selected: ${ctx.id}` : section.emptyDetailMessage)}
+      ${detailAuthored || detailCustom}
+    </aside>
   `;
 }
 
@@ -2581,15 +3294,26 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
   }
 }
 
-function renderAuthoringClientScript() {
+function renderPlatformClientRuntime({
+  enableVerificationLiveUpdates = false,
+  fragmentHref = null
+} = {}) {
   return `
     <script>
       (function () {
         const platformPageState = {
-          enableVerificationLiveUpdates: ${"__ENABLE_VERIFICATION__"},
+          enableVerificationLiveUpdates: ${enableVerificationLiveUpdates ? "true" : "false"},
           testRunEventsHref: "/api/platform-test-runs/events",
-          backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
+          backendRevisionEventsHref: "/api/runtime/backend-revisions/events",
+          fragmentHref: ${fragmentHref ? JSON.stringify(fragmentHref) : "null"}
         };
+        function escapeHtml(value) {
+          return String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;");
+        }
         function formStatus(form) {
           const statusId = form && form.getAttribute("data-platform-status-id");
           return statusId ? document.getElementById(statusId) : null;
@@ -2777,17 +3501,26 @@ function renderAuthoringClientScript() {
           }
           window.__platformVerificationSources = [];
         }
+        function platformContentMount() {
+          return document.getElementById("platform-page-content");
+        }
         async function refreshVerificationPage() {
           if (window.__platformVerificationRefreshInFlight) return;
           window.__platformVerificationRefreshInFlight = true;
           try {
-            const response = await fetch(window.location.href, { headers: { "x-platform-verification-refresh": "1" } });
+            const response = await fetch(platformPageState.fragmentHref || window.location.href, { headers: { "x-platform-verification-refresh": "1" } });
             const html = await response.text();
-            const next = new DOMParser().parseFromString(html, "text/html").querySelector("main");
-            const current = document.querySelector("main");
-            if (!next || !current) return;
             closeVerificationSources();
-            current.innerHTML = next.innerHTML;
+            if (platformPageState.fragmentHref) {
+              const mount = platformContentMount();
+              if (!mount) return;
+              mount.innerHTML = html;
+            } else {
+              const next = new DOMParser().parseFromString(html, "text/html").querySelector("main");
+              const current = document.querySelector("main");
+              if (!next || !current) return;
+              current.innerHTML = next.innerHTML;
+            }
             bindPlatformPage(document);
           } catch {}
           window.__platformVerificationRefreshInFlight = false;
@@ -2839,7 +3572,31 @@ function renderAuthoringClientScript() {
           });
           bindVerificationLiveUpdates();
         }
-        bindPlatformPage(document);
+        async function loadPlatformFragment() {
+          const mount = platformContentMount();
+          if (!platformPageState.fragmentHref || !mount) {
+            bindPlatformPage(document);
+            return;
+          }
+          try {
+            const response = await fetch(platformPageState.fragmentHref, {
+              headers: {
+                accept: "text/html",
+                "x-platform-page-fragment": "1"
+              }
+            });
+            const html = await response.text();
+            if (!response.ok) {
+              mount.innerHTML = '<section class="card"><h2>Platform Page Unavailable</h2><div class="muted">' + escapeHtml(html || "Fragment request failed.") + '</div></section>';
+              return;
+            }
+            mount.innerHTML = html;
+            bindPlatformPage(document);
+          } catch (error) {
+            mount.innerHTML = '<section class="card"><h2>Platform Page Unavailable</h2><div class="muted">' + escapeHtml(error instanceof Error ? error.message : "Fragment request failed.") + '</div></section>';
+          }
+        }
+        void loadPlatformFragment();
       }());
     </script>
   `;
@@ -2893,15 +3650,23 @@ function pageNeedsClientScript(pageSurface, ctx) {
 }
 
 function isVerificationLivePage(view) {
-  return ["verification", "verificationRuns", "verificationRuntime"].includes(String(view || ""));
+  return ["verification", "verificationStatus", "verificationRuns", "verificationRuntime"].includes(String(view || ""));
 }
 
-function renderPageFromSurface(pageSurface, model, ctx, consoleLayout) {
+function renderPageFromSurface(pageSurface, model, ctx, consoleLayout, {
+  includeClientRuntime = true,
+  fragmentHref = null
+} = {}) {
   const sections = (pageSurface?.childSurfaces ?? []).map(surface => renderSurfaceSection(surface, model, ctx, consoleLayout)).join("");
   return `
     ${renderSummaryCardsFromSurface(pageSurface, model)}
     ${sections}
-    ${pageNeedsClientScript(pageSurface, ctx) ? renderAuthoringClientScript().replace("__ENABLE_VERIFICATION__", isVerificationLivePage(ctx.view) ? "true" : "false") : ""}
+    ${includeClientRuntime && pageNeedsClientScript(pageSurface, ctx)
+      ? renderPlatformClientRuntime({
+          enableVerificationLiveUpdates: isVerificationLivePage(ctx.view),
+          fragmentHref
+        })
+      : ""}
   `;
 }
 
@@ -2974,58 +3739,89 @@ function platformSourceRows(source, model) {
   }
 }
 
-export function renderPlatformPage(model, { requestUrl = null } = {}) {
-  const consoleLayout = readPlatformConsoleLayout();
-  const rawCtx = parsePlatformPageRequest(requestUrl);
-  const knowledgeDestination = rawCtx.requestedView === "knowledge" && rawCtx.id
-    ? conceptDestination(rawCtx.id)
-    : null;
-  const signalsDestination = rawCtx.requestedView === "signals" && rawCtx.id
-    ? conceptDestination(rawCtx.id)
-    : null;
-  const modelDestination = rawCtx.requestedView === "model" && rawCtx.id
-    ? conceptDestination(rawCtx.id)
-    : null;
-  const requestedView = knowledgeDestination && ["knowledgeDocs", "knowledgeFolders", "knowledgeRoadmap"].includes(knowledgeDestination.view)
-    ? knowledgeDestination.view
-    : signalsDestination && ["signalsGaps", "signalsCatalog"].includes(signalsDestination.view)
-      ? signalsDestination.view
-    : modelDestination && ["modelObjects"].includes(modelDestination.view)
-      ? modelDestination.view
-    : rawCtx.requestedView;
-  const requestedId = knowledgeDestination?.id ?? signalsDestination?.id ?? modelDestination?.id ?? rawCtx.id;
-  const pageViews = authoredPageViews(consoleLayout);
-  const currentView = pageDef(requestedView, pageViews);
-  const ctx = {
-    ...rawCtx,
-    id: requestedId,
-    view: currentView.id
-  };
-  const consolePage = consoleLayout.page ?? { title: "Platform Console", summary: "" };
-  const pageModel = filterPlatformModel(model, pageViewModelView(currentView), ctx.id, {
+function renderPlatformPageSkeleton(section) {
+  return `
+    <section class="platform-console-pane platform-console-pane-main">
+      <section class="card platform-pane-placeholder">
+        <h2>${esc(section.title)}</h2>
+        <div class="muted" id="platform-page-status">Loading platform content...</div>
+      </section>
+    </section>
+    <aside class="platform-console-pane platform-console-pane-detail">
+      <section class="card platform-pane-placeholder">
+        <h2>${esc(section.emptyDetailTitle)}</h2>
+        <div class="muted">${esc(section.emptyDetailMessage)}</div>
+      </section>
+    </aside>
+  `;
+}
+
+export function renderPlatformPageFragment(model, { requestUrl = null } = {}) {
+  const { consoleLayout, section, pages, ctx } = resolvePlatformLocation(requestUrl);
+  const pageModel = filterPlatformModel(model, section.modelView, ctx.id, {
     context: ctx.context,
     name: ctx.name,
     target: ctx.target
   });
-  const body = currentView.surface
-    ? renderPageFromSurface(currentView.surface, pageModel, ctx, consoleLayout)
-    : "";
+  return renderSectionFragment(section, pages, pageModel, ctx, consoleLayout);
+}
+
+export function renderPlatformShellPage({ requestUrl = null } = {}) {
+  const { consolePage, area, section, ctx } = resolvePlatformLocation(requestUrl);
+  const fragmentHref = platformFragmentHref(ctx);
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${esc(consolePage.title || "Platform Console")} - ${esc(currentView.title)}</title>
-  <style>${renderPlatformConsoleCss()}</style>
+  <title>${esc(consolePage.title || "Platform Console")} - ${esc(platformLocationTitle(area, section))}</title>
+  <style>${renderPlatformConsoleCss()}${renderPlatformIaCss()}</style>
 </head>
 <body class="${esc(consolePage.className || "platform-console")}">
   <header>
     <h1>${esc(consolePage.title || "Platform Console")}</h1>
-    <div class="muted">${esc(currentView.subtitle || consolePage.summary || "Platform self-inspection")}</div>
+    <div class="muted">${esc(section.subtitle || consolePage.summary || "Platform self-inspection")}</div>
   </header>
-  <main>
-    ${renderNav(ctx, pageViews)}
-    ${body}
+  <main class="platform-console-shell" data-platform-fragment-href="${esc(fragmentHref)}">
+    ${renderNav(ctx, area, section)}
+    <section id="platform-page-content" class="platform-console-content" aria-live="polite" aria-busy="true">
+      ${renderPlatformPageSkeleton(section)}
+    </section>
+  </main>
+  ${renderPlatformClientRuntime({
+    enableVerificationLiveUpdates: isVerificationLivePage(ctx.view),
+    fragmentHref
+  })}
+</body>
+</html>`;
+}
+
+export function renderPlatformPage(model, { requestUrl = null } = {}) {
+  const { consoleLayout, consolePage, area, section, pages, ctx } = resolvePlatformLocation(requestUrl);
+  const pageModel = filterPlatformModel(model, section.modelView, ctx.id, {
+    context: ctx.context,
+    name: ctx.name,
+    target: ctx.target
+  });
+  const body = renderSectionFragment(section, pages, pageModel, ctx, consoleLayout);
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${esc(consolePage.title || "Platform Console")} - ${esc(platformLocationTitle(area, section))}</title>
+  <style>${renderPlatformConsoleCss()}${renderPlatformIaCss()}</style>
+</head>
+<body class="${esc(consolePage.className || "platform-console")}">
+  <header>
+    <h1>${esc(consolePage.title || "Platform Console")}</h1>
+    <div class="muted">${esc(section.subtitle || consolePage.summary || "Platform self-inspection")}</div>
+  </header>
+  <main class="platform-console-shell">
+    ${renderNav(ctx, area, section)}
+    <section id="platform-page-content" class="platform-console-content">
+      ${body}
+    </section>
   </main>
 </body>
 </html>`;

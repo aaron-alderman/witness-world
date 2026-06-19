@@ -288,7 +288,7 @@ export function createProcessRuntime(world, options = {}) {
         throw new Error(`rule command '${step.command}' has no runtime handler`);
       }
       if (step?.kind === "option") {
-        const branch = truthy(configValue(step.config)) ? (step.real ?? []) : (step.else ?? []);
+        const branch = projectionTruthiness(configValue(step.config)) ? (step.real ?? []) : (step.else ?? []);
         lastObservation = await runRuleSteps(branch, eventId, proc) ?? lastObservation;
         continue;
       }
