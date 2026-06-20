@@ -125,6 +125,43 @@ export function projectDocs(witnesses) {
   return out;
 }
 
+// --- live sync: canonical head per file over the commons (reconcile.rvm) ------
+// Every save a peer makes is published as a doc.put version to the commons; they
+// UNION (all retained). Here, in-world, we pick the canonical head per file with
+// the same reconcile model (canonicalHead -> reconcile.rvm pick_head: latest by
+// `at`). The daemon reads these heads and writes them to its local copy, so two
+// copies converge with no merge — the "git but better" thesis, made live.
+export function projectCommonsHeads(witnesses, items) {
+  const recognized = projectRecognized(witnesses);
+  const byDoc = new Map();   // docId -> versions[]
+  for (const it of (items || [])) {
+    if (it.kind !== "doc.put" || !it.docId || !it.id) continue;
+    const valid = verifyIdentity({
+      scheme: it.scheme, id: it.id,
+      message: canonical.docPut({ docId: it.docId, content: it.content ?? "", id: it.id }),
+      sig: it.sig
+    });
+    if (!valid || !recognized.has(it.id)) continue;    // only verified, recognized versions
+    if (!byDoc.has(it.docId)) byDoc.set(it.docId, []);
+    byDoc.get(it.docId).push({
+      versionId: it.versionId || `${it.docId}@${it.seq}`,
+      content: String(it.content ?? ""),
+      // order by the bridge's sequence (a true total order) — not client clocks,
+      // so last-write-wins is deterministic and can't oscillate. Zero-padded so
+      // reconcile.rvm's pick_head (latest by `at`, string-compared) picks highest seq.
+      at: String(it.seq ?? 0).padStart(12, "0"),
+      actor: recognized.get(it.id).label,
+      signerId: it.id
+    });
+  }
+  const heads = [];
+  for (const [docId, versions] of byDoc) {
+    const head = canonicalHead(versions);            // reconcile.rvm pick_head
+    if (head) heads.push({ docId, content: head.content, at: head.at, actor: head.actor, versionCount: versions.length });
+  }
+  return heads.sort((a, b) => a.docId.localeCompare(b.docId));
+}
+
 // --- pull: witnessed gestures; the daemon does the irreducible file-write -----
 // Pulling a peer's repo lands the bytes on your disk (a syscall — the boundary
 // leaf, in the daemon). But the GESTURES are witnessed: the folder you chose,
@@ -413,7 +450,32 @@ export function requestRepoSetSync(world, { repoName, open }) {
   return { ok: true, status: 200, repoName: name, open: !!open, witness };
 }
 
+// "Go live" — mark a repo for continuous two-way sync (browser policy, unsigned).
+// The daemon picks it up and watches/publishes/applies its local copy. Works for
+// your own repos (Share out) and repos you've pulled (Pull in) alike.
+export function requestRepoSetLive(world, { repoName, live }) {
+  const name = stringOrNull(repoName);
+  if (!name) return { ok: false, status: 400, error: "repoName required" };
+  const witness = world.emit({
+    process: live ? "repo.live.on" : "repo.live.off",
+    actor: "local",
+    claims: [relation(`repo:${name}`, "liveState", live ? "live" : "off")],
+    body: { repoName: name, live: !!live, at: new Date().toISOString() }
+  });
+  return { ok: true, status: 200, repoName: name, live: !!live, witness };
+}
+
+export function projectRepoLive(witnesses) {
+  const live = new Set();
+  for (const w of witnesses) {
+    if (w.process === "repo.live.on" && w.body?.repoName) live.add(w.body.repoName);
+    else if (w.process === "repo.live.off" && w.body?.repoName) live.delete(w.body.repoName);
+  }
+  return live;   // Set of repoNames currently live
+}
+
 export function projectRepos(witnesses) {
+  const liveSet = projectRepoLive(witnesses);
   const repos = new Map();
   for (const w of witnesses) {
     const b = w.body ?? {};
@@ -433,6 +495,7 @@ export function projectRepos(witnesses) {
   }
   return [...repos.values()].map(r => ({
     ...r,
+    live: liveSet.has(r.repoName),
     sessionsText: r.sessions.length ? `from: ${r.sessions.join(", ")}` : ""
   })).sort((a, b) => a.repoName.localeCompare(b.repoName));
 }
@@ -505,6 +568,7 @@ export function projectSessions(witnesses) {
 export function projectCommons(witnesses, items) {
   const recognized = projectRecognized(witnesses);
   const pulls = projectPulls(witnesses);
+  const liveSet = projectRepoLive(witnesses);
   const bundles = new Map();
   for (const it of (items || [])) {
     if (it.kind !== "doc.put" || !it.docId || !it.id) continue;
@@ -551,6 +615,7 @@ export function projectCommons(witnesses, items) {
         : `${b.verifiedCount}/${b.totalCount} verified ✗`,
       verified: allVerified,
       fileCount: b.files.size,
+      live: liveSet.has(b.name),    // pulled repos can be made live too
       // pullable only if recognized + verified + not already pulled; show pull state
       pullable: !!member && allVerified && !pulled && pull?.status !== "pending",
       pullStatus: pull?.status || "",
@@ -606,6 +671,17 @@ export function createTilthNetHandlers({ world, sendJson, readJson }) {
       const r = requestRepoSetSync(world, { repoName: params?.name, open: false });
       sendJson(res, r.status, r.ok ? r : { error: r.error });
     },
+    "repo.live": async ({ res, params }) => {
+      const r = requestRepoSetLive(world, { repoName: params?.name, live: true });
+      sendJson(res, r.status, r.ok ? r : { error: r.error });
+    },
+    "repo.unlive": async ({ res, params }) => {
+      const r = requestRepoSetLive(world, { repoName: params?.name, live: false });
+      sendJson(res, r.status, r.ok ? r : { error: r.error });
+    },
+    "live.read": async ({ res }) => {
+      sendJson(res, 200, { repos: [...projectRepoLive(world.allWitnesses())] });
+    },
 
     "sessions.read": async ({ res }) => {
       sendJson(res, 200, { sessions: projectSessions(world.allWitnesses()) });
@@ -616,6 +692,11 @@ export function createTilthNetHandlers({ world, sendJson, readJson }) {
       const body = await readJson(req);
       observedCommons = Array.isArray(body?.items) ? body.items : [];
       sendJson(res, 200, { ok: true, count: observedCommons.length });
+    },
+    // live-sync canonical heads (reconcile.rvm over the couriered commons feed)
+    "commons.heads.read": async ({ res }) => {
+      await ensureModel();
+      sendJson(res, 200, { heads: projectCommonsHeads(world.allWitnesses(), observedCommons) });
     },
     "commons.read": async ({ res }) => {
       const w = world.allWitnesses();

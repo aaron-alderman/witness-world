@@ -10,11 +10,26 @@
 
 import { thing, relation } from "../../src/projectors-core.js";
 
+const EXPECTED_DAEMONS = [
+  {
+    daemonId: "tilth-daemon",
+    label: "tilth-daemon",
+    capabilities: ["repo-recognition", "repo-snapshot", "ai-summary"],
+    summary: "Handles local repo recognition, repo snapshots, and AI summaries"
+  },
+  {
+    daemonId: "tilth-claude-code-daemon",
+    label: "tilth-claude-code-daemon",
+    capabilities: ["session-import", "repo-index", "transcript-preview"],
+    summary: "Handles Claude Code session import, repo indexing, and transcript previews"
+  }
+];
+
 // --- projection -----------------------------------------------------------
 // Fold every witness into the current set of known sessions. Two processes
 // contribute: session.import (creates the thing + provenance) and
 // session.markDesire (asserts the relatesTo:DESIRE relation).
-export function projectSessions(witnesses) {
+export function projectSessions(witnesses, options = {}) {
   const sessions = new Map();
   const repoIndexBySession = projectLatestRepoIndexBySession(witnesses);
   const transcriptPreviewBySession = projectLatestTranscriptPreviewBySession(witnesses);
@@ -26,6 +41,9 @@ export function projectSessions(witnesses) {
 
     if (witness.process === "session.import") {
       const existing = sessions.get(id);
+      const incomingLastMessageAt = String(body.lastMessageAt || body.updatedAt || body.started || "");
+      const keepExistingLastMessage = existing?.lastMessageAt
+        && (!incomingLastMessageAt || String(existing.lastMessageAt).localeCompare(incomingLastMessageAt) > 0);
       sessions.set(id, {
         id,
         title: String(body.title || ""),
@@ -34,6 +52,9 @@ export function projectSessions(witnesses) {
         project: String(body.project || ""),
         started: String(body.started || ""),
         msgCount: Number.isFinite(Number(body.msgCount)) ? Number(body.msgCount) : 0,
+        lastMessageAt: keepExistingLastMessage ? existing.lastMessageAt : incomingLastMessageAt,
+        lastMessageRole: keepExistingLastMessage ? existing.lastMessageRole : normalizeMessageRole(body.lastMessageRole),
+        lastMessageText: keepExistingLastMessage ? existing.lastMessageText : String(body.lastMessageText || ""),
         importedBy: witness.actor || null,
         // marks survive a re-import of the same session
         desire: existing ? existing.desire : false,
@@ -51,10 +72,12 @@ export function projectSessions(witnesses) {
     }
   }
 
-  return [...sessions.values()].map(enrichSessionDisplay).sort((a, b) => {
-    // newest first by start time, then id for stability
-    const t = String(b.started).localeCompare(String(a.started));
+  return [...sessions.values()].map(session => enrichSessionDisplay(session, options)).sort((a, b) => {
+    // newest first by latest message time, then start time, then id for stability
+    const t = String(b.lastMessageAt || b.started).localeCompare(String(a.lastMessageAt || a.started));
     if (t !== 0) return t;
+    const started = String(b.started).localeCompare(String(a.started));
+    if (started !== 0) return started;
     return String(a.id).localeCompare(String(b.id));
   });
 }
@@ -82,9 +105,11 @@ export function projectRepoIndexRequests(witnesses) {
         sessionId: String(body.sessionId || body.id || ""),
         status: "pending",
         requestedBy: witness.actor || null,
-        requestedAt: witness.at || null,
+        requestedAt: body.requestedAt || witness.at || null,
         completedBy: null,
         completedAt: null,
+        sourceLastMessageAt: String(body.sourceLastMessageAt || ""),
+        sourceMsgCount: parseOptionalNumber(body.sourceMsgCount),
         repos: [],
         error: null
       });
@@ -97,7 +122,9 @@ export function projectRepoIndexRequests(witnesses) {
         ...current,
         status: "completed",
         completedBy: witness.actor || null,
-        completedAt: witness.at || null,
+        completedAt: body.completedAt || witness.at || null,
+        sourceLastMessageAt: String(body.sourceLastMessageAt || current.sourceLastMessageAt || ""),
+        sourceMsgCount: parseOptionalNumber(body.sourceMsgCount) ?? current.sourceMsgCount,
         repos: normalizeRepos(body.repos),
         error: null
       });
@@ -110,7 +137,9 @@ export function projectRepoIndexRequests(witnesses) {
         ...current,
         status: "failed",
         completedBy: witness.actor || null,
-        completedAt: witness.at || null,
+        completedAt: body.completedAt || witness.at || null,
+        sourceLastMessageAt: String(body.sourceLastMessageAt || current.sourceLastMessageAt || ""),
+        sourceMsgCount: parseOptionalNumber(body.sourceMsgCount) ?? current.sourceMsgCount,
         repos: [],
         error: String(body.error || body.reason || "repo index failed")
       });
@@ -133,9 +162,11 @@ export function projectTranscriptPreviewRequests(witnesses) {
         sessionId: String(body.sessionId || body.id || ""),
         status: "pending",
         requestedBy: witness.actor || null,
-        requestedAt: witness.at || null,
+        requestedAt: body.requestedAt || witness.at || null,
         completedBy: null,
         completedAt: null,
+        sourceLastMessageAt: String(body.sourceLastMessageAt || ""),
+        sourceMsgCount: parseOptionalNumber(body.sourceMsgCount),
         text: "",
         error: null
       });
@@ -148,7 +179,9 @@ export function projectTranscriptPreviewRequests(witnesses) {
         ...current,
         status: "completed",
         completedBy: witness.actor || null,
-        completedAt: witness.at || null,
+        completedAt: body.completedAt || witness.at || null,
+        sourceLastMessageAt: String(body.sourceLastMessageAt || current.sourceLastMessageAt || ""),
+        sourceMsgCount: parseOptionalNumber(body.sourceMsgCount) ?? current.sourceMsgCount,
         text: String(body.text || ""),
         error: null
       });
@@ -161,7 +194,9 @@ export function projectTranscriptPreviewRequests(witnesses) {
         ...current,
         status: "failed",
         completedBy: witness.actor || null,
-        completedAt: witness.at || null,
+        completedAt: body.completedAt || witness.at || null,
+        sourceLastMessageAt: String(body.sourceLastMessageAt || current.sourceLastMessageAt || ""),
+        sourceMsgCount: parseOptionalNumber(body.sourceMsgCount) ?? current.sourceMsgCount,
         text: "",
         error: String(body.error || body.reason || "transcript preview failed")
       });
@@ -187,10 +222,14 @@ export function projectAiSummaryRequests(witnesses) {
         sessionId,
         status: transcriptPreview.text ? "pending" : "waiting_for_transcript",
         requestedBy: witness.actor || null,
-        requestedAt: witness.at || null,
+        requestedAt: body.requestedAt || witness.at || null,
         completedBy: null,
         completedAt: null,
+        sourceLastMessageAt: String(body.sourceLastMessageAt || ""),
+        sourceMsgCount: parseOptionalNumber(body.sourceMsgCount),
         transcriptPreviewRequestId: transcriptPreview.requestId,
+        transcriptPreviewSourceLastMessageAt: transcriptPreview.sourceLastMessageAt || "",
+        transcriptPreviewSourceMsgCount: transcriptPreview.sourceMsgCount ?? null,
         transcriptText: transcriptPreview.text,
         text: "",
         bullets: [],
@@ -205,7 +244,9 @@ export function projectAiSummaryRequests(witnesses) {
         ...current,
         status: "completed",
         completedBy: witness.actor || null,
-        completedAt: witness.at || null,
+        completedAt: body.completedAt || witness.at || null,
+        sourceLastMessageAt: String(body.sourceLastMessageAt || current.sourceLastMessageAt || ""),
+        sourceMsgCount: parseOptionalNumber(body.sourceMsgCount) ?? current.sourceMsgCount,
         text: String(body.text || ""),
         bullets: normalizeStringList(body.bullets),
         error: null
@@ -219,7 +260,9 @@ export function projectAiSummaryRequests(witnesses) {
         ...current,
         status: "failed",
         completedBy: witness.actor || null,
-        completedAt: witness.at || null,
+        completedAt: body.completedAt || witness.at || null,
+        sourceLastMessageAt: String(body.sourceLastMessageAt || current.sourceLastMessageAt || ""),
+        sourceMsgCount: parseOptionalNumber(body.sourceMsgCount) ?? current.sourceMsgCount,
         text: "",
         bullets: [],
         error: String(body.error || body.reason || "AI summary failed")
@@ -516,6 +559,278 @@ function repoSnapshotText(snapshot) {
   return "Snapshot not prepared";
 }
 
+export function projectJobs(witnesses, options = {}) {
+  const status = String(options?.status || "").trim().toLowerCase();
+  const kind = String(options?.kind || "").trim().toLowerCase();
+  const rawLimit = String(options?.limit ?? "").trim();
+  const limit = rawLimit && Number.isFinite(Number(rawLimit)) ? Math.max(1, Number(rawLimit)) : 100;
+  const sessions = new Map(projectSessions(witnesses).map(session => [session.id, session]));
+  const daemons = projectDaemonHeartbeats(witnesses, options);
+  const rows = [
+    ...projectRepoRecognitionRequests(witnesses).map(request => jobRow({
+      kind: "repo-recognition",
+      worker: "tilth-daemon",
+      request,
+      targetId: request.path,
+      label: request.name || displayRepoRoot(request.root) || displayRepoRoot(request.path) || "Repo recognition",
+      summary: request.status === "completed" ? `Recognized ${request.name || displayRepoRoot(request.root)}` : "Manual repo recognition"
+    })),
+    ...projectRepoSnapshotRequests(witnesses).map(request => jobRow({
+      kind: "repo-snapshot",
+      worker: "tilth-daemon",
+      request,
+      targetId: request.repoId,
+      label: request.repoId || request.name || "Repo snapshot",
+      summary: request.status === "completed" ? `Snapshot ready · ${countText(request.fileCount, "file")}` : "Prepare local repo snapshot"
+    })),
+    ...projectAiSummaryRequests(witnesses).map(request => {
+      const session = sessions.get(request.sessionId);
+      return jobRow({
+        kind: "ai-summary",
+        worker: "tilth-daemon",
+        request,
+        targetId: request.sessionId,
+        label: session?.title || request.sessionId || "AI summary",
+        summary: request.status === "completed" ? "AI summary loaded" : "Summarize DESIRE session"
+      });
+    }),
+    ...projectTranscriptPreviewRequests(witnesses).map(request => {
+      const session = sessions.get(request.sessionId);
+      return jobRow({
+        kind: "transcript-preview",
+        worker: "tilth-claude-code-daemon",
+        request,
+        targetId: request.sessionId,
+        label: session?.title || request.sessionId || "Transcript preview",
+        summary: request.status === "completed" ? "Transcript preview loaded" : "Recover readable transcript"
+      });
+    }),
+    ...projectRepoIndexRequests(witnesses).map(request => {
+      const session = sessions.get(request.sessionId);
+      return jobRow({
+        kind: "repo-index",
+        worker: "tilth-claude-code-daemon",
+        request,
+        targetId: request.sessionId,
+        label: session?.title || request.sessionId || "Repo index",
+        summary: request.status === "completed" ? `Indexed ${countText(request.repos.length, "repo")}` : "Index repos mentioned in Claude transcript"
+      });
+    }),
+    ...daemons
+      .filter(daemon => daemon.lastSeen)
+      .map(daemon => daemonActivityRow(daemon))
+  ].map(row => ({
+    ...row,
+    searchText: searchText([row.kind, row.status, row.label, row.worker, row.summary, row.error])
+  }));
+
+  return rows
+    .filter(row => !status || row.status === status || (status === "pending" && row.status === "waiting_for_transcript"))
+    .filter(row => !kind || row.kind === kind)
+    .sort(jobSort)
+    .slice(0, limit);
+}
+
+export function projectOpsSummary(witnesses, options = {}) {
+  const jobs = projectJobs(witnesses, { ...options, limit: 10000 });
+  const daemons = projectDaemonHeartbeats(witnesses, options);
+  const sessions = projectSessions(witnesses, options);
+  const failed = jobs.filter(job => job.status === "failed").length;
+  const pending = jobs.filter(job => job.status === "pending" || job.status === "waiting_for_transcript").length;
+  const completed = jobs.filter(job => job.status === "completed").length;
+  const staleArtifacts = sessions.reduce((sum, session) => sum + artifactFreshnessCount(session, "stale"), 0);
+  const unknownArtifacts = sessions.reduce((sum, session) => sum + artifactFreshnessCount(session, "unknown"), 0);
+  const freshArtifacts = sessions.reduce((sum, session) => sum + artifactFreshnessCount(session, "fresh"), 0);
+  const activeDaemons = daemons.filter(daemon => daemon.status === "active").length;
+  const staleDaemons = daemons.filter(daemon => daemon.status === "stale").length;
+  const missingDaemons = daemons.filter(daemon => daemon.status === "never seen").length;
+  return {
+    jobs: jobs.length,
+    failed,
+    pending,
+    completed,
+    staleArtifacts,
+    unknownArtifacts,
+    freshArtifacts,
+    activeDaemons,
+    staleDaemons,
+    missingDaemons,
+    workText: `${countText(failed, "failed job")} · ${countText(pending, "pending job")} · ${countText(completed, "completed job")}`,
+    artifactText: `${countText(staleArtifacts, "stale artifact")} · ${countText(unknownArtifacts, "unknown artifact")} · ${countText(freshArtifacts, "fresh artifact")}`,
+    daemonText: `${activeDaemons}/${daemons.length} daemons active${staleDaemons ? ` · ${countText(staleDaemons, "stale")}` : ""}${missingDaemons ? ` · ${countText(missingDaemons, "missing")}` : ""}`,
+    statusText: `${failed} failed · ${pending} pending · ${activeDaemons}/${daemons.length} daemons active`
+  };
+}
+
+function artifactFreshnessCount(session, freshness) {
+  return [session.repoIndex, session.transcriptPreview, session.aiSummary]
+    .filter(artifact => artifact?.status === "completed" && artifact.freshness === freshness)
+    .length;
+}
+
+function jobRow({ kind, worker, request, targetId, label, summary }) {
+  const error = String(request.error || "");
+  const concise = conciseError(error);
+  return {
+    source: "request",
+    kind,
+    requestId: request.requestId,
+    targetId: String(targetId || ""),
+    label: compactText(label, 90),
+    status: request.status,
+    worker,
+    requestedAt: request.requestedAt,
+    completedAt: request.completedAt,
+    error,
+    errorText: concise ? `Error: ${concise}` : "",
+    errorDetailText: error,
+    rawDetailText: error || request.requestId,
+    summary,
+    kindLabel: kindLabel(kind),
+    statusRank: jobStatusRank(request.status),
+    shortStatusText: jobStatusText(request.status),
+    statusText: `${kindLabel(kind)} · ${jobStatusText(request.status)}`,
+    titleText: `${kindLabel(kind)} · ${compactText(label, 80)}`,
+    metaText: `${worker} · ${jobStatusText(request.status)}`,
+    detailText: concise || summary || request.requestId
+  };
+}
+
+function daemonActivityRow(daemon) {
+  const error = String(daemon.error || "");
+  const concise = conciseError(error);
+  return {
+    source: "heartbeat",
+    kind: "daemon-tick",
+    requestId: `heartbeat.${daemon.daemonId}.${daemon.at || "latest"}`,
+    targetId: daemon.daemonId,
+    label: daemon.label,
+    status: error ? "failed" : "completed",
+    worker: daemon.daemonId,
+    requestedAt: daemon.at,
+    completedAt: daemon.at,
+    error,
+    errorText: concise ? `Error: ${concise}` : "",
+    errorDetailText: error,
+    rawDetailText: error || daemon.countersText || daemon.requestId || "",
+    summary: daemon.detailText,
+    kindLabel: "Daemon tick",
+    statusRank: jobStatusRank(error ? "failed" : "completed"),
+    shortStatusText: jobStatusText(error ? "failed" : "completed"),
+    statusText: `Daemon tick · ${jobStatusText(error ? "failed" : "completed")}`,
+    titleText: `Daemon tick · ${daemon.label}`,
+    metaText: `${daemon.daemonId} · ${jobStatusText(error ? "failed" : "completed")}`,
+    detailText: concise || daemon.detailText || daemon.countersText || "Heartbeat received"
+  };
+}
+
+function kindLabel(kind) {
+  const labels = {
+    "ai-summary": "AI summary",
+    "repo-index": "Repo index",
+    "transcript-preview": "Transcript preview",
+    "repo-snapshot": "Repo snapshot",
+    "repo-recognition": "Repo recognition",
+    "daemon-tick": "Daemon tick"
+  };
+  if (labels[kind]) return labels[kind];
+  return String(kind || "")
+    .split("-")
+    .map(part => part ? part[0].toUpperCase() + part.slice(1) : "")
+    .join(" ");
+}
+
+function jobSort(a, b) {
+  const statusDelta = jobStatusRank(a.status) - jobStatusRank(b.status);
+  if (statusDelta !== 0) return statusDelta;
+  return String(b.requestedAt || b.completedAt || "").localeCompare(String(a.requestedAt || a.completedAt || ""))
+    || String(a.requestId).localeCompare(String(b.requestId));
+}
+
+function jobStatusRank(status) {
+  const rank = { failed: 0, pending: 1, waiting_for_transcript: 1, completed: 2 };
+  return rank[status] ?? 3;
+}
+
+function jobStatusText(status) {
+  if (status === "waiting_for_transcript") return "waiting for text";
+  return String(status || "unknown").replace(/_/g, " ");
+}
+
+export function projectDaemonHeartbeats(witnesses, options = {}) {
+  const now = options?.now ? Date.parse(options.now) : Date.now();
+  const staleMs = Number.isFinite(Number(options?.staleMs)) ? Number(options.staleMs) : 120000;
+  const latest = new Map();
+  for (const witness of witnesses) {
+    if (witness.process !== "daemon.heartbeat") continue;
+    const body = witness.body ?? {};
+    const daemonId = String(body.daemonId || body.id || "");
+    if (!daemonId) continue;
+    const at = String(body.at || witness.at || "");
+    const row = {
+      daemonId,
+      label: String(body.label || daemonId),
+      at,
+      capabilities: normalizeStringList(body.capabilities),
+      counters: body.counters && typeof body.counters === "object" ? body.counters : {},
+      error: String(body.error || ""),
+      summary: String(body.summary || "")
+    };
+    const current = latest.get(daemonId);
+    if (!current || String(row.at).localeCompare(String(current.at || "")) >= 0) latest.set(daemonId, row);
+  }
+  return EXPECTED_DAEMONS.map(expected => latest.get(expected.daemonId) || {
+    ...expected,
+    at: "",
+    counters: {},
+    error: "",
+    lastSeen: false
+  })
+    .map(row => {
+      const ageMs = row.at ? now - Date.parse(row.at) : Infinity;
+      const lastSeen = row.lastSeen !== false && Boolean(row.at);
+      const active = lastSeen && Number.isFinite(ageMs) && ageMs <= staleMs;
+      const status = !lastSeen ? "never seen" : active ? "active" : "stale";
+      const countersText = Object.entries(row.counters).map(([key, value]) => `${key}: ${value}`).join(" · ");
+      return {
+        ...row,
+        lastSeen,
+        status,
+        active,
+        ageMs: Number.isFinite(ageMs) ? ageMs : null,
+        ageText: daemonAgeText(ageMs, lastSeen),
+        capabilitiesText: row.capabilities.join(", "),
+        countersText,
+        counterSummaryText: countersText || "No counters reported",
+        statusText: `${row.label} · ${status}`,
+        detailText: conciseError(row.error) || row.summary || countersText || (lastSeen ? "No recent work" : "No heartbeat witnessed yet"),
+        metaText: `${status}${lastSeen ? ` · seen ${daemonAgeText(ageMs, lastSeen)}` : ""}`
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function daemonAgeText(ageMs, lastSeen) {
+  if (!lastSeen || !Number.isFinite(ageMs)) return "never";
+  const seconds = Math.max(0, Math.round(ageMs / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  return `${hours}h ago`;
+}
+
+function conciseError(error) {
+  const text = String(error || "").trim();
+  if (!text) return "";
+  const rateLimit = text.match(/rate limit reached[^"]*/i);
+  if (rateLimit) return compactText(rateLimit[0].replace(/\s+/g, " "), 180);
+  const status = text.match(/HTTP\s+\d+/i)?.[0] || "";
+  const message = text.match(/"message"\s*:\s*"([^"]+)"/)?.[1] || "";
+  if (status && message) return compactText(`${status}: ${message}`, 180);
+  return compactText(text.replace(/\s+/g, " "), 180);
+}
+
 function repoRecognitionText(repo) {
   const parts = [];
   const manual = Array.isArray(repo.manualRecognitions) ? repo.manualRecognitions : [];
@@ -536,6 +851,12 @@ function remoteText(remotes) {
 function countText(count, singular) {
   const number = Number.isFinite(Number(count)) ? Number(count) : 0;
   return `${number} ${singular}${number === 1 ? "" : "s"}`;
+}
+
+function parseOptionalNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function normalizeFilter(value) {
@@ -641,14 +962,36 @@ function projectLatestAiSummaryBySession(witnesses) {
   return bySession;
 }
 
-function enrichSessionDisplay(session) {
+function enrichSessionDisplay(session, options = {}) {
+  const lastMessageRoleText = session.lastMessageRole === "assistant" ? "Claude" : session.lastMessageRole === "user" ? "You" : "Latest";
+  const lastMessageText = compactText(session.lastMessageText, 180);
+  const transcriptPreview = withArtifactFreshness(session.transcriptPreview, session);
+  const repoIndex = withArtifactFreshness(session.repoIndex, session);
+  const aiSummaryBase = withArtifactFreshness(session.aiSummary, session);
+  const aiSummary = {
+    ...aiSummaryBase,
+    freshness: aiSummaryFreshness(aiSummaryBase, transcriptPreview),
+    freshnessText: aiSummaryFreshnessText(aiSummaryBase, transcriptPreview),
+    stale: aiSummaryBase.stale || transcriptPreview.stale,
+    unknownFreshness: aiSummaryBase.unknownFreshness,
+    staleMs: aiSummaryBase.staleMs || (transcriptPreview.stale ? transcriptPreview.staleMs : 0),
+    staleTimeText: aiSummaryBase.staleTimeText || (transcriptPreview.stale ? transcriptPreview.staleTimeText : ""),
+    staleMsgCount: aiSummaryBase.staleMsgCount || (transcriptPreview.stale ? transcriptPreview.staleMsgCount : 0),
+    staleMsgText: aiSummaryBase.staleMsgText || (transcriptPreview.stale ? transcriptPreview.staleMsgText : "")
+  };
   const row = {
     ...session,
+    repoIndex,
+    transcriptPreview,
+    aiSummary,
     previewBrief: compactText(session.preview, 220),
-    repoChipText: repoChipText(session.repoIndex?.repos),
-    repoStatusText: session.repoIndex?.statusText || "Repos not indexed",
-    transcriptStatusText: session.transcriptPreview?.statusText || "Text not loaded",
-    aiStatusText: session.aiSummary?.statusText || "Summary not run"
+    lastMessageRelativeText: humanRelativeTime(session.lastMessageAt, options.now),
+    lastMessageExactText: exactLocalTime(session.lastMessageAt),
+    lastMessageLine: lastMessageText ? `${lastMessageRoleText}: ${lastMessageText}` : "",
+    repoChipText: repoChipText(repoIndex?.repos),
+    repoStatusText: artifactStatusLine("Repos", repoIndex, "Repos not indexed"),
+    transcriptStatusText: artifactStatusLine("Text", transcriptPreview, "Text not loaded"),
+    aiStatusText: artifactStatusLine("Summary", aiSummary, "Summary not run")
   };
   return {
     ...row,
@@ -656,6 +999,10 @@ function enrichSessionDisplay(session) {
       row.title,
       row.preview,
       row.previewBrief,
+      row.lastMessageText,
+      row.lastMessageLine,
+      row.lastMessageRelativeText,
+      row.lastMessageExactText,
       row.project,
       row.origin,
       row.repoChipText,
@@ -666,6 +1013,113 @@ function enrichSessionDisplay(session) {
       row.aiSummary?.bulletText
     ])
   };
+}
+
+function artifactStatusLine(label, artifact, fallback) {
+  if (!artifact) return fallback;
+  if (artifact.status === "completed" && artifact.freshnessText) return `${label}: ${artifact.freshnessText}`;
+  return artifact.statusText || fallback;
+}
+
+function withArtifactFreshness(artifact, session) {
+  const row = artifact || {};
+  const freshness = artifactFreshness(row, session.lastMessageAt);
+  const staleMs = freshness === "stale" ? artifactStaleMs(row, session.lastMessageAt) : 0;
+  const staleMsgCount = freshness === "stale" ? artifactStaleMsgCount(row, session.msgCount) : 0;
+  return {
+    ...row,
+    freshness,
+    freshnessText: freshnessText(freshness, { staleMs }),
+    stale: freshness === "stale",
+    unknownFreshness: freshness === "unknown",
+    staleMs,
+    staleTimeText: staleMs ? durationText(staleMs) : "",
+    staleMsgCount,
+    staleMsgText: staleMsgCount ? countText(staleMsgCount, "msg") + " behind" : "",
+    versionText: artifactVersionText(row, session, { freshness, staleMs, staleMsgCount }),
+    actionText: freshness === "stale" ? staleActionText(row) : row.actionText
+  };
+}
+
+function artifactFreshness(artifact, currentLastMessageAt) {
+  if (!artifact || artifact.status !== "completed") return "";
+  const source = String(artifact.sourceLastMessageAt || "");
+  const current = String(currentLastMessageAt || "");
+  if (!source || !current) return "unknown";
+  return source === current ? "fresh" : source.localeCompare(current) < 0 ? "stale" : "fresh";
+}
+
+function freshnessText(freshness, details = {}) {
+  if (freshness === "fresh") return "fresh";
+  if (freshness === "stale") return details.staleMs ? `stale by ${durationText(details.staleMs)}` : "stale";
+  if (freshness === "unknown") return "freshness unknown";
+  return "";
+}
+
+function artifactStaleMs(artifact, currentLastMessageAt) {
+  const source = Date.parse(String(artifact?.sourceLastMessageAt || ""));
+  const current = Date.parse(String(currentLastMessageAt || ""));
+  if (!Number.isFinite(source) || !Number.isFinite(current) || current <= source) return 0;
+  return current - source;
+}
+
+function artifactStaleMsgCount(artifact, currentMsgCount) {
+  const source = parseOptionalNumber(artifact?.sourceMsgCount);
+  const current = parseOptionalNumber(currentMsgCount);
+  if (!Number.isFinite(source) || !Number.isFinite(current) || current <= source) return 0;
+  return current - source;
+}
+
+function artifactVersionText(artifact, session, details = {}) {
+  if (!artifact || artifact.status === "not_requested") return "";
+  if (artifact.status !== "completed") {
+    return artifact.requestedAt ? `Requested ${exactLocalTime(artifact.requestedAt)}` : "";
+  }
+  if (details.freshness === "unknown") return "Generated before source version tracking";
+  const parts = [];
+  if (artifact.completedAt) parts.push(`Generated ${exactLocalTime(artifact.completedAt)}`);
+  const sourceParts = [];
+  const sourceMsgCount = parseOptionalNumber(artifact.sourceMsgCount);
+  if (sourceMsgCount !== null) sourceParts.push(`${sourceMsgCount.toLocaleString()} msgs`);
+  if (artifact.sourceLastMessageAt) sourceParts.push(exactLocalTime(artifact.sourceLastMessageAt));
+  if (sourceParts.length) parts.push(`based on ${sourceParts.join(" at ")}`);
+  const latestParts = [];
+  const latestMsgCount = parseOptionalNumber(session.msgCount);
+  if (latestMsgCount !== null) latestParts.push(`${latestMsgCount.toLocaleString()} msgs`);
+  if (session.lastMessageAt) latestParts.push(exactLocalTime(session.lastMessageAt));
+  if (latestParts.length) parts.push(`latest is ${latestParts.join(" at ")}`);
+  const staleParts = [details.staleMs ? `stale by ${durationText(details.staleMs)}` : "", details.staleMsgCount ? `${countText(details.staleMsgCount, "msg")} behind` : ""].filter(Boolean);
+  if (staleParts.length) parts.push(staleParts.join(" · "));
+  return parts.join(" · ");
+}
+
+function durationText(ms) {
+  const seconds = Math.max(0, Math.round(Number(ms) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  return `${days}d`;
+}
+
+function staleActionText(artifact) {
+  const text = String(artifact?.actionText || "");
+  if (/repo/i.test(text)) return "Refresh stale repo index";
+  if (/summary|summar/i.test(text)) return "Refresh stale summary";
+  if (/text|transcript|preview/i.test(text)) return "Refresh stale text";
+  return text || "Refresh stale artifact";
+}
+
+function aiSummaryFreshness(summary, transcriptPreview) {
+  if (summary.status !== "completed") return summary.freshness;
+  if (summary.freshness === "stale" || transcriptPreview?.stale) return "stale";
+  return summary.freshness;
+}
+
+function aiSummaryFreshnessText(summary, transcriptPreview) {
+  return freshnessText(aiSummaryFreshness(summary, transcriptPreview), { staleMs: summary.staleMs || transcriptPreview?.staleMs || 0 });
 }
 
 function searchText(values) {
@@ -683,6 +1137,8 @@ function transcriptPreviewReadShape(request) {
     requestId: request.requestId,
     requestedAt: request.requestedAt,
     completedAt: request.completedAt,
+    sourceLastMessageAt: request.sourceLastMessageAt || "",
+    sourceMsgCount: request.sourceMsgCount ?? null,
     text: String(request.text || ""),
     error: request.error,
     errorText: request.error ? `Error: ${request.error}` : "",
@@ -699,6 +1155,10 @@ function aiSummaryReadShape(request) {
     requestId: request.requestId,
     requestedAt: request.requestedAt,
     completedAt: request.completedAt,
+    sourceLastMessageAt: request.sourceLastMessageAt || "",
+    sourceMsgCount: request.sourceMsgCount ?? null,
+    transcriptPreviewSourceLastMessageAt: request.transcriptPreviewSourceLastMessageAt || "",
+    transcriptPreviewSourceMsgCount: request.transcriptPreviewSourceMsgCount ?? null,
     text: String(request.text || ""),
     bullets,
     bulletText: bullets.map(item => `- ${item}`).join("\n"),
@@ -716,6 +1176,10 @@ function emptyAiSummary() {
     requestId: null,
     requestedAt: null,
     completedAt: null,
+    sourceLastMessageAt: "",
+    sourceMsgCount: null,
+    transcriptPreviewSourceLastMessageAt: "",
+    transcriptPreviewSourceMsgCount: null,
     text: "",
     bullets: [],
     bulletText: "",
@@ -741,6 +1205,8 @@ function emptyTranscriptPreview() {
     requestId: null,
     requestedAt: null,
     completedAt: null,
+    sourceLastMessageAt: "",
+    sourceMsgCount: null,
     text: "",
     error: null,
     errorText: "",
@@ -765,6 +1231,8 @@ function repoIndexReadShape(request) {
     requestId: request.requestId,
     requestedAt: request.requestedAt,
     completedAt: request.completedAt,
+    sourceLastMessageAt: request.sourceLastMessageAt || "",
+    sourceMsgCount: request.sourceMsgCount ?? null,
     repoCount: repos.length,
     mentionCount,
     repos,
@@ -784,6 +1252,8 @@ function emptyRepoIndex() {
     requestId: null,
     requestedAt: null,
     completedAt: null,
+    sourceLastMessageAt: "",
+    sourceMsgCount: null,
     repoCount: 0,
     mentionCount: 0,
     repos: [],
@@ -846,6 +1316,39 @@ function compactText(value, maxLength) {
   return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
 }
 
+function normalizeMessageRole(value) {
+  const role = String(value || "").trim().toLowerCase();
+  return role === "user" || role === "assistant" ? role : "";
+}
+
+function humanRelativeTime(value, nowValue = null) {
+  const timestamp = Date.parse(String(value || ""));
+  if (!Number.isFinite(timestamp)) return "";
+  const now = nowValue ? Date.parse(String(nowValue)) : Date.now();
+  if (!Number.isFinite(now)) return "";
+  const deltaSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
+  if (deltaSeconds < 45) return "just now";
+  const minutes = Math.floor(deltaSeconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function exactLocalTime(value) {
+  const timestamp = Date.parse(String(value || ""));
+  if (!Number.isFinite(timestamp)) return "";
+  return new Date(timestamp).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
 // --- processes (the only writers) -----------------------------------------
 export function requestSessionImport(world, { actor, backendHost, body }) {
   const id = stringOrNull(body?.id);
@@ -857,16 +1360,30 @@ export function requestSessionImport(world, { actor, backendHost, body }) {
   const project = String(body?.project || "");
   const started = String(body?.started || "");
   const msgCount = Number.isFinite(Number(body?.msgCount)) ? Number(body.msgCount) : 0;
+  const lastMessageAt = String(body?.lastMessageAt || body?.updatedAt || started || "");
+  const lastMessageRole = normalizeMessageRole(body?.lastMessageRole);
+  const lastMessageText = String(body?.lastMessageText || "");
 
   // Idempotent on CONTENT: skip only when the known session already carries the
   // same title/preview/msgCount. If any changed (e.g. a sanitization fix, or a
   // grown conversation), re-witness an update — the projection preserves the
   // DESIRE mark across re-import, so marks are never lost.
   const existing = projectSessions(world.allWitnesses()).find(s => s.id === id);
+  const staleLastMessage = existing?.lastMessageAt
+    && (!lastMessageAt || String(existing.lastMessageAt).localeCompare(lastMessageAt) > 0);
   if (existing
+    && staleLastMessage
     && existing.title === title
     && existing.preview === preview
     && existing.msgCount === msgCount) {
+    return { ok: true, status: 200, skipped: true, id };
+  }
+  if (existing
+    && existing.title === title
+    && existing.preview === preview
+    && existing.msgCount === msgCount
+    && existing.lastMessageAt === lastMessageAt
+    && existing.lastMessageText === lastMessageText) {
     return { ok: true, status: 200, skipped: true, id };
   }
 
@@ -878,7 +1395,7 @@ export function requestSessionImport(world, { actor, backendHost, body }) {
       relation(id, "origin", origin),
       relation(id, "hasTitle", title)
     ],
-    body: { id, title, preview, origin, project, started, msgCount }
+    body: { id, title, preview, origin, project, started, msgCount, lastMessageAt, lastMessageRole, lastMessageText }
   });
   return { ok: true, status: 201, id, witness };
 }
@@ -907,6 +1424,7 @@ export function requestSessionRepoIndex(world, { actor, backendHost, id }) {
   if (!known) return { ok: false, status: 404, error: "unknown session" };
 
   const requestId = `repoIndex.${sid.replace(/[^A-Za-z0-9_.-]/g, "_")}.${world.allWitnesses().length + 1}`;
+  const requestedAt = new Date().toISOString();
   const witness = world.emit({
     process: "session.repoIndex.requested",
     actor: actor || backendHost,
@@ -914,7 +1432,7 @@ export function requestSessionRepoIndex(world, { actor, backendHost, id }) {
       relation(sid, "hasRepoIndexRequest", requestId),
       relation(requestId, "targetsSession", sid)
     ],
-    body: { requestId, sessionId: sid, id: sid }
+    body: { requestId, sessionId: sid, id: sid, sourceLastMessageAt: known.lastMessageAt || "", sourceMsgCount: known.msgCount, requestedAt }
   });
   return { ok: true, status: 202, requestId, sessionId: sid, witness };
 }
@@ -927,6 +1445,7 @@ export function requestSessionTranscriptPreview(world, { actor, backendHost, id 
   if (!known) return { ok: false, status: 404, error: "unknown session" };
 
   const requestId = `transcriptPreview.${sid.replace(/[^A-Za-z0-9_.-]/g, "_")}.${world.allWitnesses().length + 1}`;
+  const requestedAt = new Date().toISOString();
   const witness = world.emit({
     process: "session.transcriptPreview.requested",
     actor: actor || backendHost,
@@ -934,7 +1453,7 @@ export function requestSessionTranscriptPreview(world, { actor, backendHost, id 
       relation(sid, "hasTranscriptPreviewRequest", requestId),
       relation(requestId, "targetsSession", sid)
     ],
-    body: { requestId, sessionId: sid, id: sid }
+    body: { requestId, sessionId: sid, id: sid, sourceLastMessageAt: known.lastMessageAt || "", sourceMsgCount: known.msgCount, requestedAt }
   });
   return { ok: true, status: 202, requestId, sessionId: sid, witness };
 }
@@ -948,6 +1467,7 @@ export function requestSessionAiSummary(world, { actor, backendHost, id }) {
   if (!known.desire) return { ok: false, status: 409, error: "session is not marked DESIRE" };
 
   const requestId = `aiSummary.${sid.replace(/[^A-Za-z0-9_.-]/g, "_")}.${world.allWitnesses().length + 1}`;
+  const requestedAt = new Date().toISOString();
   const witness = world.emit({
     process: "session.aiSummary.requested",
     actor: actor || backendHost,
@@ -955,7 +1475,7 @@ export function requestSessionAiSummary(world, { actor, backendHost, id }) {
       relation(sid, "hasAiSummaryRequest", requestId),
       relation(requestId, "targetsSession", sid)
     ],
-    body: { requestId, sessionId: sid, id: sid }
+    body: { requestId, sessionId: sid, id: sid, sourceLastMessageAt: known.lastMessageAt || "", sourceMsgCount: known.msgCount, requestedAt }
   });
   return { ok: true, status: 202, requestId, sessionId: sid, witness };
 }
@@ -1012,6 +1532,7 @@ export function completeSessionRepoIndex(world, { actor, backendHost, body }) {
   if (request.status !== "pending") return { ok: true, status: 200, skipped: true, requestId, sessionId: request.sessionId };
 
   const status = String(body?.status || "").toLowerCase();
+  const completedAt = new Date().toISOString();
   if (status === "failed") {
     const witness = world.emit({
       process: "session.repoIndex.failed",
@@ -1020,6 +1541,9 @@ export function completeSessionRepoIndex(world, { actor, backendHost, body }) {
       body: {
         requestId,
         sessionId: request.sessionId,
+        sourceLastMessageAt: request.sourceLastMessageAt || "",
+        sourceMsgCount: request.sourceMsgCount,
+        completedAt,
         error: String(body?.error || "repo index failed")
       }
     });
@@ -1037,6 +1561,9 @@ export function completeSessionRepoIndex(world, { actor, backendHost, body }) {
     body: {
       requestId,
       sessionId: request.sessionId,
+      sourceLastMessageAt: request.sourceLastMessageAt || "",
+      sourceMsgCount: request.sourceMsgCount,
+      completedAt,
       repos
     }
   });
@@ -1052,6 +1579,7 @@ export function completeSessionTranscriptPreview(world, { actor, backendHost, bo
   if (request.status !== "pending") return { ok: true, status: 200, skipped: true, requestId, sessionId: request.sessionId };
 
   const status = String(body?.status || "").toLowerCase();
+  const completedAt = new Date().toISOString();
   if (status === "failed") {
     const witness = world.emit({
       process: "session.transcriptPreview.failed",
@@ -1060,6 +1588,9 @@ export function completeSessionTranscriptPreview(world, { actor, backendHost, bo
       body: {
         requestId,
         sessionId: request.sessionId,
+        sourceLastMessageAt: request.sourceLastMessageAt || "",
+        sourceMsgCount: request.sourceMsgCount,
+        completedAt,
         error: String(body?.error || "transcript preview failed")
       }
     });
@@ -1077,6 +1608,9 @@ export function completeSessionTranscriptPreview(world, { actor, backendHost, bo
     body: {
       requestId,
       sessionId: request.sessionId,
+      sourceLastMessageAt: request.sourceLastMessageAt || "",
+      sourceMsgCount: request.sourceMsgCount,
+      completedAt,
       text
     }
   });
@@ -1094,6 +1628,7 @@ export function completeSessionAiSummary(world, { actor, backendHost, body }) {
   }
 
   const status = String(body?.status || "").toLowerCase();
+  const completedAt = new Date().toISOString();
   if (status === "failed") {
     const witness = world.emit({
       process: "session.aiSummary.failed",
@@ -1102,6 +1637,9 @@ export function completeSessionAiSummary(world, { actor, backendHost, body }) {
       body: {
         requestId,
         sessionId: request.sessionId,
+        sourceLastMessageAt: request.sourceLastMessageAt || "",
+        sourceMsgCount: request.sourceMsgCount,
+        completedAt,
         error: String(body?.error || "AI summary failed")
       }
     });
@@ -1120,6 +1658,9 @@ export function completeSessionAiSummary(world, { actor, backendHost, body }) {
     body: {
       requestId,
       sessionId: request.sessionId,
+      sourceLastMessageAt: request.sourceLastMessageAt || "",
+      sourceMsgCount: request.sourceMsgCount,
+      completedAt,
       text,
       bullets
     }
@@ -1221,11 +1762,47 @@ export function completeRepoSnapshot(world, { actor, backendHost, body }) {
   return { ok: true, status: 200, requestId, repoId: request.repoId, snapshotId, fileCount, witness };
 }
 
+export function recordDaemonHeartbeat(world, { actor, backendHost, body }) {
+  const daemonId = stringOrNull(body?.daemonId || body?.id);
+  if (!daemonId) return { ok: false, status: 400, error: "daemonId is required" };
+
+  const at = String(body?.at || new Date().toISOString());
+  const capabilities = normalizeStringList(body?.capabilities);
+  const counters = body?.counters && typeof body.counters === "object" ? body.counters : {};
+  const witness = world.emit({
+    process: "daemon.heartbeat",
+    actor: actor || backendHost,
+    claims: [
+      thing(daemonId),
+      relation(daemonId, "isA", "daemon")
+    ],
+    body: {
+      daemonId,
+      label: String(body?.label || daemonId),
+      at,
+      capabilities,
+      counters,
+      error: String(body?.error || ""),
+      summary: String(body?.summary || "")
+    }
+  });
+  return { ok: true, status: 202, daemonId, witness };
+}
+
 // --- handler registration (eden dispatch-handler pattern) -----------------
 export function createTilthHandlers({ world, backendHost, sendJson, readJson }) {
   return {
     "sessions.read": async ({ req, res }) => {
       sendJson(res, 200, { sessions: projectFilteredSessions(world.allWitnesses(), requestFilter(req), requestQuery(req)) });
+    },
+
+    "jobs.read": async ({ req, res }) => {
+      const options = { status: requestParam(req, "status"), kind: requestParam(req, "kind"), limit: requestParam(req, "limit") };
+      sendJson(res, 200, { jobs: projectJobs(world.allWitnesses(), options), summary: projectOpsSummary(world.allWitnesses()) });
+    },
+
+    "daemons.read": async ({ res }) => {
+      sendJson(res, 200, { daemons: projectDaemonHeartbeats(world.allWitnesses()) });
     },
 
     "session.import": async ({ req, res, requestActor }) => {
@@ -1291,6 +1868,13 @@ export function createTilthHandlers({ world, backendHost, sendJson, readJson }) 
       });
       if (!result.ok) { sendJson(res, result.status, { error: result.error }); return; }
       sendJson(res, result.status, { ok: true, requestId: result.requestId, repoId: result.repoId, witness: result.witness });
+    },
+
+    "daemon.heartbeat": async ({ req, res, requestActor }) => {
+      const body = await readJson(req);
+      const result = recordDaemonHeartbeat(world, { actor: requestActor, backendHost, body });
+      if (!result.ok) { sendJson(res, result.status, { error: result.error }); return; }
+      sendJson(res, result.status, { ok: true, daemonId: result.daemonId, witness: result.witness });
     },
 
     "transcriptPreview.requests.read": async ({ res }) => {
@@ -1397,9 +1981,13 @@ function requestFilter(req) {
 }
 
 function requestQuery(req) {
+  return requestParam(req, "q");
+}
+
+function requestParam(req, name) {
   try {
     const url = new URL(req?.url || "", "http://tilth.local");
-    return url.searchParams.get("q") || "";
+    return url.searchParams.get(name) || "";
   } catch {
     return "";
   }

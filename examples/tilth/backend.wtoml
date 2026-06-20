@@ -23,7 +23,7 @@ method = "GET"
 path = "/"
 serves = "tilthView"
 handler = "page.home"
-params = { rootWidget = "tilth_page_workbench_v7", frontendProgram = "tilth_program_workbench_v7", page = "home" }
+params = { rootWidget = "tilth_page_workbench_v9", frontendProgram = "tilth_program_workbench_v9", page = "home" }
 
 [[serve]]
 serverRunner = "tilth_server"
@@ -40,6 +40,30 @@ handler = "sessions.read"
 [[serve]]
 serverRunner = "tilth_server"
 route = "tilth_sessions_read_route"
+
+# Local job projection across all Tilth request/result queues.
+[[route]]
+id = "tilth_jobs_read_route"
+method = "GET"
+path = "/api/jobs"
+serves = "tilthJobs"
+handler = "jobs.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_jobs_read_route"
+
+# Local daemon heartbeat projection.
+[[route]]
+id = "tilth_daemons_read_route"
+method = "GET"
+path = "/api/daemons"
+serves = "tilthDaemons"
+handler = "daemons.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_daemons_read_route"
 
 # Import a session (the external tilth-claude-code-daemon POSTs JSON here)
 [[route]]
@@ -141,6 +165,18 @@ handler = "repo.snapshot.request"
 [[serve]]
 serverRunner = "tilth_server"
 route = "tilth_repo_snapshot_request_body_route"
+
+# Daemon heartbeat reporting from local capability workers.
+[[route]]
+id = "tilth_daemon_heartbeat_route"
+method = "POST"
+path = "/api/daemon-heartbeat"
+serves = "tilthDaemons"
+handler = "daemon.heartbeat"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_daemon_heartbeat_route"
 
 # Pending repo-index jobs for the daemon worker.
 [[route]]

@@ -183,6 +183,41 @@ handler = "repo.close"
 serverRunner = "tilth_net_server"
 route = "tilth_net_repo_close_route"
 
+# Browser toggles continuous live sync on / off for a repo
+[[route]]
+id = "tilth_net_repo_live_route"
+method = "POST"
+path = "/api/repos/:name/live"
+serves = "tilthNetRepos"
+handler = "repo.live"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_repo_live_route"
+
+[[route]]
+id = "tilth_net_repo_unlive_route"
+method = "POST"
+path = "/api/repos/:name/unlive"
+serves = "tilthNetRepos"
+handler = "repo.unlive"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_repo_unlive_route"
+
+# Which repos are live (for the daemon to watch/publish/apply)
+[[route]]
+id = "tilth_net_live_read_route"
+method = "GET"
+path = "/api/live"
+serves = "tilthNetRepos"
+handler = "live.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_live_read_route"
+
 # Conversations: DESIRE-marked sessions announced from tilth (projection)
 [[route]]
 id = "tilth_net_sessions_read_route"
@@ -253,6 +288,18 @@ handler = "commons.read"
 [[serve]]
 serverRunner = "tilth_net_server"
 route = "tilth_net_commons_read_route"
+
+# Live sync: canonical head per file (reconcile.rvm over the commons feed)
+[[route]]
+id = "tilth_net_commons_heads_route"
+method = "GET"
+path = "/api/commons/heads"
+serves = "tilthNetCommons"
+handler = "commons.heads.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_commons_heads_route"
 
 # Commons: set the local folder pulls sync into (witnessed setting)
 [[route]]

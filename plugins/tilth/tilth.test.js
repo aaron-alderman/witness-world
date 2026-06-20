@@ -8,8 +8,11 @@ import {
   completeSessionTranscriptPreview,
   completeRepoRecognition,
   completeRepoSnapshot,
+  projectDaemonHeartbeats,
   projectAiSummaryRequests,
   projectFilteredSessions,
+  projectJobs,
+  projectOpsSummary,
   projectRepoIndexRequests,
   projectRepoIndexRepos,
   projectRepoRecognitionRequests,
@@ -18,6 +21,7 @@ import {
   projectTranscriptPreviewRequests,
   requestRepoRecognition,
   requestRepoSnapshot,
+  recordDaemonHeartbeat,
   requestSessionImport,
   requestSessionAiSummary,
   requestSessionMarkDesire,
@@ -36,14 +40,17 @@ function importSession(world, id = "session-1", overrides = {}) {
       origin: overrides.origin || "callan",
       project: overrides.project || "meta",
       started: "2026-06-20T00:00:00.000Z",
-      msgCount: overrides.msgCount ?? 2
+      msgCount: overrides.msgCount ?? 2,
+      lastMessageAt: overrides.lastMessageAt || "2026-06-20T00:00:00.000Z",
+      lastMessageRole: Object.hasOwn(overrides, "lastMessageRole") ? overrides.lastMessageRole : "assistant",
+      lastMessageText: Object.hasOwn(overrides, "lastMessageText") ? overrides.lastMessageText : "Initial answer"
     }
   });
 }
 
 test("tilth session template stays flat to avoid duplicated controls", () => {
   const source = readFileSync(new URL("../../examples/tilth/frontend.wtoml", import.meta.url), "utf8");
-  const templateMatch = source.match(/id = "session_card_v3_template"[\s\S]*?children = \[([^\]]+)\]/);
+  const templateMatch = source.match(/id = "session_card_v4_template"[\s\S]*?children = \[([^\]]+)\]/);
   assert.ok(templateMatch);
   assert.doesNotMatch(templateMatch[1], /session_card_v2_actions/);
   assert.doesNotMatch(templateMatch[1], /session_item_actions_repo_clean/);
@@ -52,9 +59,28 @@ test("tilth session template stays flat to avoid duplicated controls", () => {
   assert.doesNotMatch(source, /id = "session_item_actions_repo_clean"/);
   assert.doesNotMatch(source, /id = "session_item_statuses_repo_clean"/);
   assert.doesNotMatch(source, /session_item_template_repo_clean/);
-  assert.match(source, /template = "session_card_v3_template"/);
+  assert.match(source, /template = "session_card_v4_template"/);
   assert.match(templateMatch[1], /session_card_v2_repo_chips/);
+  assert.match(templateMatch[1], /session_card_v4_latest/);
+  assert.match(source, /session_card_v2_ai_summary_version/);
+  assert.match(source, /session_card_v2_repo_version/);
+  assert.match(source, /session_card_v2_transcript_version/);
   assert.doesNotMatch(source, /'Repos: ' \+ item\.repoIndex\.summary/);
+});
+
+test("tilth jobs view keeps ops controls flat and raw detail collapsed", () => {
+  const source = readFileSync(new URL("../../examples/tilth/frontend.wtoml", import.meta.url), "utf8");
+  const sectionMatch = source.match(/id = "jobs_section_ops_v1"[\s\S]*?children = \[([^\]]+)\]/);
+  assert.ok(sectionMatch);
+  assert.match(sectionMatch[1], /ops_summary_bar_workbench/);
+  assert.match(sectionMatch[1], /jobs_filter_bar_workbench/);
+  assert.equal((sectionMatch[1].match(/daemon_status_list_ops_v1/g) || []).length, 1);
+  assert.equal((sectionMatch[1].match(/jobs_list_ops_v1/g) || []).length, 1);
+  assert.match(source, /\[\[details\]\]\nid = "job_item_raw_details_workbench"/);
+  assert.doesNotMatch(source, /id = "job_item_error_workbench"/);
+  assert.match(source, /url = "\/api\/jobs\?status=failed"/);
+  assert.match(source, /url = "\/api\/jobs\?status=pending"/);
+  assert.match(source, /url = "\/api\/jobs\?status=completed"/);
 });
 
 test("tilth repo-index requests require a known session", () => {
@@ -67,6 +93,59 @@ test("tilth repo-index requests require a known session", () => {
   assert.equal(requested.ok, true);
   assert.equal(requested.status, 202);
   assert.equal(projectRepoIndexRequests(world.allWitnesses()).at(-1).status, "pending");
+});
+
+test("tilth sessions sort by latest message time", () => {
+  const world = createWorld();
+  importSession(world, "old", { title: "Old chat", lastMessageAt: "2026-06-20T00:00:00.000Z" });
+  importSession(world, "new", { title: "New chat", lastMessageAt: "2026-06-20T00:10:00.000Z" });
+
+  assert.deepEqual(projectSessions(world.allWitnesses()).map(row => row.id), ["new", "old"]);
+});
+
+test("tilth session re-import updates latest message and preserves DESIRE", () => {
+  const world = createWorld();
+  importSession(world, "session-1", {
+    msgCount: 1,
+    lastMessageAt: "2026-06-20T00:00:00.000Z",
+    lastMessageText: "Initial answer"
+  });
+  requestSessionMarkDesire(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  importSession(world, "session-1", {
+    msgCount: 2,
+    lastMessageAt: "2026-06-20T00:05:00.000Z",
+    lastMessageRole: "user",
+    lastMessageText: "Follow-up question"
+  });
+
+  const session = projectSessions(world.allWitnesses(), { now: "2026-06-20T00:10:00.000Z" })[0];
+  assert.equal(session.desire, true);
+  assert.equal(session.msgCount, 2);
+  assert.equal(session.lastMessageAt, "2026-06-20T00:05:00.000Z");
+  assert.equal(session.lastMessageLine, "You: Follow-up question");
+  assert.equal(session.lastMessageRelativeText, "5 min ago");
+  assert.match(session.lastMessageExactText, /2026/);
+});
+
+test("tilth session import does not downgrade latest message metadata", () => {
+  const world = createWorld();
+  importSession(world, "session-1", {
+    msgCount: 2,
+    lastMessageAt: "2026-06-20T00:10:00.000Z",
+    lastMessageRole: "assistant",
+    lastMessageText: "Newest answer"
+  });
+  importSession(world, "session-1", {
+    msgCount: 2,
+    lastMessageAt: "2026-06-20T00:00:00.000Z",
+    lastMessageRole: "",
+    lastMessageText: ""
+  });
+
+  const session = projectSessions(world.allWitnesses())[0];
+  assert.equal(session.lastMessageAt, "2026-06-20T00:10:00.000Z");
+  assert.equal(session.lastMessageRole, "assistant");
+  assert.equal(session.lastMessageText, "Newest answer");
 });
 
 test("tilth manual repo recognition requests require a path", () => {
@@ -165,7 +244,11 @@ test("tilth AI-summary completion projects onto the session", () => {
   const session = projectSessions(world.allWitnesses()).find(row => row.id === "session-1");
   assert.equal(session.aiSummary.status, "completed");
   assert.equal(session.aiSummary.summary, "AI summary loaded");
-  assert.equal(session.aiStatusText, "Summary loaded");
+  assert.equal(session.aiSummary.sourceLastMessageAt, "2026-06-20T00:00:00.000Z");
+  assert.equal(session.aiSummary.sourceMsgCount, 2);
+  assert.equal(session.aiSummary.freshness, "fresh");
+  assert.equal(session.aiStatusText, "Summary: fresh");
+  assert.match(session.aiSummary.versionText, /based on 2 msgs/);
   assert.equal(session.aiSummary.actionText, "Refresh summary");
   assert.equal(session.aiSummary.text, "The session planned and implemented a Tilth feature.");
   assert.deepEqual(session.aiSummary.bullets, ["Added request/result plumbing", "Updated the UI"]);
@@ -192,7 +275,11 @@ test("tilth transcript-preview completion projects onto the session", () => {
   assert.equal(session.transcriptPreview.status, "completed");
   assert.match(session.transcriptPreview.text, /Open the repo/);
   assert.equal(session.transcriptPreview.summary, "Transcript preview loaded");
-  assert.equal(session.transcriptStatusText, "Text loaded");
+  assert.equal(session.transcriptPreview.sourceLastMessageAt, "2026-06-20T00:00:00.000Z");
+  assert.equal(session.transcriptPreview.sourceMsgCount, 2);
+  assert.equal(session.transcriptPreview.freshness, "fresh");
+  assert.equal(session.transcriptStatusText, "Text: fresh");
+  assert.match(session.transcriptPreview.versionText, /based on 2 msgs/);
   assert.equal(session.transcriptPreview.actionText, "Refresh text");
 });
 
@@ -221,9 +308,166 @@ test("tilth repo-index completion projects onto the session", () => {
   assert.equal(session.repoIndex.repoCount, 1);
   assert.equal(session.repoIndex.mentionCount, 1);
   assert.match(session.repoIndex.summary, /meta/);
+  assert.equal(session.repoIndex.sourceLastMessageAt, "2026-06-20T00:00:00.000Z");
+  assert.equal(session.repoIndex.sourceMsgCount, 2);
+  assert.equal(session.repoIndex.freshness, "fresh");
   assert.equal(session.repoIndex.actionText, "Refresh repo index");
-  assert.equal(session.repoStatusText, "1 repo · 1 mention");
+  assert.equal(session.repoStatusText, "Repos: fresh");
   assert.equal(session.repoChipText, "meta · 1");
+});
+
+test("tilth completed session artifacts become stale when the session has newer text", () => {
+  const world = createWorld();
+  importSession(world, "session-1", {
+    lastMessageAt: "2026-06-20T00:00:00.000Z",
+    lastMessageText: "Initial answer"
+  });
+  requestSessionMarkDesire(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  const repo = requestSessionRepoIndex(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  const preview = requestSessionTranscriptPreview(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  completeSessionRepoIndex(world, {
+    actor: "daemon",
+    backendHost: "backendHost",
+    body: {
+      requestId: repo.requestId,
+      status: "completed",
+      repos: [{ root: "/home/callan/projects/swell/repos/ai/repos/meta", name: "meta", mentions: [] }]
+    }
+  });
+  completeSessionTranscriptPreview(world, {
+    actor: "daemon",
+    backendHost: "backendHost",
+    body: { requestId: preview.requestId, status: "completed", text: "You:\nInitial answer\n" }
+  });
+  const summary = requestSessionAiSummary(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  completeSessionAiSummary(world, {
+    actor: "tilth-daemon",
+    backendHost: "backendHost",
+    body: { requestId: summary.requestId, status: "completed", text: "Initial summary.", bullets: [] }
+  });
+
+  importSession(world, "session-1", {
+    msgCount: 3,
+    lastMessageAt: "2026-06-20T00:05:00.000Z",
+    lastMessageRole: "user",
+    lastMessageText: "Can you revisit this?"
+  });
+
+  const session = projectSessions(world.allWitnesses()).find(row => row.id === "session-1");
+  assert.equal(session.repoIndex.freshness, "stale");
+  assert.equal(session.transcriptPreview.freshness, "stale");
+  assert.equal(session.aiSummary.freshness, "stale");
+  assert.equal(session.repoIndex.staleTimeText, "5m");
+  assert.equal(session.repoIndex.staleMsgCount, 1);
+  assert.equal(session.repoIndex.staleMsgText, "1 msg behind");
+  assert.match(session.repoIndex.versionText, /stale by 5m · 1 msg behind/);
+  assert.equal(session.repoStatusText, "Repos: stale by 5m");
+  assert.equal(session.transcriptStatusText, "Text: stale by 5m");
+  assert.equal(session.aiStatusText, "Summary: stale by 5m");
+  assert.equal(session.repoIndex.actionText, "Refresh stale repo index");
+  assert.equal(session.transcriptPreview.actionText, "Refresh stale text");
+  assert.equal(session.aiSummary.actionText, "Refresh stale summary");
+});
+
+test("tilth legacy completed session artifacts report unknown freshness", () => {
+  const world = createWorld();
+  importSession(world);
+  requestSessionMarkDesire(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+
+  world.emit({
+    process: "session.repoIndex.requested",
+    actor: "old-daemon",
+    claims: [],
+    body: { requestId: "repo.legacy", sessionId: "session-1", id: "session-1" }
+  });
+  world.emit({
+    process: "session.repoIndex.completed",
+    actor: "old-daemon",
+    claims: [],
+    body: {
+      requestId: "repo.legacy",
+      sessionId: "session-1",
+      repos: [{ root: "/home/callan/projects/swell/repos/ai/repos/meta", name: "meta", mentions: [] }]
+    }
+  });
+  world.emit({
+    process: "session.transcriptPreview.requested",
+    actor: "old-daemon",
+    claims: [],
+    body: { requestId: "text.legacy", sessionId: "session-1", id: "session-1" }
+  });
+  world.emit({
+    process: "session.transcriptPreview.completed",
+    actor: "old-daemon",
+    claims: [],
+    body: { requestId: "text.legacy", sessionId: "session-1", text: "You:\nLegacy text\n" }
+  });
+  world.emit({
+    process: "session.aiSummary.requested",
+    actor: "old-daemon",
+    claims: [],
+    body: { requestId: "summary.legacy", sessionId: "session-1", id: "session-1" }
+  });
+  world.emit({
+    process: "session.aiSummary.completed",
+    actor: "old-daemon",
+    claims: [],
+    body: { requestId: "summary.legacy", sessionId: "session-1", text: "Legacy summary.", bullets: [] }
+  });
+
+  const session = projectSessions(world.allWitnesses()).find(row => row.id === "session-1");
+  assert.equal(session.repoIndex.freshness, "unknown");
+  assert.equal(session.transcriptPreview.freshness, "unknown");
+  assert.equal(session.aiSummary.freshness, "unknown");
+  assert.equal(session.repoStatusText, "Repos: freshness unknown");
+  assert.equal(session.transcriptStatusText, "Text: freshness unknown");
+  assert.equal(session.aiStatusText, "Summary: freshness unknown");
+  assert.equal(session.repoIndex.unknownFreshness, true);
+  assert.equal(session.transcriptPreview.unknownFreshness, true);
+  assert.equal(session.aiSummary.unknownFreshness, true);
+});
+
+test("tilth timestamp-only artifacts show time staleness without inventing message lag", () => {
+  const world = createWorld();
+  importSession(world, "session-1", {
+    msgCount: 10,
+    lastMessageAt: "2026-06-20T00:00:00.000Z"
+  });
+  world.emit({
+    process: "session.transcriptPreview.requested",
+    actor: "old-daemon",
+    claims: [],
+    body: {
+      requestId: "text.timestamp-only",
+      sessionId: "session-1",
+      sourceLastMessageAt: "2026-06-20T00:00:00.000Z"
+    }
+  });
+  world.emit({
+    process: "session.transcriptPreview.completed",
+    actor: "old-daemon",
+    claims: [],
+    body: {
+      requestId: "text.timestamp-only",
+      sessionId: "session-1",
+      sourceLastMessageAt: "2026-06-20T00:00:00.000Z",
+      sourceMsgCount: null,
+      completedAt: "2026-06-20T00:00:10.000Z",
+      text: "You:\nOld text\n"
+    }
+  });
+  importSession(world, "session-1", {
+    msgCount: 12,
+    lastMessageAt: "2026-06-20T00:05:00.000Z"
+  });
+
+  const session = projectSessions(world.allWitnesses()).find(row => row.id === "session-1");
+  assert.equal(session.transcriptPreview.freshness, "stale");
+  assert.equal(session.transcriptPreview.staleTimeText, "5m");
+  assert.equal(session.transcriptPreview.staleMsgCount, 0);
+  assert.equal(session.transcriptPreview.staleMsgText, "");
+  assert.doesNotMatch(session.transcriptPreview.versionText, /0 msgs|msgs behind/);
+  assert.equal(session.transcriptStatusText, "Text: stale by 5m");
 });
 
 test("tilth session search matches projected workbench text", () => {
@@ -444,6 +688,229 @@ test("tilth completed repo snapshot records manifest metadata", () => {
   assert.equal(repo.snapshot.snapshotId, "meta_tilth-net_123");
   assert.equal(repo.snapshot.fileCount, 7);
   assert.equal(repo.snapshotText, "Snapshot ready · 7 files");
+});
+
+test("tilth jobs projection aggregates visible local work", () => {
+  const world = createWorld();
+  const manual = requestRepoRecognition(world, {
+    actor: "callan",
+    backendHost: "backendHost",
+    body: { path: "~/projects/swell/repos/ai/repos/meta/tilth-net" }
+  });
+  completeRepoRecognition(world, {
+    actor: "tilth-daemon",
+    backendHost: "backendHost",
+    body: {
+      requestId: manual.requestId,
+      status: "completed",
+      root: "/home/callan/projects/swell/repos/ai/repos/meta/tilth-net",
+      name: "tilth-net",
+      remotes: []
+    }
+  });
+  requestRepoSnapshot(world, {
+    actor: "callan",
+    backendHost: "backendHost",
+    repoId: "meta/tilth-net"
+  });
+
+  const jobs = projectJobs(world.allWitnesses());
+  assert.equal(jobs[0].kind, "repo-snapshot");
+  assert.equal(jobs[0].status, "pending");
+  assert.equal(jobs[0].worker, "tilth-daemon");
+  assert.equal(jobs[0].label, "meta/tilth-net");
+  assert.equal(jobs.some(job => job.kind === "repo-recognition" && job.status === "completed"), true);
+});
+
+test("tilth daemon heartbeats project latest active daemon", () => {
+  const world = createWorld();
+  recordDaemonHeartbeat(world, {
+    actor: "tilth-daemon",
+    backendHost: "backendHost",
+    body: {
+      daemonId: "tilth-daemon",
+      label: "tilth-daemon",
+      at: "2026-06-20T00:00:00.000Z",
+      capabilities: ["repo-recognition", "repo-snapshot", "ai-summary"],
+      counters: { repoSnapshots: 2 }
+    }
+  });
+
+  const daemons = projectDaemonHeartbeats(world.allWitnesses(), { now: "2026-06-20T00:00:30.000Z" });
+  const tilthDaemon = daemons.find(daemon => daemon.daemonId === "tilth-daemon");
+  const claudeDaemon = daemons.find(daemon => daemon.daemonId === "tilth-claude-code-daemon");
+  assert.equal(daemons.length, 2);
+  assert.equal(tilthDaemon.status, "active");
+  assert.equal(tilthDaemon.capabilitiesText, "repo-recognition, repo-snapshot, ai-summary");
+  assert.match(tilthDaemon.countersText, /repoSnapshots: 2/);
+  assert.equal(tilthDaemon.counterSummaryText, "repoSnapshots: 2");
+  assert.equal(tilthDaemon.ageText, "30s ago");
+  assert.equal(tilthDaemon.metaText, "active · seen 30s ago");
+  assert.equal(claudeDaemon.status, "never seen");
+  assert.equal(claudeDaemon.detailText, "Handles Claude Code session import, repo indexing, and transcript previews");
+  assert.equal(claudeDaemon.ageText, "never");
+});
+
+test("tilth daemon heartbeats mark expected daemons stale", () => {
+  const world = createWorld();
+  recordDaemonHeartbeat(world, {
+    actor: "tilth-claude-code-daemon",
+    backendHost: "backendHost",
+    body: {
+      daemonId: "tilth-claude-code-daemon",
+      label: "tilth-claude-code-daemon",
+      at: "2026-06-20T00:00:00.000Z",
+      capabilities: ["session-import", "repo-index", "transcript-preview"]
+    }
+  });
+
+  const daemons = projectDaemonHeartbeats(world.allWitnesses(), { now: "2026-06-20T00:03:00.000Z" });
+  const daemon = daemons.find(row => row.daemonId === "tilth-claude-code-daemon");
+  assert.equal(daemon.status, "stale");
+});
+
+test("tilth jobs projection includes successful daemon activity", () => {
+  const world = createWorld();
+  recordDaemonHeartbeat(world, {
+    actor: "tilth-claude-code-daemon",
+    backendHost: "backendHost",
+    body: {
+      daemonId: "tilth-claude-code-daemon",
+      label: "tilth-claude-code-daemon",
+      at: "2026-06-20T00:00:00.000Z",
+      capabilities: ["session-import", "repo-index", "transcript-preview"],
+      counters: { imported: 1, repoIndexed: 1, transcriptPreviewed: 1 }
+    }
+  });
+
+  const jobs = projectJobs(world.allWitnesses(), { now: "2026-06-20T00:00:30.000Z" });
+  const tick = jobs.find(job => job.source === "heartbeat" && job.worker === "tilth-claude-code-daemon");
+  assert.equal(tick.status, "completed");
+  assert.match(tick.detailText, /imported: 1/);
+});
+
+test("tilth jobs projection treats blank limit as default history limit", () => {
+  const world = createWorld();
+  recordDaemonHeartbeat(world, {
+    actor: "tilth-daemon",
+    backendHost: "backendHost",
+    body: {
+      daemonId: "tilth-daemon",
+      label: "tilth-daemon",
+      at: "2026-06-20T00:00:00.000Z",
+      capabilities: ["repo-recognition", "repo-snapshot", "ai-summary"]
+    }
+  });
+  recordDaemonHeartbeat(world, {
+    actor: "tilth-claude-code-daemon",
+    backendHost: "backendHost",
+    body: {
+      daemonId: "tilth-claude-code-daemon",
+      label: "tilth-claude-code-daemon",
+      at: "2026-06-20T00:00:01.000Z",
+      capabilities: ["session-import", "repo-index", "transcript-preview"]
+    }
+  });
+
+  assert.equal(projectJobs(world.allWitnesses(), { limit: "" }).length, 2);
+});
+
+test("tilth jobs projection keeps raw error detail out of collapsed text", () => {
+  const world = createWorld();
+  importSession(world);
+  requestSessionMarkDesire(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  const preview = requestSessionTranscriptPreview(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  completeSessionTranscriptPreview(world, {
+    actor: "tilth-claude-code-daemon",
+    backendHost: "backendHost",
+    body: { requestId: preview.requestId, status: "completed", text: "You:\nSummarize this." }
+  });
+  const request = requestSessionAiSummary(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  completeSessionAiSummary(world, {
+    actor: "tilth-daemon",
+    backendHost: "backendHost",
+    body: {
+      requestId: request.requestId,
+      status: "failed",
+      error: 'model request failed: HTTP 429 { "error": { "message": "Rate limit reached for gpt-4.1-mini on tokens per min. Please try again later." } }'
+    }
+  });
+
+  const job = projectJobs(world.allWitnesses()).find(row => row.kind === "ai-summary");
+  assert.equal(job.kindLabel, "AI summary");
+  assert.equal(job.statusRank, 0);
+  assert.equal(job.shortStatusText, "failed");
+  assert.match(job.titleText, /^AI summary · /);
+  assert.match(job.detailText, /HTTP 429|Rate limit reached/i);
+  assert.ok(job.detailText.length < job.error.length);
+  assert.equal(job.errorDetailText, job.error);
+  assert.equal(job.rawDetailText, job.error);
+});
+
+test("tilth jobs projection sorts failed work before pending and completed work", () => {
+  const world = createWorld();
+  importSession(world);
+  requestSessionMarkDesire(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  requestSessionRepoIndex(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  const preview = requestSessionTranscriptPreview(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  completeSessionTranscriptPreview(world, {
+    actor: "tilth-claude-code-daemon",
+    backendHost: "backendHost",
+    body: { requestId: preview.requestId, status: "completed", text: "You:\nSummarize this." }
+  });
+  const summary = requestSessionAiSummary(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  completeSessionAiSummary(world, {
+    actor: "tilth-daemon",
+    backendHost: "backendHost",
+    body: { requestId: summary.requestId, status: "failed", error: "model unavailable" }
+  });
+
+  const jobs = projectJobs(world.allWitnesses());
+  assert.deepEqual(jobs.slice(0, 3).map(job => job.status), ["failed", "pending", "completed"]);
+});
+
+test("tilth ops summary counts jobs daemons and artifact freshness", () => {
+  const world = createWorld();
+  importSession(world, "session-1", { lastMessageAt: "2026-06-20T00:00:00.000Z" });
+  requestSessionMarkDesire(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  const preview = requestSessionTranscriptPreview(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  completeSessionTranscriptPreview(world, {
+    actor: "tilth-claude-code-daemon",
+    backendHost: "backendHost",
+    body: { requestId: preview.requestId, status: "completed", text: "You:\nInitial text." }
+  });
+  const repo = requestSessionRepoIndex(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+  completeSessionRepoIndex(world, {
+    actor: "tilth-claude-code-daemon",
+    backendHost: "backendHost",
+    body: { requestId: repo.requestId, status: "failed", error: "git unavailable" }
+  });
+  importSession(world, "session-1", {
+    msgCount: 3,
+    lastMessageAt: "2026-06-20T00:05:00.000Z",
+    lastMessageText: "Newer text"
+  });
+  recordDaemonHeartbeat(world, {
+    actor: "tilth-daemon",
+    backendHost: "backendHost",
+    body: {
+      daemonId: "tilth-daemon",
+      label: "tilth-daemon",
+      at: "2026-06-20T00:05:00.000Z",
+      capabilities: ["repo-recognition", "repo-snapshot", "ai-summary"]
+    }
+  });
+
+  const summary = projectOpsSummary(world.allWitnesses(), { now: "2026-06-20T00:05:30.000Z" });
+  assert.equal(summary.failed, 1);
+  assert.equal(summary.pending, 0);
+  assert.equal(summary.completed, 2);
+  assert.equal(summary.staleArtifacts, 1);
+  assert.equal(summary.activeDaemons, 1);
+  assert.equal(summary.missingDaemons, 1);
+  assert.match(summary.workText, /1 failed job/);
+  assert.match(summary.artifactText, /1 stale artifact/);
+  assert.match(summary.daemonText, /1\/2 daemons active/);
 });
 
 test("tilth repo-index repos invert completed session results by repository", () => {

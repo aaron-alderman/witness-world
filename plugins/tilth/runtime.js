@@ -7,6 +7,8 @@ export const handlerCatalog = Object.freeze({
   pageHandlers: Object.freeze([]),
   dispatchHandlers: Object.freeze([
     "sessions.read",
+    "jobs.read",
+    "daemons.read",
     "session.import",
     "session.markDesire",
     "session.repoIndex.request",
@@ -14,6 +16,7 @@ export const handlerCatalog = Object.freeze({
     "session.aiSummary.request",
     "repo.recognition.request",
     "repo.snapshot.request",
+    "daemon.heartbeat",
     "repoIndex.requests.read",
     "repoIndex.repos.read",
     "repoIndex.request.result",

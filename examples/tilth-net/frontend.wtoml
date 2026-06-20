@@ -1,8 +1,9 @@
-# tilth-net frontend: your node, organised by flow.
-#   Share out — what's yours: could put up vs put up ✓
-#   Pull in   — the commons: could pull vs pulled ✓
-#   Members   — identity (its own thing)
-# (No keys, no signing here — the browser reads and toggles; the daemon signs.)
+# tilth-net frontend: your node, two flows, progressively disclosed.
+#   Share out — your work moving into the commons   (could put up / put up ✓)
+#   Pull in   — peers' work coming to your disk      (could pull / pulled ✓)
+#   Members   — identity
+# Each group is a collapsible <details> with a live count; conversation cards
+# tuck their AI summary behind a toggle. No keys here — the daemon signs/syncs.
 
 [[defaults]]
 context = "frontend"
@@ -10,7 +11,7 @@ program = "tilth_net_program"
 
 [[page]]
 id = "tilth_net_page"
-children = ["tn_title", "tn_intro", "tn_shareout_h", "tn_couldput_h", "tn_convos", "tn_repos", "tn_putup_h", "tn_putup", "tn_pullin_h", "tn_folder_current", "tn_folder_form", "tn_couldpull_h", "tn_couldpull", "tn_pulled_h", "tn_pulled", "tn_members_h", "tn_addpeer", "tn_members"]
+children = ["tn_title", "g_shareout", "g_pullin", "g_members"]
 title = "Tilth-Net — your node"
 
 [[heading]]
@@ -18,23 +19,20 @@ id = "tn_title"
 text = "Your node"
 level = 1
 
-[[text]]
-id = "tn_intro"
-text = "Two flows. Share out: your conversations and repos move into the shared commons when you put them up. Pull in: a recognised peer's published work, verified here, synced to a local folder you choose. The browser holds no key — your daemon signs and syncs."
-class = "surface-lede"
+# ===== SHARE OUT (collapsible group) ========================================
+[[details]]
+id = "g_shareout"
+children = ["g_shareout_sum", "sh_couldput_h", "tn_convos", "tn_repos", "sh_putup_h", "tn_putup"]
 
-# ===== SHARE OUT ============================================================
-[[heading]]
-id = "tn_shareout_h"
+[[summary]]
+id = "g_shareout_sum"
 text = "Share out"
-level = 2
 
 [[heading]]
-id = "tn_couldput_h"
+id = "sh_couldput_h"
 text = "Could put up"
 level = 3
 
-# conversations not yet shared
 [[box]]
 id = "tn_convos"
 role = "convos-list"
@@ -43,7 +41,7 @@ class = "surface-list"
 [[box]]
 id = "convo_tpl"
 template = true
-children = ["convo_title", "convo_summary", "convo_meta", "convo_btn"]
+children = ["convo_title", "convo_summary_d", "convo_meta", "convo_btn"]
 class = "surface-card"
 
 [[heading]]
@@ -52,8 +50,18 @@ template = true
 text = "${item.title}"
 level = 4
 
+[[details]]
+id = "convo_summary_d"
+template = true
+children = ["convo_summary_sum", "convo_summary_txt"]
+
+[[summary]]
+id = "convo_summary_sum"
+template = true
+text = "AI summary"
+
 [[text]]
-id = "convo_summary"
+id = "convo_summary_txt"
 template = true
 text = "${item.aiSummary || '(no AI summary yet)'}"
 class = "surface-lede"
@@ -73,7 +81,6 @@ action = "shareConversation"
 data-id = "${item.sessionId}"
 data-target = "share"
 
-# repos not yet open
 [[box]]
 id = "tn_repos"
 role = "repos-list"
@@ -82,8 +89,8 @@ class = "surface-list"
 [[box]]
 id = "repo_tpl"
 template = true
-children = ["repo_name", "repo_meta", "repo_btn"]
-class = "surface-card"
+children = ["repo_name", "repo_meta", "repo_btn", "repo_live_btn"]
+class = "${item.live ? 'surface-card desire' : 'surface-card'}"
 
 [[heading]]
 id = "repo_name"
@@ -106,8 +113,17 @@ action = "toggleSync"
 data-name = "${item.repoName}"
 data-target = "open"
 
+[[button]]
+id = "repo_live_btn"
+template = true
+text = "${item.live ? 'Stop live' : 'Go live'}"
+type = "button"
+action = "toggleLive"
+data-name = "${item.repoName}"
+data-target = "${item.live ? 'unlive' : 'live'}"
+
 [[heading]]
-id = "tn_putup_h"
+id = "sh_putup_h"
 text = "Put up ✓"
 level = 3
 
@@ -134,11 +150,14 @@ template = true
 text = "in the commons · ${item.integrityText}"
 class = "surface-status"
 
-# ===== PULL IN ==============================================================
-[[heading]]
-id = "tn_pullin_h"
+# ===== PULL IN (collapsible group, open by default) =========================
+[[details]]
+id = "g_pullin"
+children = ["g_pullin_sum", "tn_folder_current", "tn_folder_form", "pl_couldpull_h", "tn_couldpull", "pl_pulled_h", "tn_pulled"]
+
+[[summary]]
+id = "g_pullin_sum"
 text = "Pull in"
-level = 2
 
 [[text]]
 id = "tn_folder_current"
@@ -161,7 +180,7 @@ text = "Set sync folder"
 type = "submit"
 
 [[heading]]
-id = "tn_couldpull_h"
+id = "pl_couldpull_h"
 text = "Could pull"
 level = 3
 
@@ -204,7 +223,7 @@ data-name = "${item.name}"
 data-signer = "${item.signerId}"
 
 [[heading]]
-id = "tn_pulled_h"
+id = "pl_pulled_h"
 text = "Pulled ✓"
 level = 3
 
@@ -216,7 +235,7 @@ class = "surface-list"
 [[box]]
 id = "pulled_tpl"
 template = true
-children = ["pl_name", "pl_status"]
+children = ["pl_name", "pl_status", "pl_live_btn"]
 class = "surface-card desire"
 
 [[heading]]
@@ -228,14 +247,26 @@ level = 4
 [[text]]
 id = "pl_status"
 template = true
-text = "${item.statusText}"
+text = "${item.statusText}${item.live ? ' · live ⇄' : ''}"
 class = "surface-status"
 
-# ===== MEMBERS ==============================================================
-[[heading]]
-id = "tn_members_h"
+[[button]]
+id = "pl_live_btn"
+template = true
+text = "${item.live ? 'Stop live' : 'Go live'}"
+type = "button"
+action = "toggleLive"
+data-name = "${item.name}"
+data-target = "${item.live ? 'unlive' : 'live'}"
+
+# ===== MEMBERS (collapsible group) ==========================================
+[[details]]
+id = "g_members"
+children = ["g_members_sum", "tn_addpeer", "tn_members"]
+
+[[summary]]
+id = "g_members_sum"
 text = "Members"
-level = 2
 
 [[form]]
 id = "tn_addpeer"
@@ -298,6 +329,13 @@ into = "commonsResponse"
 
 [[step]]
 order = 1
+op = "fetchJson"
+on = "load"
+url = "/api/identities"
+into = "identitiesResponse"
+
+[[step]]
+order = 2
 op = "renderCollection"
 on = "load"
 widget = "tn_convos"
@@ -305,7 +343,7 @@ from = "commonsResponse.couldShareConvos"
 template = "convo_tpl"
 
 [[step]]
-order = 2
+order = 3
 op = "renderCollection"
 on = "load"
 widget = "tn_repos"
@@ -313,7 +351,7 @@ from = "commonsResponse.couldOpenRepos"
 template = "repo_tpl"
 
 [[step]]
-order = 3
+order = 4
 op = "renderCollection"
 on = "load"
 widget = "tn_putup"
@@ -321,7 +359,7 @@ from = "commonsResponse.putUp"
 template = "putup_tpl"
 
 [[step]]
-order = 4
+order = 5
 op = "renderCollection"
 on = "load"
 widget = "tn_couldpull"
@@ -329,7 +367,7 @@ from = "commonsResponse.couldPull"
 template = "couldpull_tpl"
 
 [[step]]
-order = 5
+order = 6
 op = "renderCollection"
 on = "load"
 widget = "tn_pulled"
@@ -337,26 +375,40 @@ from = "commonsResponse.pulled"
 template = "pulled_tpl"
 
 [[step]]
-order = 6
+order = 7
+op = "renderCollection"
+on = "load"
+widget = "tn_members"
+from = "identitiesResponse.identities"
+template = "member_tpl"
+
+[[step]]
+order = 8
 op = "setText"
 on = "load"
 widget = "tn_folder_current"
 text = "Pulls sync into: ${state.commonsResponse.pullFolder || '~/tilth-pulled'}"
 
 [[step]]
-order = 7
-op = "fetchJson"
+order = 10
+op = "setText"
 on = "load"
-url = "/api/identities"
-into = "identitiesResponse"
+widget = "g_shareout_sum"
+text = "Share out — ${state.commonsResponse.couldShareConvos.length + state.commonsResponse.couldOpenRepos.length} to put up · ${state.commonsResponse.putUp.length} up"
 
 [[step]]
-order = 8
-op = "renderCollection"
+order = 11
+op = "setText"
 on = "load"
-widget = "tn_members"
-from = "identitiesResponse.identities"
-template = "member_tpl"
+widget = "g_pullin_sum"
+text = "Pull in — ${state.commonsResponse.couldPull.length} to pull · ${state.commonsResponse.pulled.length} pulled"
+
+[[step]]
+order = 12
+op = "setText"
+on = "load"
+widget = "g_members_sum"
+text = "Members — ${state.identitiesResponse.identities.length}"
 
 # --- submit: set the local folder pulls sync into ---------------------------
 [[step]]
@@ -428,6 +480,22 @@ into = "toggled"
 order = 1
 op = "run"
 on = "click:toggleSync"
+event = "load"
+
+# --- click: go live / stop live on a repo -----------------------------------
+[[step]]
+order = 0
+op = "postJson"
+on = "click:toggleLive"
+url = "/api/repos/${event.name}/${event.target}"
+method = "POST"
+body = {}
+into = "liveToggled"
+
+[[step]]
+order = 1
+op = "run"
+on = "click:toggleLive"
 event = "load"
 
 # --- submit: add a peer by pasting their identity card ----------------------

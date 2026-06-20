@@ -88,6 +88,8 @@ Boundary leaf (JS, the only writers/readers of witnesses):
 | ------ | -------------------------- | -------------------- | ------------------------------------ |
 | GET    | `/`                        | `page.home`          | the browser surface                  |
 | GET    | `/api/sessions`            | `sessions.read`      | the projection as JSON               |
+| GET    | `/api/jobs`                | `jobs.read`          | local job projection across request/result queues |
+| GET    | `/api/daemons`             | `daemons.read`       | latest local daemon heartbeats       |
 | POST   | `/api/sessions`            | `session.import`     | import one session (daemon → world)  |
 | POST   | `/api/sessions/:id/desire` | `session.markDesire` | mark a session DESIRE-related        |
 | POST   | `/api/sessions/:id/transcript-preview/request` | `session.transcriptPreview.request` | request readable transcript text |
@@ -104,14 +106,15 @@ Boundary leaf (JS, the only writers/readers of witnesses):
 | POST   | `/api/repo-snapshot/request` | `repo.snapshot.request` | body-based snapshot request for slash-containing repo ids |
 | GET    | `/api/repo-snapshot/requests` | `repoSnapshot.requests.read` | pending repo-snapshot work queue |
 | POST   | `/api/repo-snapshot/requests/:requestId/result` | `repoSnapshot.request.result` | repo-snapshot daemon result |
+| POST   | `/api/daemon-heartbeat` | `daemon.heartbeat` | local daemon liveness/counter heartbeat |
 | POST   | `/api/sessions/:id/ai-summary/request` | `session.aiSummary.request` | request an AI summary for a DESIRE session |
 | GET    | `/api/ai-summary/requests` | `aiSummary.requests.read` | pending AI-summary work queue |
 | POST   | `/api/ai-summary/requests/:requestId/result` | `aiSummary.request.result` | AI-summary daemon result |
 
-Import payload: `{ id, title, preview, project, origin, started, msgCount }`.
-Import is **idempotent on content** — the same title/preview/msgCount is a
-no-op; a change (e.g. a sanitization fix) re-witnesses an update, and the
-projection preserves the DESIRE mark across it.
+Import payload: `{ id, title, preview, project, origin, started, msgCount,
+lastMessageAt, lastMessageRole, lastMessageText }`. Import is **idempotent on
+content** — unchanged metadata is a no-op; a growing conversation re-witnesses
+an update, and the projection preserves the DESIRE mark across it.
 
 Transcript-preview result payload:
 `{ status: "completed", text }` or `{ status: "failed", error }`. The daemon
@@ -133,6 +136,13 @@ Repo-snapshot result payload:
 `{ status: "failed", error }`. Tilth witnesses only the manifest. Source file
 contents stay in `tilth-daemon`'s local cache for `tilth-net-daemon` to sign and
 publish.
+
+Daemon heartbeat payload:
+`{ daemonId, label, at, capabilities, counters, error, summary }`. Heartbeats
+power the local Jobs view and make background queue health visible without
+requiring terminal logs. The workbench expects `tilth-daemon` and
+`tilth-claude-code-daemon`; a missing heartbeat is shown as `never seen`, and an
+old heartbeat is shown as `stale`.
 
 AI-summary result payload:
 `{ status: "completed", text, bullets }` or `{ status: "failed", error }`.

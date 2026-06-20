@@ -3,11 +3,11 @@
 
 [[defaults]]
 context = "frontend"
-program = "tilth_program_workbench_v7"
+program = "tilth_program_workbench_v9"
 
 [[page]]
-id = "tilth_page_workbench_v7"
-children = ["tilth_title_repo_filters", "tilth_status_repo_filters", "tilth_search_box", "tilth_nav_repo_filters", "tilth_filter_bar_repo_filters", "repo_section_repo_filters", "sessions_section_repo_filters"]
+id = "tilth_page_workbench_v9"
+children = ["tilth_title_repo_filters", "tilth_status_repo_filters", "tilth_search_box", "tilth_nav_repo_filters", "tilth_filter_bar_repo_filters", "repo_section_repo_filters", "sessions_section_repo_filters", "jobs_section_ops_v1"]
 title = "Tilth"
 
 [[heading]]
@@ -41,7 +41,7 @@ action = "clearSearch"
 
 [[box]]
 id = "tilth_nav_repo_filters"
-children = ["repo_nav_button_repo_filters", "sessions_nav_button_repo_filters"]
+children = ["repo_nav_button_repo_filters", "sessions_nav_button_repo_filters", "jobs_nav_button_workbench"]
 role = "view-nav"
 class = "surface-actions"
 
@@ -57,6 +57,12 @@ id = "sessions_nav_button_repo_filters"
 text = "Sessions"
 type = "button"
 action = "showSessions"
+
+[[button]]
+id = "jobs_nav_button_workbench"
+text = "Jobs"
+type = "button"
+action = "showJobs"
 
 [[box]]
 id = "tilth_filter_bar_repo_filters"
@@ -125,9 +131,84 @@ id = "sessions_list_repo_filters"
 role = "session-list"
 class = "surface-list"
 
+[[box]]
+id = "jobs_section_ops_v1"
+children = ["ops_summary_bar_workbench", "daemon_status_heading_ops_v1", "daemon_status_list_ops_v1", "jobs_heading_ops_v1", "jobs_filter_bar_workbench", "jobs_list_ops_v1"]
+role = "jobs-view"
+hidden = true
+
+[[box]]
+id = "ops_summary_bar_workbench"
+children = ["ops_summary_work_workbench", "ops_summary_artifacts_workbench", "ops_summary_daemons_workbench"]
+class = "surface-actions"
+
+[[text]]
+id = "ops_summary_work_workbench"
+text = "Work: loading"
+class = "surface-status"
+
+[[text]]
+id = "ops_summary_artifacts_workbench"
+text = "Artifacts: loading"
+class = "surface-status"
+
+[[text]]
+id = "ops_summary_daemons_workbench"
+text = "Daemons: loading"
+class = "surface-status"
+
+[[heading]]
+id = "daemon_status_heading_ops_v1"
+text = "Daemons"
+level = 2
+
+[[box]]
+id = "daemon_status_list_ops_v1"
+role = "daemon-list"
+class = "surface-list"
+
+[[heading]]
+id = "jobs_heading_ops_v1"
+text = "Recent work"
+level = 2
+
+[[box]]
+id = "jobs_filter_bar_workbench"
+children = ["jobs_filter_all_workbench", "jobs_filter_failed_workbench", "jobs_filter_pending_workbench", "jobs_filter_completed_workbench"]
+class = "surface-actions"
+
+[[button]]
+id = "jobs_filter_all_workbench"
+text = "All"
+type = "button"
+action = "filterJobsAll"
+
+[[button]]
+id = "jobs_filter_failed_workbench"
+text = "Failed"
+type = "button"
+action = "filterJobsFailed"
+
+[[button]]
+id = "jobs_filter_pending_workbench"
+text = "Pending"
+type = "button"
+action = "filterJobsPending"
+
+[[button]]
+id = "jobs_filter_completed_workbench"
+text = "Completed"
+type = "button"
+action = "filterJobsCompleted"
+
+[[box]]
+id = "jobs_list_ops_v1"
+role = "jobs-list"
+class = "surface-list"
+
 [[frontendProgram]]
-id = "tilth_program_workbench_v7"
-rootWidget = "tilth_page_workbench_v7"
+id = "tilth_program_workbench_v9"
+rootWidget = "tilth_page_workbench_v9"
 
 # --- repo template ----------------------------------------------------------
 [[box]]
@@ -198,9 +279,9 @@ class = "surface-state-list surface-note surface-mono repo-paths-list"
 
 # --- session template -------------------------------------------------------
 [[box]]
-id = "session_card_v3_template"
+id = "session_card_v4_template"
 template = true
-children = ["session_card_v2_title", "session_card_v2_meta", "session_card_v2_preview", "session_card_v2_desire_button", "session_card_v2_transcript_button", "session_card_v2_ai_summary_button", "session_card_v2_repo_button", "session_card_v2_status_line", "session_card_v2_repo_chips", "session_card_v2_ai_summary_details", "session_card_v2_repo_details", "session_card_v2_transcript_details"]
+children = ["session_card_v2_title", "session_card_v2_meta", "session_card_v4_latest", "session_card_v2_preview", "session_card_v2_desire_button", "session_card_v2_transcript_button", "session_card_v2_ai_summary_button", "session_card_v2_repo_button", "session_card_v2_status_line", "session_card_v2_repo_chips", "session_card_v2_ai_summary_details", "session_card_v2_repo_details", "session_card_v2_transcript_details"]
 class = "${item.desire ? 'surface-card session-card desire' : 'surface-card session-card'}"
 
 [[heading]]
@@ -213,7 +294,13 @@ class = "session-title"
 [[text]]
 id = "session_card_v2_meta"
 template = true
-text = "${item.project} · ${item.msgCount} msgs · origin ${item.origin || '—'}${item.desire ? ' · marked by ' + (item.markedBy || '—') : ''}"
+text = "${item.project} · ${item.msgCount} msgs · origin ${item.origin || '—'}${item.lastMessageRelativeText ? ' · updated ' + item.lastMessageRelativeText : ''}${item.lastMessageExactText ? ' · ' + item.lastMessageExactText : ''}${item.desire ? ' · marked by ' + (item.markedBy || '—') : ''}"
+class = "surface-status"
+
+[[text]]
+id = "session_card_v4_latest"
+template = true
+text = "${item.lastMessageLine || ''}"
 class = "surface-status"
 
 [[text]]
@@ -269,7 +356,7 @@ class = "surface-status surface-mono"
 [[details]]
 id = "session_card_v2_ai_summary_details"
 template = true
-children = ["session_card_v2_ai_summary_summary", "session_card_v2_ai_summary_error", "session_card_v2_ai_summary_text", "session_card_v2_ai_summary_bullets"]
+children = ["session_card_v2_ai_summary_summary", "session_card_v2_ai_summary_version", "session_card_v2_ai_summary_error", "session_card_v2_ai_summary_text", "session_card_v2_ai_summary_bullets"]
 class = "session-transcript-panel"
 
 [[summary]]
@@ -277,6 +364,12 @@ id = "session_card_v2_ai_summary_summary"
 template = true
 text = "Summary"
 class = "surface-card-title"
+
+[[text]]
+id = "session_card_v2_ai_summary_version"
+template = true
+text = "${item.aiSummary && item.aiSummary.versionText ? item.aiSummary.versionText : ''}"
+class = "surface-status"
 
 [[text]]
 id = "session_card_v2_ai_summary_text"
@@ -299,7 +392,7 @@ class = "surface-state-list surface-note session-transcript-preview"
 [[details]]
 id = "session_card_v2_repo_details"
 template = true
-children = ["session_card_v2_repo_summary", "session_card_v2_repo_error", "session_card_v2_repo_result"]
+children = ["session_card_v2_repo_summary", "session_card_v2_repo_version", "session_card_v2_repo_error", "session_card_v2_repo_result"]
 class = "session-transcript-panel"
 
 [[summary]]
@@ -307,6 +400,12 @@ id = "session_card_v2_repo_summary"
 template = true
 text = "Repos"
 class = "surface-card-title"
+
+[[text]]
+id = "session_card_v2_repo_version"
+template = true
+text = "${item.repoIndex && item.repoIndex.versionText ? item.repoIndex.versionText : ''}"
+class = "surface-status"
 
 [[text]]
 id = "session_card_v2_repo_error"
@@ -323,7 +422,7 @@ class = "surface-note"
 [[details]]
 id = "session_card_v2_transcript_details"
 template = true
-children = ["session_card_v2_transcript_summary", "session_card_v2_transcript_error", "session_card_v2_transcript_text"]
+children = ["session_card_v2_transcript_summary", "session_card_v2_transcript_version", "session_card_v2_transcript_error", "session_card_v2_transcript_text"]
 class = "session-transcript-panel"
 
 [[summary]]
@@ -331,6 +430,12 @@ id = "session_card_v2_transcript_summary"
 template = true
 text = "Transcript"
 class = "surface-card-title"
+
+[[text]]
+id = "session_card_v2_transcript_version"
+template = true
+text = "${item.transcriptPreview && item.transcriptPreview.versionText ? item.transcriptPreview.versionText : ''}"
+class = "surface-status"
 
 [[text]]
 id = "session_card_v2_transcript_error"
@@ -343,6 +448,79 @@ id = "session_card_v2_transcript_text"
 template = true
 text = "${item.transcriptPreview && item.transcriptPreview.text ? item.transcriptPreview.text : ''}"
 class = "surface-state-list surface-note surface-mono session-transcript-preview"
+
+# --- job templates ----------------------------------------------------------
+[[box]]
+id = "daemon_status_template_workbench"
+template = true
+children = ["daemon_status_title_workbench", "daemon_status_meta_workbench", "daemon_status_detail_workbench", "daemon_status_counters_workbench"]
+class = "surface-card"
+
+[[heading]]
+id = "daemon_status_title_workbench"
+template = true
+text = "${item.statusText || item.label || item.daemonId}"
+level = 3
+
+[[text]]
+id = "daemon_status_meta_workbench"
+template = true
+text = "${item.metaText || item.statusText || item.status}"
+class = "surface-status"
+
+[[text]]
+id = "daemon_status_detail_workbench"
+template = true
+text = "${item.detailText || 'No recent work'}"
+class = "surface-lede"
+
+[[text]]
+id = "daemon_status_counters_workbench"
+template = true
+text = "${item.counterSummaryText || item.capabilitiesText || 'No counters reported'}"
+class = "surface-status"
+
+[[box]]
+id = "job_item_template_workbench"
+template = true
+children = ["job_item_title_workbench", "job_item_meta_workbench", "job_item_detail_workbench", "job_item_raw_details_workbench"]
+class = "surface-card"
+
+[[heading]]
+id = "job_item_title_workbench"
+template = true
+text = "${item.titleText || item.requestId}"
+level = 3
+
+[[text]]
+id = "job_item_meta_workbench"
+template = true
+text = "${item.metaText || item.statusText || item.status}${item.errorText ? ' · ' + item.errorText : ''}"
+class = "surface-status"
+
+[[text]]
+id = "job_item_detail_workbench"
+template = true
+text = "${item.detailText || item.summary || ''}"
+class = "surface-lede"
+
+[[details]]
+id = "job_item_raw_details_workbench"
+template = true
+children = ["job_item_raw_summary_workbench", "job_item_raw_detail_workbench"]
+class = "repo-paths-panel"
+
+[[summary]]
+id = "job_item_raw_summary_workbench"
+template = true
+text = "${item.errorDetailText ? 'Show error detail' : 'Show request detail'}"
+class = "surface-card-title"
+
+[[text]]
+id = "job_item_raw_detail_workbench"
+template = true
+text = "${item.rawDetailText || item.errorDetailText || item.requestId || ''}"
+class = "surface-state-list surface-note surface-mono repo-paths-list"
 
 # --- load -------------------------------------------------------------------
 [[step]]
@@ -368,6 +546,20 @@ into = "repoIndexResponse"
 
 [[step]]
 order = 3
+op = "fetchJson"
+on = "load"
+url = "/api/jobs"
+into = "jobsResponse"
+
+[[step]]
+order = 4
+op = "fetchJson"
+on = "load"
+url = "/api/daemons"
+into = "daemonsResponse"
+
+[[step]]
+order = 5
 op = "renderCollection"
 on = "load"
 widget = "repo_index_list_repo_filters"
@@ -375,19 +567,56 @@ from = "repoIndexResponse.repos"
 template = "repo_item_template_clean"
 
 [[step]]
-order = 4
+order = 6
 op = "renderCollection"
 on = "load"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v3_template"
+template = "session_card_v4_template"
 
 [[step]]
-order = 5
+order = 7
+op = "renderCollection"
+on = "load"
+widget = "daemon_status_list_ops_v1"
+from = "daemonsResponse.daemons"
+template = "daemon_status_template_workbench"
+
+[[step]]
+order = 8
+op = "renderCollection"
+on = "load"
+widget = "jobs_list_ops_v1"
+from = "jobsResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+order = 9
 op = "setText"
 on = "load"
 widget = "tilth_status_repo_filters"
-text = "${state.sessionsResponse && state.sessionsResponse.sessions ? state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : 'No conversations yet'}"
+text = "${state.sessionsResponse && state.sessionsResponse.sessions ? state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos · ' + ((state.jobsResponse && state.jobsResponse.jobs) ? state.jobsResponse.jobs.length : 0) + ' jobs' : 'No conversations yet'}"
+
+[[step]]
+order = 10
+op = "setText"
+on = "load"
+widget = "ops_summary_work_workbench"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.workText : 'Work: unavailable'}"
+
+[[step]]
+order = 11
+op = "setText"
+on = "load"
+widget = "ops_summary_artifacts_workbench"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.artifactText : 'Artifacts: unavailable'}"
+
+[[step]]
+order = 12
+op = "setText"
+on = "load"
+widget = "ops_summary_daemons_workbench"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.daemonText : 'Daemons: unavailable'}"
 
 # --- nav --------------------------------------------------------------------
 [[step]]
@@ -420,16 +649,37 @@ text = "Sessions"
 
 [[step]]
 order = 4
+op = "setText"
+on = "click:showRepos"
+widget = "jobs_nav_button_workbench"
+text = "Jobs"
+
+[[step]]
+order = 5
+op = "setHidden"
+on = "click:showRepos"
+widget = "jobs_section_ops_v1"
+hidden = true
+
+[[step]]
+order = 6
 op = "setDisabled"
 on = "click:showRepos"
 widget = "repo_nav_button_repo_filters"
 disabled = true
 
 [[step]]
-order = 5
+order = 7
 op = "setDisabled"
 on = "click:showRepos"
 widget = "sessions_nav_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 8
+op = "setDisabled"
+on = "click:showRepos"
+widget = "jobs_nav_button_workbench"
 disabled = false
 
 [[step]]
@@ -462,17 +712,409 @@ text = "Sessions ✓"
 
 [[step]]
 order = 4
+op = "setText"
+on = "click:showSessions"
+widget = "jobs_nav_button_workbench"
+text = "Jobs"
+
+[[step]]
+order = 5
+op = "setHidden"
+on = "click:showSessions"
+widget = "jobs_section_ops_v1"
+hidden = true
+
+[[step]]
+order = 6
 op = "setDisabled"
 on = "click:showSessions"
 widget = "repo_nav_button_repo_filters"
 disabled = false
 
 [[step]]
-order = 5
+order = 7
 op = "setDisabled"
 on = "click:showSessions"
 widget = "sessions_nav_button_repo_filters"
 disabled = true
+
+[[step]]
+order = 8
+op = "setDisabled"
+on = "click:showSessions"
+widget = "jobs_nav_button_workbench"
+disabled = false
+
+[[step]]
+order = 0
+op = "setHidden"
+on = "click:showJobs"
+widget = "repo_section_repo_filters"
+hidden = true
+
+[[step]]
+order = 1
+op = "setHidden"
+on = "click:showJobs"
+widget = "sessions_section_repo_filters"
+hidden = true
+
+[[step]]
+order = 2
+op = "setHidden"
+on = "click:showJobs"
+widget = "jobs_section_ops_v1"
+hidden = false
+
+[[step]]
+order = 3
+op = "fetchJson"
+on = "click:showJobs"
+url = "/api/jobs"
+into = "jobsResponse"
+
+[[step]]
+order = 4
+op = "fetchJson"
+on = "click:showJobs"
+url = "/api/daemons"
+into = "daemonsResponse"
+
+[[step]]
+order = 5
+op = "renderCollection"
+on = "click:showJobs"
+widget = "daemon_status_list_ops_v1"
+from = "daemonsResponse.daemons"
+template = "daemon_status_template_workbench"
+
+[[step]]
+order = 6
+op = "renderCollection"
+on = "click:showJobs"
+widget = "jobs_list_ops_v1"
+from = "jobsResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+order = 7
+op = "setText"
+on = "click:showJobs"
+widget = "repo_nav_button_repo_filters"
+text = "Repos"
+
+[[step]]
+order = 8
+op = "setText"
+on = "click:showJobs"
+widget = "sessions_nav_button_repo_filters"
+text = "Sessions"
+
+[[step]]
+order = 9
+op = "setText"
+on = "click:showJobs"
+widget = "jobs_nav_button_workbench"
+text = "Jobs ✓"
+
+[[step]]
+order = 10
+op = "setDisabled"
+on = "click:showJobs"
+widget = "repo_nav_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 11
+op = "setDisabled"
+on = "click:showJobs"
+widget = "sessions_nav_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 12
+op = "setDisabled"
+on = "click:showJobs"
+widget = "jobs_nav_button_workbench"
+disabled = true
+
+[[step]]
+order = 13
+op = "setText"
+on = "click:showJobs"
+widget = "tilth_status_repo_filters"
+text = "${state.jobsResponse && state.jobsResponse.jobs ? state.jobsResponse.jobs.length + ' jobs · ' + ((state.daemonsResponse && state.daemonsResponse.daemons) ? state.daemonsResponse.daemons.length : 0) + ' daemons' : 'Jobs'}"
+
+[[step]]
+order = 14
+op = "setText"
+on = "click:showJobs"
+widget = "ops_summary_work_workbench"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.workText : 'Work: unavailable'}"
+
+[[step]]
+order = 15
+op = "setText"
+on = "click:showJobs"
+widget = "ops_summary_artifacts_workbench"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.artifactText : 'Artifacts: unavailable'}"
+
+[[step]]
+order = 16
+op = "setText"
+on = "click:showJobs"
+widget = "ops_summary_daemons_workbench"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.daemonText : 'Daemons: unavailable'}"
+
+# --- job filters ------------------------------------------------------------
+[[step]]
+order = 0
+op = "setText"
+on = "click:filterJobsAll"
+widget = "jobs_heading_ops_v1"
+text = "Recent work"
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "click:filterJobsAll"
+url = "/api/jobs"
+into = "jobsResponse"
+
+[[step]]
+order = 2
+op = "renderCollection"
+on = "click:filterJobsAll"
+widget = "jobs_list_ops_v1"
+from = "jobsResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:filterJobsAll"
+widget = "jobs_filter_all_workbench"
+text = "All ✓"
+
+[[step]]
+order = 4
+op = "setText"
+on = "click:filterJobsAll"
+widget = "jobs_filter_failed_workbench"
+text = "Failed"
+
+[[step]]
+order = 5
+op = "setText"
+on = "click:filterJobsAll"
+widget = "jobs_filter_pending_workbench"
+text = "Pending"
+
+[[step]]
+order = 6
+op = "setText"
+on = "click:filterJobsAll"
+widget = "jobs_filter_completed_workbench"
+text = "Completed"
+
+[[step]]
+order = 7
+op = "setText"
+on = "click:filterJobsAll"
+widget = "tilth_status_repo_filters"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.statusText : 'Jobs'}"
+
+[[step]]
+order = 8
+op = "setText"
+on = "click:filterJobsAll"
+widget = "ops_summary_work_workbench"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.workText : 'Work: unavailable'}"
+
+[[step]]
+order = 9
+op = "setText"
+on = "click:filterJobsAll"
+widget = "ops_summary_artifacts_workbench"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.artifactText : 'Artifacts: unavailable'}"
+
+[[step]]
+order = 10
+op = "setText"
+on = "click:filterJobsAll"
+widget = "ops_summary_daemons_workbench"
+text = "${state.jobsResponse && state.jobsResponse.summary ? state.jobsResponse.summary.daemonText : 'Daemons: unavailable'}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:filterJobsFailed"
+widget = "jobs_heading_ops_v1"
+text = "Failed work"
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "click:filterJobsFailed"
+url = "/api/jobs?status=failed"
+into = "jobsResponse"
+
+[[step]]
+order = 2
+op = "renderCollection"
+on = "click:filterJobsFailed"
+widget = "jobs_list_ops_v1"
+from = "jobsResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:filterJobsFailed"
+widget = "jobs_filter_all_workbench"
+text = "All"
+
+[[step]]
+order = 4
+op = "setText"
+on = "click:filterJobsFailed"
+widget = "jobs_filter_failed_workbench"
+text = "Failed ✓"
+
+[[step]]
+order = 5
+op = "setText"
+on = "click:filterJobsFailed"
+widget = "jobs_filter_pending_workbench"
+text = "Pending"
+
+[[step]]
+order = 6
+op = "setText"
+on = "click:filterJobsFailed"
+widget = "jobs_filter_completed_workbench"
+text = "Completed"
+
+[[step]]
+order = 7
+op = "setText"
+on = "click:filterJobsFailed"
+widget = "tilth_status_repo_filters"
+text = "${state.jobsResponse && state.jobsResponse.jobs ? state.jobsResponse.jobs.length + ' failed jobs' : 'Failed jobs'}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:filterJobsPending"
+widget = "jobs_heading_ops_v1"
+text = "Pending work"
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "click:filterJobsPending"
+url = "/api/jobs?status=pending"
+into = "jobsResponse"
+
+[[step]]
+order = 2
+op = "renderCollection"
+on = "click:filterJobsPending"
+widget = "jobs_list_ops_v1"
+from = "jobsResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:filterJobsPending"
+widget = "jobs_filter_all_workbench"
+text = "All"
+
+[[step]]
+order = 4
+op = "setText"
+on = "click:filterJobsPending"
+widget = "jobs_filter_failed_workbench"
+text = "Failed"
+
+[[step]]
+order = 5
+op = "setText"
+on = "click:filterJobsPending"
+widget = "jobs_filter_pending_workbench"
+text = "Pending ✓"
+
+[[step]]
+order = 6
+op = "setText"
+on = "click:filterJobsPending"
+widget = "jobs_filter_completed_workbench"
+text = "Completed"
+
+[[step]]
+order = 7
+op = "setText"
+on = "click:filterJobsPending"
+widget = "tilth_status_repo_filters"
+text = "${state.jobsResponse && state.jobsResponse.jobs ? state.jobsResponse.jobs.length + ' pending jobs' : 'Pending jobs'}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:filterJobsCompleted"
+widget = "jobs_heading_ops_v1"
+text = "Completed work"
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "click:filterJobsCompleted"
+url = "/api/jobs?status=completed"
+into = "jobsResponse"
+
+[[step]]
+order = 2
+op = "renderCollection"
+on = "click:filterJobsCompleted"
+widget = "jobs_list_ops_v1"
+from = "jobsResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:filterJobsCompleted"
+widget = "jobs_filter_all_workbench"
+text = "All"
+
+[[step]]
+order = 4
+op = "setText"
+on = "click:filterJobsCompleted"
+widget = "jobs_filter_failed_workbench"
+text = "Failed"
+
+[[step]]
+order = 5
+op = "setText"
+on = "click:filterJobsCompleted"
+widget = "jobs_filter_pending_workbench"
+text = "Pending"
+
+[[step]]
+order = 6
+op = "setText"
+on = "click:filterJobsCompleted"
+widget = "jobs_filter_completed_workbench"
+text = "Completed ✓"
+
+[[step]]
+order = 7
+op = "setText"
+on = "click:filterJobsCompleted"
+widget = "tilth_status_repo_filters"
+text = "${state.jobsResponse && state.jobsResponse.jobs ? state.jobsResponse.jobs.length + ' completed jobs' : 'Completed jobs'}"
 
 # --- filters ----------------------------------------------------------------
 [[step]]
@@ -510,7 +1152,7 @@ op = "renderCollection"
 on = "click:filterAll"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v3_template"
+template = "session_card_v4_template"
 
 [[step]]
 order = 5
@@ -603,7 +1245,7 @@ op = "renderCollection"
 on = "click:filterDesire"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v3_template"
+template = "session_card_v4_template"
 
 [[step]]
 order = 5
@@ -696,7 +1338,7 @@ op = "renderCollection"
 on = "click:filterIndexed"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v3_template"
+template = "session_card_v4_template"
 
 [[step]]
 order = 5
@@ -790,7 +1432,7 @@ op = "renderCollection"
 on = "input:tilth_search_input"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v3_template"
+template = "session_card_v4_template"
 
 [[step]]
 order = 5
@@ -876,7 +1518,7 @@ op = "renderCollection"
 on = "click:clearSearch"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v3_template"
+template = "session_card_v4_template"
 
 [[step]]
 order = 5
