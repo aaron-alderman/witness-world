@@ -418,6 +418,31 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-context-authority",
     "Policy definition attempts shared context authority first and routes to proposal creation when direct authored definition is not allowed."
   ),
+  "computeModule.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Compute-module definition attempts shared context authority first and routes to proposal creation when direct AssemblyScript module definition is not allowed."
+  ),
+  "computeModule.source.upsert": directAuthority(
+    "bootstrap-target-authority",
+    "Compute-module source upsert requires shared package-revision authority and persists AssemblyScript source as package materialized-file history."
+  ),
+  "computeModule.source.markDeleted": directAuthority(
+    "bootstrap-target-authority",
+    "Compute-module source deletion is a package-revision-authorized soft-delete tombstone over the authored materialized source file."
+  ),
+  "computeModuleSmokeTest.upsert": directAuthority(
+    "bootstrap-target-authority",
+    "Compute-module smoke-test upsert requires shared package-revision authority and persists the saved test plus package fixture."
+  ),
+  "computeModuleSmokeTest.markDeleted": directAuthority(
+    "bootstrap-target-authority",
+    "Compute-module smoke-test deletion is a package-revision-authorized soft-delete tombstone over the saved test and fixture file."
+  ),
+  "computeModuleSmokeTest.run": directAuthority(
+    "bootstrap-actor",
+    "Smoke-test execution requires a bootstrap actor and delegates to witness-core shadow invocation without writing source.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "verification" }
+  ),
   "package.create": proposalFallback(
     "bootstrap-context-authority",
     "Package creation attempts shared package-scope context authority first and routes to proposal creation when direct package definition is not allowed."
@@ -828,6 +853,10 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   "policy.define": proposalTarget(
     "bootstrap-context-authority",
     "Policy-define proposals execute through shared context authority on the authored policy context once approved."
+  ),
+  "computeModule.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Compute-module define proposals execute through shared context authority on the authored AssemblyScript compute module context once approved."
   ),
   "package.define": proposalTarget(
     "bootstrap-context-authority",

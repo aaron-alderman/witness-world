@@ -39,6 +39,8 @@ import {
   describeMountedRouteOwnership
 } from "./runtime-ownership.js";
 import { describeMountedRouteGovernance } from "./runtime-governance.js";
+import { RUNTIME_WORKER_TRANSPORT_METHODS } from "./runtime-worker-transport-contract.js";
+import { executeRuntimeWorkerTransportCall } from "./runtime-worker-transport.js";
 import {
   currentPreviewManager,
   previewAwareAppContext,
@@ -1507,37 +1509,14 @@ export function createCoreRuntimeBundleHandlers({
     },
 
     "app.snapshot.reload": async ({ req, res, appContext }) => {
-      if (runtimeMutationsBlocked(appContext)) {
-        sendJson(res, 409, runtimeDrainingPayload(appContext));
-        return;
-      }
-      const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
-      if (!snapshotManager) {
-        sendJson(res, 503, { error: "app snapshot manager unavailable" });
-        return;
-      }
-      try {
-        const body = await readJson(req);
-        const sourceIds = Array.isArray(body?.paths) ? body.paths : [];
-        const absolutePaths = sourceIds
-          .map(value => typeof value === "string" && value.trim() ? path.resolve(snapshotManager.appRoot, value.trim()) : null)
-          .filter(Boolean);
-        const snapshot = absolutePaths.length
-          ? await snapshotManager.markDirtyPaths(absolutePaths, { trigger: "reload" })
-          : await snapshotManager.ensureFresh({ trigger: "reload" });
-        sendJson(res, 200, {
-          ok: true,
-          appRevision: Number(snapshot?.appRevision ?? snapshotManager.appRevision ?? 0),
-          changedSources: sourceIds,
-          buildErrors: [...(snapshotManager.buildErrors ?? [])],
-          watchersEnabled: appContext?.runtimeSupervision?.watchersEnabled === true
-        });
-      } catch (error) {
-        sendJson(res, 400, {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error)
-        });
-      }
+      const body = await readJson(req);
+      const result = await executeRuntimeWorkerTransportCall({
+        method: RUNTIME_WORKER_TRANSPORT_METHODS.appSnapshotReload,
+        args: body && typeof body === "object" ? body : {},
+        runtimeContext: appContext,
+        appContext
+      });
+      sendJson(res, result.status, result.body);
     },
 
     "app.preview.session.create": async ({ res, appContext, requestActor, requestSession }) => {
@@ -1784,19 +1763,16 @@ export function createCoreRuntimeBundleHandlers({
         sendJson(res, 409, runtimeDrainingPayload(appContext));
         return;
       }
-      const authoringPolicy = currentAuthoringPolicy(appContext);
-      if (authoringPolicy.mode === AUTHORING_MODE_MCP_ONLY) {
-        sendJson(res, 403, blockedDirectMutationResponse({
-          attemptedAuthoringPath: APP_SOURCE_WRITE_PATH,
-          goal: "mutate app sources through the runtime host",
-          minimumHumanAction: "stop and route the change through plugin.authoring or the human platform lane",
-          proof: [
-            "MCP-authoring-only mode forbids direct runtime/file fallback mutation",
-            "no proposal artifact may be created automatically"
-          ]
-        }));
-        return;
-      }
+      sendJson(res, 403, blockedDirectMutationResponse({
+        attemptedAuthoringPath: APP_SOURCE_WRITE_PATH,
+        goal: "mutate app sources through the runtime host",
+        minimumHumanAction: "use MCP compute-module package authoring",
+        proof: [
+          "direct app-source writes are disabled for this AssemblyScript module tranche",
+          "AssemblyScript source and smoke fixtures must be persisted as package materialized files"
+        ]
+      }));
+      return;
       const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
       if (!snapshotManager) {
         sendJson(res, 404, { error: "app source updates unavailable" });

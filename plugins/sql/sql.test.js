@@ -118,7 +118,7 @@ test("sql plugin projectors track datasource test state and clear stale errors o
   }]);
 }));
 
-test("sql runtime resolves multiple datasources explicitly and uses secret-backed postgres adapters", async () => {
+test("sql runtime resolves multiple datasources explicitly and uses witness-core SQL capabilities", async () => {
   const rows = [
     {
       id: "sqlite.main",
@@ -154,7 +154,7 @@ test("sql runtime resolves multiple datasources explicitly and uses secret-backe
     }
   ];
   const byId = Object.fromEntries(rows.map(row => [row.id, row]));
-  const seenConfigs = [];
+  const seenCalls = [];
   const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sql-runtime-"));
   const runtime = createDbSqlRuntime({
     project(projector) {
@@ -165,6 +165,13 @@ test("sql runtime resolves multiple datasources explicitly and uses secret-backe
     runtimeRoot,
     serverRunnerId: "runner.demo",
     getAppContext: () => ({
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async sqlTestConnection(input) {
+          seenCalls.push(input);
+          return { ok: true };
+        }
+      },
       secretStore: {
         resolveSecretValue(secretId) {
           return Promise.resolve(secretId === "secret.pg"
@@ -172,35 +179,34 @@ test("sql runtime resolves multiple datasources explicitly and uses secret-backe
             : { ok: false, status: 404, reason: "secret not found" });
         }
       }
-    }),
-    postgresAdapter: {
-      Client: class {
-        constructor(config) {
-          seenConfigs.push(config);
-        }
-        async connect() {}
-        async query(sql) {
-          assert.equal(sql, "select 1 as ok");
-        }
-        async end() {}
-      }
-    }
+    })
   });
 
   try {
     const listed = runtime.listDatasources();
     assert.deepEqual(listed.map(row => row.id), ["sqlite.main", "pg.main", "pg.reporting"]);
-    assert.equal(listed[0].adapterStatus, "witness-core-required");
+    assert.equal(listed[0].adapterStatus, "witness-core");
     assert.equal(listed[0].boundaryOwner, "witness-core");
     assert.equal(listed[0].boundaryAuthority, "rust-owned");
     assert.equal(listed[0].boundaryTransport, "capability.db.sqlite");
     assert.equal(listed[0].boundaryScope, "canonical-runtime");
     assert.equal(listed[0].canonicalBoundary, true);
     assert.equal(listed[0].boundaryFallbackAllowed, false);
+    assert.equal(listed[1].adapterStatus, "witness-core");
+    assert.equal(listed[1].boundaryOwner, "witness-core");
+    assert.equal(listed[1].boundaryAuthority, "rust-owned");
+    assert.equal(listed[1].boundaryTransport, "capability.db.postgres");
+    assert.equal(listed[1].boundaryScope, "runtime");
+    assert.equal(listed[1].canonicalBoundary, true);
     assert.equal((await runtime.testConnection({ datasourceId: "pg.main" })).ok, true);
-    assert.equal(seenConfigs.length, 1);
-    assert.equal(seenConfigs[0].password, "super-secret");
-    assert.deepEqual(seenConfigs[0].ssl, { rejectUnauthorized: false });
+    assert.equal(seenCalls.length, 1);
+    assert.equal(seenCalls[0].provider, "postgres");
+    assert.equal(seenCalls[0].connection.password, "super-secret");
+    assert.equal(seenCalls[0].connection.host, "127.0.0.1");
+    assert.equal(seenCalls[0].connection.port, 5432);
+    assert.equal(seenCalls[0].connection.database, "engentus");
+    assert.equal(seenCalls[0].connection.user, "pipeline_user");
+    assert.equal(seenCalls[0].connection.ssl, true);
 
     const missing = await runtime.testConnection({ datasourceId: "missing" });
     assert.equal(missing.ok, false);
@@ -404,7 +410,109 @@ test("sql runtime keeps the same rust-owned boundary in canonical app-serving mo
   }
 });
 
-test("sql runtime supports pipeline mysql reads and postgres writes", async () => {
+test("sql runtime requires witness-core SQL capability for postgres/mysql execution", async () => {
+  const rows = [
+    {
+      id: "mysql.source",
+      serverRunner: "runner.demo",
+      provider: "mysql",
+      datasourceName: "source",
+      host: "127.0.0.1",
+      port: 3306,
+      database: "engentus",
+      user: "reader",
+      passwordSecretId: "secret.db",
+      ssl: false
+    },
+    {
+      id: "pg.target",
+      serverRunner: "runner.demo",
+      provider: "postgres",
+      datasourceName: "target",
+      host: "127.0.0.1",
+      port: 5432,
+      database: "engentus",
+      user: "writer",
+      passwordSecretId: "secret.db",
+      ssl: false
+    }
+  ];
+  const byId = Object.fromEntries(rows.map(row => [row.id, row]));
+  let secretLookups = 0;
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sql-runtime-required-direct-db-"));
+  const runtime = createDbSqlRuntime({
+    project(projector) {
+      if (projector === moduleProjectors.sqlDatasources) return rows;
+      if (projector === moduleProjectors.sqlDatasourceIndex) return { rows, byId };
+      return [];
+    },
+    runtimeRoot,
+    serverRunnerId: "runner.demo",
+    getAppContext: () => ({
+      secretStore: {
+        resolveSecretValue() {
+          secretLookups += 1;
+          return Promise.resolve({ ok: true, value: "super-secret" });
+        }
+      }
+    })
+  });
+  try {
+    const listed = runtime.listDatasources();
+    assert.deepEqual(listed.map(row => row.id), ["mysql.source", "pg.target"]);
+    assert.equal(listed[0].adapterStatus, "witness-core-required");
+    assert.equal(listed[0].boundaryOwner, "witness-core");
+    assert.equal(listed[0].boundaryAuthority, "rust-owned");
+    assert.equal(listed[0].boundaryTransport, "capability.db.mysql");
+    assert.equal(listed[0].boundaryScope, "runtime");
+    assert.equal(listed[0].boundaryAvailability, "unavailable");
+    assert.equal(listed[1].adapterStatus, "witness-core-required");
+    assert.equal(listed[1].boundaryTransport, "capability.db.postgres");
+    assert.equal(listed[1].boundaryScope, "runtime");
+    assert.equal(listed[1].boundaryAvailability, "unavailable");
+
+    const tested = await runtime.testConnection({ datasourceId: "pg.target" });
+    assert.equal(tested.ok, false);
+    assert.equal(tested.status, 503);
+    assert.match(tested.reason, /requires the witness-core sql capability/i);
+    assert.equal(tested.datasource?.adapterStatus, "witness-core-required");
+    assert.equal(tested.datasource?.boundaryScope, "runtime");
+
+    const readResult = await runtime.readOrderedBatch({
+      datasourceId: "mysql.source",
+      schema: "engentus",
+      table: "Transactions_IMU",
+      columns: ["tx_timestamp_start"],
+      progressField: "tx_timestamp_start"
+    });
+    assert.equal(readResult.ok, false);
+    assert.equal(readResult.status, 503);
+    assert.match(readResult.reason, /requires the witness-core sql capability/i);
+    assert.equal(readResult.datasource?.adapterStatus, "witness-core-required");
+    assert.equal(readResult.datasource?.boundaryTransport, "capability.db.mysql");
+
+    const writeResult = await runtime.writeRows({
+      datasourceId: "pg.target",
+      schema: "engentus",
+      table: "sensor_data",
+      rows: [{ sensor_id: "sensor:1", value: 12.5 }],
+      writeMode: "insert_ignore",
+      keyFields: ["sensor_id"]
+    });
+    assert.equal(writeResult.ok, false);
+    assert.equal(writeResult.status, 503);
+    assert.match(writeResult.reason, /requires the witness-core sql capability/i);
+    assert.equal(writeResult.datasource?.adapterStatus, "witness-core-required");
+    assert.equal(writeResult.datasource?.boundaryTransport, "capability.db.postgres");
+
+    assert.equal(secretLookups, 0);
+  } finally {
+    runtime.close();
+    await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test("sql runtime routes pipeline mysql reads and postgres writes through witness-core SQL capability", async () => {
   const rows = [
     {
       id: "mysql.source",
@@ -433,8 +541,7 @@ test("sql runtime supports pipeline mysql reads and postgres writes", async () =
   ];
   const byId = Object.fromEntries(rows.map(row => [row.id, row]));
   const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sql-pipeline-runtime-"));
-  const mysqlQueries = [];
-  const postgresQueries = [];
+  const bridgeCalls = [];
   const runtime = createDbSqlRuntime({
     project(projector) {
       if (projector === moduleProjectors.sqlDatasources) return rows;
@@ -444,34 +551,34 @@ test("sql runtime supports pipeline mysql reads and postgres writes", async () =
     runtimeRoot,
     serverRunnerId: "runner.demo",
     getAppContext: () => ({
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async sqlReadOrderedBatch(input) {
+          bridgeCalls.push({ op: "readOrderedBatch", input });
+          return {
+            ok: true,
+            rows: [{
+              tx_timestamp_start: 1700000000000,
+              tx_gateway_id: "4EF47C45"
+            }],
+            rowCount: 1
+          };
+        },
+        async sqlWriteRows(input) {
+          bridgeCalls.push({ op: "writeRows", input });
+          return {
+            ok: true,
+            rowCount: 1,
+            changes: 1
+          };
+        }
+      },
       secretStore: {
         resolveSecretValue() {
           return Promise.resolve({ ok: true, value: "super-secret" });
         }
       }
-    }),
-    mysqlAdapter: {
-      createConnection: async () => ({
-        async query(sql, params) {
-          mysqlQueries.push({ sql, params });
-          return [[{
-            tx_timestamp_start: 1700000000000,
-            tx_gateway_id: "4EF47C45"
-          }]];
-        },
-        async end() {}
-      })
-    },
-    postgresAdapter: {
-      Client: class {
-        async connect() {}
-        async query(sql, params) {
-          postgresQueries.push({ sql, params });
-          return { rowCount: 1 };
-        }
-        async end() {}
-      }
-    }
+    })
   });
 
   try {
@@ -486,9 +593,16 @@ test("sql runtime supports pipeline mysql reads and postgres writes", async () =
     });
     assert.equal(readResult.ok, true);
     assert.equal(readResult.rowCount, 1);
-    assert.match(mysqlQueries[0].sql, /from `engentus`\.`Transactions_IMU`/);
-    assert.match(mysqlQueries[0].sql, /order by `tx_timestamp_start` asc limit \?/);
-    assert.deepEqual(mysqlQueries[0].params, [1699999999000, 50]);
+    assert.equal(bridgeCalls[0].op, "readOrderedBatch");
+    assert.equal(bridgeCalls[0].input.provider, "mysql");
+    assert.equal(bridgeCalls[0].input.connection.password, "super-secret");
+    assert.deepEqual(bridgeCalls[0].input.columns, ["tx_timestamp_start", "tx_gateway_id"]);
+    assert.equal(bridgeCalls[0].input.progressField, "tx_timestamp_start");
+    assert.equal(bridgeCalls[0].input.lowerBound, 1699999999000);
+    assert.equal(bridgeCalls[0].input.rowLimit, 50);
+    assert.match(readResult.sql, /from `engentus`\.`Transactions_IMU`/);
+    assert.match(readResult.sql, /order by `tx_timestamp_start` asc limit \?/);
+    assert.deepEqual(readResult.params, [1699999999000, 50]);
 
     const writeResult = await runtime.writeRows({
       datasourceId: "pg.target",
@@ -503,8 +617,13 @@ test("sql runtime supports pipeline mysql reads and postgres writes", async () =
       keyFields: ["sensor_id", "timestamp"]
     });
     assert.equal(writeResult.ok, true);
-    assert.match(postgresQueries[0].sql, /insert into "engentus"\."sensor_data"/);
-    assert.match(postgresQueries[0].sql, /on conflict \("sensor_id", "timestamp"\) do nothing/);
+    assert.equal(bridgeCalls[1].op, "writeRows");
+    assert.equal(bridgeCalls[1].input.provider, "postgres");
+    assert.equal(bridgeCalls[1].input.connection.password, "super-secret");
+    assert.equal(bridgeCalls[1].input.schema, "engentus");
+    assert.equal(bridgeCalls[1].input.table, "sensor_data");
+    assert.equal(bridgeCalls[1].input.writeMode, "insert_ignore");
+    assert.deepEqual(bridgeCalls[1].input.keyFields, ["sensor_id", "timestamp"]);
   } finally {
     runtime.close();
     await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});

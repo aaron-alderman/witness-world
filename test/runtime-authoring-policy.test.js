@@ -34,6 +34,8 @@ test("mcp-only authoring policy exposes plugin.authoring as the canonical write 
   assert.equal(policy.allowedHandlerIds.includes("boundary.create"), true);
   assert.equal(policy.allowedHandlerIds.includes("policy.create"), true);
   assert.equal(policy.allowedHandlerIds.includes("frontend.upliftLegacy"), true);
+  assert.equal(policy.allowedHandlerIds.includes("computeModule.source.upsert"), true);
+  assert.equal(policy.allowedHandlerIds.includes("computeModuleSmokeTest.run"), true);
   assert.equal(policy.publicMcpActions.includes("collection.create"), true);
   assert.equal(policy.publicMcpActions.includes("process.create"), true);
   assert.equal(policy.publicMcpActions.includes("type.create"), true);
@@ -42,10 +44,13 @@ test("mcp-only authoring policy exposes plugin.authoring as the canonical write 
   assert.equal(policy.publicMcpActions.includes("boundary.create"), true);
   assert.equal(policy.publicMcpActions.includes("policy.create"), true);
   assert.equal(policy.publicMcpActions.includes("frontend.upliftLegacy"), true);
+  assert.equal(policy.publicMcpActions.includes("computeModule.source.upsert"), true);
+  assert.equal(policy.publicMcpActions.includes("computeModuleSmokeTest.run"), true);
   assert.equal(policy.publicMcpActions.includes("widget.create"), false);
   assert.equal(policy.legacyMcpActions.includes("frontendProgram.create"), false);
   assert.equal(policy.proposalAccess, "read_only");
   assert.equal(policy.forbiddenMutations.includes("custom browser runtime files"), true);
+  assert.equal(policy.forbiddenMutations.includes("MCP fs.blob write/delete mutations"), true);
   assert.equal(policy.stopOnLimitation, true);
 });
 
@@ -59,6 +64,14 @@ test("authoring capability matrix reports page.surface pathway semantics separat
   assert.equal(matrix.publicAuthoringConcepts.collection.publicAction, "collection.create");
   assert.equal(matrix.publicAuthoringConcepts.boundary.publicAction, "boundary.create");
   assert.equal(matrix.publicAuthoringConcepts.policy.publicAction, "policy.create");
+  assert.deepEqual(matrix.publicAuthoringConcepts.computeModule.publicActions, [
+    "computeModule.create",
+    "computeModule.source.upsert",
+    "computeModule.source.markDeleted",
+    "computeModuleSmokeTest.upsert",
+    "computeModuleSmokeTest.markDeleted",
+    "computeModuleSmokeTest.run"
+  ]);
   assert.equal(matrix.publicAuthoringConcepts.frontendLegacyUplift.publicAction, "frontend.upliftLegacy");
   assert.equal(pageSurface.status, "supported");
   assert.equal(pageSurface.pairings.surface, "supported");

@@ -235,8 +235,6 @@ Node still owns transitional seams:
 - main runtime HTTP serving in [src/runtime-server.js](/C:/Users/aaron/Documents/world/src/runtime-server.js)
 - direct boot/orchestration in [src/cli.js](/C:/Users/aaron/Documents/world/src/cli.js)
 - local no-core dirty detection in [src/runtime-server.js](/C:/Users/aaron/Documents/world/src/runtime-server.js)
-- local fallback verification persistence in [src/runtime-verification-persistence.js](/C:/Users/aaron/Documents/world/src/runtime-verification-persistence.js)
-- local fallback SQLite ownership in [plugins/sql/provider-runtime.js](/C:/Users/aaron/Documents/world/plugins/sql/provider-runtime.js) and [plugins/sqlite/provider-runtime.js](/C:/Users/aaron/Documents/world/plugins/sqlite/provider-runtime.js)
 - remaining server-side outbound network ownership frozen by [test/rust-owned-external-boundary-roadmap.test.js](/C:/Users/aaron/Documents/world/test/rust-owned-external-boundary-roadmap.test.js)
 
 These are removal targets, not precedents.
@@ -248,10 +246,10 @@ If a new agent needs the shortest truthful answer to "what is still actually ope
 1. Stage 1 ingress is effectively closed.
 Stage 1 ingress is now materially closed in the checked-in product path:
 Rust frontdoor is the checked-in supervised default and the only supported public ingress, while the remaining direct Node startup commands are explicitly loopback-only utility commands rather than supported product-facing entrypoints.
-2. Stage 5 is not fully closed yet.
-Rust owns the canonical verification-persistence and SQLite seams when core authority is configured, but explicit no-core fallbacks still remain and must either be removed from canonical operation or kept visibly scoped as non-canonical exceptions until their removal tranche lands.
-3. Stage 7 is barely started.
-   The worker contract is still largely HTTP/control-plane shaped. That is acceptable temporarily, but it should not be mistaken for the final worker boundary.
+2. Stage 5 is materially implemented, but live evidence is still thinner than SQLite.
+Node no longer owns runtime `postgres` / `mysql` client handles in `plugins/sql/provider-runtime.js`, and `witness-core` now carries the real non-SQLite SQL executor for `testConnection`, `readOrderedBatch`, and `writeRows`. The remaining Stage 5 follow-up is to add stronger live-capability evidence for that path, not to transfer ownership again.
+3. Stage 7 is materially forward, but not closed.
+   The worker protocol, supervised control descriptor, runtime-worker method inventory, shared control dispatcher, and supervised witness-core IPC carrier are now explicit and versioned. The fixture-first continuity matrix is green again after aligning supervised workers to the actual witness-core workspace root, but the remaining gaps are the private Node HTTP worker listener itself, the surviving HTTP fallback adapter path, and an explicit workspace-local plugin import fallback that still covers incomplete transitive bridge materialization for first-party plugin/source graphs.
 4. The final audit is still open.
    Node still has transitional serving and canonical file-mutation ownership points in some modes, so the platform is not yet at "Rust owns the external world, Node is compute only."
 
@@ -304,6 +302,8 @@ If a new agent does not know where to look, start here:
   frozen ownership inventory and drift guardrail
 - [test/support/live-core-smoke-runner.mjs](/C:/Users/aaron/Documents/world/test/support/live-core-smoke-runner.mjs) and [test/witness-core-live-continuity.test.js](/C:/Users/aaron/Documents/world/test/witness-core-live-continuity.test.js):
   fixture-first continuity acceptance path
+- [test/support/witness-core-harness.js](/C:/Users/aaron/Documents/world/test/support/witness-core-harness.js):
+  the tracked fixture workspace builder that now links `plugins/`, `src/`, and `store/` into the witness-core workspace and rebuilds `witness-core` when Rust inputs change
 
 When a proposed tranche cannot point at one or more of those files immediately, it is probably not concrete enough yet.
 
@@ -343,6 +343,13 @@ Default command discipline:
 - prefer tracked fixture apps and direct HTTP or journal checks over browser flows
 - do not start with Engentus or Sourcery unless the seam itself lives there
 - do not update roadmap checkboxes before the proving tests pass
+
+Current proving note:
+
+- the fixture-first continuity matrix is currently green again through the tracked runner:
+  `continuity`, `preview`, `published-authoring`, `supervised`, `supervised-health`, `frontdoor`, and `soak`
+- the full [test/witness-core-live-continuity.test.js](/C:/Users/aaron/Documents/world/test/witness-core-live-continuity.test.js) suite also passes again against the real `witness-core` binary after the supervised workspace-root alignment fixes in [src/cli.js](/C:/Users/aaron/Documents/world/src/cli.js), [src/runtime-server.js](/C:/Users/aaron/Documents/world/src/runtime-server.js), and [substrate/witness-core/src/lib.rs](/C:/Users/aaron/Documents/world/substrate/witness-core/src/lib.rs)
+- do not interpret that green matrix as closure of the plugin-runtime boundary: [src/runtime-plugin-loader.js](/C:/Users/aaron/Documents/world/src/runtime-plugin-loader.js) still carries an explicit `preferLocalWorkspaceImports` fallback that must be removed in a later tranche
 
 The first session should end with a narrower problem statement than it started with.
 
@@ -448,6 +455,11 @@ At the current repo state, the safest priority order is:
 4. Tighten Stage 7 only after 1 through 3 materially shrink authority:
    worker contract hardening matters, but it should not become a distraction from the remaining external ownership seams.
 5. Run the final audit only when the exception set is genuinely small enough to verify end to end.
+
+Immediate follow-up inside Stage 7:
+
+- remove the `preferLocalWorkspaceImports` fallback in [src/runtime-plugin-loader.js](/C:/Users/aaron/Documents/world/src/runtime-plugin-loader.js) by extending bridged plugin materialization to cover transitive first-party plugin/source dependencies
+- only after that fallback is gone should the roadmap claim that authoritative supervised startup/plugin loading is free of local workspace import escape hatches
 
 How to choose among those priorities:
 

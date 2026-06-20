@@ -19,6 +19,7 @@ import {
   requestMessageDefine,
   requestBoundaryDefine,
   requestPolicyDefine,
+  requestComputeModuleDefine,
   requestPackageDefine,
   requestPackageRevisionDefine,
   requestPackageRevisionPublish,
@@ -198,6 +199,18 @@ export async function executeAuthoringCoreProposalTarget({
       const gate = body?.context ? ensureContextAuthority(actor, body.context) : { ok: true };
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
       const result = requestPolicyDefine(world, { actor, backendHost, body });
+      return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+    }
+    case "computeModule.define": {
+      const gate = body?.context
+        ? ensureContextAuthority(actor, body.context)
+        : (proposal.targetId ? ensureContextAuthority(actor, proposal.targetId) : { ok: true });
+      if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+      const result = requestComputeModuleDefine(world, {
+        actor,
+        backendHost,
+        body: body?.context ? body : { ...body, context: proposal.targetId ?? null }
+      });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "package.define": {

@@ -34,10 +34,82 @@ operator_screen_section operator_links {
   priority 2
 }
 
+operator_overlay help_overlay {
+  kind doc_view
+  title "Help"
+  width 56
+  height 10
+  resizable true
+}
+
+operator_overlay context_menu {
+  kind menu
+  title "Context"
+  width 24
+  height 8
+}
+
+operator_surface top_status {
+  kind status_bar
+  title "Status"
+}
+
+operator_surface command_bar {
+  kind command_bar
+  title "Command"
+}
+
+operator_handle top_handle {
+  kind splitter
+  axis horizontal
+  size 1
+  draggable true
+}
+
+operator_handle bottom_handle {
+  kind splitter
+  axis horizontal
+  size 1
+  draggable true
+}
+
+operator_handle split_handle {
+  kind splitter
+  axis vertical
+  size 1
+  draggable true
+}
+
+operator_viewport operator_default {
+  title "Default Browser Workbench"
+  theme ansi16
+  screen operator_trace
+  left_screen operator_left
+  top_surface top_status
+  bottom_surface command_bar
+  top_handle top_handle
+  bottom_handle bottom_handle
+  split_handle split_handle
+  width 80
+  height 30
+  top 3
+  bottom 4
+  split_orientation horizontal
+  left_weight 28
+  right_weight 72
+  overlay help_overlay
+  overlay context_menu
+  binding F1 overlay help_overlay
+  binding MouseSecondary overlay context_menu
+  binding Alt-R action rename
+  binding F2 action rename
+}
+
 operator_setup operator_shell {
   screen operator_trace
   screen references
   shortcut F5 operator_trace
   default_screen operator_trace
   default_left_screen operator_left
+  default_viewport operator_default
 }

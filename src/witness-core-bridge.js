@@ -1,8 +1,18 @@
 import { createHash } from "node:crypto";
+import { createWitnessCoreIpcTransport, normalizeWitnessCoreTransportPipe } from "./witness-core-ipc-transport.js";
+import { createWitnessCoreHttpTransport } from "./witness-core-http-transport.js";
+import {
+  WITNESS_CORE_TRANSPORT_METHODS,
+  WITNESS_CORE_TRANSPORT_SUBSCRIPTIONS,
+  createWitnessCoreTransportCall,
+  createWitnessCoreTransportSubscribe
+} from "./witness-core-transport-contract.js";
 
-export function normalizeWitnessCoreUrl(value) {
-  return typeof value === "string" && value.trim() ? value.trim().replace(/\/$/, "") : "";
-}
+export {
+  createWitnessCoreRequestError,
+  normalizeWitnessCoreUrl
+} from "./witness-core-http-transport.js";
+export { normalizeWitnessCoreTransportPipe } from "./witness-core-ipc-transport.js";
 
 export function latestWitnessCoreGeneration(status = null) {
   const generations = Array.isArray(status?.generations) ? status.generations : [];
@@ -58,187 +68,110 @@ function cloneSessionPayload(session = null) {
   return session && typeof session === "object" ? structuredClone(session) : null;
 }
 
-function createWitnessCoreRequestError(message, {
-  status = 500,
-  code = null,
-  details = null
+function createTransport({
+  coreUrl = null,
+  pipePath = null,
+  fetchImpl = null,
+  logger = null,
+  transport = null
 } = {}) {
-  const error = new Error(message);
-  error.status = Number(status || 500);
-  if (code) error.code = String(code);
-  if (details && typeof details === "object") Object.assign(error, details);
-  return error;
+  if (transport) return transport;
+  const normalizedPipePath = normalizeWitnessCoreTransportPipe(
+    pipePath
+    ?? process.env.WITNESS_CORE_TRANSPORT_PIPE
+    ?? null
+  );
+  if (normalizedPipePath) {
+    const ipcTransport = createWitnessCoreIpcTransport({
+      pipePath: normalizedPipePath,
+      logger
+    });
+    if (ipcTransport) return ipcTransport;
+  }
+  return createWitnessCoreHttpTransport({
+    coreUrl,
+    fetchImpl: fetchImpl ?? globalThis.fetch,
+    logger
+  });
+}
+
+function createCallInvoker(transport) {
+  if (!transport || typeof transport.call !== "function") return null;
+  return async (method, args = null, requestId = null) => {
+    return await transport.call(createWitnessCoreTransportCall({
+      method,
+      requestId,
+      args
+    }));
+  };
+}
+
+function createSubscribeInvoker(transport) {
+  if (!transport || typeof transport.subscribe !== "function") return null;
+  return async (channel, args = null, requestId = null, options = null) => {
+    const subscription = createWitnessCoreTransportSubscribe({
+      channel,
+      requestId,
+      args
+    });
+    if (options && typeof options === "object") {
+      if (Object.prototype.hasOwnProperty.call(options, "signal")) {
+        subscription.signal = options.signal;
+      }
+    }
+    return await transport.subscribe(subscription);
+  };
 }
 
 export function createWitnessCoreBridge({
   coreUrl = null,
-  fetchImpl = globalThis.fetch,
-  logger = null
+  pipePath = null,
+  fetchImpl = null,
+  logger = null,
+  transport = null
 } = {}) {
-  const normalizedCoreUrl = normalizeWitnessCoreUrl(coreUrl);
-  if (!normalizedCoreUrl || typeof fetchImpl !== "function") return null;
-
-  const publishGeneration = async ({
-    id = null,
-    state = "candidate",
-    contentHash,
-    parentId = null,
-    sourcePaths = [],
-    correlation = null,
-    promotionDecision = null,
-    eventKind = null,
-    message = null
-  } = {}) => {
-    const hash = String(contentHash ?? "").trim();
-    if (!hash) throw new Error("contentHash is required");
-    const form = new URLSearchParams();
-    if (id) form.set("id", String(id));
-    form.set("state", String(state || "candidate"));
-    form.set("contentHash", hash);
-    if (parentId) form.set("parentId", String(parentId));
-    form.set("sourcePaths", JSON.stringify(normalizeSourcePaths(sourcePaths)));
-    if (correlation?.sessionId) form.set("sessionId", String(correlation.sessionId));
-    if (correlation?.surfaceId) form.set("surfaceId", String(correlation.surfaceId));
-    if (correlation?.actor) form.set("actor", String(correlation.actor));
-    if (promotionDecision) form.set("promotionDecision", String(promotionDecision));
-    if (eventKind) form.set("eventKind", String(eventKind));
-    if (message) form.set("message", String(message));
-    const response = await fetchImpl(`${normalizedCoreUrl}/generations`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded; charset=utf-8"
-      },
-      body: form.toString()
-    });
-    if (!response?.ok) {
-      const details = await response.text().catch(() => "");
-      throw new Error(`witness core generation publish failed (${response?.status || "unknown"}): ${details || "request rejected"}`);
-    }
-    return response.json();
-  };
-
-  const postJson = async (endpoint, {
-    method = "POST",
-    body = null
-  } = {}) => {
-    const options = { method };
-    if (body != null) {
-      options.headers = { "content-type": "application/json; charset=utf-8" };
-      options.body = JSON.stringify(body);
-    }
-    let response;
-    try {
-      response = await fetchImpl(`${normalizedCoreUrl}${endpoint}`, options);
-    } catch (error) {
-      throw createWitnessCoreRequestError("witness core unavailable", {
-        status: 503,
-        code: "WITNESS_CORE_UNAVAILABLE",
-        details: {
-          cause: error instanceof Error ? error.message : String(error)
-        }
-      });
-    }
-    if (!response?.ok) {
-      let payload = null;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = null;
-      }
-      const details = payload && typeof payload === "object" ? payload : null;
-      const message = typeof details?.error === "string" && details.error
-        ? details.error
-        : "request rejected";
-      throw createWitnessCoreRequestError(
-        `witness core request failed (${response?.status || "unknown"}): ${message}`,
-        {
-          status: response?.status || 500,
-          code: typeof details?.code === "string" && details.code
-            ? details.code
-            : (response?.status === 409 ? "WITNESS_CORE_SOURCE_CONFLICT" : null),
-          details
-        }
-      );
-    }
-    return await response.json();
-  };
-
-  const sourceCapabilityRequest = async (method, endpoint, {
-    path = "",
-    encoding = null,
-    content = null,
-    expectedHash = null,
-    reason = null,
-    previewOnly = false,
-    correlation = null
-  } = {}) => {
-    const sourcePath = String(path || "").trim();
-    if (!sourcePath) throw new Error("source path is required");
-    const url = new URL(`${normalizedCoreUrl}${endpoint}`);
-    const options = { method };
-    if (method === "GET") {
-      url.searchParams.set("path", sourcePath);
-      if (typeof encoding === "string" && encoding.trim()) {
-        url.searchParams.set("encoding", encoding.trim());
-      }
-      if (correlation?.sessionId) url.searchParams.set("sessionId", String(correlation.sessionId));
-      if (correlation?.surfaceId) url.searchParams.set("surfaceId", String(correlation.surfaceId));
-      if (correlation?.actor) url.searchParams.set("actor", String(correlation.actor));
-    } else {
-      options.headers = { "content-type": "application/json; charset=utf-8" };
-      options.body = JSON.stringify({
-        path: sourcePath,
-        content: String(content ?? ""),
-        expectedHash: typeof expectedHash === "string" && expectedHash.trim() ? expectedHash.trim() : null,
-        reason: reason ? String(reason) : null,
-        previewOnly: previewOnly === true,
-        sessionId: correlation?.sessionId ? String(correlation.sessionId) : null,
-        surfaceId: correlation?.surfaceId ? String(correlation.surfaceId) : null,
-        actor: correlation?.actor ? String(correlation.actor) : null
-      });
-    }
-    let response;
-    try {
-      response = await fetchImpl(String(url), options);
-    } catch (error) {
-      throw createWitnessCoreRequestError("witness core unavailable", {
-        status: 503,
-        code: "WITNESS_CORE_UNAVAILABLE",
-        details: {
-          cause: error instanceof Error ? error.message : String(error)
-        }
-      });
-    }
-    if (!response?.ok) {
-      let payload = null;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = null;
-      }
-      const details = payload && typeof payload === "object" ? payload : null;
-      const message = typeof details?.error === "string" && details.error
-        ? details.error
-        : "request rejected";
-      throw createWitnessCoreRequestError(
-        `witness core source capability failed (${response?.status || "unknown"}): ${message}`,
-        {
-          status: response?.status || 500,
-          code: typeof details?.code === "string" && details.code
-            ? details.code
-            : (response?.status === 409 ? "WITNESS_CORE_SOURCE_CONFLICT" : null),
-          details
-        }
-      );
-    }
-    return await response.json();
-  };
+  const effectiveTransport = createTransport({
+    coreUrl,
+    pipePath,
+    fetchImpl,
+    logger,
+    transport
+  });
+  if (!effectiveTransport) return null;
+  const call = createCallInvoker(effectiveTransport);
+  if (!call) return null;
 
   return {
-    coreUrl: normalizedCoreUrl,
-    async publishGeneration(input = {}) {
+    coreUrl: effectiveTransport.coreUrl,
+    async publishGeneration({
+      id = null,
+      state = "candidate",
+      contentHash,
+      parentId = null,
+      sourcePaths = [],
+      correlation = null,
+      promotionDecision = null,
+      eventKind = null,
+      message = null
+    } = {}) {
+      const hash = String(contentHash ?? "").trim();
+      if (!hash) throw new Error("contentHash is required");
+      const form = new URLSearchParams();
+      if (id) form.set("id", String(id));
+      form.set("state", String(state || "candidate"));
+      form.set("contentHash", hash);
+      if (parentId) form.set("parentId", String(parentId));
+      form.set("sourcePaths", JSON.stringify(normalizeSourcePaths(sourcePaths)));
+      if (correlation?.sessionId) form.set("sessionId", String(correlation.sessionId));
+      if (correlation?.surfaceId) form.set("surfaceId", String(correlation.surfaceId));
+      if (correlation?.actor) form.set("actor", String(correlation.actor));
+      if (promotionDecision) form.set("promotionDecision", String(promotionDecision));
+      if (eventKind) form.set("eventKind", String(eventKind));
+      if (message) form.set("message", String(message));
       try {
-        return await publishGeneration(input);
+        return await call(WITNESS_CORE_TRANSPORT_METHODS.generationPublish, {
+          form: form.toString()
+        });
       } catch (error) {
         logger?.warn?.("witnessCore.publishGeneration failed", {
           error: error instanceof Error ? error.message : String(error)
@@ -246,23 +179,101 @@ export function createWitnessCoreBridge({
         throw error;
       }
     },
-    async readSource(input = {}) {
-      return await sourceCapabilityRequest("GET", "/capabilities/fs/read", input);
+    async readSource({
+      path = "",
+      encoding = null,
+      correlation = null
+    } = {}) {
+      const sourcePath = String(path || "").trim();
+      if (!sourcePath) throw new Error("source path is required");
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sourceRead, {
+        query: {
+          path: sourcePath,
+          ...(typeof encoding === "string" && encoding.trim() ? { encoding: encoding.trim() } : {}),
+          ...(correlation?.sessionId ? { sessionId: String(correlation.sessionId) } : {}),
+          ...(correlation?.surfaceId ? { surfaceId: String(correlation.surfaceId) } : {}),
+          ...(correlation?.actor ? { actor: String(correlation.actor) } : {})
+        }
+      });
     },
-    async statSource(input = {}) {
-      return await sourceCapabilityRequest("GET", "/capabilities/fs/stat", input);
+    async statSource({
+      path = "",
+      correlation = null
+    } = {}) {
+      const sourcePath = String(path || "").trim();
+      if (!sourcePath) throw new Error("source path is required");
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sourceStat, {
+        query: {
+          path: sourcePath,
+          ...(correlation?.sessionId ? { sessionId: String(correlation.sessionId) } : {}),
+          ...(correlation?.surfaceId ? { surfaceId: String(correlation.surfaceId) } : {}),
+          ...(correlation?.actor ? { actor: String(correlation.actor) } : {})
+        }
+      });
     },
-    async listSourceDirectory(input = {}) {
-      return await sourceCapabilityRequest("GET", "/capabilities/fs/list", input);
+    async listSourceDirectory({
+      path = "",
+      correlation = null
+    } = {}) {
+      const sourcePath = String(path || "").trim();
+      if (!sourcePath) throw new Error("source path is required");
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sourceList, {
+        query: {
+          path: sourcePath,
+          ...(correlation?.sessionId ? { sessionId: String(correlation.sessionId) } : {}),
+          ...(correlation?.surfaceId ? { surfaceId: String(correlation.surfaceId) } : {}),
+          ...(correlation?.actor ? { actor: String(correlation.actor) } : {})
+        }
+      });
     },
-    async writeSource(input = {}) {
-      return await sourceCapabilityRequest("PUT", "/capabilities/fs/write", input);
+    async writeSource({
+      path = "",
+      content = null,
+      expectedHash = null,
+      reason = null,
+      previewOnly = false,
+      correlation = null
+    } = {}) {
+      const sourcePath = String(path || "").trim();
+      if (!sourcePath) throw new Error("source path is required");
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sourceWrite, {
+        body: {
+          path: sourcePath,
+          content: String(content ?? ""),
+          expectedHash: typeof expectedHash === "string" && expectedHash.trim() ? expectedHash.trim() : null,
+          reason: reason ? String(reason) : null,
+          previewOnly: previewOnly === true,
+          sessionId: correlation?.sessionId ? String(correlation.sessionId) : null,
+          surfaceId: correlation?.surfaceId ? String(correlation.surfaceId) : null,
+          actor: correlation?.actor ? String(correlation.actor) : null
+        }
+      });
     },
-    async patchSource(input = {}) {
-      return await sourceCapabilityRequest("POST", "/capabilities/fs/patch", input);
+    async patchSource({
+      path = "",
+      content = null,
+      expectedHash = null,
+      reason = null,
+      previewOnly = false,
+      correlation = null
+    } = {}) {
+      const sourcePath = String(path || "").trim();
+      if (!sourcePath) throw new Error("source path is required");
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sourcePatch, {
+        body: {
+          path: sourcePath,
+          content: String(content ?? ""),
+          expectedHash: typeof expectedHash === "string" && expectedHash.trim() ? expectedHash.trim() : null,
+          reason: reason ? String(reason) : null,
+          previewOnly: previewOnly === true,
+          sessionId: correlation?.sessionId ? String(correlation.sessionId) : null,
+          surfaceId: correlation?.surfaceId ? String(correlation.surfaceId) : null,
+          actor: correlation?.actor ? String(correlation.actor) : null
+        }
+      });
     },
     async verificationPersistenceRequest(body = {}) {
-      return await postJson("/verification-persistence", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.verificationPersistenceRequest, {
         body: body && typeof body === "object" ? body : {}
       });
     },
@@ -276,7 +287,7 @@ export function createWitnessCoreBridge({
     } = {}) {
       const normalizedUrl = String(url || "").trim();
       if (!normalizedUrl) throw new Error("url is required");
-      return await postJson("/capabilities/network/http-outbound", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.httpOutboundExecute, {
         body: {
           url: normalizedUrl,
           method: String(method || "GET").trim() || "GET",
@@ -293,7 +304,7 @@ export function createWitnessCoreBridge({
       path,
       migrationTable = null
     } = {}) {
-      return await postJson("/capabilities/db/sqlite", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sqliteTestConnection, {
         body: {
           operation: "testConnection",
           path: String(path || ""),
@@ -306,7 +317,7 @@ export function createWitnessCoreBridge({
       migrationTable,
       migrations = []
     } = {}) {
-      return await postJson("/capabilities/db/sqlite", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sqliteMigrate, {
         body: {
           operation: "migrate",
           path: String(path || ""),
@@ -320,7 +331,7 @@ export function createWitnessCoreBridge({
       sql,
       params = null
     } = {}) {
-      return await postJson("/capabilities/db/sqlite", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sqliteQuery, {
         body: {
           operation: "query",
           path: String(path || ""),
@@ -334,7 +345,7 @@ export function createWitnessCoreBridge({
       sql,
       params = null
     } = {}) {
-      return await postJson("/capabilities/db/sqlite", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sqliteCommand, {
         body: {
           operation: "command",
           path: String(path || ""),
@@ -347,11 +358,81 @@ export function createWitnessCoreBridge({
       path,
       steps = []
     } = {}) {
-      return await postJson("/capabilities/db/sqlite", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sqliteTransaction, {
         body: {
           operation: "transaction",
           path: String(path || ""),
           steps: Array.isArray(steps) ? steps : []
+        }
+      });
+    },
+    async sqlTestConnection({
+      provider,
+      connection = {},
+      correlation = null
+    } = {}) {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sqlTestConnection, {
+        body: {
+          operation: "testConnection",
+          provider: String(provider || ""),
+          connection: connection && typeof connection === "object" ? connection : {},
+          sessionId: correlation?.sessionId ? String(correlation.sessionId) : null,
+          surfaceId: correlation?.surfaceId ? String(correlation.surfaceId) : null,
+          actor: correlation?.actor ? String(correlation.actor) : null
+        }
+      });
+    },
+    async sqlReadOrderedBatch({
+      provider,
+      connection = {},
+      schema = "",
+      table = "",
+      columns = [],
+      progressField = "",
+      lowerBound = null,
+      rowLimit = 500,
+      correlation = null
+    } = {}) {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sqlReadOrderedBatch, {
+        body: {
+          operation: "readOrderedBatch",
+          provider: String(provider || ""),
+          connection: connection && typeof connection === "object" ? connection : {},
+          schema: String(schema ?? ""),
+          table: String(table ?? ""),
+          columns: Array.isArray(columns) ? columns : [],
+          progressField: String(progressField ?? ""),
+          lowerBound,
+          rowLimit: Number(rowLimit ?? 500),
+          sessionId: correlation?.sessionId ? String(correlation.sessionId) : null,
+          surfaceId: correlation?.surfaceId ? String(correlation.surfaceId) : null,
+          actor: correlation?.actor ? String(correlation.actor) : null
+        }
+      });
+    },
+    async sqlWriteRows({
+      provider,
+      connection = {},
+      schema = "",
+      table = "",
+      rows = [],
+      writeMode = "",
+      keyFields = [],
+      correlation = null
+    } = {}) {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.sqlWriteRows, {
+        body: {
+          operation: "writeRows",
+          provider: String(provider || ""),
+          connection: connection && typeof connection === "object" ? connection : {},
+          schema: String(schema ?? ""),
+          table: String(table ?? ""),
+          rows: Array.isArray(rows) ? rows : [],
+          writeMode: String(writeMode ?? ""),
+          keyFields: Array.isArray(keyFields) ? keyFields : [],
+          sessionId: correlation?.sessionId ? String(correlation.sessionId) : null,
+          surfaceId: correlation?.surfaceId ? String(correlation.surfaceId) : null,
+          actor: correlation?.actor ? String(correlation.actor) : null
         }
       });
     },
@@ -361,7 +442,7 @@ export function createWitnessCoreBridge({
       edits = [],
       correlation = null
     } = {}) {
-      return await postJson("/transactions/published-authoring", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.publishedAuthoringTransaction, {
         body: {
           manifestPath: String(manifestPath || ""),
           runtimeProfile: String(runtimeProfile || "authoring"),
@@ -375,57 +456,49 @@ export function createWitnessCoreBridge({
     async createPreviewSession({ session } = {}) {
       const payload = cloneSessionPayload(session);
       if (!payload?.id) throw new Error("preview session id is required");
-      return await postJson("/preview-sessions", {
-        method: "POST",
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.previewSessionCreate, {
         body: payload
       });
     },
     async readPreviewSession({ id } = {}) {
       const previewSessionId = String(id || "").trim();
       if (!previewSessionId) throw new Error("preview session id is required");
-      const response = await fetchImpl(`${normalizedCoreUrl}/preview-sessions/${encodeURIComponent(previewSessionId)}`, {
-        cache: "no-store"
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.previewSessionRead, {
+        id: previewSessionId
       });
-      if (response?.status === 404) return null;
-      if (!response?.ok) {
-        const details = await response.text().catch(() => "");
-        throw new Error(`witness core preview session read failed (${response?.status || "unknown"}): ${details || "request rejected"}`);
-      }
-      return await response.json();
     },
     async writePreviewSession({ id, session } = {}) {
       const previewSessionId = String(id || session?.id || "").trim();
       const payload = cloneSessionPayload(session);
       if (!previewSessionId) throw new Error("preview session id is required");
       if (!payload?.id) throw new Error("preview session payload id is required");
-      return await postJson(`/preview-sessions/${encodeURIComponent(previewSessionId)}`, {
-        method: "PUT",
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.previewSessionWrite, {
+        id: previewSessionId,
         body: payload
       });
     },
     async deletePreviewSession({ id } = {}) {
       const previewSessionId = String(id || "").trim();
       if (!previewSessionId) throw new Error("preview session id is required");
-      const response = await fetchImpl(`${normalizedCoreUrl}/preview-sessions/${encodeURIComponent(previewSessionId)}`, {
-        method: "DELETE"
+      const payload = await call(WITNESS_CORE_TRANSPORT_METHODS.previewSessionDelete, {
+        id: previewSessionId
       });
-      if (response?.status === 404) return false;
-      if (!response?.ok) {
-        const details = await response.text().catch(() => "");
-        throw new Error(`witness core preview session delete failed (${response?.status || "unknown"}): ${details || "request rejected"}`);
-      }
-      const payload = await response.json().catch(() => ({ ok: true }));
+      if (payload === false) return false;
       return payload?.ok !== false;
     },
     async promoteGeneration({ id } = {}) {
       const generationId = String(id || "").trim();
       if (!generationId) throw new Error("generation id is required");
-      return await postJson(`/generations/${encodeURIComponent(generationId)}/promote`);
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.generationPromote, {
+        id: generationId
+      });
     },
     async rollbackGeneration({ id } = {}) {
       const generationId = String(id || "").trim();
       if (!generationId) throw new Error("generation id is required");
-      return await postJson(`/generations/${encodeURIComponent(generationId)}/rollback`);
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.generationRollback, {
+        id: generationId
+      });
     },
     async shadowInvokeComputeModule({
       hostOperation,
@@ -438,7 +511,7 @@ export function createWitnessCoreBridge({
       if (!normalizedHostOperation) throw new Error("hostOperation is required");
       if (!normalizedInputJson) throw new Error("inputJson is required");
       if (!normalizedJsResultJson) throw new Error("jsResultJson is required");
-      return await postJson("/compute-modules/shadow-invoke", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.computeModuleShadowInvoke, {
         body: {
           hostOperation: normalizedHostOperation,
           inputJson: normalizedInputJson,
@@ -447,29 +520,19 @@ export function createWitnessCoreBridge({
       });
     },
     async readServing() {
-      const response = await fetchImpl(`${normalizedCoreUrl}/serving`, { cache: "no-store" });
-      if (!response?.ok) {
-        const details = await response.text().catch(() => "");
-        throw new Error(`witness core serving read failed (${response?.status || "unknown"}): ${details || "request rejected"}`);
-      }
-      return await response.json();
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.servingRead);
     },
     async requestServeLive() {
-      return await postJson("/serving/live");
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.servingRequestLive);
     },
     async requestServeStable() {
-      return await postJson("/serving/stable");
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.servingRequestStable);
     },
     async readSoak() {
-      const response = await fetchImpl(`${normalizedCoreUrl}/soak`, { cache: "no-store" });
-      if (!response?.ok) {
-        const details = await response.text().catch(() => "");
-        throw new Error(`witness core soak read failed (${response?.status || "unknown"}): ${details || "request rejected"}`);
-      }
-      return await response.json();
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.soakRead);
     },
     async startSoakSession({ id = null, scenario = "soak" } = {}) {
-      return await postJson("/soak/start", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.soakStart, {
         body: {
           ...(id ? { id: String(id) } : {}),
           scenario: String(scenario || "soak")
@@ -479,7 +542,7 @@ export function createWitnessCoreBridge({
     async markSoakSession({ sessionId, phase, message = null } = {}) {
       if (!sessionId) throw new Error("sessionId is required");
       if (!phase) throw new Error("phase is required");
-      return await postJson("/soak/mark", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.soakMark, {
         body: {
           sessionId: String(sessionId),
           phase: String(phase),
@@ -489,7 +552,7 @@ export function createWitnessCoreBridge({
     },
     async recordSoakSample({ sessionId, sample = {} } = {}) {
       if (!sessionId) throw new Error("sessionId is required");
-      return await postJson("/soak/sample", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.soakSample, {
         body: {
           sessionId: String(sessionId),
           ...(sample && typeof sample === "object" ? sample : {})
@@ -498,7 +561,7 @@ export function createWitnessCoreBridge({
     },
     async completeSoakSession({ sessionId, message = null } = {}) {
       if (!sessionId) throw new Error("sessionId is required");
-      return await postJson("/soak/complete", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.soakComplete, {
         body: {
           sessionId: String(sessionId),
           ...(message ? { message: String(message) } : {})
@@ -507,7 +570,7 @@ export function createWitnessCoreBridge({
     },
     async failSoakSession({ sessionId, message = null } = {}) {
       if (!sessionId) throw new Error("sessionId is required");
-      return await postJson("/soak/fail", {
+      return await call(WITNESS_CORE_TRANSPORT_METHODS.soakFail, {
         body: {
           sessionId: String(sessionId),
           ...(message ? { message: String(message) } : {})
@@ -519,12 +582,24 @@ export function createWitnessCoreBridge({
 
 export function createWitnessCoreStatusStore({
   coreUrl = null,
-  fetchImpl = globalThis.fetch,
+  pipePath = null,
+  fetchImpl = null,
   pollMs = 2500,
-  logger = null
+  logger = null,
+  transport = null
 } = {}) {
-  const normalizedCoreUrl = normalizeWitnessCoreUrl(coreUrl);
-  if (!normalizedCoreUrl || typeof fetchImpl !== "function") return null;
+  const effectiveTransport = createTransport({
+    coreUrl,
+    pipePath,
+    fetchImpl,
+    logger,
+    transport
+  });
+  if (!effectiveTransport) return null;
+  const call = createCallInvoker(effectiveTransport);
+  const subscribe = createSubscribeInvoker(effectiveTransport);
+  if (!call || !subscribe) return null;
+
   let currentStatus = null;
   let timer = null;
   let listeners = new Set();
@@ -570,14 +645,11 @@ export function createWitnessCoreStatusStore({
 
   const poll = async () => {
     try {
-      const [generationsResponse, healthResponse, servingResponse] = await Promise.all([
-        fetchImpl(`${normalizedCoreUrl}/generations`, { cache: "no-store" }),
-        fetchImpl(`${normalizedCoreUrl}/health`, { cache: "no-store" }),
-        fetchImpl(`${normalizedCoreUrl}/serving`, { cache: "no-store" })
+      const [generations, health, serving] = await Promise.all([
+        call(WITNESS_CORE_TRANSPORT_METHODS.statusReadGenerations).catch(() => null),
+        call(WITNESS_CORE_TRANSPORT_METHODS.statusReadHealth).catch(() => null),
+        call(WITNESS_CORE_TRANSPORT_METHODS.statusReadServing).catch(() => null)
       ]);
-      const generations = generationsResponse?.ok ? await generationsResponse.json() : null;
-      const health = healthResponse?.ok ? await healthResponse.json() : null;
-      const serving = servingResponse?.ok ? await servingResponse.json() : null;
       if (!generations && !health && !serving) return;
       currentStatus = {
         ...(generations ?? currentStatus ?? {}),
@@ -633,10 +705,9 @@ export function createWitnessCoreStatusStore({
     const abortController = typeof AbortController === "function" ? new AbortController() : null;
     eventsAbortController = abortController;
     try {
-      const response = await fetchImpl(`${normalizedCoreUrl}/events`, {
-        cache: "no-store",
-        headers: { accept: "text/event-stream" },
-        signal: abortController?.signal
+      const response = await subscribe(WITNESS_CORE_TRANSPORT_SUBSCRIPTIONS.coreEvents, {
+      }, null, {
+        signal: abortController?.signal ?? null
       });
       if (!response?.ok || !response.body?.getReader) return;
       const reader = response.body.getReader();
@@ -679,6 +750,7 @@ export function createWitnessCoreStatusStore({
       }
     }
   };
+
   void refreshNow();
   void connectEvents();
   timer = setInterval(() => {
@@ -687,7 +759,7 @@ export function createWitnessCoreStatusStore({
   timer?.unref?.();
 
   return {
-    coreUrl: normalizedCoreUrl,
+    coreUrl: effectiveTransport.coreUrl,
     getStatus() {
       return currentStatus ? structuredClone(currentStatus) : null;
     },

@@ -305,6 +305,9 @@ function makeFakeDocument() {
     "operator-help-summary",
     "operator-setting-font-size",
     "operator-setting-row-density",
+    "operator-setting-viewport-top",
+    "operator-setting-viewport-bottom",
+    "operator-settings-reset-viewport",
     "operator-setting-pane-split",
     "operator-setting-page-size",
     "operator-setting-color-mode"
@@ -637,12 +640,18 @@ test("workbench controller persists updated display settings through the host se
   const updated = await controller.updateDisplaySettings({
     fontSize: 18,
     colorMode: "on",
-    pageSize: 30
+    pageSize: 30,
+    viewportTop: 5,
+    viewportBottom: 6
   });
   assert.equal(saved.length, 1);
   assert.equal(updated.snapshot.ui.displaySettings.fontSize, 18);
   assert.equal(updated.snapshot.ui.displaySettings.colorMode, "on");
   assert.equal(updated.snapshot.ui.displaySettings.pageSize, 30);
+  assert.equal(updated.snapshot.ui.displaySettings.viewportTop, 5);
+  assert.equal(updated.snapshot.ui.displaySettings.viewportBottom, 6);
+  assert.equal(saved[0].viewportTop, 5);
+  assert.equal(saved[0].viewportBottom, 6);
 });
 
 test("workbench controller exposes navigation chips and supports top-pane breadcrumb navigation", async () => {
@@ -2208,6 +2217,215 @@ test("startOperatorWorkbenchRuntime maps authored F5 shortcuts to custom screens
   ]);
 });
 
+test("startOperatorWorkbenchRuntime saves explicit viewport top and bottom settings through the host bridge", async () => {
+  const { documentTarget, elements } = makeFakeDocument();
+  const dispatchCalls = [];
+  const displaySettingsCalls = [];
+  const snapshot = {
+    path: "root",
+    focus: { active: false, kind: null, id: null },
+    preview: { available: true, status: "active" },
+    viewport: {
+      layout: {
+        top: 3,
+        bottom: 4,
+        leftWeight: 42,
+        rightWeight: 58
+      }
+    },
+    topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+    leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+    rightPane: {
+      title: "Trace",
+      activeScreenId: "inspect",
+      screen: { title: "Trace", activeSectionIndex: 0, sections: [], rows: [], activeRowIndex: 0, detailLines: [] },
+      tabs: { inspect: true, references: true, source: true, provenance: true },
+      target: { kind: "record", id: "thing.alpha", mode: "record" }
+    },
+    ui: {
+      focusedPane: "left",
+      inspectorTab: "inspect",
+      rightScreenMode: "custom-screen",
+      helpOpen: false,
+      numberBuffer: "",
+      lastOutput: "Ready.",
+      lastStatus: "info",
+      displaySettings: {
+        fontSize: 14,
+        paneSplit: 0.42,
+        viewportTop: 3,
+        viewportBottom: 4,
+        rowDensity: "comfortable",
+        colorMode: "auto",
+        pageSize: 25
+      }
+    }
+  };
+  const windowTarget = {
+    listeners: new Map(),
+    witnessOperatorWorkbench: {
+      async getSnapshot() { return snapshot; },
+      async getAutocomplete() { return { preview: "", matches: [] }; },
+      async runCommand() { return { snapshot }; },
+      async dispatchIntent(intent) {
+        dispatchCalls.push(intent);
+        return { snapshot };
+      },
+      async updateDisplaySettings(patch) {
+        displaySettingsCalls.push(patch);
+        snapshot.ui.displaySettings = { ...snapshot.ui.displaySettings, ...patch };
+        snapshot.viewport.layout = {
+          ...snapshot.viewport.layout,
+          top: patch.viewportTop,
+          bottom: patch.viewportBottom,
+          leftWeight: Math.round((patch.paneSplit ?? snapshot.ui.displaySettings.paneSplit) * 100),
+          rightWeight: 100 - Math.round((patch.paneSplit ?? snapshot.ui.displaySettings.paneSplit) * 100)
+        };
+        return { snapshot };
+      }
+    },
+    addEventListener(type, handler) {
+      this.listeners.set(type, handler);
+    }
+  };
+
+  const runtime = startOperatorWorkbenchRuntime({ windowTarget, documentTarget });
+  await runtime.started;
+
+  elements.get("operator-setting-font-size").value = "16";
+  elements.get("operator-setting-row-density").value = "compact";
+  elements.get("operator-setting-viewport-top").value = "5";
+  elements.get("operator-setting-viewport-bottom").value = "6";
+  elements.get("operator-setting-pane-split").value = "50";
+  elements.get("operator-setting-page-size").value = "30";
+  elements.get("operator-setting-color-mode").value = "on";
+
+  await documentTarget.listeners.get("click")({
+    target: { id: "operator-settings-save" },
+    preventDefault() {}
+  });
+
+  assert.deepEqual(dispatchCalls.map(call => `${call.type}:${call.pane ?? ""}`), ["set-focused-pane:bottom"]);
+  assert.equal(displaySettingsCalls.length, 1);
+  assert.deepEqual(displaySettingsCalls[0], {
+    fontSize: 16,
+    rowDensity: "compact",
+    viewportTop: 5,
+    viewportBottom: 6,
+    paneSplit: 0.5,
+    pageSize: 30,
+    colorMode: "on"
+  });
+});
+
+test("startOperatorWorkbenchRuntime resets viewport overrides back to authored defaults through the host bridge", async () => {
+  const { documentTarget, elements } = makeFakeDocument();
+  const dispatchCalls = [];
+  const displaySettingsCalls = [];
+  const snapshot = {
+    path: "root",
+    focus: { active: false, kind: null, id: null },
+    preview: { available: true, status: "active" },
+    viewport: {
+      top: 3,
+      bottom: 4,
+      leftWeight: 28,
+      rightWeight: 72,
+      layout: {
+        top: 5,
+        bottom: 6,
+        leftWeight: 50,
+        rightWeight: 50
+      }
+    },
+    topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+    leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+    rightPane: {
+      title: "Trace",
+      activeScreenId: "inspect",
+      screen: { title: "Trace", activeSectionIndex: 0, sections: [], rows: [], activeRowIndex: 0, detailLines: [] },
+      tabs: { inspect: true, references: true, source: true, provenance: true },
+      target: { kind: "record", id: "thing.alpha", mode: "record" }
+    },
+    ui: {
+      focusedPane: "left",
+      inspectorTab: "inspect",
+      rightScreenMode: "custom-screen",
+      helpOpen: false,
+      numberBuffer: "",
+      lastOutput: "Ready.",
+      lastStatus: "info",
+      displaySettings: {
+        fontSize: 14,
+        paneSplit: 0.5,
+        viewportTop: 5,
+        viewportBottom: 6,
+        rowDensity: "comfortable",
+        colorMode: "auto",
+        pageSize: 25
+      }
+    }
+  };
+  const windowTarget = {
+    listeners: new Map(),
+    witnessOperatorWorkbench: {
+      async getSnapshot() { return snapshot; },
+      async getAutocomplete() { return { preview: "", matches: [] }; },
+      async runCommand() { return { snapshot }; },
+      async dispatchIntent(intent) {
+        dispatchCalls.push(intent);
+        return { snapshot };
+      },
+      async updateDisplaySettings(patch) {
+        displaySettingsCalls.push(patch);
+        snapshot.ui.displaySettings = { ...snapshot.ui.displaySettings, ...patch };
+        snapshot.viewport.layout = {
+          ...snapshot.viewport.layout,
+          top: patch.viewportTop ?? snapshot.viewport.top,
+          bottom: patch.viewportBottom ?? snapshot.viewport.bottom,
+          leftWeight: patch.paneSplit === 0.42 ? snapshot.viewport.leftWeight : Math.round((patch.paneSplit ?? snapshot.ui.displaySettings.paneSplit) * 100),
+          rightWeight: patch.paneSplit === 0.42 ? snapshot.viewport.rightWeight : 100 - Math.round((patch.paneSplit ?? snapshot.ui.displaySettings.paneSplit) * 100)
+        };
+        return { snapshot };
+      }
+    },
+    addEventListener(type, handler) {
+      this.listeners.set(type, handler);
+    }
+  };
+
+  const runtime = startOperatorWorkbenchRuntime({ windowTarget, documentTarget });
+  await runtime.started;
+
+  elements.get("operator-setting-viewport-top").value = "9";
+  elements.get("operator-setting-viewport-bottom").value = "9";
+  elements.get("operator-setting-pane-split").value = "65";
+
+  await documentTarget.listeners.get("click")({
+    target: {
+      dataset: {},
+      closest(selector) {
+        if (selector === "[data-settings-reset-scope]") {
+          return { dataset: { settingsResetScope: "viewport" } };
+        }
+        return null;
+      }
+    },
+    preventDefault() {}
+  });
+
+  assert.deepEqual(dispatchCalls.map(call => `${call.type}:${call.pane ?? ""}`), ["set-focused-pane:bottom"]);
+  assert.equal(displaySettingsCalls.length, 1);
+  assert.deepEqual(displaySettingsCalls[0], {
+    viewportTop: null,
+    viewportBottom: null,
+    paneSplit: 0.42
+  });
+  assert.equal(Number(elements.get("operator-setting-viewport-top").value), 3);
+  assert.equal(Number(elements.get("operator-setting-viewport-bottom").value), 4);
+  assert.equal(Number(elements.get("operator-setting-pane-split").value), 28);
+});
+
 test("startOperatorWorkbenchRuntime maps right-pane section keys onto section intents", async () => {
   const { documentTarget } = makeFakeDocument();
   const calls = [];
@@ -2799,6 +3017,7 @@ test("operator workbench page renders the multi-pane shell", () => {
   assert.match(html, /operator-tab-provenance/);
   assert.match(html, /operator-custom-screen-body/);
   assert.match(html, /operator-command-input/);
+  assert.match(html, /data-settings-reset-scope="viewport"/);
   assert.match(html, /witnessOperatorWorkbench/);
   assert.match(html, /operator-canvas/);
   assert.equal(html.includes("operator-titlebar"), false);

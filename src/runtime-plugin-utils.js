@@ -111,6 +111,10 @@ function createCapabilityMissingError(targetPath) {
   return error;
 }
 
+function isWitnessCoreMissingError(error) {
+  return Number(error?.status || 0) === 404 || String(error?.code || "") === "ENOENT";
+}
+
 function createCapabilityRequiredError(targetPath) {
   const error = new Error(`source path must be available through witness-core capability: ${targetPath}`);
   error.code = "WITNESS_CORE_REQUIRED";
@@ -151,7 +155,13 @@ function createRuntimePluginDiscoveryFsModule({
       const sourceId = capabilitySourceIdForWorkspacePath(resolved, resolvedCwd);
       if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createCapabilityRequiredError(resolved);
       if (!sourceId) return await fsModule.readFile(resolved, encoding ?? undefined);
-      const payload = await generationBridge.readSource({ path: sourceId });
+      let payload;
+      try {
+        payload = await generationBridge.readSource({ path: sourceId });
+      } catch (error) {
+        if (isWitnessCoreMissingError(error)) throw createCapabilityMissingError(resolved);
+        throw error;
+      }
       const content = String(payload?.content ?? "");
       if (!encoding) return Buffer.from(content, "utf8");
       if (encoding === "utf8" || encoding === "utf-8") return content;
@@ -162,7 +172,13 @@ function createRuntimePluginDiscoveryFsModule({
       const sourceId = capabilitySourceIdForWorkspacePath(resolved, resolvedCwd);
       if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createCapabilityRequiredError(resolved);
       if (!sourceId) return await fsModule.stat(resolved);
-      const payload = await generationBridge.statSource({ path: sourceId });
+      let payload;
+      try {
+        payload = await generationBridge.statSource({ path: sourceId });
+      } catch (error) {
+        if (isWitnessCoreMissingError(error)) throw createCapabilityMissingError(resolved);
+        throw error;
+      }
       if (payload?.exists !== true) throw createCapabilityMissingError(resolved);
       return {
         size: Number(payload?.size || 0),
@@ -176,7 +192,13 @@ function createRuntimePluginDiscoveryFsModule({
       const sourceId = capabilitySourceIdForWorkspacePath(resolved, resolvedCwd);
       if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createCapabilityRequiredError(resolved);
       if (!sourceId) return await fsModule.readdir(resolved, options);
-      const payload = await generationBridge.listSourceDirectory({ path: sourceId });
+      let payload;
+      try {
+        payload = await generationBridge.listSourceDirectory({ path: sourceId });
+      } catch (error) {
+        if (isWitnessCoreMissingError(error)) throw createCapabilityMissingError(resolved);
+        throw error;
+      }
       if (options?.withFileTypes === true) {
         return (payload?.entries ?? []).map(entry => ({
           name: String(entry?.name || ""),

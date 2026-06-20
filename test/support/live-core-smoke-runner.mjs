@@ -131,6 +131,14 @@ function fixtureNodeExecutable() {
   return process.execPath;
 }
 
+function coreConnectedEnv(core, workspace) {
+  return {
+    ...process.env,
+    WITNESS_CORE_URL: core.url,
+    WITNESS_CORE_WORKSPACE_ROOT: workspace.tempRoot
+  };
+}
+
 function flattenProcessHealthSample(health, { phase = null } = {}) {
   return {
     ...(phase ? { phase } : {}),
@@ -277,10 +285,7 @@ async function runContinuityScenario() {
       serverRunnerId: "fixture_server",
       runtimeProfile: "authoring",
       devMode: true,
-      env: {
-        ...process.env,
-        WITNESS_CORE_URL: core.url
-      }
+      env: coreConnectedEnv(core, workspace)
     });
 
     const routeUrl = `${server.url}${workspace.servedRoutePath}`;
@@ -478,10 +483,7 @@ async function runPreviewScenario() {
       serverRunnerId: "fixture_server",
       runtimeProfile: "authoring",
       devMode: false,
-      env: {
-        ...process.env,
-        WITNESS_CORE_URL: core.url
-      }
+      env: coreConnectedEnv(core, workspace)
     });
 
     const createResponse = await fetch(`${server.url}/api/runtime/app-preview-sessions`, {
@@ -537,10 +539,7 @@ async function runPreviewScenario() {
       serverRunnerId: "fixture_server",
       runtimeProfile: "authoring",
       devMode: false,
-      env: {
-        ...process.env,
-        WITNESS_CORE_URL: core.url
-      }
+      env: coreConnectedEnv(core, workspace)
     });
     const previewAfterNodeRestart = await fetchText(`${server.url}${workspace.servedRoutePath}?previewSessionId=${encodeURIComponent(previewSessionId)}`);
     assert.match(previewAfterNodeRestart, /Live Core Preview/);
@@ -557,10 +556,7 @@ async function runPreviewScenario() {
       serverRunnerId: "fixture_server",
       runtimeProfile: "authoring",
       devMode: false,
-      env: {
-        ...process.env,
-        WITNESS_CORE_URL: core.url
-      }
+      env: coreConnectedEnv(core, workspace)
     });
     const previewAfterRustAndNodeRestart = await fetchText(`${server.url}${workspace.servedRoutePath}?previewSessionId=${encodeURIComponent(previewSessionId)}`);
     assert.match(previewAfterRustAndNodeRestart, /Live Core Preview/);

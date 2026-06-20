@@ -31,6 +31,7 @@ const ANSI = Object.freeze({
 const DEFAULT_DIRECT_SERVE_PORT = 4017;
 const DEFAULT_DIRECT_BOOTSTRAP_PORT = 4015;
 const DEFAULT_DIRECT_HTTP_MCP_PORT = 4018;
+const WITNESS_CORE_WORKSPACE_ROOT_ENV = "WITNESS_CORE_WORKSPACE_ROOT";
 
 const [command, ...rest] = process.argv.slice(2);
 
@@ -60,6 +61,13 @@ function startupGenerationBridge(env = process.env) {
   });
 }
 
+function resolveRuntimeWorkspaceCwd(env = process.env, fallbackCwd = process.cwd()) {
+  const configured = typeof env?.[WITNESS_CORE_WORKSPACE_ROOT_ENV] === "string"
+    ? env[WITNESS_CORE_WORKSPACE_ROOT_ENV].trim()
+    : "";
+  return path.resolve(configured || String(fallbackCwd || process.cwd()));
+}
+
 async function runServe(args) {
   const parsed = parseServeArgs(args);
   if (!parsed.appPath) {
@@ -70,11 +78,13 @@ async function runServe(args) {
   let selection = null;
   const startupTelemetry = createStartupTelemetry({ mode: "serve" });
   const generationBridge = startupGenerationBridge(process.env);
+  const runtimeWorkspaceCwd = resolveRuntimeWorkspaceCwd(process.env, process.cwd());
   try {
     const loaded = await startupTelemetry.runPhase("app.project.load", () => loadAppProjectWithStableFallback(parsed.appPath, {
       runtimeProfile: parsed.runtimeProfile,
       runtimePluginIds: parsed.runtimePluginIds,
       env: process.env,
+      cwd: runtimeWorkspaceCwd,
       generationBridge,
       requireGenerationBridgeForCanonicalReads: Boolean(generationBridge)
     }), {
@@ -99,7 +109,7 @@ async function runServe(args) {
       runtimePluginIds: parsed.runtimePluginIds,
       devMode: parsed.devMode,
       worldHome: parsed.worldHome,
-      cwd: process.cwd(),
+      cwd: runtimeWorkspaceCwd,
       env: process.env,
       startupTelemetry
     });
@@ -142,6 +152,7 @@ async function runServe(args) {
 async function runBootstrap(args) {
   const parsed = parseBootstrapArgs(args);
   const startupTelemetry = createStartupTelemetry({ mode: "bootstrap" });
+  const runtimeWorkspaceCwd = resolveRuntimeWorkspaceCwd(process.env, process.cwd());
   let launched = null;
   try {
     launched = await startBlankRuntime({
@@ -150,7 +161,7 @@ async function runBootstrap(args) {
       runtimeProfile: parsed.runtimeProfile,
       runtimeProfileExplicit: parsed.runtimeProfileExplicit,
       runtimePluginIds: parsed.runtimePluginIds,
-      cwd: process.cwd(),
+      cwd: runtimeWorkspaceCwd,
       env: process.env,
       port: parsed.port,
       startupTelemetry
@@ -210,11 +221,13 @@ async function runMcp(args) {
   let selection = null;
   const startupTelemetry = createStartupTelemetry({ mode: "mcp" });
   const generationBridge = startupGenerationBridge(process.env);
+  const runtimeWorkspaceCwd = resolveRuntimeWorkspaceCwd(process.env, process.cwd());
   try {
     const loaded = await startupTelemetry.runPhase("app.project.load", () => loadAppProjectWithStableFallback(parsed.appPath, {
       runtimeProfile: parsed.runtimeProfile,
       runtimePluginIds: parsed.runtimePluginIds,
       env: process.env,
+      cwd: runtimeWorkspaceCwd,
       generationBridge,
       requireGenerationBridgeForCanonicalReads: Boolean(generationBridge)
     }), {
@@ -244,7 +257,7 @@ async function runMcp(args) {
         runtimeProfileExplicit: parsed.runtimeProfileExplicit,
         runtimePluginIds: parsed.runtimePluginIds,
         worldHome: parsed.worldHome,
-        cwd: process.cwd(),
+        cwd: runtimeWorkspaceCwd,
         env: process.env,
         startupTelemetry
       });

@@ -6,6 +6,13 @@ const VALID_SHORTCUTS = new Set(["F2", "F3", "F4", "F5", "F6", "F7", "F8"]);
 const VALID_PRIMARY_ACTIONS = new Set(["open-link", "source-open", "provenance-open", "inspect-record", "none"]);
 const VALID_SECTION_KINDS = new Set(["detail", "list", "table", "kv"]);
 const VALID_SCREEN_PANES = new Set(["right", "left"]);
+const VALID_VIEWPORT_SPLIT_ORIENTATIONS = new Set(["horizontal", "vertical"]);
+const VALID_VIEWPORT_BINDING_VERBS = new Set(["overlay", "action"]);
+const VALID_OVERLAY_KINDS = new Set(["menu", "doc_view"]);
+const VALID_HANDLE_KINDS = new Set(["splitter"]);
+const VALID_HANDLE_AXES = new Set(["horizontal", "vertical"]);
+const VALID_SURFACE_KINDS = new Set(["status_bar", "command_bar"]);
+const VALID_SURFACE_SCROLL_AXES = new Set(["x", "y"]);
 
 function escapeRegExp(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -155,7 +162,100 @@ function parseOperatorSetup(form) {
     screens: readRepeatedSimpleValues(bodyLines, "screen").map(value => String(value)),
     shortcuts,
     defaultScreen: readSimpleValue(bodyLines, "default_screen"),
-    defaultLeftScreen: readSimpleValue(bodyLines, "default_left_screen")
+    defaultLeftScreen: readSimpleValue(bodyLines, "default_left_screen"),
+    defaultViewport: readSimpleValue(bodyLines, "default_viewport")
+  };
+}
+
+function parseOperatorOverlay(form) {
+  const parsed = pluginParsedData(form);
+  if (parsed) return parsed;
+  const bodyLines = formBodyLines(form);
+  return {
+    id: formName(form),
+    title: readSimpleValue(bodyLines, "title"),
+    kind: readSimpleValue(bodyLines, "kind") ?? "doc_view",
+    width: readSimpleValue(bodyLines, "width"),
+    height: readSimpleValue(bodyLines, "height"),
+    resizable: readSimpleValue(bodyLines, "resizable"),
+    scroll: readRepeatedSimpleValues(bodyLines, "scroll").map(value => String(value))
+  };
+}
+
+function parseOperatorHandle(form) {
+  const parsed = pluginParsedData(form);
+  if (parsed) return parsed;
+  const bodyLines = formBodyLines(form);
+  return {
+    id: formName(form),
+    title: readSimpleValue(bodyLines, "title"),
+    kind: readSimpleValue(bodyLines, "kind") ?? "splitter",
+    axis: readSimpleValue(bodyLines, "axis"),
+    size: readSimpleValue(bodyLines, "size"),
+    draggable: readSimpleValue(bodyLines, "draggable")
+  };
+}
+
+function parseOperatorSurface(form) {
+  const parsed = pluginParsedData(form);
+  if (parsed) return parsed;
+  const bodyLines = formBodyLines(form);
+  return {
+    id: formName(form),
+    title: readSimpleValue(bodyLines, "title"),
+    kind: readSimpleValue(bodyLines, "kind"),
+    width: readSimpleValue(bodyLines, "width"),
+    height: readSimpleValue(bodyLines, "height"),
+    resizable: readSimpleValue(bodyLines, "resizable"),
+    maxPrimaryChars: readSimpleValue(bodyLines, "max_primary_chars"),
+    scroll: readRepeatedSimpleValues(bodyLines, "scroll").map(value => String(value))
+  };
+}
+
+function parseOperatorViewport(form) {
+  const parsed = pluginParsedData(form);
+  if (parsed) return parsed;
+  const bodyLines = formBodyLines(form);
+  const overlays = [];
+  const bindings = [];
+  for (const line of bodyLines) {
+    const trimmed = line.trim();
+    let match = trimmed.match(/^overlay\s+([A-Za-z_][A-Za-z0-9_.:-]*)$/i);
+    if (match) {
+      overlays.push(match[1]);
+      continue;
+    }
+    match = trimmed.match(/^binding\s+([^\s]+)\s+([A-Za-z_][A-Za-z0-9_.:-]*)\s+([A-Za-z_][A-Za-z0-9_.:-]*)$/i);
+    if (match) {
+      bindings.push({
+        trigger: match[1],
+        verb: match[2],
+        target: match[3]
+      });
+    }
+  }
+  const size = readSimpleValue(bodyLines, "size");
+  const split = readSimpleValue(bodyLines, "split");
+  return {
+    id: formName(form),
+    title: readSimpleValue(bodyLines, "title"),
+    theme: readSimpleValue(bodyLines, "theme"),
+    screen: readSimpleValue(bodyLines, "screen"),
+    leftScreen: readSimpleValue(bodyLines, "left_screen"),
+    topSurface: readSimpleValue(bodyLines, "top_surface"),
+    bottomSurface: readSimpleValue(bodyLines, "bottom_surface"),
+    topHandle: readSimpleValue(bodyLines, "top_handle"),
+    bottomHandle: readSimpleValue(bodyLines, "bottom_handle"),
+    splitHandle: readSimpleValue(bodyLines, "split_handle"),
+    width: (Array.isArray(size) ? Number(size[0] ?? 0) || null : null) ?? readSimpleValue(bodyLines, "width"),
+    height: (Array.isArray(size) ? Number(size[1] ?? 0) || null : null) ?? readSimpleValue(bodyLines, "height"),
+    top: readSimpleValue(bodyLines, "top"),
+    bottom: readSimpleValue(bodyLines, "bottom"),
+    splitOrientation: (Array.isArray(split) ? String(split[0] ?? "") : null) ?? readSimpleValue(bodyLines, "split_orientation"),
+    leftWeight: (Array.isArray(split) ? Number(split[1] ?? 0) || null : null) ?? readSimpleValue(bodyLines, "left_weight"),
+    rightWeight: (Array.isArray(split) ? Number(split[2] ?? 0) || null : null) ?? readSimpleValue(bodyLines, "right_weight"),
+    overlays,
+    bindings
   };
 }
 
@@ -244,6 +344,113 @@ function validateOperatorSetup(form) {
   }
 }
 
+function validateOperatorOverlay(form) {
+  const payload = parseOperatorOverlay(form);
+  if (!VALID_OVERLAY_KINDS.has(String(payload.kind))) {
+    throw new Error(`operator_overlay ${formName(form)} kind must be one of ${[...VALID_OVERLAY_KINDS].join(", ")}`);
+  }
+  if (payload.width !== null && payload.width !== undefined && (!Number.isInteger(payload.width) || payload.width <= 0)) {
+    throw new Error(`operator_overlay ${formName(form)} width must be a positive integer`);
+  }
+  if (payload.height !== null && payload.height !== undefined && (!Number.isInteger(payload.height) || payload.height <= 0)) {
+    throw new Error(`operator_overlay ${formName(form)} height must be a positive integer`);
+  }
+  if (payload.resizable !== null && payload.resizable !== undefined && typeof payload.resizable !== "boolean") {
+    throw new Error(`operator_overlay ${formName(form)} resizable must be true or false`);
+  }
+}
+
+function validateOperatorHandle(form) {
+  const payload = parseOperatorHandle(form);
+  if (!VALID_HANDLE_KINDS.has(String(payload.kind))) {
+    throw new Error(`operator_handle ${formName(form)} kind must be one of ${[...VALID_HANDLE_KINDS].join(", ")}`);
+  }
+  if (!VALID_HANDLE_AXES.has(String(payload.axis))) {
+    throw new Error(`operator_handle ${formName(form)} axis must be one of ${[...VALID_HANDLE_AXES].join(", ")}`);
+  }
+  if (payload.size !== null && payload.size !== undefined && (!Number.isInteger(payload.size) || payload.size <= 0)) {
+    throw new Error(`operator_handle ${formName(form)} size must be a positive integer`);
+  }
+  if (payload.draggable !== null && payload.draggable !== undefined && typeof payload.draggable !== "boolean") {
+    throw new Error(`operator_handle ${formName(form)} draggable must be true or false`);
+  }
+}
+
+function validateOperatorSurface(form) {
+  const payload = parseOperatorSurface(form);
+  if (!VALID_SURFACE_KINDS.has(String(payload.kind))) {
+    throw new Error(`operator_surface ${formName(form)} kind must be one of ${[...VALID_SURFACE_KINDS].join(", ")}`);
+  }
+  if (payload.width !== null && payload.width !== undefined && (!Number.isInteger(payload.width) || payload.width <= 0)) {
+    throw new Error(`operator_surface ${formName(form)} width must be a positive integer`);
+  }
+  if (payload.height !== null && payload.height !== undefined && (!Number.isInteger(payload.height) || payload.height <= 0)) {
+    throw new Error(`operator_surface ${formName(form)} height must be a positive integer`);
+  }
+  if (payload.resizable !== null && payload.resizable !== undefined && typeof payload.resizable !== "boolean") {
+    throw new Error(`operator_surface ${formName(form)} resizable must be true or false`);
+  }
+  if (payload.maxPrimaryChars !== null && payload.maxPrimaryChars !== undefined && (!Number.isInteger(payload.maxPrimaryChars) || payload.maxPrimaryChars <= 0)) {
+    throw new Error(`operator_surface ${formName(form)} max_primary_chars must be a positive integer`);
+  }
+  for (const axis of payload.scroll ?? []) {
+    if (!VALID_SURFACE_SCROLL_AXES.has(String(axis))) {
+      throw new Error(`operator_surface ${formName(form)} scroll axes must be one of ${[...VALID_SURFACE_SCROLL_AXES].join(", ")}`);
+    }
+  }
+}
+
+function validateOperatorViewport(form) {
+  const payload = parseOperatorViewport(form);
+  if (payload.width !== null && (!Number.isInteger(payload.width) || payload.width <= 0)) {
+    throw new Error(`operator_viewport ${formName(form)} size width must be a positive integer`);
+  }
+  if (payload.height !== null && (!Number.isInteger(payload.height) || payload.height <= 0)) {
+    throw new Error(`operator_viewport ${formName(form)} size height must be a positive integer`);
+  }
+  if (payload.top !== null && payload.top !== undefined && (!Number.isInteger(payload.top) || payload.top <= 0)) {
+    throw new Error(`operator_viewport ${formName(form)} top must be a positive integer`);
+  }
+  if (payload.bottom !== null && payload.bottom !== undefined && (!Number.isInteger(payload.bottom) || payload.bottom <= 0)) {
+    throw new Error(`operator_viewport ${formName(form)} bottom must be a positive integer`);
+  }
+  if (payload.splitOrientation && !VALID_VIEWPORT_SPLIT_ORIENTATIONS.has(payload.splitOrientation)) {
+    throw new Error(`operator_viewport ${formName(form)} split orientation must be one of ${[...VALID_VIEWPORT_SPLIT_ORIENTATIONS].join(", ")}`);
+  }
+  if (payload.leftWeight !== null && (!Number.isInteger(payload.leftWeight) || payload.leftWeight <= 0)) {
+    throw new Error(`operator_viewport ${formName(form)} left split weight must be a positive integer`);
+  }
+  if (payload.rightWeight !== null && (!Number.isInteger(payload.rightWeight) || payload.rightWeight <= 0)) {
+    throw new Error(`operator_viewport ${formName(form)} right split weight must be a positive integer`);
+  }
+  const seenOverlays = new Set();
+  for (const overlayId of payload.overlays ?? []) {
+    const normalized = String(overlayId ?? "").trim();
+    if (!normalized) continue;
+    if (seenOverlays.has(normalized)) {
+      throw new Error(`operator_viewport ${formName(form)} duplicate overlay reference: ${normalized}`);
+    }
+    seenOverlays.add(normalized);
+  }
+  const seenTriggers = new Set();
+  for (const binding of payload.bindings) {
+    if (!binding.trigger?.trim()) {
+      throw new Error(`operator_viewport ${formName(form)} binding trigger is required`);
+    }
+    if (!VALID_VIEWPORT_BINDING_VERBS.has(String(binding.verb))) {
+      throw new Error(`operator_viewport ${formName(form)} binding verb must be one of ${[...VALID_VIEWPORT_BINDING_VERBS].join(", ")}`);
+    }
+    if (!binding.target?.trim()) {
+      throw new Error(`operator_viewport ${formName(form)} binding target is required`);
+    }
+    const trigger = String(binding.trigger).trim();
+    if (seenTriggers.has(trigger)) {
+      throw new Error(`operator_viewport ${formName(form)} duplicate binding trigger: ${trigger}`);
+    }
+    seenTriggers.add(trigger);
+  }
+}
+
 function serializeOperatorDataset(payload) {
   const lines = [
     `operator_dataset ${payload.id} {`,
@@ -309,6 +516,67 @@ function serializeOperatorSetup(payload) {
   for (const screenId of payload.screens ?? []) lines.push(`  screen ${screenId}`);
   for (const row of payload.shortcuts ?? []) lines.push(`  shortcut ${row.shortcut} ${row.screenId}`);
   if (payload.defaultScreen) lines.push(`  default_screen ${payload.defaultScreen}`);
+  if (payload.defaultLeftScreen) lines.push(`  default_left_screen ${payload.defaultLeftScreen}`);
+  if (payload.defaultViewport) lines.push(`  default_viewport ${payload.defaultViewport}`);
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function serializeOperatorOverlay(payload) {
+  const lines = [`operator_overlay ${payload.id} {`];
+  lines.push(`  kind ${payload.kind ?? "doc_view"}`);
+  if (payload.title) lines.push(`  title "${payload.title}"`);
+  if (payload.width !== undefined && payload.width !== null) lines.push(`  width ${payload.width}`);
+  if (payload.height !== undefined && payload.height !== null) lines.push(`  height ${payload.height}`);
+  if (payload.resizable !== undefined && payload.resizable !== null) lines.push(`  resizable ${payload.resizable ? "true" : "false"}`);
+  for (const axis of payload.scroll ?? []) lines.push(`  scroll ${axis}`);
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function serializeOperatorHandle(payload) {
+  const lines = [`operator_handle ${payload.id} {`];
+  lines.push(`  kind ${payload.kind ?? "splitter"}`);
+  if (payload.axis) lines.push(`  axis ${payload.axis}`);
+  if (payload.title) lines.push(`  title "${payload.title}"`);
+  if (payload.size !== undefined && payload.size !== null) lines.push(`  size ${payload.size}`);
+  if (payload.draggable !== undefined && payload.draggable !== null) lines.push(`  draggable ${payload.draggable ? "true" : "false"}`);
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function serializeOperatorSurface(payload) {
+  const lines = [`operator_surface ${payload.id} {`];
+  lines.push(`  kind ${payload.kind ?? "status_bar"}`);
+  if (payload.title) lines.push(`  title "${payload.title}"`);
+  if (payload.width !== undefined && payload.width !== null) lines.push(`  width ${payload.width}`);
+  if (payload.height !== undefined && payload.height !== null) lines.push(`  height ${payload.height}`);
+  if (payload.resizable !== undefined && payload.resizable !== null) lines.push(`  resizable ${payload.resizable ? "true" : "false"}`);
+  if (payload.maxPrimaryChars !== undefined && payload.maxPrimaryChars !== null) lines.push(`  max_primary_chars ${payload.maxPrimaryChars}`);
+  for (const axis of payload.scroll ?? []) lines.push(`  scroll ${axis}`);
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function serializeOperatorViewport(payload) {
+  const lines = [`operator_viewport ${payload.id} {`];
+  if (payload.title) lines.push(`  title "${payload.title}"`);
+  if (payload.theme) lines.push(`  theme ${payload.theme}`);
+  if (payload.screen) lines.push(`  screen ${payload.screen}`);
+  if (payload.leftScreen) lines.push(`  left_screen ${payload.leftScreen}`);
+  if (payload.topSurface) lines.push(`  top_surface ${payload.topSurface}`);
+  if (payload.bottomSurface) lines.push(`  bottom_surface ${payload.bottomSurface}`);
+  if (payload.topHandle) lines.push(`  top_handle ${payload.topHandle}`);
+  if (payload.bottomHandle) lines.push(`  bottom_handle ${payload.bottomHandle}`);
+  if (payload.splitHandle) lines.push(`  split_handle ${payload.splitHandle}`);
+  if (payload.width && payload.height) lines.push(`  size [${payload.width}, ${payload.height}]`);
+  if (payload.top !== undefined && payload.top !== null) lines.push(`  top ${payload.top}`);
+  if (payload.bottom !== undefined && payload.bottom !== null) lines.push(`  bottom ${payload.bottom}`);
+  if (payload.splitOrientation && payload.leftWeight && payload.rightWeight) {
+    lines.push(`  split [${payload.splitOrientation}, ${payload.leftWeight}, ${payload.rightWeight}]`);
+  }
+  for (const overlay of payload.overlays ?? []) lines.push(`  overlay ${overlay}`);
+  for (const binding of payload.bindings ?? []) lines.push(`  binding ${binding.trigger} ${binding.verb} ${binding.target}`);
   lines.push("}");
   return lines.join("\n");
 }
@@ -402,7 +670,104 @@ function normalizeOperatorSetup(node, context) {
           screenId: row.screenId
         })).filter(row => row.shortcut && row.screenId),
         defaultScreen: values.defaultScreen ?? null,
-        defaultLeftScreen: values.defaultLeftScreen ?? null
+        defaultLeftScreen: values.defaultLeftScreen ?? null,
+        defaultViewport: values.defaultViewport ?? null
+      }, values.id, {
+        pluginId: "plugin.operator-workbench"
+      })
+    ]
+  };
+}
+
+function normalizeOperatorOverlay(node, context) {
+  const values = parseOperatorOverlay(node.payload);
+  return {
+    nodes: [],
+    runtimeResiduals: [
+      context.createRuntimeDeclarationResidual("operator_overlay", {
+        id: values.id,
+        title: values.title ?? values.id,
+        kind: values.kind ?? "doc_view",
+        width: values.width ?? null,
+        height: values.height ?? null,
+        resizable: values.resizable ?? null,
+        scroll: Array.isArray(values.scroll) ? values.scroll : []
+      }, values.id, {
+        pluginId: "plugin.operator-workbench"
+      })
+    ]
+  };
+}
+
+function normalizeOperatorHandle(node, context) {
+  const values = parseOperatorHandle(node.payload);
+  return {
+    nodes: [],
+    runtimeResiduals: [
+      context.createRuntimeDeclarationResidual("operator_handle", {
+        id: values.id,
+        title: values.title ?? values.id,
+        kind: values.kind ?? "splitter",
+        axis: values.axis ?? null,
+        size: values.size ?? null,
+        draggable: values.draggable ?? null
+      }, values.id, {
+        pluginId: "plugin.operator-workbench"
+      })
+    ]
+  };
+}
+
+function normalizeOperatorSurface(node, context) {
+  const values = parseOperatorSurface(node.payload);
+  return {
+    nodes: [],
+    runtimeResiduals: [
+      context.createRuntimeDeclarationResidual("operator_surface", {
+        id: values.id,
+        title: values.title ?? values.id,
+        kind: values.kind ?? null,
+        width: values.width ?? null,
+        height: values.height ?? null,
+        resizable: values.resizable ?? null,
+        maxPrimaryChars: values.maxPrimaryChars ?? null,
+        scroll: Array.isArray(values.scroll) ? values.scroll : []
+      }, values.id, {
+        pluginId: "plugin.operator-workbench"
+      })
+    ]
+  };
+}
+
+function normalizeOperatorViewport(node, context) {
+  const values = parseOperatorViewport(node.payload);
+  return {
+    nodes: [],
+    runtimeResiduals: [
+      context.createRuntimeDeclarationResidual("operator_viewport", {
+        id: values.id,
+        title: values.title ?? values.id,
+        theme: values.theme ?? null,
+        screen: values.screen ?? null,
+        leftScreen: values.leftScreen ?? null,
+        topSurface: values.topSurface ?? null,
+        bottomSurface: values.bottomSurface ?? null,
+        topHandle: values.topHandle ?? null,
+        bottomHandle: values.bottomHandle ?? null,
+        splitHandle: values.splitHandle ?? null,
+        width: values.width ?? null,
+        height: values.height ?? null,
+        top: values.top ?? null,
+        bottom: values.bottom ?? null,
+        splitOrientation: values.splitOrientation ?? null,
+        leftWeight: values.leftWeight ?? null,
+        rightWeight: values.rightWeight ?? null,
+        overlays: Array.isArray(values.overlays) ? values.overlays : [],
+        bindings: Array.isArray(values.bindings) ? values.bindings.map(binding => ({
+          trigger: String(binding.trigger ?? ""),
+          verb: String(binding.verb ?? ""),
+          target: String(binding.target ?? "")
+        })) : []
       }, values.id, {
         pluginId: "plugin.operator-workbench"
       })
@@ -431,6 +796,34 @@ export const operatorWorkbenchRvmForms = Object.freeze([
     serialize: serializeOperatorScreenSection,
     validate: validateOperatorScreenSection,
     normalize: normalizeOperatorScreenSection
+  }),
+  Object.freeze({
+    kind: "operator_overlay",
+    parse: parseOperatorOverlay,
+    serialize: serializeOperatorOverlay,
+    validate: validateOperatorOverlay,
+    normalize: normalizeOperatorOverlay
+  }),
+  Object.freeze({
+    kind: "operator_handle",
+    parse: parseOperatorHandle,
+    serialize: serializeOperatorHandle,
+    validate: validateOperatorHandle,
+    normalize: normalizeOperatorHandle
+  }),
+  Object.freeze({
+    kind: "operator_surface",
+    parse: parseOperatorSurface,
+    serialize: serializeOperatorSurface,
+    validate: validateOperatorSurface,
+    normalize: normalizeOperatorSurface
+  }),
+  Object.freeze({
+    kind: "operator_viewport",
+    parse: parseOperatorViewport,
+    serialize: serializeOperatorViewport,
+    validate: validateOperatorViewport,
+    normalize: normalizeOperatorViewport
   }),
   Object.freeze({
     kind: "operator_setup",

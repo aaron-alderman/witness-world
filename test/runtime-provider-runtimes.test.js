@@ -102,8 +102,8 @@ test("runtime provider runtimes require witness-core sqlite capability and fail 
   }
 });
 
-test("runtime provider runtimes resolve postgres credentials through secret.store and keep datasource selection explicit", async () => {
-  const seenConfigs = [];
+test("runtime provider runtimes resolve postgres credentials through witness-core and keep datasource selection explicit", async () => {
+  const seenCalls = [];
   const runtime = createDbSqlRuntime({
     project(projector) {
       if (projector === moduleProjectors.sqlDatasources) {
@@ -155,6 +155,13 @@ test("runtime provider runtimes resolve postgres credentials through secret.stor
     runtimeRoot: process.cwd(),
     serverRunnerId: "runner-1",
     getAppContext: () => ({
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async sqlTestConnection(input) {
+          seenCalls.push(input);
+          return { ok: true };
+        }
+      },
       secretStore: {
         resolveSecretValue(secretId) {
           return Promise.resolve(secretId === "secret.pg"
@@ -162,27 +169,33 @@ test("runtime provider runtimes resolve postgres credentials through secret.stor
             : { ok: false, status: 404, reason: "secret not found" });
         }
       }
-    }),
-    postgresAdapter: {
-      Client: class {
-        constructor(config) {
-          seenConfigs.push(config);
-        }
-        async connect() {}
-        async query(sql) {
-          assert.equal(sql, "select 1 as ok");
-        }
-        async end() {}
-      }
-    }
+    })
   });
 
   try {
+    const listed = runtime.listDatasources();
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0].provider, "postgres");
+    assert.equal(listed[0].adapterStatus, "witness-core");
+    assert.equal(listed[0].boundaryOwner, "witness-core");
+    assert.equal(listed[0].boundaryAuthority, "rust-owned");
+    assert.equal(listed[0].boundaryTransport, "capability.db.postgres");
+    assert.equal(listed[0].boundaryScope, "runtime");
+    assert.equal(listed[0].canonicalBoundary, true);
+    assert.equal(listed[0].boundaryFallbackAllowed, false);
+
     const tested = await runtime.testConnection({ datasourceId: "pg.main" });
     assert.equal(tested.ok, true);
-    assert.equal(seenConfigs.length, 1);
-    assert.equal(seenConfigs[0].password, "super-secret");
-    assert.deepEqual(seenConfigs[0].ssl, { rejectUnauthorized: false });
+    assert.equal(seenCalls.length, 1);
+    assert.equal(seenCalls[0].provider, "postgres");
+    assert.equal(seenCalls[0].connection.password, "super-secret");
+    assert.equal(seenCalls[0].connection.host, "127.0.0.1");
+    assert.equal(seenCalls[0].connection.port, 5432);
+    assert.equal(seenCalls[0].connection.database, "engentus");
+    assert.equal(seenCalls[0].connection.user, "pipeline_user");
+    assert.equal(seenCalls[0].connection.ssl, true);
+    assert.equal(tested.datasource.boundaryOwner, "witness-core");
+    assert.equal(tested.datasource.boundaryTransport, "capability.db.postgres");
 
     const missing = await runtime.testConnection({ datasourceId: "missing" });
     assert.equal(missing.ok, false);

@@ -8,6 +8,7 @@ import { loadAppProject } from "./app-project.js";
 import { AppPreviewSessionManager, AppSnapshotManager } from "./app-snapshot-manager.js";
 import { declareBackendHost, declareFrontendHost, resolveServerRunner } from "./host.js";
 import { buildOperatorWorkbenchDefinition } from "./operator-screen-specs.js";
+import { DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS } from "./operator-workbench/settings.js";
 import { resolveRuntimeOperatorPaths } from "./runtime-operator-contract.js";
 import { resolveCliRuntimeProfile } from "./runtime-local-launcher.js";
 import { buildPlatformModel } from "../plugins/platform/platform-model.js";
@@ -3422,6 +3423,43 @@ function buildWorkbenchNavigationModel(state, session, {
   };
 }
 
+function buildWorkbenchViewportLayout(activeViewportSpec, uiState = {}) {
+  if (!activeViewportSpec) return null;
+  const authoredLeftWeight = Number(activeViewportSpec.leftWeight ?? 28) || 28;
+  const persistedPaneSplit = Number(uiState?.displaySettings?.paneSplit);
+  const persistedTop = uiState?.displaySettings?.viewportTop;
+  const persistedBottom = uiState?.displaySettings?.viewportBottom;
+  const persistedLeftWeight = Number.isFinite(persistedPaneSplit)
+    && persistedPaneSplit !== DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS.paneSplit
+    ? Math.round(persistedPaneSplit * 100)
+    : null;
+  const leftWeight = Math.max(
+    15,
+    Math.min(
+      85,
+      Number(uiState?.viewportLayout?.leftWeight ?? persistedLeftWeight ?? authoredLeftWeight) || authoredLeftWeight
+    )
+  );
+  const top = Number(
+    uiState?.viewportLayout?.top
+    ?? persistedTop
+    ?? activeViewportSpec.top
+    ?? 3
+  ) || 3;
+  const bottom = Number(
+    uiState?.viewportLayout?.bottom
+    ?? persistedBottom
+    ?? activeViewportSpec.bottom
+    ?? 4
+  ) || 4;
+  return {
+    top,
+    bottom,
+    leftWeight,
+    rightWeight: 100 - leftWeight
+  };
+}
+
 function buildNavigationLeftPaneModel(state, session, {
   screenId = "builtin.navigation",
   title = null,
@@ -3796,6 +3834,11 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
   const activeLeftDatasetSpec = activeLeftScreenSpec?.datasetId
     ? (operatorWorkbenchDatasetSpec(state, activeLeftScreenSpec.datasetId) ?? null)
     : null;
+  const activeViewportId = workbenchDefinition.defaultViewport ?? workbenchDefinition.viewports?.[0]?.id ?? null;
+  const activeViewportSpec = activeViewportId
+    ? (workbenchDefinition.viewportsById?.get(activeViewportId) ?? null)
+    : null;
+  const activeViewportLayout = buildWorkbenchViewportLayout(activeViewportSpec, uiState);
   const leftPaneModel = resultView
     ? buildResultLeftPaneModel(resultView, materializedResultView, session)
     : buildAuthoredLeftPaneModel(state, session, activeLeftScreenSpec, activeLeftDatasetSpec, {
@@ -3865,6 +3908,30 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
         origin: row.origin
       }))
     },
+    viewport: activeViewportSpec
+      ? {
+          id: activeViewportSpec.id,
+          title: activeViewportSpec.title ?? activeViewportSpec.id,
+          theme: activeViewportSpec.theme ?? null,
+          screenId: activeViewportSpec.screenId ?? null,
+          leftScreenId: activeViewportSpec.leftScreenId ?? null,
+          topSurfaceId: activeViewportSpec.topSurfaceId ?? null,
+          bottomSurfaceId: activeViewportSpec.bottomSurfaceId ?? null,
+          topHandleId: activeViewportSpec.topHandleId ?? null,
+          bottomHandleId: activeViewportSpec.bottomHandleId ?? null,
+          splitHandleId: activeViewportSpec.splitHandleId ?? null,
+          width: activeViewportSpec.width ?? null,
+          height: activeViewportSpec.height ?? null,
+          top: activeViewportSpec.top ?? null,
+          bottom: activeViewportSpec.bottom ?? null,
+          splitOrientation: activeViewportSpec.splitOrientation ?? null,
+          leftWeight: activeViewportSpec.leftWeight ?? null,
+          rightWeight: activeViewportSpec.rightWeight ?? null,
+          layout: activeViewportLayout,
+          overlays: structuredClone(activeViewportSpec.overlays ?? []),
+          bindings: structuredClone(activeViewportSpec.bindings ?? [])
+        }
+      : null,
     topPane: {
       title: "Operator Workbench",
       subtitle: session.focusKind ? `focus=${session.focusKind}:${session.focusId}` : "global",

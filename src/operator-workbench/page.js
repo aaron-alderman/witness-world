@@ -301,12 +301,15 @@ export function renderOperatorWorkbenchPage() {
       <div id="operator-number-buffer"></div>
       <button type="button" id="operator-help-button">help</button>
       <button type="button" id="operator-settings-save">save</button>
+      <button type="button" id="operator-settings-reset-viewport" data-settings-reset-scope="viewport">reset viewport</button>
       <input id="operator-setting-font-size" type="number" value="14">
       <select id="operator-setting-row-density">
         <option value="compact">compact</option>
         <option value="comfortable" selected>comfortable</option>
         <option value="relaxed">relaxed</option>
       </select>
+      <input id="operator-setting-viewport-top" type="number" min="3" value="3">
+      <input id="operator-setting-viewport-bottom" type="number" min="3" value="4">
       <input id="operator-setting-pane-split" type="range" min="25" max="70" value="42">
       <input id="operator-setting-page-size" type="number" value="25">
       <select id="operator-setting-color-mode">

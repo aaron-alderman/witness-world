@@ -100,7 +100,7 @@ test("package scripts promote the rich tui host while keeping the raw shell expl
   const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
   assert.equal(packageJson.scripts.tui, "node scripts/run-tui.mjs");
   assert.equal(packageJson.scripts["tui:shell"], "node src/cli.js tui");
-  assert.equal(packageJson.scripts.operator, "node src/cli.js operator");
+  assert.equal(packageJson.scripts.operator, "node src/cli.js operator examples/operator --runtime-plugin plugin.operator-workbench");
 });
 
 test("operator workbench shell registers IPC handlers, loads a generated html page, and cleans up once", async () => {
@@ -294,6 +294,108 @@ test("operator workbench shell registers IPC handlers, loads a generated html pa
     await appHandlers.get("window-all-closed")?.();
     assert.equal(coreCloseCalls, 1);
     assert.deepEqual(removed.sort(), Object.values(OPERATOR_WORKBENCH_IPC_CHANNELS).sort());
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("operator example shell loads the browser example URL through the embedded local server", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-shell-browser-"));
+  const handled = new Map();
+  const loadedUrls = [];
+  let coreCloseCalls = 0;
+  let serverCloseCalls = 0;
+  let serverOptions = null;
+
+  class MockWindow {
+    constructor(options) {
+      this.options = options;
+      this.events = new Map();
+      this.webContents = {
+        on() {},
+        isDevToolsOpened: () => false,
+        openDevTools() {},
+        closeDevTools() {}
+      };
+    }
+
+    once(event, handler) {
+      this.events.set(`once:${event}`, handler);
+    }
+
+    on(event, handler) {
+      this.events.set(event, handler);
+    }
+
+    removeMenu() {}
+
+    setMenuBarVisibility() {}
+
+    async loadURL(url) {
+      loadedUrls.push(url);
+    }
+  }
+
+  const electron = {
+    app: {
+      async whenReady() {},
+      on() {},
+      getPath() {
+        return tempRoot;
+      }
+    },
+    BrowserWindow: MockWindow,
+    ipcMain: {
+      handle(channel, fn) {
+        handled.set(channel, fn);
+      },
+      removeHandler(channel) {
+        handled.delete(channel);
+      }
+    }
+  };
+
+  const shell = await createOperatorWorkbenchShell({
+    electron,
+    args: ["examples/operator"],
+    createCoreImpl: async () => ({
+      async snapshot() {
+        return { ok: true };
+      },
+      async executeCommand() {
+        return { snapshot: { ok: true } };
+      },
+      async dispatchIntent() {
+        return { snapshot: { ok: true } };
+      },
+      async updateDisplaySettings() {
+        return { snapshot: { ok: true } };
+      },
+      autocomplete() {
+        return { preview: "", matches: [] };
+      },
+      async close() {
+        coreCloseCalls += 1;
+      }
+    }),
+    startBrowserExampleServerImpl: async options => {
+      serverOptions = options;
+      return {
+        url: "http://127.0.0.1:4021",
+        async close() {
+          serverCloseCalls += 1;
+        }
+      };
+    }
+  });
+
+  try {
+    assert.equal(serverOptions.core != null, true);
+    assert.equal(serverOptions.exampleRoot, path.resolve(process.cwd(), "examples/operator"));
+    assert.deepEqual(loadedUrls, ["http://127.0.0.1:4021"]);
+    await shell.close();
+    assert.equal(serverCloseCalls, 1);
+    assert.equal(coreCloseCalls, 1);
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }

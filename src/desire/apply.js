@@ -29,6 +29,7 @@ import {
   definePackage,
   definePackageRevision,
   definePackagePatch,
+  definePackageMaterializedFile,
   definePackageNamespace,
   definePackageDependency,
   definePackageTransformer,
@@ -39,6 +40,7 @@ import {
   removeRuntimePlugin,
   createServerRunner,
   defineComputeModule,
+  defineComputeModuleSmokeTest,
   defineRuntimePreload,
   defineRoute,
   serveRoute,
@@ -1222,6 +1224,22 @@ function applyCoreRuntimeDeclaration(world, doc) {
           patchWitness
         ]);
       }
+    case "packageMaterializedFile":
+      {
+        const fileWitness = definePackageMaterializedFile(world, {
+          actor: req(values, "actor"),
+          id: values.id ?? null,
+          package: req(values, "package"),
+          revision: req(values, "revision"),
+          path: req(values, "path"),
+          content: values.content ?? "",
+          sourceLanguage: values.sourceLanguage ?? "text",
+          owner: values.owner ?? values.actor
+        });
+        return withSourceAnnotations(world, doc, [fileWitness.body?.id].filter(Boolean), req(values, "actor"), [
+          fileWitness
+        ]);
+      }
     case "packageNamespace":
       {
         const namespaceWitness = definePackageNamespace(world, {
@@ -1433,6 +1451,24 @@ function applyCoreRuntimeDeclaration(world, doc) {
           values
         })
       ]);
+    case "computeModuleSmokeTest":
+      {
+        const smokeWitness = defineComputeModuleSmokeTest(world, {
+          actor: req(values, "actor"),
+          id: values.id ?? null,
+          module: req(values, "module"),
+          package: req(values, "package"),
+          revision: req(values, "revision"),
+          hostOperation: req(values, "hostOperation"),
+          request: values.request ?? {},
+          expected: values.expected ?? {},
+          timeoutMs: Number.isInteger(values.timeoutMs) ? values.timeoutMs : null,
+          owner: values.owner ?? values.actor
+        });
+        return withSourceAnnotations(world, doc, [smokeWitness.body?.id].filter(Boolean), req(values, "actor"), [
+          smokeWitness
+        ]);
+      }
     case "serverRunner":
       {
         const backendHost = resolveCoveredPreparedDocRef(world, values, {

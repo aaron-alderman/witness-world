@@ -24,6 +24,11 @@ export function renderOperatorWorkbenchRuntimeFactory() {
     const expandCanvasLineSelection = ${expandCanvasLineSelection.toString()};
     const extractCanvasSelectionText = ${extractCanvasSelectionText.toString()};
     const computeViewportStart = ${computeViewportStart.toString()};
+    const effectivePaneSplit = ${effectivePaneSplit.toString()};
+    const authoredViewportDefaults = ${authoredViewportDefaults.toString()};
+    const readDisplaySettingsDraft = ${readDisplaySettingsDraft.toString()};
+    const applyDisplaySettingsControls = ${applyDisplaySettingsControls.toString()};
+    const settingsResetPatchForScope = ${settingsResetPatchForScope.toString()};
     const leftPaneCanvasModel = ${leftPaneCanvasModel.toString()};
     const rightPaneCanvasModel = ${rightPaneCanvasModel.toString()};
     const topPaneCanvasModel = ${topPaneCanvasModel.toString()};
@@ -266,6 +271,69 @@ function fitCanvasLine(value, width) {
   if (safeValue.length <= safeWidth) return safeValue.padEnd(safeWidth, " ");
   if (safeWidth <= 3) return safeValue.slice(0, safeWidth);
   return `${safeValue.slice(0, safeWidth - 3)}...`;
+}
+
+function effectivePaneSplit(snapshot = {}) {
+  const layoutLeftWeight = Number(snapshot?.viewport?.layout?.leftWeight);
+  if (Number.isFinite(layoutLeftWeight) && layoutLeftWeight > 0) {
+    return Math.max(0.15, Math.min(0.85, layoutLeftWeight / 100));
+  }
+  return Number(snapshot?.ui?.displaySettings?.paneSplit || 0.42) || 0.42;
+}
+
+function authoredViewportDefaults(snapshot = {}) {
+  const authoredLeftWeight = Number(snapshot?.viewport?.leftWeight);
+  return {
+    top: Number(snapshot?.viewport?.top ?? snapshot?.viewport?.layout?.top ?? 3) || 3,
+    bottom: Number(snapshot?.viewport?.bottom ?? snapshot?.viewport?.layout?.bottom ?? 4) || 4,
+    paneSplit: Number.isFinite(authoredLeftWeight) && authoredLeftWeight > 0
+      ? Math.max(0.15, Math.min(0.85, authoredLeftWeight / 100))
+      : 0.42
+  };
+}
+
+function readDisplaySettingsDraft(byId) {
+  return {
+    fontSize: Number(byId("operator-setting-font-size")?.value || 14),
+    rowDensity: byId("operator-setting-row-density")?.value || "comfortable",
+    viewportTop: Number(byId("operator-setting-viewport-top")?.value || 3),
+    viewportBottom: Number(byId("operator-setting-viewport-bottom")?.value || 4),
+    paneSplit: Number(byId("operator-setting-pane-split")?.value || 42) / 100,
+    pageSize: Number(byId("operator-setting-page-size")?.value || 25),
+    colorMode: byId("operator-setting-color-mode")?.value || "auto"
+  };
+}
+
+function applyDisplaySettingsControls(snapshot = {}, byId) {
+  const settings = snapshot?.ui?.displaySettings || {};
+  const fontSize = byId("operator-setting-font-size");
+  if (fontSize) fontSize.value = settings.fontSize ?? 14;
+  const rowDensity = byId("operator-setting-row-density");
+  if (rowDensity) rowDensity.value = settings.rowDensity ?? "comfortable";
+  const viewportTop = byId("operator-setting-viewport-top");
+  if (viewportTop) viewportTop.value = settings.viewportTop ?? snapshot?.viewport?.layout?.top ?? 3;
+  const viewportBottom = byId("operator-setting-viewport-bottom");
+  if (viewportBottom) viewportBottom.value = settings.viewportBottom ?? snapshot?.viewport?.layout?.bottom ?? 4;
+  const paneSplit = byId("operator-setting-pane-split");
+  if (paneSplit) paneSplit.value = Math.round(effectivePaneSplit(snapshot) * 100);
+  const pageSize = byId("operator-setting-page-size");
+  if (pageSize) pageSize.value = settings.pageSize ?? 25;
+  const colorMode = byId("operator-setting-color-mode");
+  if (colorMode) colorMode.value = settings.colorMode ?? "auto";
+}
+
+function settingsResetPatchForScope(scope = "", snapshot = {}) {
+  if (scope === "viewport") {
+    return {
+      patch: {
+        viewportTop: null,
+        viewportBottom: null,
+        paneSplit: 0.42
+      },
+      defaults: authoredViewportDefaults(snapshot)
+    };
+  }
+  return null;
 }
 
 function normalizeCanvasSelection(selection = null) {
@@ -703,7 +771,7 @@ function drawOperatorWorkbenchCanvas({
   const topHeight = 5;
   const bottomHeight = 6;
   const mainHeight = Math.max(10, rows - topHeight - bottomHeight);
-  const leftWidth = Math.max(24, Math.floor(cols * Number(snapshot?.ui?.displaySettings?.paneSplit || 0.42)));
+  const leftWidth = Math.max(24, Math.floor(cols * effectivePaneSplit(snapshot)));
   const rightWidth = Math.max(24, cols - leftWidth);
   const leftContentWidth = Math.max(1, leftWidth - 2);
   const rightContentWidth = Math.max(1, rightWidth - 2);
@@ -1191,7 +1259,7 @@ export function renderOperatorWorkbenchState({
     body.dataset.colorMode = snapshot.ui?.displaySettings?.colorMode || "auto";
     body.dataset.rowDensity = snapshot.ui?.displaySettings?.rowDensity || "comfortable";
     body.style.setProperty("--operator-font-size", `${snapshot.ui?.displaySettings?.fontSize || 14}px`);
-    body.style.setProperty("--operator-pane-split", `${Math.round((snapshot.ui?.displaySettings?.paneSplit || 0.42) * 100)}%`);
+    body.style.setProperty("--operator-pane-split", `${Math.round(effectivePaneSplit(snapshot) * 100)}%`);
   }
 
   const title = byId("operator-title");
@@ -1330,16 +1398,7 @@ export function renderOperatorWorkbenchState({
   const helpSummary = byId("operator-help-summary");
   if (helpSummary) helpSummary.textContent = helpCopy.summary;
 
-  const fontSizeInput = byId("operator-setting-font-size");
-  if (fontSizeInput) fontSizeInput.value = String(snapshot.ui?.displaySettings?.fontSize || 14);
-  const rowDensitySelect = byId("operator-setting-row-density");
-  if (rowDensitySelect) rowDensitySelect.value = snapshot.ui?.displaySettings?.rowDensity || "comfortable";
-  const paneSplitInput = byId("operator-setting-pane-split");
-  if (paneSplitInput) paneSplitInput.value = String(Math.round((snapshot.ui?.displaySettings?.paneSplit || 0.42) * 100));
-  const pageSizeInput = byId("operator-setting-page-size");
-  if (pageSizeInput) pageSizeInput.value = String(snapshot.ui?.displaySettings?.pageSize || 25);
-  const colorModeSelect = byId("operator-setting-color-mode");
-  if (colorModeSelect) colorModeSelect.value = snapshot.ui?.displaySettings?.colorMode || "auto";
+  applyDisplaySettingsControls(snapshot, byId);
 
   drawOperatorWorkbenchCanvas({
     snapshot,
@@ -1798,20 +1857,38 @@ export function startOperatorWorkbenchRuntime({
       return;
     }
     if (target?.id === "operator-settings-save") {
+      const {
+        fontSize,
+        rowDensity,
+        viewportTop,
+        viewportBottom,
+        paneSplit,
+        pageSize,
+        colorMode
+      } = readDisplaySettingsDraft(byId);
       await dispatch({ type: "set-focused-pane", pane: "bottom" });
-      const fontSize = Number(byId("operator-setting-font-size")?.value || 14);
-      const rowDensity = byId("operator-setting-row-density")?.value || "comfortable";
-      const paneSplit = Number(byId("operator-setting-pane-split")?.value || 42) / 100;
-      const pageSize = Number(byId("operator-setting-page-size")?.value || 25);
-      const colorMode = byId("operator-setting-color-mode")?.value || "auto";
       const result = await api.updateDisplaySettings({
         fontSize,
         rowDensity,
+        viewportTop,
+        viewportBottom,
         paneSplit,
         pageSize,
         colorMode
       });
       await refresh(result.snapshot);
+      return;
+    }
+    const resetScope = target?.dataset?.settingsResetScope
+      ?? target?.closest?.("[data-settings-reset-scope]")?.dataset?.settingsResetScope
+      ?? null;
+    if (resetScope) {
+      const resetPlan = settingsResetPatchForScope(resetScope, snapshot);
+      if (!resetPlan) return;
+      await dispatch({ type: "set-focused-pane", pane: "bottom" });
+      const result = await api.updateDisplaySettings(resetPlan.patch);
+      await refresh(result.snapshot);
+      applyDisplaySettingsControls(result.snapshot, byId);
     }
   });
 
@@ -2010,17 +2087,7 @@ export function startOperatorWorkbenchRuntime({
   });
 
   const started = refresh().then(current => {
-    const settings = current?.ui?.displaySettings || {};
-    const fontSize = byId("operator-setting-font-size");
-    if (fontSize) fontSize.value = settings.fontSize ?? 14;
-    const rowDensity = byId("operator-setting-row-density");
-    if (rowDensity) rowDensity.value = settings.rowDensity ?? "comfortable";
-    const paneSplit = byId("operator-setting-pane-split");
-    if (paneSplit) paneSplit.value = Math.round((settings.paneSplit ?? 0.42) * 100);
-    const pageSize = byId("operator-setting-page-size");
-    if (pageSize) pageSize.value = settings.pageSize ?? 25;
-    const colorMode = byId("operator-setting-color-mode");
-    if (colorMode) colorMode.value = settings.colorMode ?? "auto";
+    applyDisplaySettingsControls(current, byId);
     return current;
   }).catch(error => {
     const detail = error instanceof Error ? error.message : String(error);

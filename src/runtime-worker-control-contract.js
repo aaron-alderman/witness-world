@@ -1,3 +1,5 @@
+import { createRuntimeWorkerTransportDescriptor } from "./runtime-worker-transport-contract.js";
+
 export const RUNTIME_WORKER_CONTROL_PROTOCOL_VERSION = "witness-worker-control/v1";
 export const RUNTIME_WORKER_CONTROL_KIND = "descriptor";
 
@@ -36,6 +38,9 @@ export function createRuntimeWorkerControlDocument({
     activationUrl: absoluteUrl(safeOrigin, RUNTIME_SUPERVISION_ACTIVATE_PATH),
     quiesceUrl: absoluteUrl(safeOrigin, RUNTIME_SUPERVISION_QUIESCE_PATH),
     reloadUrl,
+    transport: createRuntimeWorkerTransportDescriptor({
+      mutationsEnabled
+    }),
     actions: {
       health: {
         method: "GET",

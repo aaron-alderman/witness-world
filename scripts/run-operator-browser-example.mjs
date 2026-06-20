@@ -1,23 +1,11 @@
-import http from "node:http";
-import fs from "node:fs/promises";
-import path from "node:path";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { startOperatorBrowserExampleServer } from "../src/operator-browser-example-server.js";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "examples", "operator", "browser");
 const host = "127.0.0.1";
-const port = 4020;
 const shouldOpen = process.argv.includes("--open");
-
-const mimeByExtension = new Map([
-  [".html", "text/html; charset=utf-8"],
-  [".js", "text/javascript; charset=utf-8"],
-  [".rvm", "text/plain; charset=utf-8"],
-  [".css", "text/css; charset=utf-8"],
-  [".json", "application/json; charset=utf-8"],
-  [".ts", "text/plain; charset=utf-8"],
-  [".wasm", "application/wasm"]
-]);
+const fixtureOnly = process.argv.includes("--fixture");
+const explicitPort = process.argv.includes("--port");
+const requestedPort = resolveRequestedPort(process.argv, 4020);
 
 function openUrl(url) {
   if (process.platform === "win32") {
@@ -43,27 +31,35 @@ function openUrl(url) {
   child.unref();
 }
 
-const server = http.createServer(async (req, res) => {
-  try {
-    const rawPath = req.url === "/" ? "/index.html" : decodeURIComponent(req.url || "/index.html");
-    const targetPath = path.resolve(root, `.${rawPath}`);
-    if (!targetPath.startsWith(root)) {
-      res.writeHead(403);
-      res.end("forbidden");
-      return;
-    }
-    const body = await fs.readFile(targetPath);
-    res.writeHead(200, { "content-type": mimeByExtension.get(path.extname(targetPath)) || "application/octet-stream" });
-    res.end(body);
-  } catch (error) {
-    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-    res.end(error instanceof Error ? error.message : "not found");
+function resolveRequestedPort(args, fallback) {
+  const portIndex = args.indexOf("--port");
+  if (portIndex < 0) return fallback;
+  const numeric = Number(args[portIndex + 1]);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : fallback;
+}
+
+const server = await startOperatorBrowserExampleServer({
+  host,
+  port: requestedPort,
+  explicitPort,
+  fixtureOnly,
+  onPortFallback(currentPort, nextPort) {
+    console.warn(`Port ${currentPort} is already in use; trying ${nextPort}.`);
   }
 });
 
-server.listen(port, host, () => {
-  const url = `http://${host}:${port}`;
-  console.log(`Operator browser example: ${url}`);
-  console.log("Press Ctrl+C to stop the server.");
-  if (shouldOpen) openUrl(url);
+async function shutdown() {
+  await server.close();
+}
+
+process.once("SIGINT", () => {
+  void shutdown().finally(() => process.exit(0));
 });
+process.once("SIGTERM", () => {
+  void shutdown().finally(() => process.exit(0));
+});
+
+console.log(`Operator browser example: ${server.url}`);
+if (fixtureOnly) console.log("Mode: fixture-readonly (offline/testing-only).");
+console.log("Press Ctrl+C to stop the server.");
+if (shouldOpen) openUrl(server.url);

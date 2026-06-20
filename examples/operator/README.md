@@ -36,6 +36,13 @@ npm run utility:operator-browser
 ```
 
 The `operator:example` launcher opens the browser automatically and keeps the local server running until you stop it.
+Offline fixture boot is intentionally a lower-level developer/testing path, not a primary product launcher:
+
+```bash
+node scripts/run-operator-browser-example.mjs --fixture
+```
+
+That path is opt-in and read-only; it exists for offline/testing workflows and should not be treated as the normal product boot path.
 
 ## What It Proves
 

@@ -5,6 +5,8 @@ export const DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS = Object.freeze({
   fontSize: 14,
   rowDensity: "comfortable",
   paneSplit: 0.42,
+  viewportTop: null,
+  viewportBottom: null,
   defaultColumns: ["title", "kind", "scope", "id"],
   pageSize: 25,
   colorMode: "auto"
@@ -21,12 +23,20 @@ export function normalizeOperatorWorkbenchDisplaySettings(value = {}) {
   const defaultColumns = Array.isArray(source.defaultColumns) && source.defaultColumns.length
     ? source.defaultColumns.map(String)
     : DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS.defaultColumns;
+  const viewportTop = source.viewportTop === null || source.viewportTop === undefined
+    ? null
+    : Math.round(clamp(source.viewportTop, 3, 999, DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS.viewportTop));
+  const viewportBottom = source.viewportBottom === null || source.viewportBottom === undefined
+    ? null
+    : Math.round(clamp(source.viewportBottom, 3, 999, DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS.viewportBottom));
   return {
     fontSize: Math.round(clamp(source.fontSize, 11, 22, DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS.fontSize)),
     rowDensity: ["compact", "comfortable", "relaxed"].includes(source.rowDensity)
       ? source.rowDensity
       : DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS.rowDensity,
     paneSplit: clamp(source.paneSplit, 0.25, 0.7, DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS.paneSplit),
+    viewportTop,
+    viewportBottom,
     defaultColumns,
     pageSize: Math.round(clamp(source.pageSize, 10, 100, DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS.pageSize)),
     colorMode: ["auto", "on", "off"].includes(source.colorMode)

@@ -26,6 +26,11 @@ import {
   revokeStewardship,
   defineRoute,
   serveRoute,
+  defineComputeModule,
+  definePackageMaterializedFile,
+  markPackageMaterializedFileDeleted,
+  defineComputeModuleSmokeTest,
+  markComputeModuleSmokeTestDeleted,
   definePackage,
   definePackageRevision,
   publishPackageRevision,
@@ -35,7 +40,7 @@ import {
   definePackageTransformer,
   moduleProjectors
 } from "../../src/modules.js";
-import { createCanonicalPackagePatch } from "../../src/package-authorship.js";
+import { createCanonicalPackagePatch, normalizeCanonicalPath } from "../../src/package-authorship.js";
 import { applyLegacyFrontendUplift } from "../../src/frontend-legacy-uplift.js";
 import { defineFrontendProgram, defineFrontendStep, defineWidget, updateWidget, attachWidget, widgetDefinitions, widgetVersions } from "../../src/widgets.js";
 import { normalizeInteractionTiming } from "../../src/runtime-surface-runtime-shared.js";
@@ -1773,6 +1778,14 @@ function packageDependencyIdFromBody(body) {
   return trimOptionalString(body?.id) ?? `packageDependency:${String(body?.sourceRevision)}:${String(body?.targetKind)}:${String(body?.targetId)}`;
 }
 
+function optionalPositiveIntegerField(body, field) {
+  const value = body?.[field];
+  if (value === undefined || value === null || value === "") return null;
+  const normalized = Number(value);
+  if (!Number.isInteger(normalized) || normalized <= 0) throw new Error(`${field} must be a positive integer`);
+  return normalized;
+}
+
 function packageTransformerIdFromBody(body) {
   return trimOptionalString(body?.id)
     ?? `packageTransformer:${String(body?.package)}:${String(body?.targetRevision ?? body?.targetNamespace ?? body?.sourceRevision ?? body?.sourceNamespace ?? "draft")}`;
@@ -1829,6 +1842,499 @@ export function requestPackageDefine(world, {
     package: witness.body ?? { id: input.id },
     witness
   };
+}
+
+export function requestComputeModuleDefine(world, {
+  actor,
+  backendHost,
+  body,
+  owner = actor || backendHost
+}) {
+  let input;
+  try {
+    input = authoringObject(body, "compute module doc");
+    input.id = requiredStringField(input, "id", "compute module doc");
+    input.source = requiredStringField(input, "source", "compute module doc");
+    input.hostOperation = requiredStringField(input, "hostOperation", "compute module doc");
+    input.language = trimOptionalString(input.language) ?? "assemblyscript";
+    input.abi = trimOptionalString(input.abi) ?? "world.hostOperation.v1";
+    input.export = trimOptionalString(input.export ?? input.exportName) ?? "invoke";
+    input.allowedBindings = optionalArrayField(input, "allowedBindings");
+    input.maxMemoryPages = optionalPositiveIntegerField(input, "maxMemoryPages");
+    input.timeoutMs = optionalPositiveIntegerField(input, "timeoutMs");
+    if (input.context !== undefined && input.context !== null) {
+      input.context = requiredStringField(input, "context", "compute module doc");
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  if (input.context && !exists(world, input.context)) {
+    return {
+      ok: false,
+      status: 404,
+      error: "compute module context not found",
+      witness: null
+    };
+  }
+  if (exists(world, input.id)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "compute module id already exists",
+      witness: null
+    };
+  }
+  if (input.language !== "assemblyscript") {
+    return {
+      ok: false,
+      status: 400,
+      error: "compute module language must be assemblyscript",
+      witness: null
+    };
+  }
+  if (input.abi !== "world.hostOperation.v1") {
+    return {
+      ok: false,
+      status: 400,
+      error: "compute module abi must be world.hostOperation.v1",
+      witness: null
+    };
+  }
+  if (/\s/.test(input.hostOperation)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "compute module hostOperation must not contain whitespace",
+      witness: null
+    };
+  }
+  const existingHostOperation = world.project(moduleProjectors.computeModules)
+    .find(row => row.hostOperation === input.hostOperation) ?? null;
+  if (existingHostOperation) {
+    return {
+      ok: false,
+      status: 409,
+      error: "compute module hostOperation already exists",
+      witness: null
+    };
+  }
+
+  const witness = defineComputeModule(world, {
+    actor,
+    id: input.id,
+    source: input.source,
+    hostOperation: input.hostOperation,
+    language: input.language,
+    abi: input.abi,
+    exportName: input.export,
+    maxMemoryPages: input.maxMemoryPages,
+    timeoutMs: input.timeoutMs,
+    allowedBindings: input.allowedBindings,
+    context: input.context ?? null,
+    owner,
+    values: {
+      ...body,
+      id: input.id,
+      source: input.source,
+      hostOperation: input.hostOperation,
+      language: input.language,
+      abi: input.abi,
+      export: input.export,
+      maxMemoryPages: input.maxMemoryPages,
+      timeoutMs: input.timeoutMs,
+      allowedBindings: input.allowedBindings,
+      ...(input.context ? { context: input.context } : {})
+    }
+  });
+  return {
+    ok: true,
+    status: 201,
+    computeModule: world.project(moduleProjectors.computeModules).find(row => row.id === input.id) ?? witness.body,
+    witness
+  };
+}
+
+function jsonObjectField(body, field, label) {
+  const value = body?.[field];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} requires object ${field}`);
+  }
+  return structuredClone(value);
+}
+
+function stableJson(value) {
+  return JSON.stringify(value ?? null);
+}
+
+function computeModuleSlug(moduleId) {
+  return String(moduleId || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "module";
+}
+
+function smokeTestSlug(testId) {
+  return String(testId || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "smoke";
+}
+
+function smokeFixturePath(moduleId, testId) {
+  return `app/modules/${computeModuleSlug(moduleId)}/smoke/${smokeTestSlug(testId)}.json`;
+}
+
+function smokeFixtureContent(smokeTest) {
+  return `${JSON.stringify({
+    schema: "world.computeModuleSmokeTest.v1",
+    id: smokeTest.id,
+    module: smokeTest.module,
+    hostOperation: smokeTest.hostOperation,
+    request: smokeTest.request,
+    expected: smokeTest.expected
+  }, null, 2)}\n`;
+}
+
+function requirePackageRevisionForBody(world, input) {
+  const packageId = requiredResolvedAuthoringRef(world, input, {
+    idField: "package",
+    refField: "packageRef",
+    label: "package"
+  });
+  const revisionId = requiredResolvedAuthoringRef(world, input, {
+    idField: "revision",
+    refField: "revisionRef",
+    label: "package revision"
+  });
+  const packageRow = world.project(moduleProjectors.packageIndex).byId?.[packageId] ?? null;
+  if (!packageRow) throw new Error("package not found");
+  const revisionRow = world.project(moduleProjectors.packageRevisionIndex).byId?.[revisionId] ?? null;
+  if (!revisionRow) throw new Error("package revision not found");
+  if (revisionRow.package !== packageId) throw new Error("package revision does not belong to package");
+  return { packageId, revisionId, packageRow, revisionRow };
+}
+
+function requireComputeModuleForBody(world, input) {
+  const moduleId = requiredStringField(input, "module", "compute module source doc");
+  const moduleRow = (world.project(moduleProjectors.computeModules) ?? [])
+    .find(row => row.id === moduleId) ?? null;
+  if (!moduleRow) throw new Error("compute module not found");
+  return moduleRow;
+}
+
+export function requestPackageMaterializedFileUpsert(world, {
+  actor,
+  body
+}) {
+  let input;
+  let packageId;
+  let revisionId;
+  try {
+    input = authoringObject(body, "package materialized file doc");
+    ({ packageId, revisionId } = requirePackageRevisionForBody(world, input));
+    input.path = normalizeCanonicalPath(requiredStringField(input, "path", "package materialized file doc")).replace(/^materialized\//, "");
+    input.content = String(input.content ?? "");
+    input.sourceLanguage = trimOptionalString(input.sourceLanguage) ?? "text";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, status: /not found/i.test(message) ? 404 : 400, error: message, witness: null };
+  }
+
+  const witness = definePackageMaterializedFile(world, {
+    actor,
+    id: trimOptionalString(input.id),
+    package: packageId,
+    revision: revisionId,
+    path: input.path,
+    content: input.content,
+    sourceLanguage: input.sourceLanguage
+  });
+  return {
+    ok: true,
+    status: 201,
+    packageMaterializedFile: witness.body,
+    witness
+  };
+}
+
+export function requestPackageMaterializedFileMarkDeleted(world, {
+  actor,
+  body
+}) {
+  let input;
+  let packageId;
+  let revisionId;
+  let existing;
+  try {
+    input = authoringObject(body, "package materialized file delete doc");
+    ({ packageId, revisionId } = requirePackageRevisionForBody(world, input));
+    input.path = normalizeCanonicalPath(requiredStringField(input, "path", "package materialized file delete doc")).replace(/^materialized\//, "");
+    const index = world.project(moduleProjectors.packageMaterializedFileIndex);
+    existing = index.historyByRevisionPath?.[`${revisionId}\u0000${input.path}`] ?? null;
+    if (!existing) throw new Error("package materialized file not found");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, status: /not found/i.test(message) ? 404 : 400, error: message, witness: null };
+  }
+
+  const witness = markPackageMaterializedFileDeleted(world, {
+    actor,
+    id: existing.id,
+    package: packageId,
+    revision: revisionId,
+    path: input.path,
+    content: existing.content ?? "",
+    sourceLanguage: existing.sourceLanguage ?? "text"
+  });
+  return {
+    ok: true,
+    status: 200,
+    packageMaterializedFile: witness.body,
+    witness
+  };
+}
+
+export function requestComputeModuleSourceUpsert(world, {
+  actor,
+  body
+}) {
+  let input;
+  let moduleRow;
+  try {
+    input = authoringObject(body, "compute module source doc");
+    moduleRow = requireComputeModuleForBody(world, input);
+    input.path = normalizeCanonicalPath(requiredStringField(input, "path", "compute module source doc"));
+    if (input.path !== normalizeCanonicalPath(moduleRow.source)) {
+      throw new Error("compute module source path must match declaration source");
+    }
+    input.content = String(input.content ?? "");
+    input.sourceLanguage = trimOptionalString(input.sourceLanguage) ?? "assemblyscript";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, status: /not found/i.test(message) ? 404 : 400, error: message, witness: null };
+  }
+  return requestPackageMaterializedFileUpsert(world, {
+    actor,
+    body: {
+      ...input,
+      path: moduleRow.source,
+      sourceLanguage: input.sourceLanguage
+    }
+  });
+}
+
+export function requestComputeModuleSourceMarkDeleted(world, {
+  actor,
+  body
+}) {
+  let input;
+  let moduleRow;
+  try {
+    input = authoringObject(body, "compute module source delete doc");
+    moduleRow = requireComputeModuleForBody(world, input);
+    input.path = normalizeCanonicalPath(requiredStringField(input, "path", "compute module source delete doc"));
+    if (input.path !== normalizeCanonicalPath(moduleRow.source)) {
+      throw new Error("compute module source path must match declaration source");
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, status: /not found/i.test(message) ? 404 : 400, error: message, witness: null };
+  }
+  return requestPackageMaterializedFileMarkDeleted(world, {
+    actor,
+    body: {
+      ...input,
+      path: moduleRow.source
+    }
+  });
+}
+
+export function requestComputeModuleSmokeTestUpsert(world, {
+  actor,
+  body
+}) {
+  let input;
+  let packageId;
+  let revisionId;
+  let moduleRow;
+  try {
+    input = authoringObject(body, "compute module smoke test doc");
+    ({ packageId, revisionId } = requirePackageRevisionForBody(world, input));
+    moduleRow = requireComputeModuleForBody(world, input);
+    input.id = requiredStringField(input, "id", "compute module smoke test doc");
+    input.hostOperation = trimOptionalString(input.hostOperation) ?? moduleRow.hostOperation;
+    if (input.hostOperation !== moduleRow.hostOperation) {
+      throw new Error("compute module smoke test hostOperation must match module hostOperation");
+    }
+    input.request = jsonObjectField(input, "request", "compute module smoke test doc");
+    input.expected = jsonObjectField(input, "expected", "compute module smoke test doc");
+    input.timeoutMs = optionalPositiveIntegerField(input, "timeoutMs");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, status: /not found/i.test(message) ? 404 : 400, error: message, witness: null };
+  }
+
+  const smokeWitness = defineComputeModuleSmokeTest(world, {
+    actor,
+    id: input.id,
+    module: moduleRow.id,
+    package: packageId,
+    revision: revisionId,
+    hostOperation: input.hostOperation,
+    request: input.request,
+    expected: input.expected,
+    timeoutMs: input.timeoutMs
+  });
+  const fixturePath = smokeFixturePath(moduleRow.id, input.id);
+  const fileWitness = definePackageMaterializedFile(world, {
+    actor,
+    package: packageId,
+    revision: revisionId,
+    path: fixturePath,
+    content: smokeFixtureContent(smokeWitness.body),
+    sourceLanguage: "json"
+  });
+  return {
+    ok: true,
+    status: 201,
+    computeModuleSmokeTest: smokeWitness.body,
+    packageMaterializedFile: fileWitness.body,
+    witnesses: [smokeWitness, fileWitness],
+    witness: smokeWitness
+  };
+}
+
+export function requestComputeModuleSmokeTestMarkDeleted(world, {
+  actor,
+  body
+}) {
+  let existing;
+  try {
+    const input = authoringObject(body, "compute module smoke test delete doc");
+    const id = requiredStringField(input, "id", "compute module smoke test delete doc");
+    existing = world.project(moduleProjectors.computeModuleSmokeTestIndex).historyById?.[id] ?? null;
+    if (!existing) throw new Error("compute module smoke test not found");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, status: /not found/i.test(message) ? 404 : 400, error: message, witness: null };
+  }
+
+  const smokeWitness = markComputeModuleSmokeTestDeleted(world, {
+    actor,
+    ...existing
+  });
+  const fixturePath = smokeFixturePath(existing.module, existing.id);
+  const materializedIndex = world.project(moduleProjectors.packageMaterializedFileIndex);
+  const existingFixture = materializedIndex.historyByRevisionPath?.[`${existing.revision}\u0000${fixturePath}`] ?? null;
+  const fileWitness = markPackageMaterializedFileDeleted(world, {
+    actor,
+    id: existingFixture?.id ?? null,
+    package: existing.package,
+    revision: existing.revision,
+    path: fixturePath,
+    content: existingFixture?.content ?? smokeFixtureContent(existing),
+    sourceLanguage: "json"
+  });
+  return {
+    ok: true,
+    status: 200,
+    computeModuleSmokeTest: smokeWitness.body,
+    packageMaterializedFile: fileWitness.body,
+    witnesses: [smokeWitness, fileWitness],
+    witness: smokeWitness
+  };
+}
+
+export async function requestComputeModuleSmokeTestRun(world, {
+  body,
+  appContext
+}) {
+  let smokeTest;
+  let moduleRow;
+  try {
+    const input = authoringObject(body, "compute module smoke test run doc");
+    if (trimOptionalString(input.id)) {
+      smokeTest = world.project(moduleProjectors.computeModuleSmokeTestIndex).byId?.[input.id] ?? null;
+      if (!smokeTest) throw new Error("compute module smoke test not found or marked deleted");
+    } else {
+      moduleRow = requireComputeModuleForBody(world, input);
+      smokeTest = {
+        id: trimOptionalString(input.id) ?? "inline",
+        module: moduleRow.id,
+        package: requiredStringField(input, "package", "compute module smoke test run doc"),
+        revision: requiredStringField(input, "revision", "compute module smoke test run doc"),
+        hostOperation: trimOptionalString(input.hostOperation) ?? moduleRow.hostOperation,
+        request: jsonObjectField(input, "request", "compute module smoke test run doc"),
+        expected: jsonObjectField(input, "expected", "compute module smoke test run doc"),
+        timeoutMs: optionalPositiveIntegerField(input, "timeoutMs")
+      };
+    }
+    moduleRow = moduleRow ?? (world.project(moduleProjectors.computeModules) ?? [])
+      .find(row => row.id === smokeTest.module) ?? null;
+    if (!moduleRow) throw new Error("compute module not found");
+    const fileIndex = world.project(moduleProjectors.packageMaterializedFileIndex);
+    const sourceKey = `${smokeTest.revision}\u0000${normalizeCanonicalPath(moduleRow.source)}`;
+    const activeSource = fileIndex.byRevisionPath?.[sourceKey] ?? null;
+    const historicalSource = fileIndex.historyByRevisionPath?.[sourceKey] ?? null;
+    if (!activeSource) {
+      if (historicalSource?.deletedAt) throw new Error("compute module source marked deleted");
+      throw new Error("compute module source not authored through package materialized files");
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, status: /not found|marked deleted|not authored/i.test(message) ? 404 : 400, error: message };
+  }
+
+  if (typeof appContext?.witnessCoreBridge?.shadowInvokeComputeModule !== "function") {
+    return {
+      ok: false,
+      status: 503,
+      code: "WITNESS_CORE_REQUIRED",
+      error: "witness-core compute module shadow invocation is required"
+    };
+  }
+  const inputJson = stableJson({
+    hostOperation: smokeTest.hostOperation,
+    request: smokeTest.request
+  });
+  const expectedJson = stableJson(smokeTest.expected);
+  try {
+    const shadow = await appContext.witnessCoreBridge.shadowInvokeComputeModule({
+      hostOperation: smokeTest.hostOperation,
+      inputJson,
+      jsResultJson: expectedJson
+    });
+    const passed = shadow?.ok !== false && shadow?.matched !== false && shadow?.match !== false;
+    return {
+      ok: true,
+      status: 200,
+      result: {
+        id: smokeTest.id,
+        module: smokeTest.module,
+        hostOperation: smokeTest.hostOperation,
+        passed,
+        inputJson,
+        expected: smokeTest.expected,
+        expectedJson,
+        shadow,
+        mismatch: passed ? null : (shadow?.mismatch ?? shadow?.diff ?? shadow ?? null)
+      }
+    };
+  } catch (error) {
+    const status = Number(error?.status || error?.httpStatus || 503);
+    return {
+      ok: false,
+      status,
+      code: typeof error?.code === "string" ? error.code : "WITNESS_CORE_UNAVAILABLE",
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 export function requestPackageRevisionDefine(world, {

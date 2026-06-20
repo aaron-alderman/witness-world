@@ -1,6 +1,6 @@
 import { thing, relation, retract, createThing, projectors } from "./kernel.js";
 import { normalizeFields } from "./type-model.js";
-import { createCanonicalPackagePatch } from "./package-authorship.js";
+import { createCanonicalPackagePatch, normalizeCanonicalPath } from "./package-authorship.js";
 import { normalizeCapabilityCompatibility } from "./capability-compatibility.js";
 
 const CAPABILITY_INSTALL_TARGET_KINDS = new Set(["context", "serverRunner", "routePage", "host"]);
@@ -358,6 +358,58 @@ function packagePatchDefinitionsById(witnesses) {
   for (const witness of witnesses) {
     if (witness.process !== "definePackagePatch" || !witness.body?.id) continue;
     rows.set(witness.body.id, structuredClone(witness.body));
+  }
+  return rows;
+}
+
+function packageMaterializedFileDefinitionsById(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (
+      witness.process !== "definePackageMaterializedFile"
+      && witness.process !== "deletePackageMaterializedFile"
+    ) continue;
+    if (!witness.body?.id) continue;
+    rows.set(witness.body.id, normalizePackageMaterializedFileDefinition(witness.body));
+  }
+  return rows;
+}
+
+function packageMaterializedFileHistoryRows(witnesses) {
+  const rows = [];
+  for (const witness of witnesses) {
+    if (
+      witness.process !== "definePackageMaterializedFile"
+      && witness.process !== "deletePackageMaterializedFile"
+    ) continue;
+    if (!witness.body?.id) continue;
+    rows.push(normalizePackageMaterializedFileDefinition(witness.body));
+  }
+  return rows;
+}
+
+function computeModuleSmokeTestDefinitionsById(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (
+      witness.process !== "defineComputeModuleSmokeTest"
+      && witness.process !== "deleteComputeModuleSmokeTest"
+    ) continue;
+    if (!witness.body?.id) continue;
+    rows.set(witness.body.id, normalizeComputeModuleSmokeTestDefinition(witness.body));
+  }
+  return rows;
+}
+
+function computeModuleSmokeTestHistoryRows(witnesses) {
+  const rows = [];
+  for (const witness of witnesses) {
+    if (
+      witness.process !== "defineComputeModuleSmokeTest"
+      && witness.process !== "deleteComputeModuleSmokeTest"
+    ) continue;
+    if (!witness.body?.id) continue;
+    rows.push(normalizeComputeModuleSmokeTestDefinition(witness.body));
   }
   return rows;
 }
@@ -972,6 +1024,98 @@ export function definePackagePatch(world, {
       ...(normalized.transformer ? [relation(normalized.id, "packagePatchTransformer", normalized.transformer)] : []),
       ...(normalized.nextHash ? [relation(normalized.id, "packagePatchNextHash", normalized.nextHash)] : []),
       ...(normalized.previousHash ? [relation(normalized.id, "packagePatchPreviousHash", normalized.previousHash)] : [])
+    ],
+    body: normalized
+  });
+}
+
+function packageMaterializedFileId({ revision, path }) {
+  return `packageMaterializedFile:${String(revision)}:${normalizeCanonicalPath(path)}`;
+}
+
+function normalizePackageMaterializedFileDefinition({
+  id = null,
+  package: packageId,
+  revision,
+  path,
+  content,
+  sourceLanguage = "text",
+  deletedAt = null
+}) {
+  const normalizedPath = normalizeCanonicalPath(path).replace(/^materialized\//, "");
+  return {
+    id: id ? String(id) : packageMaterializedFileId({ revision, path: normalizedPath }),
+    package: String(packageId),
+    revision: String(revision),
+    path: normalizedPath,
+    content: String(content ?? ""),
+    sourceLanguage: typeof sourceLanguage === "string" && sourceLanguage.trim() ? sourceLanguage.trim() : "text",
+    deletedAt: typeof deletedAt === "string" && deletedAt.trim() ? deletedAt.trim() : null
+  };
+}
+
+export function definePackageMaterializedFile(world, {
+  actor,
+  id = null,
+  package: packageId,
+  revision,
+  path,
+  content,
+  sourceLanguage = "text",
+  owner = actor
+}) {
+  const normalized = normalizePackageMaterializedFileDefinition({
+    id,
+    package: packageId,
+    revision,
+    path,
+    content,
+    sourceLanguage
+  });
+  createThing(world, { actor, id: normalized.id, owner });
+  return world.emit({
+    process: "definePackageMaterializedFile",
+    actor,
+    claims: [
+      relation(normalized.id, "hasModuleKind", "packageMaterializedFile"),
+      relation(normalized.id, "packageMaterializedFileOf", normalized.package),
+      relation(normalized.id, "packageMaterializedFileRevision", normalized.revision),
+      relation(normalized.id, "materializesPackagePath", normalized.path),
+      relation(normalized.id, "packageMaterializedFileSourceLanguage", normalized.sourceLanguage)
+    ],
+    body: normalized
+  });
+}
+
+export function markPackageMaterializedFileDeleted(world, {
+  actor,
+  id = null,
+  package: packageId,
+  revision,
+  path,
+  content = "",
+  sourceLanguage = "text",
+  deletedAt = new Date().toISOString(),
+  owner = actor
+}) {
+  const normalized = normalizePackageMaterializedFileDefinition({
+    id,
+    package: packageId,
+    revision,
+    path,
+    content,
+    sourceLanguage,
+    deletedAt: deletedAt ?? new Date().toISOString()
+  });
+  createThing(world, { actor, id: normalized.id, owner });
+  return world.emit({
+    process: "deletePackageMaterializedFile",
+    actor,
+    claims: [
+      relation(normalized.id, "hasModuleKind", "packageMaterializedFile"),
+      relation(normalized.id, "packageMaterializedFileOf", normalized.package),
+      relation(normalized.id, "packageMaterializedFileRevision", normalized.revision),
+      relation(normalized.id, "materializesPackagePath", normalized.path)
     ],
     body: normalized
   });
@@ -3014,6 +3158,109 @@ export function defineComputeModule(world, {
   });
 }
 
+function computeModuleSmokeTestIdFromBody({ id, module, hostOperation } = {}) {
+  if (typeof id === "string" && id.trim()) return id.trim();
+  return `computeModuleSmokeTest:${String(module)}:${String(hostOperation)}`;
+}
+
+function normalizeComputeModuleSmokeTestDefinition({
+  id = null,
+  module,
+  package: packageId,
+  revision,
+  hostOperation,
+  request,
+  expected,
+  timeoutMs = null,
+  deletedAt = null
+}) {
+  const normalized = {
+    id: computeModuleSmokeTestIdFromBody({ id, module, hostOperation }),
+    module: String(module),
+    package: String(packageId),
+    revision: String(revision),
+    hostOperation: String(hostOperation),
+    request: request && typeof request === "object" ? structuredClone(request) : request,
+    expected: expected && typeof expected === "object" ? structuredClone(expected) : expected,
+    timeoutMs: Number.isInteger(timeoutMs) && timeoutMs > 0 ? timeoutMs : null,
+    deletedAt: typeof deletedAt === "string" && deletedAt.trim() ? deletedAt.trim() : null
+  };
+  return normalized;
+}
+
+export function defineComputeModuleSmokeTest(world, {
+  actor,
+  id = null,
+  module,
+  package: packageId,
+  revision,
+  hostOperation,
+  request,
+  expected,
+  timeoutMs = null,
+  owner = actor
+}) {
+  const normalized = normalizeComputeModuleSmokeTestDefinition({
+    id,
+    module,
+    package: packageId,
+    revision,
+    hostOperation,
+    request,
+    expected,
+    timeoutMs
+  });
+  createThing(world, { actor, id: normalized.id, owner });
+  return world.emit({
+    process: "defineComputeModuleSmokeTest",
+    actor,
+    claims: [
+      relation(normalized.id, "hasModuleKind", "computeModuleSmokeTest"),
+      relation(normalized.id, "smokeTestOfComputeModule", normalized.module),
+      relation(normalized.id, "smokeTestHostOperation", normalized.hostOperation),
+      relation(normalized.id, "packageMaterializedFileRevision", normalized.revision)
+    ],
+    body: normalized
+  });
+}
+
+export function markComputeModuleSmokeTestDeleted(world, {
+  actor,
+  id,
+  module,
+  package: packageId,
+  revision,
+  hostOperation,
+  request,
+  expected,
+  timeoutMs = null,
+  deletedAt = new Date().toISOString(),
+  owner = actor
+}) {
+  const normalized = normalizeComputeModuleSmokeTestDefinition({
+    id,
+    module,
+    package: packageId,
+    revision,
+    hostOperation,
+    request,
+    expected,
+    timeoutMs,
+    deletedAt: deletedAt ?? new Date().toISOString()
+  });
+  createThing(world, { actor, id: normalized.id, owner });
+  return world.emit({
+    process: "deleteComputeModuleSmokeTest",
+    actor,
+    claims: [
+      relation(normalized.id, "hasModuleKind", "computeModuleSmokeTest"),
+      relation(normalized.id, "smokeTestOfComputeModule", normalized.module),
+      relation(normalized.id, "smokeTestHostOperation", normalized.hostOperation)
+    ],
+    body: normalized
+  });
+}
+
 export function serveRoute(world, { actor, serverRunner, route }) {
   const rels = world.project(witnessRelations);
   const canServe = rels.some(r => r.from === serverRunner && r.rel === "supportsProcess" && r.to === "serveRoute");
@@ -3509,6 +3756,73 @@ export const moduleProjectors = {
       }
     }
     return { rows, byId, byRevision, byPackage, byTransformer };
+  },
+
+  packageMaterializedFileHistory(witnesses) {
+    return packageMaterializedFileHistoryRows(witnesses)
+      .sort((a, b) =>
+        String(a.revision).localeCompare(String(b.revision))
+        || String(a.path).localeCompare(String(b.path))
+        || String(a.id).localeCompare(String(b.id))
+        || String(a.deletedAt ?? "").localeCompare(String(b.deletedAt ?? ""))
+      );
+  },
+
+  packageMaterializedFiles(witnesses) {
+    return [...packageMaterializedFileDefinitionsById(witnesses).values()]
+      .filter(row => !row.deletedAt);
+  },
+
+  packageMaterializedFileIndex(witnesses) {
+    const rows = moduleProjectors.packageMaterializedFiles(witnesses);
+    const history = moduleProjectors.packageMaterializedFileHistory(witnesses);
+    const latestHistoryRows = [...packageMaterializedFileDefinitionsById(witnesses).values()];
+    const byId = Object.create(null);
+    const byRevision = Object.create(null);
+    const byRevisionPath = Object.create(null);
+    const historyById = Object.create(null);
+    const historyByRevisionPath = Object.create(null);
+    for (const row of latestHistoryRows) {
+      historyById[row.id] = row;
+      historyByRevisionPath[`${row.revision}\u0000${row.path}`] = row;
+    }
+    for (const row of rows) {
+      byId[row.id] = row;
+      if (!byRevision[row.revision]) byRevision[row.revision] = [];
+      byRevision[row.revision].push(row);
+      byRevisionPath[`${row.revision}\u0000${row.path}`] = row;
+    }
+    return { rows, history, byId, byRevision, byRevisionPath, historyById, historyByRevisionPath };
+  },
+
+  computeModuleSmokeTestHistory(witnesses) {
+    return computeModuleSmokeTestHistoryRows(witnesses)
+      .sort((a, b) =>
+        String(a.module).localeCompare(String(b.module))
+        || String(a.id).localeCompare(String(b.id))
+        || String(a.deletedAt ?? "").localeCompare(String(b.deletedAt ?? ""))
+      );
+  },
+
+  computeModuleSmokeTests(witnesses) {
+    return [...computeModuleSmokeTestDefinitionsById(witnesses).values()]
+      .filter(row => !row.deletedAt);
+  },
+
+  computeModuleSmokeTestIndex(witnesses) {
+    const rows = moduleProjectors.computeModuleSmokeTests(witnesses);
+    const history = moduleProjectors.computeModuleSmokeTestHistory(witnesses);
+    const latestHistoryRows = [...computeModuleSmokeTestDefinitionsById(witnesses).values()];
+    const byId = Object.create(null);
+    const byModule = Object.create(null);
+    const historyById = Object.create(null);
+    for (const row of latestHistoryRows) historyById[row.id] = row;
+    for (const row of rows) {
+      byId[row.id] = row;
+      if (!byModule[row.module]) byModule[row.module] = [];
+      byModule[row.module].push(row);
+    }
+    return { rows, history, byId, byModule, historyById };
   },
 
   packageNamespaces(witnesses) {

@@ -106,6 +106,21 @@ async function blockedCanonicalAuthoringAction(callHandler, {
   });
 }
 
+function blockedFileMutationToolResult({ attemptedAuthoringPath, goal }) {
+  return errorToolResult("blocked by MCP compute-module package authoring policy", {
+    blockedHandoff: buildBlockedAuthoringHandoff({
+      limitationType: "policy",
+      goal,
+      attemptedAuthoringPath,
+      minimumHumanAction: "use MCP compute module package authoring",
+      proof: [
+        "direct app-source and file mutation pathways are disabled for this AssemblyScript module tranche",
+        "AssemblyScript source and smoke fixtures must be persisted as package materialized files"
+      ]
+    })
+  });
+}
+
 function rawResult(response) {
   if (response.status >= 400) {
     const message = typeof response.body?.error === "string"
@@ -144,7 +159,7 @@ const TOOL_DEFINITIONS = [
     title: "World Read",
     description: "Read bootstrap state, witnesses, source, world graph, process projections, contextual naming state, authored package coexistence, or authoring capability state.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "frontendLegacyUplift", "capabilityRevisionHistory", "authoringMatrix"] },
+      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "computeModules", "computeModuleSources", "computeModuleSmokeTests", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "frontendLegacyUplift", "capabilityRevisionHistory", "authoringMatrix"] },
       id: { type: "string" },
       context: { type: "string" },
       name: { type: "string" },
@@ -155,16 +170,30 @@ const TOOL_DEFINITIONS = [
       program: { type: "string" },
       event: { type: "string" },
       node: { type: "string" },
-      sourceFile: { type: "string" }
+      sourceFile: { type: "string" },
+      includeDeleted: { type: "boolean" }
     }, ["view"]),
     scope(args) {
+      const packageViews = new Set([
+        "packageCoexistence",
+        "packageConvergence",
+        "packageApplyPreview",
+        "capabilityLegacyMigration",
+        "frontendLegacyUplift",
+        "capabilityRevisionHistory"
+      ]);
+      const targets = args?.view === "processRun" && args?.runId
+        ? [args.runId]
+        : args?.view === "contextNaming"
+          ? [args?.id, args?.target].filter(Boolean)
+          : (args?.view === "computeModules" || args?.view === "computeModuleSources" || args?.view === "computeModuleSmokeTests") && args?.id
+            ? [args.id]
+            : packageViews.has(args?.view) && args?.id
+              ? [args.id]
+              : [];
       return scopeResult({
         contexts: args?.view === "contextNaming" && args?.context ? [args.context] : [],
-        targets: args?.view === "processRun" && args?.runId
-          ? [args.runId]
-          : (args?.view === "contextNaming"
-              ? [args?.id, args?.target].filter(Boolean)
-              : ((args?.view === "packageCoexistence" || args?.view === "packageConvergence" || args?.view === "packageApplyPreview" || args?.view === "capabilityLegacyMigration" || args?.view === "frontendLegacyUplift" || args?.view === "capabilityRevisionHistory") && args?.id ? [args.id] : []))
+        targets
       });
     },
     async run({ args, callHandler, appContext }) {
@@ -208,6 +237,75 @@ const TOOL_DEFINITIONS = [
             path: "/api/source",
             query: { file: args.sourceFile || "" }
           });
+        case "computeModules":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("computeModules read requires projected world access");
+          }
+          try {
+            const rows = appContext.project(moduleProjectors.computeModules) ?? [];
+            return jsonToolResult({
+              computeModules: args.id
+                ? rows.filter(row => row.id === args.id || row.hostOperation === args.id)
+                : rows
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "computeModuleSources":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("computeModuleSources read requires projected world access");
+          }
+          try {
+            const rows = appContext.project(args.includeDeleted
+              ? moduleProjectors.packageMaterializedFileHistory
+              : moduleProjectors.packageMaterializedFiles) ?? [];
+            const modules = appContext.project(moduleProjectors.computeModules) ?? [];
+            const sourcePathSet = new Set(modules.map(row => row.source).filter(Boolean));
+            const sourceRows = rows.filter(row => sourcePathSet.has(row.path));
+            return jsonToolResult({
+              computeModuleSources: args.id
+                ? sourceRows.filter(row =>
+                  row.id === args.id
+                  || row.path === args.id
+                  || row.revision === args.id
+                  || row.package === args.id
+                )
+                : sourceRows
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "computeModuleSmokeTests":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("computeModuleSmokeTests read requires projected world access");
+          }
+          try {
+            const rows = appContext.project(args.includeDeleted
+              ? moduleProjectors.computeModuleSmokeTestHistory
+              : moduleProjectors.computeModuleSmokeTests) ?? [];
+            return jsonToolResult({
+              computeModuleSmokeTests: args.id
+                ? rows.filter(row =>
+                  row.id === args.id
+                  || row.module === args.id
+                  || row.hostOperation === args.id
+                  || row.revision === args.id
+                  || row.package === args.id
+                )
+                : rows
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
         case "contextNaming":
           if (typeof appContext?.project !== "function") {
             return errorToolResult("contextNaming read requires projected world access");
@@ -395,6 +493,12 @@ const TOOL_DEFINITIONS = [
           "message.create",
           "boundary.create",
           "policy.create",
+          "computeModule.create",
+          "computeModule.source.upsert",
+          "computeModule.source.markDeleted",
+          "computeModuleSmokeTest.upsert",
+          "computeModuleSmokeTest.markDeleted",
+          "computeModuleSmokeTest.run",
           "package.create",
           "packageRevision.create",
           "packageRevision.publish",
@@ -436,8 +540,11 @@ const TOOL_DEFINITIONS = [
           doc.server,
           doc.serverRunner,
           doc.id,
+          doc.module,
+          doc.path,
           doc.subject,
           doc.stateField,
+          doc.hostOperation,
           doc.package,
           doc.revision,
           doc.sourcePackage,
@@ -498,6 +605,18 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "boundary.create", method: "POST", path: "/api/boundaries", body });
         case "policy.create":
           return runJsonHandler(callHandler, { handler: "policy.create", method: "POST", path: "/api/policies", body });
+        case "computeModule.create":
+          return runJsonHandler(callHandler, { handler: "computeModule.create", method: "POST", path: "/api/compute-modules", body });
+        case "computeModule.source.upsert":
+          return runJsonHandler(callHandler, { handler: "computeModule.source.upsert", method: "POST", path: "/api/compute-module-sources", body });
+        case "computeModule.source.markDeleted":
+          return runJsonHandler(callHandler, { handler: "computeModule.source.markDeleted", method: "DELETE", path: "/api/compute-module-sources", body });
+        case "computeModuleSmokeTest.upsert":
+          return runJsonHandler(callHandler, { handler: "computeModuleSmokeTest.upsert", method: "POST", path: "/api/compute-module-smoke-tests", body });
+        case "computeModuleSmokeTest.markDeleted":
+          return runJsonHandler(callHandler, { handler: "computeModuleSmokeTest.markDeleted", method: "DELETE", path: "/api/compute-module-smoke-tests", body });
+        case "computeModuleSmokeTest.run":
+          return runJsonHandler(callHandler, { handler: "computeModuleSmokeTest.run", method: "POST", path: "/api/compute-module-smoke-tests/run", body });
         case "package.create":
           return runJsonHandler(callHandler, { handler: "package.create", method: "POST", path: "/api/packages", body });
         case "packageRevision.create":
@@ -1131,22 +1250,15 @@ const TOOL_DEFINITIONS = [
         });
       }
       if (operation === "edit") {
-        return runJsonHandler(callHandler, {
-          handler: "platform.changeSet.edit",
-          method: "POST",
-          path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/edits`,
-          params: { id: changeSetId },
-          body: { edits: Array.isArray(args.edits) ? args.edits : [] }
+        return blockedFileMutationToolResult({
+          attemptedAuthoringPath: "platform.changeSet(edit)",
+          goal: "stage file edits through platform change sets"
         });
       }
       if (operation === "removeEdit") {
-        const pathHash = args.pathHash || "";
-        if (!pathHash) return errorToolResult("path hash is required", { operation, changeSetId });
-        return runJsonHandler(callHandler, {
-          handler: "platform.changeSet.removeEdit",
-          method: "DELETE",
-          path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/edits/${encodeURIComponent(pathHash)}`,
-          params: { id: changeSetId, pathHash }
+        return blockedFileMutationToolResult({
+          attemptedAuthoringPath: "platform.changeSet(removeEdit)",
+          goal: "remove staged file edits through platform change sets"
         });
       }
       if (operation === "validate") {
@@ -1158,11 +1270,9 @@ const TOOL_DEFINITIONS = [
         });
       }
       if (operation === "apply") {
-        return runJsonHandler(callHandler, {
-          handler: "platform.changeSet.apply",
-          method: "POST",
-          path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/apply`,
-          params: { id: changeSetId }
+        return blockedFileMutationToolResult({
+          attemptedAuthoringPath: "platform.changeSet(apply)",
+          goal: "apply file edits through platform change sets"
         });
       }
       if (operation === "reject" || operation === "abandon") {
@@ -1328,18 +1438,19 @@ const TOOL_DEFINITIONS = [
       };
       if (args.action === "list") return runJsonHandler(callHandler, { handler: "fs.blob.list", method: "GET", path: "/api/fs/blobs", query });
       if (args.action === "meta") return runJsonHandler(callHandler, { handler: "fs.blob.meta", method: "GET", path: "/api/fs/blobs/meta", query });
-      if (args.action === "delete") return runJsonHandler(callHandler, { handler: "fs.blob.delete", method: "DELETE", path: "/api/fs/blobs", query });
+      if (args.action === "delete") {
+        return blockedFileMutationToolResult({
+          attemptedAuthoringPath: "storage.blob(delete)",
+          goal: "delete blob-backed files through MCP storage"
+        });
+      }
       if (args.action === "read") {
         return rawResult(await callHandler({ handler: "fs.blob.read", method: "GET", path: "/api/fs/blobs/content", query }));
       }
       if (args.action === "write") {
-        return runJsonHandler(callHandler, {
-          handler: "fs.blob.write",
-          method: "PUT",
-          path: "/api/fs/blobs/content",
-          query,
-          rawBody: Buffer.from(String(args.contentBase64 || ""), "base64"),
-          headers: { "content-type": args.contentType || "application/octet-stream" }
+        return blockedFileMutationToolResult({
+          attemptedAuthoringPath: "storage.blob(write)",
+          goal: "write blob-backed files through MCP storage"
         });
       }
       return errorToolResult("unknown storage.blob action", { action: args.action });
@@ -1375,26 +1486,15 @@ const TOOL_DEFINITIONS = [
         return rawResult(await callHandler({ handler: "fs.stream.read", method: "GET", path: "/api/fs/streams/content", query }));
       }
       if (args.action === "write") {
-        return runJsonHandler(callHandler, {
-          handler: "fs.stream.write",
-          method: "PUT",
-          path: "/api/fs/streams/content",
-          query,
-          rawBody: Buffer.from(String(args.contentBase64 || ""), "base64"),
-          headers: { "content-type": args.contentType || "application/octet-stream" }
+        return blockedFileMutationToolResult({
+          attemptedAuthoringPath: "storage.stream(write)",
+          goal: "write streamed files through MCP storage"
         });
       }
       if (args.action === "copy") {
-        return runJsonHandler(callHandler, {
-          handler: "fs.stream.copy",
-          method: "POST",
-          path: "/api/fs/streams/copy",
-          body: {
-            ...(args.context ? { context: args.context } : {}),
-            ...(args.serverRunner ? { serverRunner: args.serverRunner } : {}),
-            fromPath: args.fromPath || "",
-            toPath: args.toPath || ""
-          }
+        return blockedFileMutationToolResult({
+          attemptedAuthoringPath: "storage.stream(copy)",
+          goal: "copy streamed files through MCP storage"
         });
       }
       return errorToolResult("unknown storage.stream action", { action: args.action });

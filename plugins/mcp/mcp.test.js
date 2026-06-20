@@ -3,7 +3,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld, createThing, relation } from "../../src/kernel.js";
 import { applyWitnessToml } from "../../src/dsl.js";
-import { bindContextName, moduleProjectors, updateCapability } from "../../src/modules.js";
+import {
+  bindContextName,
+  defineComputeModule,
+  definePackageMaterializedFile,
+  markPackageMaterializedFileDeleted,
+  defineComputeModuleSmokeTest,
+  markComputeModuleSmokeTestDeleted,
+  moduleProjectors,
+  updateCapability
+} from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { bundleId, handlerCatalog, providers, routes } from "./runtime.js";
 import { createMcpBundleSupportServices } from "./mcp-support-services.js";
@@ -169,6 +178,18 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
     contextIds: [],
     targetIds: ["cap.search"]
   });
+  assert.deepEqual(resolveMcpToolScope("world.read", { view: "computeModules", id: "engentus.health.classify" }), {
+    contextIds: [],
+    targetIds: ["engentus.health.classify"]
+  });
+  assert.deepEqual(resolveMcpToolScope("world.read", { view: "computeModuleSources", id: "app/modules/health-classify/assembly/index.ts" }), {
+    contextIds: [],
+    targetIds: ["app/modules/health-classify/assembly/index.ts"]
+  });
+  assert.deepEqual(resolveMcpToolScope("world.read", { view: "computeModuleSmokeTests", id: "smoke.health.low-risk" }), {
+    contextIds: [],
+    targetIds: ["smoke.health.low-risk"]
+  });
   const worldRead = listSupportedMcpTools().find(tool => tool.name === "world.read");
   const packageBundle = listSupportedMcpTools().find(tool => tool.name === "package.bundle");
   const authoringWrite = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
@@ -189,6 +210,10 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("capabilityLegacyMigration"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("frontendLegacyUplift"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("capabilityRevisionHistory"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("computeModules"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("computeModuleSources"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("computeModuleSmokeTests"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(worldRead.inputSchema.properties, "includeDeleted"), true);
   assert.deepEqual(packageBundle.inputSchema.properties.operation.enum, ["preview", "previewApply"]);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("docs"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("roadmap"), true);
@@ -242,6 +267,12 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("message.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("boundary.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("policy.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("computeModule.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("computeModule.source.upsert"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("computeModule.source.markDeleted"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("computeModuleSmokeTest.upsert"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("computeModuleSmokeTest.markDeleted"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("computeModuleSmokeTest.run"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("package.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageRevision.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageRevision.publish"), true);
@@ -255,6 +286,128 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontend.upliftLegacy"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontendProgram.create"), false);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("widget.create"), false);
+});
+
+test("mcp world.read exposes AssemblyScript compute modules from projected world state", async () => {
+  const world = createWorld();
+  defineComputeModule(world, {
+    actor: "system",
+    id: "engentus.health.classify",
+    source: "app/modules/health-classify/assembly/index.ts",
+    hostOperation: "engentus.pipeline.health.classify",
+    language: "assemblyscript",
+    abi: "world.hostOperation.v1",
+    exportName: "invoke",
+    allowedBindings: ["host.log"],
+    maxMemoryPages: 2,
+    timeoutMs: 100
+  });
+
+  const listed = await executeMcpTool("world.read", {
+    args: { view: "computeModules" },
+    appContext: { project: projector => world.project(projector) },
+    callHandler: async () => {
+      throw new Error("computeModules should use projected world access");
+    }
+  });
+  assert.equal(listed.isError, false);
+  assert.equal(listed.structuredContent.computeModules.length, 1);
+  assert.equal(listed.structuredContent.computeModules[0].id, "engentus.health.classify");
+  assert.equal(listed.structuredContent.computeModules[0].language, "assemblyscript");
+
+  const filtered = await executeMcpTool("world.read", {
+    args: { view: "computeModules", id: "engentus.pipeline.health.classify" },
+    appContext: { project: projector => world.project(projector) },
+    callHandler: async () => {
+      throw new Error("computeModules should use projected world access");
+    }
+  });
+  assert.equal(filtered.isError, false);
+  assert.deepEqual(filtered.structuredContent.computeModules.map(row => row.id), ["engentus.health.classify"]);
+});
+
+test("mcp world.read filters deleted compute module sources and smoke tests unless requested", async () => {
+  const world = createWorld();
+  defineComputeModule(world, {
+    actor: "system",
+    id: "engentus.health.classify",
+    source: "app/modules/health-classify/assembly/index.ts",
+    hostOperation: "engentus.pipeline.health.classify"
+  });
+  definePackageMaterializedFile(world, {
+    actor: "system",
+    package: "package.compute.health",
+    revision: "packageRevision.compute.health.v1",
+    path: "app/modules/health-classify/assembly/index.ts",
+    content: "export function invoke(): void {}",
+    sourceLanguage: "assemblyscript"
+  });
+  defineComputeModuleSmokeTest(world, {
+    actor: "system",
+    id: "smoke.health.low-risk",
+    module: "engentus.health.classify",
+    package: "package.compute.health",
+    revision: "packageRevision.compute.health.v1",
+    hostOperation: "engentus.pipeline.health.classify",
+    request: { score: 1 },
+    expected: { ok: true }
+  });
+  markPackageMaterializedFileDeleted(world, {
+    actor: "system",
+    package: "package.compute.health",
+    revision: "packageRevision.compute.health.v1",
+    path: "app/modules/health-classify/assembly/index.ts",
+    content: "export function invoke(): void {}",
+    sourceLanguage: "assemblyscript"
+  });
+  markComputeModuleSmokeTestDeleted(world, {
+    actor: "system",
+    id: "smoke.health.low-risk",
+    module: "engentus.health.classify",
+    package: "package.compute.health",
+    revision: "packageRevision.compute.health.v1",
+    hostOperation: "engentus.pipeline.health.classify",
+    request: { score: 1 },
+    expected: { ok: true }
+  });
+
+  const activeSources = await executeMcpTool("world.read", {
+    args: { view: "computeModuleSources" },
+    appContext: {
+      project: projector => world.project(projector)
+    }
+  });
+  assert.equal(activeSources.isError, false);
+  assert.deepEqual(activeSources.structuredContent.computeModuleSources, []);
+
+  const deletedSources = await executeMcpTool("world.read", {
+    args: { view: "computeModuleSources", includeDeleted: true },
+    appContext: {
+      project: projector => world.project(projector)
+    }
+  });
+  assert.equal(deletedSources.isError, false);
+  assert.equal(deletedSources.structuredContent.computeModuleSources.length, 2);
+  assert.equal(deletedSources.structuredContent.computeModuleSources.some(row => row.deletedAt), true);
+
+  const activeSmoke = await executeMcpTool("world.read", {
+    args: { view: "computeModuleSmokeTests" },
+    appContext: {
+      project: projector => world.project(projector)
+    }
+  });
+  assert.equal(activeSmoke.isError, false);
+  assert.deepEqual(activeSmoke.structuredContent.computeModuleSmokeTests, []);
+
+  const deletedSmoke = await executeMcpTool("world.read", {
+    args: { view: "computeModuleSmokeTests", includeDeleted: true },
+    appContext: {
+      project: projector => world.project(projector)
+    }
+  });
+  assert.equal(deletedSmoke.isError, false);
+  assert.equal(deletedSmoke.structuredContent.computeModuleSmokeTests.length, 2);
+  assert.equal(deletedSmoke.structuredContent.computeModuleSmokeTests.some(row => row.deletedAt), true);
 });
 
 test("mcp world.read exposes legacy capability migration as projected first-class state", async () => {
@@ -1141,6 +1294,52 @@ test("mcp authoring.write exposes authored package actions and package-aware sco
     ]
   });
   assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "computeModule.create",
+    body: {
+      id: "engentus.health.classify",
+      context: "ctx.shared",
+      source: "app/modules/health-classify/assembly/index.ts",
+      hostOperation: "engentus.pipeline.health.classify"
+    }
+  }), {
+    contextIds: ["ctx.shared"],
+    targetIds: ["engentus.health.classify", "engentus.pipeline.health.classify"]
+  });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "computeModule.source.upsert",
+    body: {
+      package: "package.compute.health",
+      revision: "packageRevision.compute.health.v1",
+      module: "engentus.health.classify",
+      path: "app/modules/health-classify/assembly/index.ts"
+    }
+  }), {
+    contextIds: [],
+    targetIds: [
+      "engentus.health.classify",
+      "app/modules/health-classify/assembly/index.ts",
+      "package.compute.health",
+      "packageRevision.compute.health.v1"
+    ]
+  });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
+    action: "computeModuleSmokeTest.run",
+    body: {
+      id: "smoke.health.low-risk",
+      module: "engentus.health.classify",
+      package: "package.compute.health",
+      revision: "packageRevision.compute.health.v1"
+    }
+  }), {
+    contextIds: [],
+    targetIds: [
+      "smoke.health.low-risk",
+      "engentus.health.classify",
+      "package.compute.health",
+      "packageRevision.compute.health.v1"
+    ]
+  });
+  assert.deepEqual(resolveMcpToolScope("authoring.write", {
     action: "capability.migrateLegacy",
     body: {}
   }), {
@@ -1209,6 +1408,75 @@ test("mcp authoring.write routes package authorship actions through shared packa
         context: "ctx.shared",
         label: "Inspect",
         packageKind: "plugin"
+      }
+    },
+    {
+      action: "computeModule.create",
+      method: "POST",
+      path: "/api/compute-modules",
+      handler: "computeModule.create",
+      body: {
+        id: "engentus.health.classify",
+        context: "ctx.shared",
+        source: "app/modules/health-classify/assembly/index.ts",
+        hostOperation: "engentus.pipeline.health.classify"
+      }
+    },
+    {
+      action: "computeModule.source.upsert",
+      method: "POST",
+      path: "/api/compute-module-sources",
+      handler: "computeModule.source.upsert",
+      body: {
+        package: "package.compute.health",
+        revision: "packageRevision.compute.health.v1",
+        module: "engentus.health.classify",
+        path: "app/modules/health-classify/assembly/index.ts",
+        content: "export function invoke(): void {}"
+      }
+    },
+    {
+      action: "computeModule.source.markDeleted",
+      method: "DELETE",
+      path: "/api/compute-module-sources",
+      handler: "computeModule.source.markDeleted",
+      body: {
+        package: "package.compute.health",
+        revision: "packageRevision.compute.health.v1",
+        module: "engentus.health.classify",
+        path: "app/modules/health-classify/assembly/index.ts"
+      }
+    },
+    {
+      action: "computeModuleSmokeTest.upsert",
+      method: "POST",
+      path: "/api/compute-module-smoke-tests",
+      handler: "computeModuleSmokeTest.upsert",
+      body: {
+        id: "smoke.health.low-risk",
+        package: "package.compute.health",
+        revision: "packageRevision.compute.health.v1",
+        module: "engentus.health.classify",
+        request: { score: 1 },
+        expected: { ok: true }
+      }
+    },
+    {
+      action: "computeModuleSmokeTest.markDeleted",
+      method: "DELETE",
+      path: "/api/compute-module-smoke-tests",
+      handler: "computeModuleSmokeTest.markDeleted",
+      body: {
+        id: "smoke.health.low-risk"
+      }
+    },
+    {
+      action: "computeModuleSmokeTest.run",
+      method: "POST",
+      path: "/api/compute-module-smoke-tests/run",
+      handler: "computeModuleSmokeTest.run",
+      body: {
+        id: "smoke.health.low-risk"
       }
     },
     {
@@ -1988,6 +2256,7 @@ test("platform MCP change-set tool routes through platform change-set handlers",
   assert.equal(calls.at(-1).handler, "platform.changeSet.create");
   assert.equal(calls.at(-1).path, "/api/platform-change-sets");
 
+  const callCountBeforeEdit = calls.length;
   const edited = await executeMcpTool("platform.changeSet", {
     args: {
       operation: "edit",
@@ -1996,9 +2265,10 @@ test("platform MCP change-set tool routes through platform change-set handlers",
     },
     callHandler
   });
-  assert.equal(edited.isError, false);
-  assert.equal(calls.at(-1).handler, "platform.changeSet.edit");
-  assert.equal(calls.at(-1).params.id, "changeset.platform.console");
+  assert.equal(edited.isError, true);
+  assert.equal(calls.length, callCountBeforeEdit);
+  assert.match(edited.content[0].text, /blocked/i);
+  assert.equal(edited.structuredContent.blockedHandoff.minimumHumanAction, "use MCP compute module package authoring");
 
   const read = await executeMcpTool("platform.changeSet", {
     args: {
@@ -2011,6 +2281,7 @@ test("platform MCP change-set tool routes through platform change-set handlers",
   assert.equal(calls.at(-1).handler, "platform.changeSet.read");
   assert.equal(calls.at(-1).params.id, "changeset.platform.console");
 
+  const callCountBeforeRemove = calls.length;
   const removed = await executeMcpTool("platform.changeSet", {
     args: {
       operation: "removeEdit",
@@ -2019,9 +2290,9 @@ test("platform MCP change-set tool routes through platform change-set handlers",
     },
     callHandler
   });
-  assert.equal(removed.isError, false);
-  assert.equal(calls.at(-1).handler, "platform.changeSet.removeEdit");
-  assert.equal(calls.at(-1).params.pathHash, "abc123");
+  assert.equal(removed.isError, true);
+  assert.equal(calls.length, callCountBeforeRemove);
+  assert.match(removed.content[0].text, /blocked/i);
 
   const validated = await executeMcpTool("platform.changeSet", {
     args: {
@@ -2034,6 +2305,7 @@ test("platform MCP change-set tool routes through platform change-set handlers",
   assert.equal(calls.at(-1).handler, "platform.changeSet.validate");
   assert.equal(calls.at(-1).params.id, "changeset.platform.console");
 
+  const callCountBeforeApply = calls.length;
   const applied = await executeMcpTool("platform.changeSet", {
     args: {
       operation: "apply",
@@ -2041,9 +2313,9 @@ test("platform MCP change-set tool routes through platform change-set handlers",
     },
     callHandler
   });
-  assert.equal(applied.isError, false);
-  assert.equal(calls.at(-1).handler, "platform.changeSet.apply");
-  assert.equal(calls.at(-1).params.id, "changeset.platform.console");
+  assert.equal(applied.isError, true);
+  assert.equal(calls.length, callCountBeforeApply);
+  assert.match(applied.content[0].text, /blocked/i);
 
   const rejected = await executeMcpTool("platform.changeSet", {
     args: {
@@ -2066,6 +2338,45 @@ test("platform MCP change-set tool routes through platform change-set handlers",
   });
   assert.equal(abandoned.isError, false);
   assert.equal(calls.at(-1).handler, "platform.changeSet.abandon");
+});
+
+test("storage MCP tools block direct file mutation pathways and keep read-only paths active", async () => {
+  const calls = [];
+  const callHandler = async request => {
+    calls.push(request);
+    if (request.handler === "fs.stream.read" || request.handler === "fs.blob.read") {
+      return { status: 200, contentType: "text/plain", buffer: Buffer.from("source") };
+    }
+    return { status: 200, headers: {}, body: { ok: true, handler: request.handler } };
+  };
+
+  const listed = await executeMcpTool("storage.blob", {
+    args: { action: "list", context: "ctx.compute" },
+    callHandler
+  });
+  assert.equal(listed.isError, false);
+  assert.equal(calls.at(-1).handler, "fs.blob.list");
+
+  const read = await executeMcpTool("storage.stream", {
+    args: { action: "read", context: "ctx.compute", path: "app/modules/health-classify/assembly/index.ts" },
+    callHandler
+  });
+  assert.equal(read.isError, false);
+  assert.equal(calls.at(-1).handler, "fs.stream.read");
+
+  for (const [tool, args] of [
+    ["storage.blob", { action: "write", context: "ctx.compute", path: "app/modules/health-classify/assembly/index.ts", contentBase64: "AA==" }],
+    ["storage.blob", { action: "delete", context: "ctx.compute", path: "app/modules/health-classify/assembly/index.ts" }],
+    ["storage.stream", { action: "write", context: "ctx.compute", path: "app/modules/health-classify/assembly/index.ts", contentBase64: "AA==" }],
+    ["storage.stream", { action: "copy", context: "ctx.compute", fromPath: "a", toPath: "b" }]
+  ]) {
+    const before = calls.length;
+    const result = await executeMcpTool(tool, { args, callHandler });
+    assert.equal(result.isError, true);
+    assert.equal(calls.length, before);
+    assert.match(result.content[0].text, /blocked/i);
+    assert.equal(result.structuredContent.blockedHandoff.minimumHumanAction, "use MCP compute module package authoring");
+  }
 });
 
 test("platform MCP test tool routes through platform test-run handlers", async () => {

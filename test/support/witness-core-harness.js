@@ -16,6 +16,11 @@ export const WITNESS_CORE_BINARY = path.join(
   "debug",
   process.platform === "win32" ? "witness-core.exe" : "witness-core"
 );
+const WITNESS_CORE_BUILD_INPUTS = [
+  WITNESS_CORE_MANIFEST,
+  path.join(REPO_ROOT, "substrate", "witness-core", "src", "lib.rs"),
+  path.join(REPO_ROOT, "substrate", "witness-core", "src", "main.rs")
+];
 
 let witnessCoreBuildPromise = null;
 
@@ -25,8 +30,16 @@ export function delay(ms) {
 
 export async function ensureWitnessCoreBuilt() {
   try {
-    await fs.access(WITNESS_CORE_BINARY);
-    return WITNESS_CORE_BINARY;
+    const binaryStat = await fs.stat(WITNESS_CORE_BINARY);
+    const sourceStats = await Promise.all(WITNESS_CORE_BUILD_INPUTS.map(async filePath => {
+      try {
+        return await fs.stat(filePath);
+      } catch {
+        return null;
+      }
+    }));
+    const sourceIsNewer = sourceStats.some(stat => stat && Number(stat.mtimeMs || 0) > Number(binaryStat.mtimeMs || 0));
+    if (!sourceIsNewer) return WITNESS_CORE_BINARY;
   } catch {}
   if (!witnessCoreBuildPromise) {
     witnessCoreBuildPromise = new Promise((resolve, reject) => {
@@ -85,6 +98,15 @@ function serializeRuntimeConfigEntries(entries = null) {
   return rows.length ? `runtimeConfig = { ${rows.join(", ")} }\n` : "";
 }
 
+async function ensureDirectoryLink(targetPath, linkPath) {
+  await fs.rm(linkPath, { recursive: true, force: true }).catch(() => {});
+  await fs.symlink(
+    targetPath,
+    linkPath,
+    process.platform === "win32" ? "junction" : "dir"
+  );
+}
+
 export async function createLiveCoreWorkspace({
   fixtureRoot = LIVE_CORE_FIXTURE_ROOT,
   proofDelayMs = 1000,
@@ -97,12 +119,18 @@ export async function createLiveCoreWorkspace({
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-core-fixture-"));
   const appDirName = path.basename(fixtureRoot);
   const appRoot = path.join(tempRoot, appDirName);
+  const pluginRoot = path.join(tempRoot, "plugins");
+  const srcRoot = path.join(tempRoot, "src");
+  const storeRoot = path.join(tempRoot, "store");
   const manifestPath = path.join(appRoot, "app.wtoml");
   const watchedSourcePath = path.join(appRoot, "app", "content.wtoml");
   const proofScriptPath = path.join(tempRoot, "proof-check.mjs");
   const configPath = path.join(tempRoot, "witness-core.toml");
   const journalPath = path.join(tempRoot, ".witness-core", "events.jsonl");
   await fs.cp(fixtureRoot, appRoot, { recursive: true });
+  await ensureDirectoryLink(path.join(REPO_ROOT, "plugins"), pluginRoot);
+  await ensureDirectoryLink(path.join(REPO_ROOT, "src"), srcRoot);
+  await ensureDirectoryLink(path.join(REPO_ROOT, "store"), storeRoot);
   if (runtimeConfig && typeof runtimeConfig === "object") {
     const manifestText = await fs.readFile(manifestPath, "utf8");
     const runtimeConfigLine = serializeRuntimeConfigEntries(runtimeConfig);
@@ -160,15 +188,15 @@ ${Number.isFinite(frontdoorConfig.drainTimeoutMs) ? `drain_timeout_ms = ${Number
 
   await fs.writeFile(configPath, `
 [watch]
-roots = [${tomlString(appDirName)}]
-ignore = ["node_modules", "target", ".git", ".witness-core"]
+roots = [${tomlString(appDirName)}, "plugins", "src", "store"]
+ignore = ["node_modules", "target", ".git", ".witness-core", "plugins", "src", "store"]
 
 [proof]
 fast = ${tomlString(proofCommand)}
 slow_ms = 250
 
 [package]
-include = [${tomlString(`${appDirName}/**`)}]
+include = [${tomlString(`${appDirName}/**`)}, "plugins/**", "src/**", "store/**"]
 ${superviseToml}${buildWorkerToml}${transactionToml}${frontdoorToml}
 `.trimStart(), "utf8");
 

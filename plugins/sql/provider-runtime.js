@@ -75,6 +75,32 @@ function sqliteBoundaryMetadata({
   };
 }
 
+function sqlCapabilityBoundaryMetadata({
+  provider = null,
+  adapterStatus = "witness-core-required",
+  lastError = null,
+  boundaryScope = "runtime"
+} = {}) {
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+  const transport = normalizedProvider === "postgres"
+    ? "capability.db.postgres"
+    : (normalizedProvider === "mysql" ? "capability.db.mysql" : "capability.db.sql");
+  return {
+    adapterStatus,
+    lastError,
+    boundaryOwner: "witness-core",
+    boundaryAuthority: "rust-owned",
+    boundaryTransport: transport,
+    boundaryScope,
+    canonicalBoundary: true,
+    boundaryFallbackAllowed: false,
+    boundaryAvailability: String(adapterStatus || "").includes("unavailable")
+      || String(adapterStatus || "").includes("required")
+      ? "unavailable"
+      : "available"
+  };
+}
+
 function decorateSqliteDatasource(datasource, {
   bridgeActive = false,
   adapterStatus = datasource?.adapterStatus ?? (bridgeActive ? "witness-core" : "witness-core-required"),
@@ -87,18 +113,50 @@ function decorateSqliteDatasource(datasource, {
   };
 }
 
+function decorateBridgeSqlDatasource(datasource, {
+  bridgeActive = false,
+  adapterStatus = datasource?.adapterStatus ?? (bridgeActive ? "witness-core" : "witness-core-required"),
+  lastError = datasource?.lastError ?? null,
+  boundaryScope = datasource?.boundaryScope ?? "runtime"
+} = {}) {
+  if (!datasource || !["postgres", "mysql"].includes(datasource.provider)) {
+    return datasource ? { ...datasource } : datasource;
+  }
+  return {
+    ...datasource,
+    ...sqlCapabilityBoundaryMetadata({
+      provider: datasource.provider,
+      adapterStatus,
+      lastError,
+      boundaryScope
+    })
+  };
+}
+
 export function createDbSqlRuntime({
   project,
   runtimeRoot,
   serverRunnerId,
-  getAppContext,
-  postgresAdapter = null,
-  mysqlAdapter = null
+  getAppContext
 }) {
   const witnessCoreBridge = () => getAppContext?.()?.witnessCoreBridge ?? null;
   const sqliteBridgeActive = () => Boolean(witnessCoreBridge()?.coreUrl);
+  const sqlBridgeActive = () => Boolean(witnessCoreBridge()?.coreUrl);
+  const sqlBridgeRequiredReason = provider => {
+    const normalized = String(provider || "sql").trim().toLowerCase() || "sql";
+    return `${normalized} runtime execution requires the witness-core SQL capability`;
+  };
   const decorateRuntimeDatasource = datasource => {
-    if (!datasource || datasource.provider !== "sqlite") return datasource ? { ...datasource } : datasource;
+    if (!datasource) return datasource;
+    if (datasource.provider === "postgres" || datasource.provider === "mysql") {
+      const bridgeActive = sqlBridgeActive();
+      return decorateBridgeSqlDatasource(datasource, {
+        bridgeActive,
+        adapterStatus: bridgeActive ? "witness-core" : "witness-core-required",
+        lastError: bridgeActive ? null : sqlBridgeRequiredReason(datasource.provider)
+      });
+    }
+    if (datasource.provider !== "sqlite") return datasource ? { ...datasource } : datasource;
     const bridgeActive = sqliteBridgeActive();
     return decorateSqliteDatasource({
       ...datasource,
@@ -124,41 +182,15 @@ export function createDbSqlRuntime({
     };
   };
 
-  const withPostgresClient = async (resolved, callback) => {
-    const { Client } = postgresAdapter ?? await import("pg");
-    const client = new Client({
-      host: resolved.connection.host,
-      port: resolved.connection.port,
-      database: resolved.connection.database,
-      user: resolved.connection.user,
-      password: resolved.connection.password,
-      ssl: resolved.connection.ssl ? { rejectUnauthorized: false } : undefined,
-      connectionTimeoutMillis: 3000
-    });
-    await client.connect();
-    try {
-      return await callback(client);
-    } finally {
-      await client.end();
+  const openSqlBridge = datasource => {
+    const bridge = witnessCoreBridge();
+    if (bridge?.coreUrl) {
+      return { ok: true, bridge };
     }
-  };
-
-  const withMySqlConnection = async (resolved, callback) => {
-    const mysql = mysqlAdapter ?? await import("mysql2/promise");
-    const connection = await mysql.createConnection({
-      host: resolved.connection.host,
-      port: resolved.connection.port,
-      database: resolved.connection.database,
-      user: resolved.connection.user,
-      password: resolved.connection.password,
-      ssl: resolved.connection.ssl ? {} : undefined,
-      connectTimeout: 3000
-    });
-    try {
-      return await callback(connection);
-    } finally {
-      await connection.end();
-    }
+    return {
+      ok: false,
+      reason: sqlBridgeRequiredReason(datasource?.provider)
+    };
   };
 
   const resolveDatasource = async (datasourceOrId) => {
@@ -183,6 +215,19 @@ export function createDbSqlRuntime({
     if (!["postgres", "mysql"].includes(datasource.provider)) {
       return { ok: false, status: 400, reason: "unsupported datasource provider", datasource };
     }
+    const bridgeOpened = openSqlBridge(datasource);
+    if (!bridgeOpened.ok) {
+      return {
+        ok: false,
+        status: 503,
+        reason: bridgeOpened.reason,
+        datasource: decorateBridgeSqlDatasource(datasource, {
+          bridgeActive: false,
+          adapterStatus: "witness-core-required",
+          lastError: bridgeOpened.reason
+        })
+      };
+    }
     const passwordResolved = await loadSecretValue(getAppContext, datasource.passwordSecretId);
     if (!passwordResolved.ok) {
       return { ok: false, status: passwordResolved.status || 503, reason: passwordResolved.reason || "secret unresolved", datasource };
@@ -192,8 +237,13 @@ export function createDbSqlRuntime({
     }
     return {
       ok: true,
-      datasource,
+      datasource: decorateBridgeSqlDatasource(datasource, {
+        bridgeActive: true,
+        adapterStatus: "witness-core"
+      }),
+      bridge: bridgeOpened.bridge,
       connection: {
+        provider: datasource.provider,
         host: datasource.host,
         port: datasource.port || (datasource.provider === "postgres" ? 5432 : 3306),
         database: datasource.database,
@@ -245,12 +295,18 @@ export function createDbSqlRuntime({
         };
       }
       if (resolved.datasource.provider === "postgres") {
-        await withPostgresClient(resolved, client => client.query("select 1 as ok"));
-        return { ok: true, datasource: resolved.datasource };
+        const result = await resolved.bridge.sqlTestConnection({
+          provider: resolved.datasource.provider,
+          connection: resolved.connection
+        });
+        return { ...result, datasource: result?.datasource ?? resolved.datasource };
       }
       if (resolved.datasource.provider === "mysql") {
-        await withMySqlConnection(resolved, connection => connection.query("select 1 as ok"));
-        return { ok: true, datasource: resolved.datasource };
+        const result = await resolved.bridge.sqlTestConnection({
+          provider: resolved.datasource.provider,
+          connection: resolved.connection
+        });
+        return { ...result, datasource: result?.datasource ?? resolved.datasource };
       }
       return { ok: false, status: 400, reason: "unsupported datasource provider", datasource: resolved.datasource };
     } catch (error) {
@@ -522,11 +578,22 @@ export function createDbSqlRuntime({
     sql += ` order by ${quoteMySqlIdentifier(progressField)} asc limit ?`;
     params.push(safeLimit);
     try {
-      const rows = await withMySqlConnection(resolved, async connection => {
-        const [resultRows] = await connection.query(sql, params);
-        return Array.isArray(resultRows) ? resultRows : [];
+      const result = await resolved.bridge.sqlReadOrderedBatch({
+        provider: resolved.datasource.provider,
+        connection: resolved.connection,
+        schema,
+        table,
+        columns: safeColumns,
+        progressField,
+        lowerBound,
+        rowLimit: safeLimit
       });
-      return { ok: true, datasource: resolved.datasource, rows, rowCount: rows.length, sql, params };
+      return {
+        ...result,
+        datasource: result?.datasource ?? resolved.datasource,
+        sql: result?.sql ?? sql,
+        params: result?.params ?? params
+      };
     } catch (error) {
       return { ok: false, status: 500, reason: error instanceof Error ? error.message : "source read failed", datasource: resolved.datasource };
     }
@@ -585,12 +652,20 @@ export function createDbSqlRuntime({
       return { ok: false, status: 400, reason: `unsupported write mode ${writeMode}`, datasource: resolved.datasource };
     }
     try {
-      const result = await withPostgresClient(resolved, client => client.query(sql, values));
+      const result = await resolved.bridge.sqlWriteRows({
+        provider: resolved.datasource.provider,
+        connection: resolved.connection,
+        schema,
+        table,
+        rows: normalizedRows,
+        writeMode,
+        keyFields: safeKeyFields
+      });
       return {
-        ok: true,
-        datasource: resolved.datasource,
-        rowCount: normalizedRows.length,
-        changes: Number(result?.rowCount ?? normalizedRows.length)
+        ...result,
+        datasource: result?.datasource ?? resolved.datasource,
+        rowCount: Number(result?.rowCount ?? normalizedRows.length),
+        changes: Number(result?.changes ?? result?.rowCount ?? normalizedRows.length)
       };
     } catch (error) {
       return { ok: false, status: 500, reason: error instanceof Error ? error.message : "destination write failed", datasource: resolved.datasource };

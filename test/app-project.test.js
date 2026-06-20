@@ -220,12 +220,82 @@ operator_screen_section trace_rows {
   priority 2
 }
 
+operator_overlay help_overlay {
+  kind doc_view
+  title "Help"
+  width 56
+  height 10
+  resizable true
+}
+
+operator_overlay context_menu {
+  kind menu
+  title "Context"
+  width 24
+  height 8
+}
+
+operator_surface top_status {
+  kind status_bar
+  title "Status"
+}
+
+operator_surface command_bar {
+  kind command_bar
+  title "Command"
+}
+
+operator_handle top_handle {
+  kind splitter
+  axis horizontal
+  size 1
+  draggable true
+}
+
+operator_handle bottom_handle {
+  kind splitter
+  axis horizontal
+  size 1
+  draggable true
+}
+
+operator_handle split_handle {
+  kind splitter
+  axis vertical
+  size 1
+  draggable true
+}
+
+operator_viewport trace_default {
+  title "Trace Default"
+  theme ansi16
+  screen trace
+  left_screen trace_left
+  top_surface top_status
+  bottom_surface command_bar
+  top_handle top_handle
+  bottom_handle bottom_handle
+  split_handle split_handle
+  width 80
+  height 30
+  top 3
+  bottom 4
+  split_orientation horizontal
+  left_weight 28
+  right_weight 72
+  overlay help_overlay
+  overlay context_menu
+  binding F1 overlay help_overlay
+  binding MouseSecondary overlay context_menu
+}
+
 operator_setup shell {
   screen trace
   screen references
   shortcut F5 trace
   default_screen trace
   default_left_screen trace_left
+  default_viewport trace_default
 }
 `);
   try {
@@ -244,8 +314,33 @@ operator_setup shell {
     assert.equal(traceScreen.sections[0].collapsible, false);
     assert.equal(traceScreen.sections[1].collapsed, true);
     assert.equal(appProject.operatorWorkbench.leftScreens.some(screen => screen.id === "trace_left" && screen.shape === "table"), true);
+    assert.equal(appProject.operatorWorkbench.overlays.some(overlay => overlay.id === "help_overlay" && overlay.kind === "doc_view"), true);
+    assert.equal(appProject.operatorWorkbench.overlays.some(overlay => overlay.id === "context_menu" && overlay.kind === "menu"), true);
+    assert.equal(appProject.operatorWorkbench.handles.some(handle => handle.id === "top_handle" && handle.axis === "horizontal"), true);
+    assert.equal(appProject.operatorWorkbench.handles.some(handle => handle.id === "bottom_handle" && handle.axis === "horizontal"), true);
+    assert.equal(appProject.operatorWorkbench.handles.some(handle => handle.id === "split_handle" && handle.axis === "vertical"), true);
+    assert.equal(appProject.operatorWorkbench.surfaces.some(surface => surface.id === "top_status" && surface.kind === "status_bar"), true);
+    assert.equal(appProject.operatorWorkbench.surfaces.some(surface => surface.id === "command_bar" && surface.kind === "command_bar"), true);
+    const traceViewport = appProject.operatorWorkbench.viewports.find(viewport => viewport.id === "trace_default");
+    assert.equal(Boolean(traceViewport), true);
+    assert.equal(traceViewport.screenId, "trace");
+    assert.equal(traceViewport.leftScreenId, "trace_left");
+    assert.equal(traceViewport.topSurfaceId, "top_status");
+    assert.equal(traceViewport.bottomSurfaceId, "command_bar");
+    assert.equal(traceViewport.topHandleId, "top_handle");
+    assert.equal(traceViewport.bottomHandleId, "bottom_handle");
+    assert.equal(traceViewport.splitHandleId, "split_handle");
+    assert.equal(traceViewport.width, 80);
+    assert.equal(traceViewport.height, 30);
+    assert.equal(traceViewport.splitOrientation, "horizontal");
+    assert.deepEqual(traceViewport.overlays, ["help_overlay", "context_menu"]);
+    assert.deepEqual(traceViewport.bindings.map(binding => `${binding.trigger}:${binding.verb}:${binding.target}`), [
+      "F1:overlay:help_overlay",
+      "MouseSecondary:overlay:context_menu"
+    ]);
     assert.equal(appProject.operatorWorkbench.defaultScreen, "trace");
     assert.equal(appProject.operatorWorkbench.defaultLeftScreen, "trace_left");
+    assert.equal(appProject.operatorWorkbench.defaultViewport, "trace_default");
     assert.equal(appProject.operatorWorkbench.shortcuts.get("F5"), "trace");
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
@@ -280,6 +375,463 @@ operator_setup shell {
         runtimePluginIds: ["plugin.operator-workbench"]
       }),
       /left_screen not found: missing_left/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects invalid authored viewport references in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-viewport-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_viewport_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_viewport trace_default {
+  screen missing_screen
+  width 80
+  height 30
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default screen not found: missing_screen/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects invalid authored overlay references in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-overlay-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_overlay_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_viewport trace_default {
+  screen trace
+  width 80
+  height 30
+  overlay missing_overlay
+  binding F1 overlay missing_overlay
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default overlay not found: missing_overlay/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects invalid authored chrome surface references in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-surface-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_surface_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_surface top_status {
+  kind status_bar
+  title "Status"
+}
+
+operator_viewport trace_default {
+  screen trace
+  top_surface top_status
+  bottom_surface missing_surface
+  width 80
+  height 30
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default bottom_surface not found: missing_surface/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects invalid authored chrome surface kinds for viewport slots in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-surface-kind-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_surface_kind_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_surface wrong_top_surface {
+  kind command_bar
+  title "Wrong Top"
+}
+
+operator_surface wrong_bottom_surface {
+  kind status_bar
+  title "Wrong Bottom"
+}
+
+operator_viewport trace_default {
+  screen trace
+  top_surface wrong_top_surface
+  bottom_surface wrong_bottom_surface
+  width 80
+  height 30
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default top_surface must resolve to kind=status_bar/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects authored text_reader operator surfaces because viewer surfaces are deferred from the canonical chrome seam", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-surface-viewer-deferred-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_surface_viewer_deferred_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_surface reader_surface {
+  kind text_reader
+  title "Reader"
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_surface reader_surface kind must be one of status_bar, command_bar/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects invalid authored handle references in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-handle-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_handle_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_viewport trace_default {
+  screen trace
+  split_handle missing_handle
+  width 80
+  height 30
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default split_handle not found: missing_handle/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects invalid authored handle axes for viewport slots in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-handle-axis-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_handle_axis_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_handle wrong_top_handle {
+  kind splitter
+  axis vertical
+  size 1
+}
+
+operator_handle wrong_split_handle {
+  kind splitter
+  axis horizontal
+  size 1
+}
+
+operator_viewport trace_default {
+  screen trace
+  top_handle wrong_top_handle
+  width 80
+  height 30
+  split_orientation horizontal
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default top_handle must resolve to axis=horizontal/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects invalid authored split handle axis in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-split-handle-axis-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_split_handle_axis_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_handle wrong_split_handle {
+  kind splitter
+  axis horizontal
+  size 1
+}
+
+operator_viewport trace_default {
+  screen trace
+  split_handle wrong_split_handle
+  width 80
+  height 30
+  split_orientation horizontal
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default split_handle must resolve to axis=vertical/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects duplicate authored viewport overlay references in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-overlay-duplicate-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_overlay_duplicate_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_overlay help_overlay {
+  kind doc_view
+  title "Help"
+  width 56
+  height 10
+}
+
+operator_viewport trace_default {
+  screen trace
+  width 80
+  height 30
+  overlay help_overlay
+  overlay help_overlay
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default duplicate overlay reference: help_overlay/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects duplicate authored viewport binding triggers in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-binding-duplicate-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_binding_duplicate_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_overlay help_overlay {
+  kind doc_view
+  title "Help"
+  width 56
+  height 10
+}
+
+operator_overlay context_menu {
+  kind menu
+  title "Context"
+  width 24
+  height 8
+}
+
+operator_viewport trace_default {
+  screen trace
+  width 80
+  height 30
+  overlay help_overlay
+  overlay context_menu
+  binding F1 overlay help_overlay
+  binding F1 overlay context_menu
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default duplicate binding trigger: F1/
     );
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
@@ -372,7 +924,7 @@ imports = ["../../examples_rvm/engentus/PIPELINE.rvm"]
 
 test("examples root contains only the standardized app directories and shared library", async () => {
   const entries = (await fs.readdir(path.join(process.cwd(), "examples"))).sort();
-  assert.deepEqual(entries, ["_lib", "demo-todo-app", "eden", "engentus", "master"]);
+  assert.deepEqual(entries, ["_lib", "demo-todo-app", "eden", "engentus", "master", "operator", "this.folder.wtoml"]);
 });
 
 test("app project loader can fall back to the persisted stable source cache", async () => {

@@ -16,6 +16,10 @@ import {
   RUNTIME_WORKER_CONTROL_PATH,
   RUNTIME_WORKER_CONTROL_PROTOCOL_VERSION
 } from "../src/runtime-worker-control-contract.js";
+import {
+  RUNTIME_WORKER_TRANSPORT_METHODS,
+  RUNTIME_WORKER_TRANSPORT_PROTOCOL_VERSION
+} from "../src/runtime-worker-transport-contract.js";
 
 function createWitnessWorld({ routes = [], runtimePluginInstalls = [] } = {}) {
   const witnesses = [];
@@ -2682,6 +2686,12 @@ test("runtime server exposes a versioned worker-control descriptor for supervise
   assert.equal(body.quiesceUrl, "http://127.0.0.1:4321/api/runtime/supervision/quiesce");
   assert.equal(body.reloadUrl, "http://127.0.0.1:4321/api/runtime/app-snapshot/reload");
   assert.equal(body.actions.reload?.href, "http://127.0.0.1:4321/api/runtime/app-snapshot/reload");
+  assert.equal(body.transport?.protocol, RUNTIME_WORKER_TRANSPORT_PROTOCOL_VERSION);
+  assert.equal(body.transport?.methods?.describe, RUNTIME_WORKER_TRANSPORT_METHODS.controlDescribe);
+  assert.equal(body.transport?.methods?.readHealth, RUNTIME_WORKER_TRANSPORT_METHODS.processHealthRead);
+  assert.equal(body.transport?.methods?.activate, RUNTIME_WORKER_TRANSPORT_METHODS.supervisionActivate);
+  assert.equal(body.transport?.methods?.quiesce, RUNTIME_WORKER_TRANSPORT_METHODS.supervisionQuiesce);
+  assert.equal(body.transport?.methods?.reload, RUNTIME_WORKER_TRANSPORT_METHODS.appSnapshotReload);
 });
 
 test("runtime server exposes the local plugin catalog through the generic route table", async () => {

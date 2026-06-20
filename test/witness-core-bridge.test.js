@@ -374,6 +374,136 @@ test("createWitnessCoreBridge sqlite capability helpers serialize requests", asy
   });
 });
 
+test("createWitnessCoreBridge SQL capability helpers serialize requests", async () => {
+  const requests = [];
+  const fetchImpl = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return { ok: true, rowCount: 1, changes: 1, rows: [{ id: 1 }] };
+      }
+    };
+  };
+  const bridge = createWitnessCoreBridge({
+    coreUrl: "http://127.0.0.1:8788/",
+    fetchImpl
+  });
+
+  await bridge.sqlTestConnection({
+    provider: "postgres",
+    connection: {
+      host: "127.0.0.1",
+      port: 5432,
+      database: "engentus",
+      user: "pipeline_user",
+      password: "super-secret",
+      ssl: true
+    },
+    correlation: {
+      sessionId: "session-1",
+      surfaceId: "surface-1",
+      actor: "tester"
+    }
+  });
+  await bridge.sqlReadOrderedBatch({
+    provider: "mysql",
+    connection: {
+      host: "127.0.0.1",
+      port: 3306,
+      database: "engentus",
+      user: "reader",
+      password: "super-secret",
+      ssl: false
+    },
+    schema: "engentus",
+    table: "Transactions_IMU",
+    columns: ["tx_timestamp_start"],
+    progressField: "tx_timestamp_start",
+    lowerBound: 1700000000000,
+    rowLimit: 50
+  });
+  await bridge.sqlWriteRows({
+    provider: "postgres",
+    connection: {
+      host: "127.0.0.1",
+      port: 5432,
+      database: "engentus",
+      user: "writer",
+      password: "super-secret",
+      ssl: false
+    },
+    schema: "engentus",
+    table: "sensor_data",
+    rows: [{ sensor_id: "sensor:1", value: 12.5 }],
+    writeMode: "insert_ignore",
+    keyFields: ["sensor_id"]
+  });
+
+  assert.deepEqual(requests.map(entry => [entry.url, entry.options.method ?? "GET"]), [
+    ["http://127.0.0.1:8788/capabilities/db/sql", "POST"],
+    ["http://127.0.0.1:8788/capabilities/db/sql", "POST"],
+    ["http://127.0.0.1:8788/capabilities/db/sql", "POST"]
+  ]);
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    operation: "testConnection",
+    provider: "postgres",
+    connection: {
+      host: "127.0.0.1",
+      port: 5432,
+      database: "engentus",
+      user: "pipeline_user",
+      password: "super-secret",
+      ssl: true
+    },
+    sessionId: "session-1",
+    surfaceId: "surface-1",
+    actor: "tester"
+  });
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    operation: "readOrderedBatch",
+    provider: "mysql",
+    connection: {
+      host: "127.0.0.1",
+      port: 3306,
+      database: "engentus",
+      user: "reader",
+      password: "super-secret",
+      ssl: false
+    },
+    schema: "engentus",
+    table: "Transactions_IMU",
+    columns: ["tx_timestamp_start"],
+    progressField: "tx_timestamp_start",
+    lowerBound: 1700000000000,
+    rowLimit: 50,
+    sessionId: null,
+    surfaceId: null,
+    actor: null
+  });
+  assert.deepEqual(JSON.parse(requests[2].options.body), {
+    operation: "writeRows",
+    provider: "postgres",
+    connection: {
+      host: "127.0.0.1",
+      port: 5432,
+      database: "engentus",
+      user: "writer",
+      password: "super-secret",
+      ssl: false
+    },
+    schema: "engentus",
+    table: "sensor_data",
+    rows: [{ sensor_id: "sensor:1", value: 12.5 }],
+    writeMode: "insert_ignore",
+    keyFields: ["sensor_id"],
+    sessionId: null,
+    surfaceId: null,
+    actor: null
+  });
+});
+
 test("createWitnessCoreBridge verification persistence helper serializes requests", async () => {
   const requests = [];
   const fetchImpl = async (url, options = {}) => {
@@ -665,4 +795,42 @@ test("createWitnessCoreBridge preview session helpers serialize requests", async
 test("createWitnessCoreBridge returns null without a usable core URL", () => {
   assert.equal(createWitnessCoreBridge({ coreUrl: "" }), null);
   assert.equal(createWitnessCoreBridge({ coreUrl: null }), null);
+});
+
+test("createWitnessCoreBridge delegates through an injected transport without owning fetch directly", async () => {
+  const requests = [];
+  const bridge = createWitnessCoreBridge({
+    transport: {
+      coreUrl: "ipc://witness-core",
+      async call(request) {
+        requests.push(structuredClone(request));
+        return { ok: true, method: request.method, args: request.args ?? null };
+      }
+    }
+  });
+
+  const serving = await bridge.readServing();
+  const promoted = await bridge.promoteGeneration({ id: "gen-1" });
+
+  assert.equal(bridge.coreUrl, "ipc://witness-core");
+  assert.equal(serving.method, "serving.read");
+  assert.equal(promoted.method, "generation.promote");
+  assert.deepEqual(requests, [
+    {
+      protocol: "witness-core-transport/v1",
+      kind: "call",
+      method: "serving.read",
+      requestId: null,
+      args: null
+    },
+    {
+      protocol: "witness-core-transport/v1",
+      kind: "call",
+      method: "generation.promote",
+      requestId: null,
+      args: {
+        id: "gen-1"
+      }
+    }
+  ]);
 });

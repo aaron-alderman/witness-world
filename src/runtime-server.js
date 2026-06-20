@@ -71,11 +71,17 @@ import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.j
 import { createStartupTelemetry } from "./startup-telemetry.js";
 import { createRuntimeProcessHealthMonitor } from "./runtime-process-health.js";
 import {
-  createRuntimeWorkerControlDocument,
+  RUNTIME_PROCESS_HEALTH_PATH,
+  RUNTIME_SUPERVISION_ACTIVATE_PATH,
+  RUNTIME_SUPERVISION_QUIESCE_PATH,
   RUNTIME_WORKER_CONTROL_PATH
 } from "./runtime-worker-control-contract.js";
+import { RUNTIME_WORKER_TRANSPORT_METHODS } from "./runtime-worker-transport-contract.js";
+import { executeRuntimeWorkerTransportCall } from "./runtime-worker-transport.js";
 import { createWitnessCoreBridge, createWitnessCoreStatusStore } from "./witness-core-bridge.js";
 import { retiredLegacyFrontendRouteState } from "./legacy-frontend-bridge.js";
+
+const WITNESS_CORE_WORKSPACE_ROOT_ENV = "WITNESS_CORE_WORKSPACE_ROOT";
 
 function surfaceRowsFromWitnesses(witnesses = []) {
   const rows = new Map();
@@ -88,6 +94,13 @@ function surfaceRowsFromWitnesses(witnesses = []) {
 
 function uniqueStrings(values = []) {
   return [...new Set((values ?? []).map(String).filter(Boolean))];
+}
+
+function resolveWitnessCoreWorkspaceRoot(env = process.env, fallbackCwd = process.cwd()) {
+  const configured = typeof env?.[WITNESS_CORE_WORKSPACE_ROOT_ENV] === "string"
+    ? env[WITNESS_CORE_WORKSPACE_ROOT_ENV].trim()
+    : "";
+  return path.resolve(configured || String(fallbackCwd || process.cwd()));
 }
 
 function normalizeSlashes(value) {
@@ -462,7 +475,8 @@ export async function startRuntimeServer(world, {
     })
   };
 
-  const runtimePluginRoot = resolveRuntimePluginRootImpl({ env });
+  const startupWitnessCoreWorkspaceRoot = resolveWitnessCoreWorkspaceRoot(env, process.cwd());
+  const runtimePluginRoot = resolveRuntimePluginRootImpl({ env, cwd: startupWitnessCoreWorkspaceRoot });
   const configuredRuntimePluginIds = resolveConfiguredRuntimePluginIdsImpl({ env, runtimePluginIds });
   const startupWitnessCoreUrl = typeof env.WITNESS_CORE_URL === "string" && env.WITNESS_CORE_URL.trim()
     ? env.WITNESS_CORE_URL.trim()
@@ -538,7 +552,7 @@ export async function startRuntimeServer(world, {
       startupPluginIds: startupPluginIdsForRunner,
       authoredPluginIds: authoredRuntimePluginIds,
       generationBridge: startupWitnessCoreBridge,
-      cwd: process.cwd(),
+      cwd: startupWitnessCoreWorkspaceRoot,
       requireGenerationBridgeForCanonicalReads: Boolean(startupWitnessCoreUrl)
     });
     const seed = {
@@ -590,7 +604,7 @@ export async function startRuntimeServer(world, {
   const runtimePluginLoadResult = await startupTelemetry.runPhase("runtime.plugins.load", () => loadRuntimePluginModulesImpl({
     pluginCatalog: mergedRuntimePluginCatalog,
     generationBridge: startupWitnessCoreBridge,
-    cwd: process.cwd(),
+    cwd: startupWitnessCoreWorkspaceRoot,
     requireGenerationBridgeForCanonicalImports: Boolean(startupWitnessCoreUrl)
   }), {
     label: "Load runtime plugin modules"
@@ -835,6 +849,7 @@ export async function startRuntimeServer(world, {
     appContext.witnessCoreUrl = typeof env.WITNESS_CORE_URL === "string" && env.WITNESS_CORE_URL.trim()
       ? env.WITNESS_CORE_URL.trim()
       : null;
+    appContext.witnessCoreWorkspaceRoot = startupWitnessCoreWorkspaceRoot;
     appContext.witnessCoreBridge = createWitnessCoreBridgeImpl({
       coreUrl: appContext.witnessCoreUrl,
       logger
@@ -1341,14 +1356,6 @@ export async function startRuntimeServer(world, {
     stopLocalSnapshotPoller();
   };
 
-  const supervisionPayload = supervision => ({
-    ok: true,
-    instanceId: supervision?.instanceId ?? null,
-    role: supervision?.role ?? "active",
-    mutationsEnabled: supervision?.mutationsEnabled !== false,
-    watchersEnabled: supervision?.watchersEnabled === true
-  });
-
   const server = httpModule.createServer(async (req, res) => {
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
     const countTowardRequestPressure = !(
@@ -1368,55 +1375,52 @@ export async function startRuntimeServer(world, {
     }
     attachEventsStream(runtime.context);
     const requestContext = resolveRequestContext(req, sessionStore, { allowActorHeader: runtime.runner.allowActorHeader === true });
-    if (req.method === "GET" && requestUrl.pathname === "/api/runtime/process-health") {
-      sendJson(res, 200, {
-        ...runtimeProcessHealthMonitor.snapshot(),
-        instanceId: runtime.context?.runtimeSupervision?.instanceId ?? null,
-        role: runtime.context?.runtimeSupervision?.role ?? "active",
-        mutationsEnabled: runtime.context?.runtimeSupervision?.mutationsEnabled !== false,
-        watchersEnabled: runtime.context?.runtimeSupervision?.watchersEnabled === true
+    if (req.method === "GET" && requestUrl.pathname === RUNTIME_PROCESS_HEALTH_PATH) {
+      const result = await executeRuntimeWorkerTransportCall({
+        method: RUNTIME_WORKER_TRANSPORT_METHODS.processHealthRead,
+        runtimeContext: runtime.context,
+        appContext,
+        runtimeProcessHealthMonitor,
+        syncLocalSnapshotPoller
       });
+      sendJson(res, result.status, result.body);
       return;
     }
     if (req.method === "GET" && requestUrl.pathname === RUNTIME_WORKER_CONTROL_PATH) {
       const host = typeof req.headers?.host === "string" && req.headers.host.trim()
         ? req.headers.host.trim()
         : `127.0.0.1:${server.address()?.port ?? 0}`;
-      sendJson(res, 200, createRuntimeWorkerControlDocument({
-        origin: `http://${host}`,
-        health: runtimeProcessHealthMonitor.snapshot(),
-        supervision: runtime.context?.runtimeSupervision ?? appContext.runtimeSupervision ?? null
-      }));
+      const result = await executeRuntimeWorkerTransportCall({
+        method: RUNTIME_WORKER_TRANSPORT_METHODS.controlDescribe,
+        runtimeContext: runtime.context,
+        appContext,
+        runtimeProcessHealthMonitor,
+        syncLocalSnapshotPoller,
+        controlOrigin: `http://${host}`
+      });
+      sendJson(res, result.status, result.body);
       return;
     }
-    if (req.method === "POST" && requestUrl.pathname === "/api/runtime/supervision/activate") {
-      const supervision = runtime.context?.runtimeSupervision ?? appContext.runtimeSupervision ?? null;
-      if (!supervision) {
-        sendJson(res, 404, { error: "runtime supervision unavailable" });
-        return;
-      }
-      supervision.role = "active";
-      supervision.mutationsEnabled = true;
-      supervision.watchersEnabled = supervision.watchersEnabled === true && runtime.context?.devMode === true;
-      supervision.lastStateAt = new Date().toISOString();
-      runtime.context?.appSnapshotManager?.setWatcherMode?.(supervision.watchersEnabled);
-      syncLocalSnapshotPoller();
-      sendJson(res, 200, supervisionPayload(supervision));
+    if (req.method === "POST" && requestUrl.pathname === RUNTIME_SUPERVISION_ACTIVATE_PATH) {
+      const result = await executeRuntimeWorkerTransportCall({
+        method: RUNTIME_WORKER_TRANSPORT_METHODS.supervisionActivate,
+        runtimeContext: runtime.context,
+        appContext,
+        runtimeProcessHealthMonitor,
+        syncLocalSnapshotPoller
+      });
+      sendJson(res, result.status, result.body);
       return;
     }
-    if (req.method === "POST" && requestUrl.pathname === "/api/runtime/supervision/quiesce") {
-      const supervision = runtime.context?.runtimeSupervision ?? appContext.runtimeSupervision ?? null;
-      if (!supervision) {
-        sendJson(res, 404, { error: "runtime supervision unavailable" });
-        return;
-      }
-      supervision.role = "draining";
-      supervision.mutationsEnabled = false;
-      supervision.watchersEnabled = false;
-      supervision.lastStateAt = new Date().toISOString();
-      runtime.context?.appSnapshotManager?.setWatcherMode?.(false);
-      syncLocalSnapshotPoller();
-      sendJson(res, 200, supervisionPayload(supervision));
+    if (req.method === "POST" && requestUrl.pathname === RUNTIME_SUPERVISION_QUIESCE_PATH) {
+      const result = await executeRuntimeWorkerTransportCall({
+        method: RUNTIME_WORKER_TRANSPORT_METHODS.supervisionQuiesce,
+        runtimeContext: runtime.context,
+        appContext,
+        runtimeProcessHealthMonitor,
+        syncLocalSnapshotPoller
+      });
+      sendJson(res, result.status, result.body);
       return;
     }
     let matchedRoute = null;
@@ -1439,7 +1443,7 @@ export async function startRuntimeServer(world, {
           const bytes = await readRuntimeSourceBytes(resolvedPath, {
             witnessCoreBridge: appContext.witnessCoreBridge,
             fsModule,
-            cwd: process.cwd(),
+            cwd: appContext.witnessCoreWorkspaceRoot ?? process.cwd(),
             requireWitnessCoreAuthority: Boolean(appContext.witnessCoreUrl)
           });
           res.writeHead(200, { "content-type": mimeTypeForAppStatic(resolvedPath), "cache-control": "no-cache" });
@@ -1467,7 +1471,7 @@ export async function startRuntimeServer(world, {
           text = await readRuntimeSourceText(resolvedFile, {
             witnessCoreBridge: appContext.witnessCoreBridge,
             fsModule,
-            cwd: process.cwd(),
+            cwd: appContext.witnessCoreWorkspaceRoot ?? process.cwd(),
             requireWitnessCoreAuthority: Boolean(appContext.witnessCoreUrl)
           });
         } catch (error) {

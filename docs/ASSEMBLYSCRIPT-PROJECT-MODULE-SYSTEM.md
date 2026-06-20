@@ -10,7 +10,7 @@ This document defines the preferred end-state for project-owned compute:
 - Wasm executes on demand inside the Rust core
 - all host access is explicit, capability-bound, and controlled by Rust
 
-This is a target architecture and migration plan. It does not override the current live-core phase gate in `docs/LIVE-CORE-GOAL-CONTRACT.md`: the platform should not implement Wasm execution until the generation, process, proof, and promotion path is working end-to-end.
+This is both the direction and the current authoring contract. First-class compute module declarations, AssemblyScript source authoring, saved smoke tests, bundle preview materialization, and soft deletion are implemented through MCP/package authoring. Rust/Wasm execution remains shadow/proof-gated and is not authoritative production execution.
 
 ## Problem
 
@@ -92,57 +92,127 @@ V1 guest modules are not:
 - long-running daemons
 - arbitrary plugin bundles
 
-### Canonical project layout
+### Canonical package layout
 
-The preferred project layout is:
+The preferred package materialized layout is:
 
 ```text
-examples/engentus/app/modules/
+app/modules/
   health-classify/
-    module.wtoml
     assembly/
       index.ts
-    fixtures/
-    proofs/
+    smoke/
+      smoke-health-low-risk.json
   burst-fit/
-    module.wtoml
     assembly/
       index.ts
-    fixtures/
-    proofs/
 ```
 
 The exact path can vary, but the ownership model should not:
 
-- the module is part of the project tree
-- its source is authored material
+- the module declaration is first-class world state
+- its source is authored through MCP/package materialized files
+- no direct project-tree write occurs when MCP authors source
 - its build artifact is a generated Wasm module
-- its proofs and fixtures live with the module
+- saved smoke fixtures live with the module as package materialized files
 
 ### Canonical authored declaration
 
-The platform should introduce a first-class authored declaration for project compute modules. A sketch:
+The platform has a first-class authored declaration for project compute modules:
 
 ```wtoml
-project.computeModule "engentus.health.classify"
-  source "app/modules/health-classify/assembly/index.ts"
-  language "assemblyscript"
-  abi "world.hostOperation.v1"
-  export "invoke"
-  maxMemoryPages 64
-  timeoutMs 100
-  allowedBindings ["host.log", "host.metric"]
+[[computeModule]]
+actor = "system"
+id = "engentus.health.classify"
+context = "ctx.compute"
+source = "app/modules/health-classify/assembly/index.ts"
+hostOperation = "engentus.pipeline.health.classify"
+language = "assemblyscript"
+abi = "world.hostOperation.v1"
+export = "invoke"
+maxMemoryPages = 64
+timeoutMs = 100
+allowedBindings = ["host.log", "host.metric"]
 ```
 
-And an adapter or host-op binding should reference that module explicitly:
+The source file itself is authored through MCP/package authoring:
 
-```wtoml
-boundary.adapter "engentus.pipeline.health.classify"
-  hostOperation "engentus.pipeline.health.classify"
-  implementation "module:engentus.health.classify"
-```
+- `authoring.write` action `computeModule.source.upsert`
+- required body fields: `package`, `revision`, `module`, `path`, `content`
+- `path` must exactly match the compute module declaration's `source`
+- the result is a package materialized-file record with `sourceLanguage = "assemblyscript"`
+- package bundle preview emits the file under `materialized/<path>`
 
 The important property is that project compute is explicit and authored, not hidden inside platform JS wiring.
+
+## MCP Authoring Contract
+
+AssemblyScript compute module authoring is exposed through these MCP actions:
+
+- `computeModule.create`
+- `computeModule.source.upsert`
+- `computeModule.source.markDeleted`
+- `computeModuleSmokeTest.upsert`
+- `computeModuleSmokeTest.markDeleted`
+- `computeModuleSmokeTest.run`
+
+Package materialized-file records are first-class world material:
+
+- fields: `id`, `package`, `revision`, `path`, `content`, `sourceLanguage`, optional `deletedAt`
+- active projections use the latest non-deleted record per `revision + path`
+- audit/debug reads can include tombstones with `includeDeleted: true`
+- bundle previews include only active materialized files by default
+
+Direct source/file mutation pathways are blocked during this tranche:
+
+- `/api/runtime/app-sources`
+- MCP `fs.blob` write/delete via `storage.blob`
+- MCP `fs.stream` write/copy via `storage.stream`
+- MCP `platform.changeSet` file edit, removeEdit, and apply operations
+
+Read-only source/file views remain available. Package authoring, proposal review, and non-source runtime capabilities remain available.
+
+## Saved Smoke Tests
+
+Saved smoke tests are authored records and package fixtures:
+
+- record fields: `id`, `module`, `package`, `revision`, `hostOperation`, `request`, `expected`, optional `timeoutMs`, optional `deletedAt`
+- saving a smoke test creates `app/modules/<module-slug>/smoke/<test-id>.json`
+- fixture schema: `world.computeModuleSmokeTest.v1`
+
+Fixture content:
+
+```json
+{
+  "schema": "world.computeModuleSmokeTest.v1",
+  "id": "smoke.health.low-risk",
+  "module": "engentus.health.classify",
+  "hostOperation": "engentus.pipeline.health.classify",
+  "request": { "score": 1 },
+  "expected": { "ok": true, "result": { "band": "low" } }
+}
+```
+
+`computeModuleSmokeTest.run`:
+
+- ignores deleted saved tests unless an inline body is supplied
+- builds `inputJson` as `{ "hostOperation": "...", "request": ... }`
+- treats `expected` as the complete expected result envelope
+- calls `appContext.witnessCoreBridge.shadowInvokeComputeModule(...)`
+- returns pass/fail, witness-core payload, expected envelope, and mismatch details
+- returns `503` with `WITNESS_CORE_REQUIRED` when shadow invocation is unavailable
+
+If the module source is marked deleted, smoke runs fail clearly with `compute module source marked deleted`.
+
+## Soft Deletion
+
+Mark-for-deletion emits tombstone witnesses. It never removes prior authored records.
+
+- source/materialized files use `deletedAt`
+- saved smoke tests use `deletedAt`
+- normal MCP/world reads filter deleted rows
+- `includeDeleted: true` exposes tombstoned rows for audit/debug views
+- re-upserting the same `revision + path` creates a new active record and leaves the tombstone in history
 
 ## Canonical ABI
 
@@ -222,7 +292,7 @@ The Wasm module system should plug into the same continuity model as other autho
 
 ### Source to generation flow
 
-1. Authored AssemblyScript source changes in the project tree.
+1. Authored AssemblyScript source is upserted through MCP as a package materialized file.
 2. Rust stages the module as a candidate generation input.
 3. The module compiles in isolation to Wasm.
 4. The smallest impacted proof set runs.
@@ -309,7 +379,7 @@ Engentus is the first vertical slice because the candidate modules are already v
 
 Deliverable:
 
-- a project can describe a compute guest module without executing it yet
+- a project can describe a compute guest module, author its AssemblyScript source through package materialized files, and save smoke fixtures without authoritative Wasm execution
 
 ### Phase 2: Add Rust guest execution
 
@@ -338,8 +408,9 @@ Why first:
 
 Steps:
 
-- create `examples/engentus/app/modules/health-classify/`
+- author `app/modules/health-classify/assembly/index.ts` through `computeModule.source.upsert`
 - port `classifyChannelHour` and the aggregate helpers to AssemblyScript
+- save smoke fixtures through `computeModuleSmokeTest.upsert`
 - keep the host-operation shape unchanged
 - run parity proofs against the current real fixtures and incumbent behavior
 - flip `engentus.pipeline.health.classify` to the Wasm module
@@ -364,9 +435,9 @@ Why second:
 
 Steps:
 
-- create `examples/engentus/app/modules/burst-fit/`
+- author `app/modules/burst-fit/assembly/index.ts` through `computeModule.source.upsert`
 - port `fitBurstRpm` and the minimal required helpers to AssemblyScript
-- keep fixtures and proof harnesses beside the module
+- keep smoke fixtures and proof harnesses beside the module as package materialized files where applicable
 - prove parity against the current real-signal fixtures
 - flip the host-operation implementation after proof passes
 
@@ -389,7 +460,7 @@ Why third:
 
 Steps:
 
-- create `examples/engentus/app/modules/kalman/`
+- author `app/modules/kalman/assembly/index.ts` through `computeModule.source.upsert`
 - port the 3-state joint Kalman implementation and required math helpers
 - preserve the current oracle and fixture lane
 - run stronger numeric tolerance and stability proofs than the earlier modules

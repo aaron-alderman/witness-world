@@ -32,10 +32,32 @@ function defaultUiState(displaySettings) {
     rightSectionIndex: 0,
     rightSectionCursorsByScreenId: {},
     collapsedSectionIdsByScreenId: {},
+    viewportLayout: null,
     numberBuffer: "",
     lastOutput: "",
     lastStatus: "info",
     displaySettings: normalizeOperatorWorkbenchDisplaySettings(displaySettings)
+  };
+}
+
+function normalizeViewportLayoutPatch(layout = {}, currentLayout = {}, viewport = {}) {
+  const viewportHeight = Math.max(12, Number(viewport?.height) || 30);
+  const currentTop = Number(currentLayout?.top ?? viewport?.top ?? 3) || 3;
+  const currentBottom = Number(currentLayout?.bottom ?? viewport?.bottom ?? 4) || 4;
+  const nextLeftWeight = clamp(
+    Number(layout?.leftWeight ?? currentLayout?.leftWeight ?? viewport?.leftWeight ?? 28) || 28,
+    15,
+    85
+  );
+  const proposedTop = Number(layout?.top ?? currentTop) || currentTop;
+  const proposedBottom = Number(layout?.bottom ?? currentBottom) || currentBottom;
+  const bottom = clamp(proposedBottom, 3, Math.max(3, viewportHeight - 9));
+  const top = clamp(proposedTop, 3, Math.max(3, viewportHeight - bottom - 6));
+  return {
+    top,
+    bottom,
+    leftWeight: nextLeftWeight,
+    rightWeight: 100 - nextLeftWeight
   };
 }
 
@@ -328,6 +350,23 @@ export function createOperatorWorkbenchController({
       uiState.helpOpen = !uiState.helpOpen;
       return { snapshot: await snapshot() };
     }
+    if (type === "set-viewport-layout") {
+      const next = await snapshot();
+      const viewport = next.viewport ?? {};
+      const currentLayout = viewport.layout ?? {};
+      uiState.viewportLayout = normalizeViewportLayoutPatch(intent.layout, currentLayout, viewport);
+      if (intent.persistDisplaySettings) {
+        uiState.displaySettings = normalizeOperatorWorkbenchDisplaySettings({
+          ...uiState.displaySettings,
+          paneSplit: clamp((uiState.viewportLayout.leftWeight || 28) / 100, 0.15, 0.85),
+          viewportTop: uiState.viewportLayout.top,
+          viewportBottom: uiState.viewportLayout.bottom
+        });
+        const saved = await saveDisplaySettings(uiState.displaySettings);
+        uiState.displaySettings = normalizeOperatorWorkbenchDisplaySettings(saved);
+      }
+      return { snapshot: await snapshot() };
+    }
     if (type === "set-inspector-tab") {
       uiState.rightScreenMode = "custom-screen";
       uiState.inspectorTab = ["inspect", "references", "source", "provenance"].includes(intent.tab)
@@ -500,10 +539,27 @@ export function createOperatorWorkbenchController({
       };
     },
     async updateDisplaySettings(patch = {}) {
+      const currentSnapshot = await snapshot();
+      const viewport = currentSnapshot.viewport ?? {};
       uiState.displaySettings = normalizeOperatorWorkbenchDisplaySettings({
         ...uiState.displaySettings,
         ...(patch && typeof patch === "object" ? patch : {})
       });
+      if (patch && typeof patch === "object" && patch.paneSplit !== undefined) {
+        const leftWeight = clamp(Math.round(Number(uiState.displaySettings.paneSplit || 0.42) * 100), 15, 85);
+        uiState.viewportLayout = {
+          ...(uiState.viewportLayout && typeof uiState.viewportLayout === "object" ? uiState.viewportLayout : {}),
+          leftWeight,
+          rightWeight: 100 - leftWeight
+        };
+      }
+      if (patch && typeof patch === "object" && (patch.viewportTop !== undefined || patch.viewportBottom !== undefined)) {
+        uiState.viewportLayout = normalizeViewportLayoutPatch({
+          top: patch.viewportTop,
+          bottom: patch.viewportBottom,
+          leftWeight: uiState.viewportLayout?.leftWeight
+        }, uiState.viewportLayout ?? (viewport.layout ?? {}), viewport);
+      }
       applyDisplaySettingsToActiveResultView();
       uiState.rightCursor = 0;
       uiState.leftCursor = 0;

@@ -43,6 +43,32 @@ function normalizePort(value, fallback = null) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function directSqlRouteDisallowedReason(provider = "sql") {
+  const normalized = typeof provider === "string" && provider.trim()
+    ? provider.trim().toLowerCase()
+    : "sql";
+  return `${normalized} datasource tests are unavailable through the public db.sql route until that route is wired to the witness-core SQL capability`;
+}
+
+function directSqlRouteDraftDatasource(payload = {}) {
+  const provider = String(payload?.provider || "").trim().toLowerCase();
+  const transport = provider === "postgres"
+    ? "capability.db.postgres"
+    : (provider === "mysql" ? "capability.db.mysql" : "capability.db.sql");
+  return {
+    ...payload,
+    adapterStatus: "route-disallowed",
+    lastError: directSqlRouteDisallowedReason(provider),
+    boundaryOwner: "witness-core",
+    boundaryAuthority: "rust-owned",
+    boundaryTransport: transport,
+    boundaryScope: "public-route-disallowed",
+    canonicalBoundary: true,
+    boundaryFallbackAllowed: false,
+    boundaryAvailability: "unavailable"
+  };
+}
+
 export function normalizeDatasourcePayload(body, existing = null) {
   const provider = normalizeProvider(body?.provider ?? existing?.provider);
   if (!provider) return { ok: false, status: 400, reason: "provider must be sqlite, postgres, or mysql" };
@@ -307,7 +333,14 @@ export function createSqlDbHandlers({
       }
       const operationId = `sqlop_${Math.random().toString(36).slice(2, 12)}`;
       const title = `test ${existing.datasourceName || existing.id}`;
-      const result = await appContext.dbSql.testConnection({ datasourceId });
+      const result = existing.provider !== "sqlite"
+        ? {
+            ok: false,
+            status: 503,
+            reason: directSqlRouteDisallowedReason(existing.provider),
+            datasource: directSqlRouteDraftDatasource(existing)
+          }
+        : await appContext.dbSql.testConnection({ datasourceId });
       emitDbSqlOperation({
         actor: requestActor,
         kind: "test",
@@ -391,7 +424,14 @@ export function createSqlDbHandlers({
       }
       const operationId = `sqlop_${Math.random().toString(36).slice(2, 12)}`;
       const title = `test ${normalized.payload.datasourceName || normalized.payload.id}`;
-      const result = await appContext.dbSql.testConnection({ datasource: normalized.payload });
+      const result = normalized.payload.provider !== "sqlite"
+        ? {
+            ok: false,
+            status: 503,
+            reason: directSqlRouteDisallowedReason(normalized.payload.provider),
+            datasource: directSqlRouteDraftDatasource(normalized.payload)
+          }
+        : await appContext.dbSql.testConnection({ datasource: normalized.payload });
       emitDbSqlOperation({
         actor: requestActor,
         kind: "test",

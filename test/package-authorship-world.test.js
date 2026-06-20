@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import { applyWitnessDocs, applyWitnessToml, parseWitnessToml } from "../src/dsl.js";
-import { moduleProjectors, publishPackageRevision } from "../src/modules.js";
+import {
+  defineComputeModule,
+  defineComputeModuleSmokeTest,
+  definePackageMaterializedFile,
+  markPackageMaterializedFileDeleted,
+  moduleProjectors,
+  publishPackageRevision
+} from "../src/modules.js";
 import { materializeCanonicalPackageBundle } from "../src/package-authorship.js";
 import {
   materializeCanonicalPackageBundleFromProject,
@@ -258,6 +265,104 @@ targetId = "dom.render"
     "namespaces/0001-ctx-packages-inspectlocal.wtoml",
     "dependencies/0001-capability-dom-render.wtoml"
   ]);
+});
+
+test("package bundle projection includes active materialized compute files and excludes deleted rows", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.compute"
+
+[[package]]
+actor = "system"
+id = "package.compute.health"
+context = "ctx.compute"
+label = "Health Compute"
+packageKind = "compute"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.compute.health.v1"
+package = "package.compute.health"
+version = "0.1.0"
+`);
+  defineComputeModule(world, {
+    actor: "system",
+    id: "engentus.health.classify",
+    context: "ctx.compute",
+    source: "app/modules/health-classify/assembly/index.ts",
+    hostOperation: "engentus.pipeline.health.classify"
+  });
+  definePackageMaterializedFile(world, {
+    actor: "system",
+    package: "package.compute.health",
+    revision: "packageRevision.compute.health.v1",
+    path: "app/modules/health-classify/assembly/index.ts",
+    content: "export function invoke(): void {}",
+    sourceLanguage: "assemblyscript"
+  });
+  const smoke = defineComputeModuleSmokeTest(world, {
+    actor: "system",
+    id: "smoke.health.low-risk",
+    module: "engentus.health.classify",
+    package: "package.compute.health",
+    revision: "packageRevision.compute.health.v1",
+    hostOperation: "engentus.pipeline.health.classify",
+    request: { score: 1 },
+    expected: { ok: true }
+  });
+  definePackageMaterializedFile(world, {
+    actor: "system",
+    package: "package.compute.health",
+    revision: "packageRevision.compute.health.v1",
+    path: "app/modules/engentus-health-classify/smoke/smoke-health-low-risk.json",
+    content: JSON.stringify({
+      schema: "world.computeModuleSmokeTest.v1",
+      id: smoke.body.id,
+      module: smoke.body.module,
+      hostOperation: smoke.body.hostOperation,
+      request: smoke.body.request,
+      expected: smoke.body.expected
+    }, null, 2),
+    sourceLanguage: "json"
+  });
+
+  let bundle = materializeCanonicalPackageBundleFromProject(projector => world.project(projector), {
+    revisionId: "packageRevision.compute.health.v1"
+  });
+  assert.equal(bundle.files.some(file => file.path === "materialized/app/modules/health-classify/assembly/index.ts"), true);
+  assert.equal(bundle.files.some(file => file.path === "materialized/app/modules/engentus-health-classify/smoke/smoke-health-low-risk.json"), true);
+
+  markPackageMaterializedFileDeleted(world, {
+    actor: "system",
+    package: "package.compute.health",
+    revision: "packageRevision.compute.health.v1",
+    path: "app/modules/health-classify/assembly/index.ts",
+    content: "export function invoke(): void {}",
+    sourceLanguage: "assemblyscript"
+  });
+  bundle = materializeCanonicalPackageBundleFromProject(projector => world.project(projector), {
+    revisionId: "packageRevision.compute.health.v1"
+  });
+  assert.equal(bundle.files.some(file => file.path === "materialized/app/modules/health-classify/assembly/index.ts"), false);
+  assert.equal(world.project(moduleProjectors.packageMaterializedFileHistory).some(row => row.deletedAt), true);
+
+  definePackageMaterializedFile(world, {
+    actor: "system",
+    package: "package.compute.health",
+    revision: "packageRevision.compute.health.v1",
+    path: "app/modules/health-classify/assembly/index.ts",
+    content: "export function invoke(): void { return; }",
+    sourceLanguage: "assemblyscript"
+  });
+  bundle = materializeCanonicalPackageBundleFromProject(projector => world.project(projector), {
+    revisionId: "packageRevision.compute.health.v1"
+  });
+  const sourceFiles = bundle.files.filter(file => file.path === "materialized/app/modules/health-classify/assembly/index.ts");
+  assert.equal(sourceFiles.length, 1);
+  assert.match(sourceFiles[0].content, /return/);
+  assert.equal(world.project(moduleProjectors.packageMaterializedFileHistory).filter(row => row.path === "app/modules/health-classify/assembly/index.ts").length, 3);
 });
 
 test("package bundle projection helper includes namespace-scoped transformers that touch the selected revision namespace", () => {

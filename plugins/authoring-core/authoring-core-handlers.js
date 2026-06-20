@@ -20,6 +20,12 @@ import {
   requestMessageDefine,
   requestBoundaryDefine,
   requestPolicyDefine,
+  requestComputeModuleDefine,
+  requestComputeModuleSourceUpsert,
+  requestComputeModuleSourceMarkDeleted,
+  requestComputeModuleSmokeTestUpsert,
+  requestComputeModuleSmokeTestMarkDeleted,
+  requestComputeModuleSmokeTestRun,
   requestPackageDefine,
   requestPackageRevisionDefine,
   requestPackageRevisionPublish,
@@ -40,6 +46,7 @@ import {
 import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
 import { frontendLegacyUpliftAuthorityTargets } from "../../src/frontend-legacy-uplift.js";
 import { resolveAuthoringHandlerSupport } from "../../src/runtime-authoring-handler-support.js";
+import { moduleProjectors } from "../../src/modules.js";
 
 function proposalIdPart(value, fallback = "target") {
   const normalized = String(value || "")
@@ -844,6 +851,181 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       sendJson(res, result.status, { package: result.package, witness: result.witness });
+    },
+
+    "computeModule.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const context = body && typeof body === "object" && !Array.isArray(body)
+        ? (body.context ?? null)
+        : null;
+      const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "computeModule.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Define an AssemblyScript compute module through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestComputeModuleDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { computeModule: result.computeModule, witness: result.witness });
+    },
+
+    "computeModule.source.upsert": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const resolvedRevision = requireCoveredAuthoringRefInput(world, body, {
+        idField: "revision",
+        refField: "revisionRef",
+        label: "package revision"
+      });
+      if (!resolvedRevision.ok) {
+        sendJson(res, 400, { error: resolvedRevision.error, witness: null });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedRevision.target);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestComputeModuleSourceUpsert(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { computeModuleSource: result.packageMaterializedFile, witness: result.witness });
+    },
+
+    "computeModule.source.markDeleted": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const resolvedRevision = requireCoveredAuthoringRefInput(world, body, {
+        idField: "revision",
+        refField: "revisionRef",
+        label: "package revision"
+      });
+      if (!resolvedRevision.ok) {
+        sendJson(res, 400, { error: resolvedRevision.error, witness: null });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedRevision.target);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestComputeModuleSourceMarkDeleted(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { computeModuleSource: result.packageMaterializedFile, witness: result.witness });
+    },
+
+    "computeModuleSmokeTest.upsert": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const resolvedRevision = requireCoveredAuthoringRefInput(world, body, {
+        idField: "revision",
+        refField: "revisionRef",
+        label: "package revision"
+      });
+      if (!resolvedRevision.ok) {
+        sendJson(res, 400, { error: resolvedRevision.error, witness: null });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedRevision.target);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestComputeModuleSmokeTestUpsert(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, {
+        computeModuleSmokeTest: result.computeModuleSmokeTest,
+        packageMaterializedFile: result.packageMaterializedFile,
+        witnesses: result.witnesses
+      });
+    },
+
+    "computeModuleSmokeTest.markDeleted": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const smokeId = body && typeof body === "object" && !Array.isArray(body)
+        ? String(body.id || "").trim()
+        : "";
+      const existing = smokeId
+        ? (world.project(moduleProjectors.computeModuleSmokeTestIndex).historyById?.[smokeId] ?? null)
+        : null;
+      if (!existing) {
+        sendJson(res, 404, { error: "compute module smoke test not found", witness: null });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, existing.revision);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestComputeModuleSmokeTestMarkDeleted(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, {
+        computeModuleSmokeTest: result.computeModuleSmokeTest,
+        packageMaterializedFile: result.packageMaterializedFile,
+        witnesses: result.witnesses
+      });
+    },
+
+    "computeModuleSmokeTest.run": async ({ req, res, requestActor, appContext }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const result = await requestComputeModuleSmokeTestRun(world, { body, appContext });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, code: result.code ?? null });
+        return;
+      }
+      sendJson(res, result.status, result.result);
     },
 
     "packageRevision.create": async ({ req, res, requestActor }) => {

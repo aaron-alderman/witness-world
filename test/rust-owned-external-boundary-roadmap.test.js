@@ -205,11 +205,13 @@ test("checked-in supervised dev config exposes the supported app path through th
 test("transitional node external-boundary owners stay contained to the known exception set", async () => {
   const sqliteOwners = await matchSourceFiles(/\bnode:sqlite\b|\bDatabaseSync\b/g);
   const pluginSqliteOwners = await matchFilesUnder(path.join(repoRoot, "plugins"), /\bnode:sqlite\b|\bDatabaseSync\b/g);
+  const directDbOwners = await matchFilesWithin(["plugins"], /import\("pg"\)|import\("mysql2\/promise"\)/g);
   const publicHttpOwners = await matchSourceFiles(/\bnode:http\b|createServer\s*\(|server\.listen\s*\(/g);
   const canonicalWatcherOwners = await matchSourceFiles(/\bfsWatch\.watch\s*\(/g);
 
   assert.deepEqual(sqliteOwners, []);
   assert.deepEqual(pluginSqliteOwners, []);
+  assert.deepEqual(directDbOwners, []);
 
   assert.deepEqual(publicHttpOwners, [
     "src/runtime-server.js"
@@ -331,7 +333,7 @@ test("node outbound network ownership stays frozen to the known server-side exce
   ]);
 
   assert.deepEqual(coreChannelFetchOwners, [
-    "src/witness-core-bridge.js"
+    "src/witness-core-http-transport.js"
   ]);
 });
 
@@ -380,7 +382,7 @@ test("node outbound network ownership is classified into typed capability famili
     "src/runtime-app-context.js",
     "src/runtime-route-handlers.js",
     "src/runtime-widget-page.js",
-    "src/witness-core-bridge.js"
+    "src/witness-core-http-transport.js"
   ]);
 
   assert.equal(RUNTIME_NETWORK_CAPABILITY_INVENTORY.loopbackMcpBridge.scope, "utility-loopback");
@@ -416,6 +418,7 @@ test("worker protocol is versioned and the build worker emits the shared envelop
   assert.match(protocolDoc, /delegated_read_only/i);
   assert.match(protocolDoc, /worker-local/i);
   assert.match(protocolDoc, /requestId/i);
+  assert.match(protocolDoc, /WITNESS-CORE-TRANSPORT\.md/i);
 
   const protocolSource = await fs.readFile(path.join(repoRoot, "src", "witness-worker-protocol.js"), "utf8");
   assert.match(protocolSource, /WITNESS_WORKER_PROTOCOL_VERSION\s*=\s*"witness-worker\/v1"/);
@@ -434,6 +437,26 @@ test("worker protocol is versioned and the build worker emits the shared envelop
   const buildWorkerSource = await fs.readFile(path.join(repoRoot, "src", "witness-core-build-worker.js"), "utf8");
   assert.match(buildWorkerSource, /createBuildWorkerResultEnvelope/);
   assert.match(buildWorkerSource, /JSON\.stringify\(createBuildWorkerResultEnvelope\(result\)\)/);
+
+  const controlTransportDoc = await fs.readFile(path.join(repoRoot, "docs", "WITNESS-CORE-TRANSPORT.md"), "utf8");
+  assert.match(controlTransportDoc, /witness-core-transport\/v1/);
+  assert.match(controlTransportDoc, /`call`/);
+  assert.match(controlTransportDoc, /`subscribe`/);
+  assert.match(controlTransportDoc, /`core\.events`/);
+  assert.match(controlTransportDoc, /`generation\.publish`/);
+  assert.match(controlTransportDoc, /`status\.read_health`/);
+  assert.match(controlTransportDoc, /src\/witness-core-ipc-transport\.js/);
+  assert.match(controlTransportDoc, /fallback\/manual adapter/i);
+
+  const controlTransportSource = await fs.readFile(path.join(repoRoot, "src", "witness-core-transport-contract.js"), "utf8");
+  assert.match(controlTransportSource, /WITNESS_CORE_TRANSPORT_PROTOCOL_VERSION\s*=\s*"witness-core-transport\/v1"/);
+  assert.match(controlTransportSource, /WITNESS_CORE_TRANSPORT_METHODS/);
+  assert.match(controlTransportSource, /WITNESS_CORE_TRANSPORT_SUBSCRIPTIONS/);
+  assert.match(controlTransportSource, /generationPublish:\s*"generation\.publish"/);
+  assert.match(controlTransportSource, /statusReadHealth:\s*"status\.read_health"/);
+  assert.match(controlTransportSource, /coreEvents:\s*"core\.events"/);
+  assert.match(controlTransportSource, /createWitnessCoreTransportCall/);
+  assert.match(controlTransportSource, /createWitnessCoreTransportSubscribe/);
 });
 
 test("supervised worker control is versioned and the checked-in control plane uses control_url", async () => {
@@ -444,10 +467,39 @@ test("supervised worker control is versioned and the checked-in control plane us
   assert.match(controlContractSource, /activationUrl/);
   assert.match(controlContractSource, /quiesceUrl/);
   assert.match(controlContractSource, /reloadUrl/);
+  assert.match(controlContractSource, /transport:\s*createRuntimeWorkerTransportDescriptor/);
+
+  const workerTransportContractSource = await fs.readFile(path.join(repoRoot, "src", "runtime-worker-transport-contract.js"), "utf8");
+  assert.match(workerTransportContractSource, /RUNTIME_WORKER_TRANSPORT_PROTOCOL_VERSION\s*=\s*"witness-runtime-worker-transport\/v1"/);
+  assert.match(workerTransportContractSource, /RUNTIME_WORKER_TRANSPORT_METHODS/);
+  assert.match(workerTransportContractSource, /controlDescribe:\s*"runtime\.control\.describe"/);
+  assert.match(workerTransportContractSource, /processHealthRead:\s*"runtime\.process_health\.read"/);
+  assert.match(workerTransportContractSource, /supervisionActivate:\s*"runtime\.supervision\.activate"/);
+  assert.match(workerTransportContractSource, /supervisionQuiesce:\s*"runtime\.supervision\.quiesce"/);
+  assert.match(workerTransportContractSource, /appSnapshotReload:\s*"runtime\.app_snapshot\.reload"/);
+  assert.match(workerTransportContractSource, /createRuntimeWorkerTransportCall/);
+  assert.match(workerTransportContractSource, /createRuntimeWorkerTransportResult/);
+  assert.match(workerTransportContractSource, /parseRuntimeWorkerTransportMessage/);
+
+  const workerTransportSource = await fs.readFile(path.join(repoRoot, "src", "runtime-worker-transport.js"), "utf8");
+  assert.match(workerTransportSource, /export async function executeRuntimeWorkerTransportCall/);
+  assert.match(workerTransportSource, /case RUNTIME_WORKER_TRANSPORT_METHODS\.controlDescribe:/);
+  assert.match(workerTransportSource, /case RUNTIME_WORKER_TRANSPORT_METHODS\.processHealthRead:/);
+  assert.match(workerTransportSource, /case RUNTIME_WORKER_TRANSPORT_METHODS\.supervisionActivate:/);
+  assert.match(workerTransportSource, /case RUNTIME_WORKER_TRANSPORT_METHODS\.supervisionQuiesce:/);
+  assert.match(workerTransportSource, /case RUNTIME_WORKER_TRANSPORT_METHODS\.appSnapshotReload:/);
 
   const runtimeServerSource = await fs.readFile(path.join(repoRoot, "src", "runtime-server.js"), "utf8");
   assert.match(runtimeServerSource, /req\.method === "GET" && requestUrl\.pathname === RUNTIME_WORKER_CONTROL_PATH/);
-  assert.match(runtimeServerSource, /createRuntimeWorkerControlDocument/);
+  assert.match(runtimeServerSource, /executeRuntimeWorkerTransportCall/);
+  assert.match(runtimeServerSource, /method:\s*RUNTIME_WORKER_TRANSPORT_METHODS\.controlDescribe/);
+  assert.match(runtimeServerSource, /method:\s*RUNTIME_WORKER_TRANSPORT_METHODS\.processHealthRead/);
+  assert.match(runtimeServerSource, /method:\s*RUNTIME_WORKER_TRANSPORT_METHODS\.supervisionActivate/);
+  assert.match(runtimeServerSource, /method:\s*RUNTIME_WORKER_TRANSPORT_METHODS\.supervisionQuiesce/);
+
+  const runtimeCoreHandlersSource = await fs.readFile(path.join(repoRoot, "src", "runtime-core-handlers.js"), "utf8");
+  assert.match(runtimeCoreHandlersSource, /executeRuntimeWorkerTransportCall/);
+  assert.match(runtimeCoreHandlersSource, /method:\s*RUNTIME_WORKER_TRANSPORT_METHODS\.appSnapshotReload/);
 
   const substrateReadme = await fs.readFile(path.join(repoRoot, "substrate", "README.md"), "utf8");
   assert.match(substrateReadme, /control_url = "http:\/\/127\.0\.0\.1:\{runtime_port\}\/api\/runtime\/worker-control"/);
@@ -471,8 +523,31 @@ test("supervised startup app-project loading routes canonical manifest reads thr
 
 test("supervised runtime plugin catalog discovery routes plugin-root reads through witness-core when configured", async () => {
   const bridgeSource = await fs.readFile(path.join(repoRoot, "src", "witness-core-bridge.js"), "utf8");
+  assert.match(bridgeSource, /createWitnessCoreIpcTransport/);
+  assert.match(bridgeSource, /createWitnessCoreHttpTransport/);
+  assert.match(bridgeSource, /WITNESS_CORE_TRANSPORT_PIPE/);
+  assert.match(bridgeSource, /createWitnessCoreTransportCall/);
+  assert.match(bridgeSource, /createWitnessCoreTransportSubscribe/);
+  assert.match(bridgeSource, /transport\s*=\s*null/);
   assert.match(bridgeSource, /async listSourceDirectory/);
-  assert.match(bridgeSource, /\/capabilities\/fs\/list/);
+  assert.match(bridgeSource, /WITNESS_CORE_TRANSPORT_METHODS\.sourceList/);
+
+  const ipcTransportSource = await fs.readFile(path.join(repoRoot, "src", "witness-core-ipc-transport.js"), "utf8");
+  assert.match(ipcTransportSource, /kind:\s*"witness-core-ipc-transport\/v1"/);
+  assert.match(ipcTransportSource, /createWitnessCoreTransportCall/);
+  assert.match(ipcTransportSource, /createWitnessCoreTransportSubscribe/);
+  assert.match(ipcTransportSource, /WITNESS_CORE_TRANSPORT_SUBSCRIPTIONS\.coreEvents/);
+
+  const transportSource = await fs.readFile(path.join(repoRoot, "src", "witness-core-http-transport.js"), "utf8");
+  assert.match(transportSource, /fetchImpl\s*=\s*globalThis\.fetch/);
+  assert.match(transportSource, /kind:\s*"witness-core-http-transport\/v1"/);
+  assert.match(transportSource, /protocol:\s*WITNESS_CORE_TRANSPORT_PROTOCOL_VERSION/);
+  assert.match(transportSource, /createWitnessCoreTransportCall/);
+  assert.match(transportSource, /createWitnessCoreTransportSubscribe/);
+  assert.match(transportSource, /case WITNESS_CORE_TRANSPORT_METHODS\.sourceList:/);
+  assert.match(transportSource, /case WITNESS_CORE_TRANSPORT_METHODS\.statusReadHealth:/);
+  assert.match(transportSource, /case WITNESS_CORE_TRANSPORT_METHODS\.statusReadServing:/);
+  assert.match(transportSource, /case WITNESS_CORE_TRANSPORT_METHODS\.generationPublish:/);
 
   const pluginUtilsSource = await fs.readFile(path.join(repoRoot, "src", "runtime-plugin-utils.js"), "utf8");
   assert.match(pluginUtilsSource, /createRuntimePluginDiscoveryFsModule/);
@@ -498,6 +573,7 @@ test("supervised runtime plugin module loading routes canonical imports through 
   assert.match(pluginLoaderSource, /pathToFileURL\(effectiveEntryPath\)/);
   assert.match(pluginLoaderSource, /resolvedPath:\s*effectiveEntryPath/);
   assert.match(pluginLoaderSource, /loadRuntimePluginModules\(\{[\s\S]*generationBridge[\s\S]*cwd/s);
+  assert.doesNotMatch(pluginLoaderSource, /preferLocalWorkspaceImports/);
 
   const dslSource = await fs.readFile(path.join(repoRoot, "src", "dsl.js"), "utf8");
   assert.match(dslSource, /loadRuntimePluginModules[\s\S]*generationBridge:\s*options\.generationBridge/s);
@@ -505,7 +581,7 @@ test("supervised runtime plugin module loading routes canonical imports through 
 
   const runtimeServerSource = await fs.readFile(path.join(repoRoot, "src", "runtime-server.js"), "utf8");
   assert.match(runtimeServerSource, /loadRuntimePluginModulesImpl\(\{[\s\S]*generationBridge:\s*startupWitnessCoreBridge/s);
-  assert.match(runtimeServerSource, /loadRuntimePluginModulesImpl\(\{[\s\S]*cwd:\s*process\.cwd\(\)/s);
+  assert.match(runtimeServerSource, /loadRuntimePluginModulesImpl\(\{[\s\S]*cwd:\s*startupWitnessCoreWorkspaceRoot/s);
 });
 
 test("core-connected startup and plugin source helpers fail closed instead of falling back to local canonical disk", async () => {
@@ -531,7 +607,7 @@ test("core-connected startup and plugin source helpers fail closed instead of fa
   const pluginLoaderSource = await fs.readFile(path.join(repoRoot, "src", "runtime-plugin-loader.js"), "utf8");
   assert.match(pluginLoaderSource, /requireGenerationBridgeForCanonicalImports/);
   assert.match(pluginLoaderSource, /if \(requireGenerationBridgeForCanonicalImports\) \{/);
-  assert.match(pluginLoaderSource, /if \(!pluginRootSourceId && requireGenerationBridgeForCanonicalImports\)/);
+  assert.match(pluginLoaderSource, /if \(\(!pluginRootSourceId \|\| !entrySourceId\) && requireGenerationBridgeForCanonicalImports\)/);
   assert.match(pluginLoaderSource, /WITNESS_CORE_REQUIRED/);
 
   const dslSource = await fs.readFile(path.join(repoRoot, "src", "dsl.js"), "utf8");

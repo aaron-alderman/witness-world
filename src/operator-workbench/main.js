@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createOperatorWorkbenchCore } from "./core.js";
+import { startOperatorBrowserExampleServer } from "../operator-browser-example-server.js";
 import { OPERATOR_WORKBENCH_IPC_CHANNELS } from "./bridge.js";
 import {
   createOperatorWorkbenchSettingsStore,
@@ -61,6 +62,11 @@ function wireWorkbenchWindowShortcuts(window) {
   });
 }
 
+function shouldLoadBrowserExample({ cwd, appPath }) {
+  if (!appPath) return false;
+  return path.resolve(cwd, appPath) === path.resolve(cwd, "examples", "operator");
+}
+
 export async function createOperatorWorkbenchShell({
   electron,
   args = process.argv.slice(2),
@@ -68,6 +74,7 @@ export async function createOperatorWorkbenchShell({
   env = process.env,
   fsModule = fs,
   createCoreImpl = createOperatorWorkbenchCore,
+  startBrowserExampleServerImpl = startOperatorBrowserExampleServer,
   renderPageImpl = renderOperatorWorkbenchPage,
   preloadPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "desktop-preload.cjs")
 } = {}) {
@@ -87,6 +94,7 @@ export async function createOperatorWorkbenchShell({
     appPath,
     worldHome
   });
+  const browserExampleMode = shouldLoadBrowserExample({ cwd, appPath });
   const displaySettings = await settingsStore.load(workspaceKey);
   const core = await createCoreImpl({
     args,
@@ -104,9 +112,11 @@ export async function createOperatorWorkbenchShell({
   };
 
   let cleanedUp = false;
+  let browserExampleServer = null;
   async function cleanup() {
     if (cleanedUp) return;
     cleanedUp = true;
+    await browserExampleServer?.close?.();
     await core.close();
     for (const [channel] of handlers) {
       ipcMain.removeHandler(channel);
@@ -125,9 +135,9 @@ export async function createOperatorWorkbenchShell({
     minWidth: 1100,
     minHeight: 760,
     show: false,
-    title: "Operator TUI",
+    title: browserExampleMode ? "Operator Example" : "Operator TUI",
     backgroundColor: "#0b0f0d",
-    frame: false,
+    frame: browserExampleMode ? true : false,
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -178,6 +188,20 @@ export async function createOperatorWorkbenchShell({
   window.setMenuBarVisibility?.(false);
   window.once?.("ready-to-show", () => window.show?.());
   window.on?.("closed", cleanup);
+  if (browserExampleMode) {
+    browserExampleServer = await startBrowserExampleServerImpl({
+      core,
+      workspaceRoot: cwd,
+      exampleRoot: path.resolve(cwd, appPath),
+      host: "127.0.0.1",
+      port: 4020
+    });
+    await window.loadURL(browserExampleServer.url);
+    return {
+      close: cleanup,
+      core
+    };
+  }
   const pagePath = await writeWorkbenchPageFile({
     html: renderPageImpl(),
     userDataRoot,

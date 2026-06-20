@@ -9,7 +9,13 @@ import {
   requestPackageRevisionDefine,
   requestPackagePatchDefine,
   requestPackageDependencyDefine,
-  requestPackageTransformerDefine
+  requestPackageTransformerDefine,
+  requestComputeModuleDefine,
+  requestComputeModuleSourceUpsert,
+  requestComputeModuleSourceMarkDeleted,
+  requestComputeModuleSmokeTestUpsert,
+  requestComputeModuleSmokeTestMarkDeleted,
+  requestComputeModuleSmokeTestRun
 } from "./authoring-core-processes.js";
 import { bundles } from "./runtime.js";
 import { executeAuthoringCoreProposalTarget } from "./authoring-core-proposal-targets.js";
@@ -35,6 +41,12 @@ const AUTHORING_CORE_HANDLER_IDS = [
   "message.create",
   "boundary.create",
   "policy.create",
+  "computeModule.create",
+  "computeModule.source.upsert",
+  "computeModule.source.markDeleted",
+  "computeModuleSmokeTest.upsert",
+  "computeModuleSmokeTest.markDeleted",
+  "computeModuleSmokeTest.run",
   "package.create",
   "packageRevision.create",
   "packageRevision.publish",
@@ -72,6 +84,12 @@ const AUTHORING_CORE_PROCESS_EXPORTS = [
   "requestMessageDefine",
   "requestBoundaryDefine",
   "requestPolicyDefine",
+  "requestComputeModuleDefine",
+  "requestComputeModuleSourceUpsert",
+  "requestComputeModuleSourceMarkDeleted",
+  "requestComputeModuleSmokeTestUpsert",
+  "requestComputeModuleSmokeTestMarkDeleted",
+  "requestComputeModuleSmokeTestRun",
   "requestPackageDefine",
   "requestPackageRevisionDefine",
   "requestPackageRevisionPublish",
@@ -392,6 +410,12 @@ test("authoring-core plugin owns generic authoring routes and handlers", async (
   assert.equal(bundle.routes.some(route => route.path === "/api/messages" && route.handler === "message.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/boundaries" && route.handler === "boundary.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/policies" && route.handler === "policy.create"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/compute-modules" && route.handler === "computeModule.create"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/compute-module-sources" && route.handler === "computeModule.source.upsert"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/compute-module-sources" && route.method === "DELETE" && route.handler === "computeModule.source.markDeleted"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/compute-module-smoke-tests" && route.handler === "computeModuleSmokeTest.upsert"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/compute-module-smoke-tests" && route.method === "DELETE" && route.handler === "computeModuleSmokeTest.markDeleted"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/compute-module-smoke-tests/run" && route.handler === "computeModuleSmokeTest.run"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/packages" && route.handler === "package.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/package-revisions" && route.handler === "packageRevision.create"), true);
   assert.equal(bundle.routes.some(route => String(route.pattern) === String(/^\/api\/package-revisions\/([^/]+)\/publish$/) && route.handler === "packageRevision.publish"), true);
@@ -434,7 +458,11 @@ test("authoring-core plugin owns generic authoring process helpers", async () =>
   const metaManifest = JSON.parse(await readFile(new URL("../authoring/plugin.json", import.meta.url), "utf8"));
 
   for (const exportName of AUTHORING_CORE_PROCESS_EXPORTS) {
-    assert.equal(processesSource.includes(`export function ${exportName}`), true);
+    assert.equal(
+      processesSource.includes(`export function ${exportName}`)
+        || processesSource.includes(`export async function ${exportName}`),
+      true
+    );
   }
   await assert.rejects(readFile(new URL("../../src/bootstrap-authoring.js", import.meta.url), "utf8"));
   assert.equal(metaManifest.runtime, undefined);
@@ -458,6 +486,7 @@ test("authoring-core plugin owns generic authoring process helpers", async () =>
     "type.define",
     "projection.define",
     "message.define",
+    "computeModule.define",
     "package.define",
     "packageRevision.define",
     "packageRevision.publish",
@@ -832,6 +861,303 @@ test("authoring-core package process helpers resolve contextual refs and reject 
   assert.equal(ambiguous.ok, false);
   assert.equal(ambiguous.status, 400);
   assert.match(ambiguous.error, /ambiguously/i);
+});
+
+test("authoring-core compute module helper defines AssemblyScript host operations", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.compute"
+`);
+
+  const result = requestComputeModuleDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "engentus.health.classify",
+      context: "ctx.compute",
+      source: "app/modules/health-classify/assembly/index.ts",
+      hostOperation: "engentus.pipeline.health.classify",
+      allowedBindings: ["host.log"],
+      maxMemoryPages: 2,
+      timeoutMs: 100
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 201);
+  assert.equal(result.computeModule.id, "engentus.health.classify");
+  assert.equal(result.computeModule.language, "assemblyscript");
+  assert.equal(result.computeModule.abi, "world.hostOperation.v1");
+  assert.equal(result.computeModule.export, "invoke");
+  assert.equal(result.computeModule.context, "ctx.compute");
+  assert.deepEqual(result.computeModule.allowedBindings, ["host.log"]);
+  assert.equal(world.project(moduleProjectors.computeModules).some(row =>
+    row.id === "engentus.health.classify"
+    && row.hostOperation === "engentus.pipeline.health.classify"
+  ), true);
+
+  const duplicateHostOperation = requestComputeModuleDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "engentus.health.classify.v2",
+      source: "app/modules/health-classify/assembly/index.ts",
+      hostOperation: "engentus.pipeline.health.classify"
+    }
+  });
+  assert.equal(duplicateHostOperation.ok, false);
+  assert.equal(duplicateHostOperation.status, 409);
+});
+
+test("authoring-core compute module source authoring persists package materialized files with soft deletion", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.compute"
+
+[[package]]
+actor = "system"
+id = "package.compute.health"
+context = "ctx.compute"
+label = "Health Compute"
+packageKind = "compute"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.compute.health.v1"
+package = "package.compute.health"
+version = "0.1.0"
+
+[[computeModule]]
+actor = "system"
+id = "engentus.health.classify"
+context = "ctx.compute"
+source = "app/modules/health-classify/assembly/index.ts"
+hostOperation = "engentus.pipeline.health.classify"
+`);
+
+  const upsert = requestComputeModuleSourceUpsert(world, {
+    actor: "aaron",
+    body: {
+      package: "package.compute.health",
+      revision: "packageRevision.compute.health.v1",
+      module: "engentus.health.classify",
+      path: "app/modules/health-classify/assembly/index.ts",
+      content: "export function invoke(): void {}"
+    }
+  });
+  assert.equal(upsert.ok, true);
+  assert.equal(upsert.packageMaterializedFile.sourceLanguage, "assemblyscript");
+  assert.equal(world.project(moduleProjectors.packageMaterializedFiles).length, 1);
+
+  const wrongPath = requestComputeModuleSourceUpsert(world, {
+    actor: "aaron",
+    body: {
+      package: "package.compute.health",
+      revision: "packageRevision.compute.health.v1",
+      module: "engentus.health.classify",
+      path: "app/modules/other/assembly/index.ts",
+      content: ""
+    }
+  });
+  assert.equal(wrongPath.ok, false);
+  assert.match(wrongPath.error, /must match declaration source/);
+
+  const deleted = requestComputeModuleSourceMarkDeleted(world, {
+    actor: "aaron",
+    body: {
+      package: "package.compute.health",
+      revision: "packageRevision.compute.health.v1",
+      module: "engentus.health.classify",
+      path: "app/modules/health-classify/assembly/index.ts"
+    }
+  });
+  assert.equal(deleted.ok, true);
+  assert.equal(world.project(moduleProjectors.packageMaterializedFiles).length, 0);
+  assert.equal(world.project(moduleProjectors.packageMaterializedFileHistory).some(row => row.deletedAt), true);
+
+  const restored = requestComputeModuleSourceUpsert(world, {
+    actor: "aaron",
+    body: {
+      package: "package.compute.health",
+      revision: "packageRevision.compute.health.v1",
+      module: "engentus.health.classify",
+      path: "app/modules/health-classify/assembly/index.ts",
+      content: "export function invoke(): void { return; }"
+    }
+  });
+  assert.equal(restored.ok, true);
+  assert.equal(world.project(moduleProjectors.packageMaterializedFiles).length, 1);
+  assert.equal(world.project(moduleProjectors.packageMaterializedFileHistory).filter(row => row.path === "app/modules/health-classify/assembly/index.ts").length, 3);
+});
+
+test("authoring-core compute module smoke tests persist fixtures and run through witness-core shadow invocation", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.compute"
+
+[[package]]
+actor = "system"
+id = "package.compute.health"
+context = "ctx.compute"
+label = "Health Compute"
+packageKind = "compute"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.compute.health.v1"
+package = "package.compute.health"
+version = "0.1.0"
+
+[[computeModule]]
+actor = "system"
+id = "engentus.health.classify"
+context = "ctx.compute"
+source = "app/modules/health-classify/assembly/index.ts"
+hostOperation = "engentus.pipeline.health.classify"
+`);
+  requestComputeModuleSourceUpsert(world, {
+    actor: "aaron",
+    body: {
+      package: "package.compute.health",
+      revision: "packageRevision.compute.health.v1",
+      module: "engentus.health.classify",
+      path: "app/modules/health-classify/assembly/index.ts",
+      content: "export function invoke(): void {}"
+    }
+  });
+
+  const saved = requestComputeModuleSmokeTestUpsert(world, {
+    actor: "aaron",
+    body: {
+      id: "smoke.health.low-risk",
+      package: "package.compute.health",
+      revision: "packageRevision.compute.health.v1",
+      module: "engentus.health.classify",
+      request: { score: 1 },
+      expected: { ok: true, result: { band: "low" } }
+    }
+  });
+  assert.equal(saved.ok, true);
+  assert.equal(saved.packageMaterializedFile.path, "app/modules/engentus-health-classify/smoke/smoke-health-low-risk.json");
+  assert.match(saved.packageMaterializedFile.content, /world\.computeModuleSmokeTest\.v1/);
+  assert.equal(world.project(moduleProjectors.computeModuleSmokeTests).length, 1);
+
+  const calls = [];
+  const run = await requestComputeModuleSmokeTestRun(world, {
+    body: { id: "smoke.health.low-risk" },
+    appContext: {
+      witnessCoreBridge: {
+        async shadowInvokeComputeModule(call) {
+          calls.push(call);
+          return { ok: true, matched: true, envelope: { ok: true, result: { band: "low" } } };
+        }
+      }
+    }
+  });
+  assert.equal(run.ok, true);
+  assert.equal(run.result.passed, true);
+  assert.deepEqual(calls, [{
+    hostOperation: "engentus.pipeline.health.classify",
+    inputJson: JSON.stringify({ hostOperation: "engentus.pipeline.health.classify", request: { score: 1 } }),
+    jsResultJson: JSON.stringify({ ok: true, result: { band: "low" } })
+  }]);
+
+  const missingCore = await requestComputeModuleSmokeTestRun(world, {
+    body: { id: "smoke.health.low-risk" },
+    appContext: {}
+  });
+  assert.equal(missingCore.ok, false);
+  assert.equal(missingCore.status, 503);
+  assert.equal(missingCore.code, "WITNESS_CORE_REQUIRED");
+
+  const deleted = requestComputeModuleSmokeTestMarkDeleted(world, {
+    actor: "aaron",
+    body: { id: "smoke.health.low-risk" }
+  });
+  assert.equal(deleted.ok, true);
+  assert.equal(world.project(moduleProjectors.computeModuleSmokeTests).length, 0);
+  assert.equal(world.project(moduleProjectors.packageMaterializedFiles).some(row => row.path.endsWith("/smoke/smoke-health-low-risk.json")), false);
+
+  const deletedRun = await requestComputeModuleSmokeTestRun(world, {
+    body: { id: "smoke.health.low-risk" },
+    appContext: {
+      witnessCoreBridge: {
+        async shadowInvokeComputeModule() {
+          throw new Error("deleted saved tests should not run");
+        }
+      }
+    }
+  });
+  assert.equal(deletedRun.ok, false);
+  assert.equal(deletedRun.status, 404);
+});
+
+test("authoring-core compute module governed flow creates and executes proposals", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.compute"
+`);
+  const body = {
+    id: "engentus.health.classify",
+    context: "ctx.compute",
+    source: "app/modules/health-classify/assembly/index.ts",
+    hostOperation: "engentus.pipeline.health.classify"
+  };
+  const sent = [];
+  const handlers = bundles["bundle-authoring-core"].createHandlers({
+    world,
+    backendHost: "backendHost",
+    readJson: async () => body,
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureIdentityAuthority: () => ({ ok: true }),
+      ensureContextAuthority: () => ({ ok: false, status: 403, reason: "forbidden context" }),
+      ensureTargetAuthority: () => ({ ok: true })
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ kind: "gate", gate });
+    },
+    sendJson(_res, status, responseBody) {
+      sent.push({ kind: "json", status, body: responseBody });
+    },
+    syncSessionIdentity: () => null,
+    sessionResponseShape: session => session,
+    supportedHandlers: [],
+    supportedHandlerMetadata: {}
+  });
+
+  await handlers["computeModule.create"]({ req: {}, res: {}, requestActor: "callan" });
+  assert.equal(sent.some(entry => entry.kind === "gate"), false);
+  assert.equal(sent[0].status, 202);
+  assert.equal(sent[0].body.proposal.targetProcess, "computeModule.define");
+  assert.equal(sent[0].body.proposal.targetKind, "context");
+  assert.equal(sent[0].body.proposal.targetId, "ctx.compute");
+
+  const applied = await executeAuthoringCoreProposalTarget({
+    world,
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: sent[0].body.proposal,
+    body,
+    supportedHandlers: [],
+    supportedHandlerMetadata: {},
+    ensureIdentityAuthority: () => ({ ok: true }),
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: () => ({ ok: true })
+  });
+  assert.equal(applied?.ok, true);
+  assert.equal(world.project(moduleProjectors.computeModules).some(row =>
+    row.id === "engentus.health.classify"
+    && row.hostOperation === "engentus.pipeline.health.classify"
+  ), true);
 });
 
 test("authoring-core package handlers lower contextual refs before target authority checks", async () => {

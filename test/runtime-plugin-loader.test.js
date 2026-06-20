@@ -197,6 +197,420 @@ test("plugin runtime loader can import from a witness-core materialized scratch 
   }
 });
 
+test("plugin runtime loader materializes transitive cross-root dependencies through witness-core without local workspace imports", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(process.cwd(), ".tmp-witness-plugin-loader-workspace-"));
+  try {
+    const pluginRoot = path.join(workspaceRoot, "plugins");
+    const pluginDir = await writePlugin(pluginRoot, "demo", {
+      id: "plugin.demo",
+      version: "0.1.0",
+      displayName: "Demo",
+      description: "Demo plugin runtime",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-demo-local"],
+      contributes: {}
+    }, `
+      import { createBundle } from "../../src/support.js";
+      export default { bundles: { "bundle-demo-local": createBundle() } };
+    `);
+    const srcRoot = path.join(workspaceRoot, "src");
+    await fs.mkdir(path.join(srcRoot, "deep"), { recursive: true });
+    await fs.writeFile(path.join(srcRoot, "support.js"), `
+      import { helperValue } from "./deep/helper.js";
+      export function createBundle() {
+        return {
+          handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [helperValue], handlerMetadata: {} },
+          routes: [],
+          surfaces: [],
+          createHandlers() { return { [helperValue]: async () => {} }; }
+        };
+      }
+    `, "utf8");
+    await fs.writeFile(path.join(srcRoot, "deep", "helper.js"), `
+      export const helperValue = "demo.read";
+    `, "utf8");
+
+    const bridgeCalls = [];
+    const bridge = {
+      async listSourceDirectory({ path: sourceId }) {
+        bridgeCalls.push({ kind: "list", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const entries = await fs.readdir(target, { withFileTypes: true });
+        return {
+          path: sourceId,
+          exists: true,
+          entries: entries.map(entry => ({
+            name: entry.name,
+            isFile: entry.isFile(),
+            isDirectory: entry.isDirectory()
+          }))
+        };
+      },
+      async readSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "read", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        return {
+          path: sourceId,
+          content: await fs.readFile(target, "utf8")
+        };
+      },
+      async statSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "stat", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const stat = await fs.stat(target);
+        return {
+          path: sourceId,
+          exists: true,
+          isFile: stat.isFile(),
+          isDirectory: stat.isDirectory(),
+          size: Number(stat.size || 0),
+          modifiedAt: String(stat.mtimeMs || 0)
+        };
+      }
+    };
+    const guardedFs = {
+      ...fs,
+      async readFile(target, encoding) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(pluginRoot) || resolved.startsWith(srcRoot)) {
+          throw new Error(`plugin runtime load read escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readFile(target, encoding);
+      },
+      async readdir(target, options) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(pluginRoot) || resolved.startsWith(srcRoot)) {
+          throw new Error(`plugin runtime load readdir escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readdir(target, options);
+      },
+      async stat(target) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(pluginRoot) || resolved.startsWith(srcRoot)) {
+          throw new Error(`plugin runtime load stat escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.stat(target);
+      }
+    };
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.demo"],
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      cwd: workspaceRoot
+    });
+    const loadResult = await loadRuntimePluginModules({
+      pluginCatalog,
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      cwd: workspaceRoot
+    });
+    const loadedCatalog = applyRuntimePluginLoadState(pluginCatalog, loadResult);
+    const demo = loadedCatalog.packages.find(row => row.id === "plugin.demo");
+
+    assert.equal(loadResult.hasBlockingErrors, false);
+    assert.ok(loadResult.bundleOverrides["bundle-demo-local"]);
+    assert.equal(demo.runtimeModule.loadStatus, "loaded");
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "src/support.js"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "src/deep/helper.js"), true);
+    assert.match(normalize(demo.runtimeModule.resolvedPath), /\.witness-core\/runtime-plugin-modules\/plugin\.demo-/);
+  } finally {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("plugin runtime loader materializes runtime-store seed assets needed by bridged src modules", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(process.cwd(), ".tmp-witness-plugin-loader-store-"));
+  try {
+    const pluginRoot = path.join(workspaceRoot, "plugins");
+    await writePlugin(pluginRoot, "demo", {
+      id: "plugin.demo",
+      version: "0.1.0",
+      displayName: "Demo",
+      description: "Demo plugin runtime",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-demo-local"],
+      contributes: {}
+    }, `
+      import { createBundle } from "../../src/support.js";
+      export default { bundles: { "bundle-demo-local": createBundle() } };
+    `);
+    await fs.mkdir(path.join(workspaceRoot, "src"), { recursive: true });
+    await fs.mkdir(path.join(workspaceRoot, "store", "seeds"), { recursive: true });
+    await fs.writeFile(path.join(workspaceRoot, "src", "support.js"), `
+      import { runtimeProfilePresetsFromSeeds } from "./runtime-store-seeds.js";
+      export function createBundle() {
+        const profile = runtimeProfilePresetsFromSeeds().minimal;
+        return {
+          handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [profile.plugins[0]], handlerMetadata: {} },
+          routes: [],
+          surfaces: [],
+          createHandlers() { return { [profile.plugins[0]]: async () => {} }; }
+        };
+      }
+    `, "utf8");
+    await fs.writeFile(path.join(workspaceRoot, "src", "runtime-store-seeds.js"), `
+      import fs from "node:fs";
+      import path from "node:path";
+      import { fileURLToPath } from "node:url";
+      const SRC_DIR = path.dirname(fileURLToPath(import.meta.url));
+      const REPO_ROOT = path.resolve(SRC_DIR, "..");
+      const STORE_SEED_DIR = path.join(REPO_ROOT, "store", "seeds");
+      function readSeedJson(fileName) {
+        return JSON.parse(fs.readFileSync(path.join(STORE_SEED_DIR, fileName), "utf8"));
+      }
+      const RUNTIME_PROFILE_SEED = readSeedJson("runtime-profiles.json");
+      const FIRST_PARTY_PLUGIN_CATALOG_SEED = readSeedJson("first-party-plugin-catalog.json");
+      export function runtimeProfilePresetsFromSeeds() {
+        return RUNTIME_PROFILE_SEED.profiles;
+      }
+      export function firstPartyPluginCatalogSeed() {
+        return FIRST_PARTY_PLUGIN_CATALOG_SEED;
+      }
+    `, "utf8");
+    await fs.writeFile(path.join(workspaceRoot, "store", "seeds", "runtime-profiles.json"), JSON.stringify({
+      profiles: {
+        minimal: {
+          coreBundles: [],
+          plugins: ["demo.read"]
+        }
+      }
+    }, null, 2));
+    await fs.writeFile(path.join(workspaceRoot, "store", "seeds", "first-party-plugin-catalog.json"), JSON.stringify({
+      packageRoot: "plugins",
+      packages: [],
+      bundles: []
+    }, null, 2));
+
+    const bridgeCalls = [];
+    const bridge = {
+      async listSourceDirectory({ path: sourceId }) {
+        bridgeCalls.push({ kind: "list", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const entries = await fs.readdir(target, { withFileTypes: true });
+        return {
+          path: sourceId,
+          exists: true,
+          entries: entries.map(entry => ({
+            name: entry.name,
+            isFile: entry.isFile(),
+            isDirectory: entry.isDirectory()
+          }))
+        };
+      },
+      async readSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "read", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        return {
+          path: sourceId,
+          content: await fs.readFile(target, "utf8")
+        };
+      },
+      async statSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "stat", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const stat = await fs.stat(target);
+        return {
+          path: sourceId,
+          exists: true,
+          isFile: stat.isFile(),
+          isDirectory: stat.isDirectory(),
+          size: Number(stat.size || 0),
+          modifiedAt: String(stat.mtimeMs || 0)
+        };
+      }
+    };
+    const guardedFs = {
+      ...fs,
+      async readFile(target, encoding) {
+        const resolved = path.resolve(String(target || ""));
+        if (
+          resolved.startsWith(path.join(workspaceRoot, "plugins"))
+          || resolved.startsWith(path.join(workspaceRoot, "src"))
+          || resolved.startsWith(path.join(workspaceRoot, "store"))
+        ) {
+          throw new Error(`plugin runtime load read escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readFile(target, encoding);
+      },
+      async readdir(target, options) {
+        const resolved = path.resolve(String(target || ""));
+        if (
+          resolved.startsWith(path.join(workspaceRoot, "plugins"))
+          || resolved.startsWith(path.join(workspaceRoot, "src"))
+          || resolved.startsWith(path.join(workspaceRoot, "store"))
+        ) {
+          throw new Error(`plugin runtime load readdir escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readdir(target, options);
+      },
+      async stat(target) {
+        const resolved = path.resolve(String(target || ""));
+        if (
+          resolved.startsWith(path.join(workspaceRoot, "plugins"))
+          || resolved.startsWith(path.join(workspaceRoot, "src"))
+          || resolved.startsWith(path.join(workspaceRoot, "store"))
+        ) {
+          throw new Error(`plugin runtime load stat escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.stat(target);
+      }
+    };
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.demo"],
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      cwd: workspaceRoot
+    });
+    const loadResult = await loadRuntimePluginModules({
+      pluginCatalog,
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      cwd: workspaceRoot
+    });
+
+    assert.equal(loadResult.hasBlockingErrors, false);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "store/seeds/runtime-profiles.json"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "store/seeds/first-party-plugin-catalog.json"), true);
+  } finally {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("plugin runtime loader materializes full external plugin directories when bridged runtime imports rely on adjacent assets", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(process.cwd(), ".tmp-witness-plugin-loader-plugin-"));
+  try {
+    const pluginRoot = path.join(workspaceRoot, "plugins");
+    const demoDir = await writePlugin(pluginRoot, "demo", {
+      id: "plugin.demo",
+      version: "0.1.0",
+      displayName: "Demo",
+      description: "Demo plugin runtime",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-demo-local"],
+      contributes: {}
+    }, `
+      import { createSharedBundle } from "../shared/shared-runtime.js";
+      export default { bundles: { "bundle-demo-local": createSharedBundle() } };
+    `);
+    const sharedDir = path.join(pluginRoot, "shared");
+    await fs.mkdir(sharedDir, { recursive: true });
+    await fs.writeFile(path.join(sharedDir, "shared-runtime.js"), `
+      import fs from "node:fs";
+      import path from "node:path";
+      import { fileURLToPath } from "node:url";
+      const __dirname = path.dirname(fileURLToPath(import.meta.url));
+      const payload = JSON.parse(fs.readFileSync(path.join(__dirname, "shared-data.json"), "utf8"));
+      export function createSharedBundle() {
+        return {
+          handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [payload.handler], handlerMetadata: {} },
+          routes: [],
+          surfaces: [],
+          createHandlers() { return { [payload.handler]: async () => {} }; }
+        };
+      }
+    `, "utf8");
+    await fs.writeFile(path.join(sharedDir, "shared-data.json"), JSON.stringify({ handler: "shared.read" }, null, 2), "utf8");
+
+    const bridgeCalls = [];
+    const bridge = {
+      async listSourceDirectory({ path: sourceId }) {
+        bridgeCalls.push({ kind: "list", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const entries = await fs.readdir(target, { withFileTypes: true });
+        return {
+          path: sourceId,
+          exists: true,
+          entries: entries.map(entry => ({
+            name: entry.name,
+            isFile: entry.isFile(),
+            isDirectory: entry.isDirectory()
+          }))
+        };
+      },
+      async readSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "read", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        return {
+          path: sourceId,
+          content: await fs.readFile(target, "utf8")
+        };
+      },
+      async statSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "stat", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const stat = await fs.stat(target);
+        return {
+          path: sourceId,
+          exists: true,
+          isFile: stat.isFile(),
+          isDirectory: stat.isDirectory(),
+          size: Number(stat.size || 0),
+          modifiedAt: String(stat.mtimeMs || 0)
+        };
+      }
+    };
+    const guardedFs = {
+      ...fs,
+      async readFile(target, encoding) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(pluginRoot)) {
+          throw new Error(`plugin runtime load read escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readFile(target, encoding);
+      },
+      async readdir(target, options) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(pluginRoot)) {
+          throw new Error(`plugin runtime load readdir escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readdir(target, options);
+      },
+      async stat(target) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(pluginRoot)) {
+          throw new Error(`plugin runtime load stat escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.stat(target);
+      }
+    };
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.demo"],
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      cwd: workspaceRoot
+    });
+    const loadResult = await loadRuntimePluginModules({
+      pluginCatalog,
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      cwd: workspaceRoot
+    });
+    const loadedCatalog = applyRuntimePluginLoadState(pluginCatalog, loadResult);
+    const demo = loadedCatalog.packages.find(row => row.id === "plugin.demo");
+
+    assert.equal(loadResult.hasBlockingErrors, false);
+    assert.ok(loadResult.bundleOverrides["bundle-demo-local"]);
+    assert.equal(demo.runtimeModule.loadStatus, "loaded");
+    assert.equal(bridgeCalls.some(call => call.kind === "list" && call.path === "plugins/shared"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "plugins/shared/shared-data.json"), true);
+    assert.equal(path.resolve(demo.runtimeModule.resolvedPath).startsWith(demoDir), false);
+  } finally {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 test("plugin runtime loader fails closed when a core-connected runtime path is outside witness-core scope", async () => {
   const root = await tempPluginRoot();
   try {

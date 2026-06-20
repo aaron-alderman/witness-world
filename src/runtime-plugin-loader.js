@@ -34,6 +34,85 @@ function sanitizeSegment(value, fallback = "plugin") {
   return normalized || fallback;
 }
 
+function extractRelativeModuleSpecifiers(sourceText) {
+  const specifiers = new Set();
+  const patterns = [
+    /\b(?:import|export)\b[\s\S]*?\bfrom\s*["']([^"'`]+)["']/g,
+    /\bimport\s*["']([^"'`]+)["']/g,
+    /\bimport\s*\(\s*["']([^"'`]+)["']\s*\)/g
+  ];
+  for (const pattern of patterns) {
+    let match = null;
+    while ((match = pattern.exec(String(sourceText || ""))) !== null) {
+      const specifier = typeof match?.[1] === "string" ? match[1].trim() : "";
+      if (!specifier.startsWith(".")) continue;
+      specifiers.add(specifier);
+    }
+  }
+  return [...specifiers];
+}
+
+function candidateModuleSourceIds(fromSourceId, specifier) {
+  const normalizedFrom = normalizeSlashes(fromSourceId);
+  const baseDir = path.posix.dirname(normalizedFrom);
+  const resolved = normalizeSlashes(path.posix.normalize(path.posix.join(baseDir === "." ? "" : baseDir, specifier)));
+  if (!resolved || resolved === "." || resolved.startsWith("../") || resolved === ".." || path.posix.isAbsolute(resolved)) {
+    return [];
+  }
+  const ext = path.posix.extname(resolved).toLowerCase();
+  const candidates = ext === ".js" || ext === ".mjs"
+    ? [resolved]
+    : [
+        resolved,
+        `${resolved}.js`,
+        `${resolved}.mjs`,
+        `${resolved}/index.js`,
+        `${resolved}/index.mjs`
+      ];
+  return [...new Set(candidates.map(normalizeSlashes))];
+}
+
+async function resolveExistingModuleSourceId(generationBridge, fromSourceId, specifier) {
+  for (const candidate of candidateModuleSourceIds(fromSourceId, specifier)) {
+    try {
+      const stat = await generationBridge.statSource({ path: candidate });
+      if (stat?.exists === true && stat?.isFile !== false) return candidate;
+    } catch (error) {
+      if (Number(error?.status || 0) === 404 || String(error?.code || "") === "ENOENT") continue;
+      throw error;
+    }
+  }
+  return null;
+}
+
+function scratchPathForSourceId(scratchDir, sourceId) {
+  return path.join(scratchDir, ...normalizeSlashes(sourceId).split("/"));
+}
+
+function pluginOrExampleDomainSourceId(sourceId) {
+  const segments = normalizeSlashes(sourceId).split("/").filter(Boolean);
+  if ((segments[0] === "plugins" || segments[0] === "examples") && segments[1]) {
+    return `${segments[0]}/${segments[1]}`;
+  }
+  return null;
+}
+
+function runtimeRelativeAssetSourceIds(sourceId, sourceText) {
+  const normalizedSourceId = normalizeSlashes(sourceId);
+  if (normalizedSourceId === "src/runtime-store-seeds.js") {
+    const assets = [];
+    const pattern = /\breadSeedJson\(\s*["']([^"'`]+)["']\s*\)/g;
+    let match = null;
+    while ((match = pattern.exec(String(sourceText || ""))) !== null) {
+      const fileName = typeof match?.[1] === "string" ? match[1].trim() : "";
+      if (!fileName) continue;
+      assets.push(`store/seeds/${fileName}`);
+    }
+    return [...new Set(assets)];
+  }
+  return [];
+}
+
 async function materializePluginDirectoryFromWitnessCore(
   pluginPackage,
   resolvedEntryPath,
@@ -63,14 +142,15 @@ async function materializePluginDirectoryFromWitnessCore(
   }
   const canonicalEntryPath = path.resolve(String(resolvedEntryPath || ""));
   const canonicalPluginRoot = path.dirname(canonicalEntryPath);
+  const entrySourceId = capabilitySourceIdForWorkspacePath(canonicalEntryPath, cwd);
   const pluginRootSourceId = capabilitySourceIdForWorkspacePath(canonicalPluginRoot, cwd);
-  if (!pluginRootSourceId && requireGenerationBridgeForCanonicalImports) {
+  if ((!pluginRootSourceId || !entrySourceId) && requireGenerationBridgeForCanonicalImports) {
     const error = new Error(`plugin runtime path must be available through witness-core capability: ${canonicalPluginRoot}`);
     error.code = "WITNESS_CORE_REQUIRED";
     error.status = 503;
     throw error;
   }
-  if (!pluginRootSourceId) {
+  if (!pluginRootSourceId || !entrySourceId) {
     return {
       entryPath: canonicalEntryPath,
       materialized: false
@@ -85,34 +165,61 @@ async function materializePluginDirectoryFromWitnessCore(
     baseScratchRoot,
     `${sanitizeSegment(pluginPackage?.id, "plugin")}-${materializationId}`
   );
-  const scratchPluginRoot = path.join(scratchDir, "plugin");
-  const queue = [{ sourceId: pluginRootSourceId, relativePath: "" }];
+  const pluginDomainSourceId = pluginOrExampleDomainSourceId(pluginRootSourceId) ?? pluginRootSourceId;
+  const materializedDirectories = new Set();
+  const materializedFiles = new Set();
 
-  while (queue.length) {
-    const current = queue.shift();
-    const destinationDir = current.relativePath
-      ? path.join(scratchPluginRoot, current.relativePath)
-      : scratchPluginRoot;
-    await fsModule.mkdir(destinationDir, { recursive: true });
-    const listing = await generationBridge.listSourceDirectory({ path: current.sourceId });
-    for (const entry of listing?.entries ?? []) {
-      const name = String(entry?.name || "");
-      if (!name) continue;
-      const childSourceId = current.sourceId ? `${current.sourceId}/${name}` : name;
-      const childRelativePath = current.relativePath ? path.join(current.relativePath, name) : name;
-      if (entry?.isDirectory === true) {
-        queue.push({ sourceId: childSourceId, relativePath: childRelativePath });
+  async function materializeSourceFile(sourceId) {
+    const normalizedSourceId = normalizeSlashes(sourceId);
+    if (!normalizedSourceId || materializedFiles.has(normalizedSourceId)) return;
+    materializedFiles.add(normalizedSourceId);
+    const source = await generationBridge.readSource({ path: normalizedSourceId });
+    const targetPath = scratchPathForSourceId(scratchDir, normalizedSourceId);
+    await fsModule.mkdir(path.dirname(targetPath), { recursive: true });
+    const content = String(source?.content ?? "");
+    await fsModule.writeFile(targetPath, content, "utf8");
+    for (const assetSourceId of runtimeRelativeAssetSourceIds(normalizedSourceId, content)) {
+      await materializeSourceFile(assetSourceId);
+    }
+    if (!targetPath.endsWith(".js") && !targetPath.endsWith(".mjs")) return;
+    for (const specifier of extractRelativeModuleSpecifiers(content)) {
+      const dependencySourceId = await resolveExistingModuleSourceId(generationBridge, normalizedSourceId, specifier);
+      if (!dependencySourceId) continue;
+      const externalDomainSourceId = pluginOrExampleDomainSourceId(dependencySourceId);
+      if (
+        externalDomainSourceId
+        && externalDomainSourceId !== pluginDomainSourceId
+        && !normalizedSourceId.startsWith(`${externalDomainSourceId}/`)
+      ) {
+        await materializeSourceDirectory(externalDomainSourceId);
         continue;
       }
-      const source = await generationBridge.readSource({ path: childSourceId });
-      const targetPath = path.join(scratchPluginRoot, childRelativePath);
-      await fsModule.mkdir(path.dirname(targetPath), { recursive: true });
-      await fsModule.writeFile(targetPath, String(source?.content ?? ""), "utf8");
+      await materializeSourceFile(dependencySourceId);
     }
   }
 
+  async function materializeSourceDirectory(sourceId) {
+    const normalizedSourceId = normalizeSlashes(sourceId);
+    if (!normalizedSourceId || materializedDirectories.has(normalizedSourceId)) return;
+    materializedDirectories.add(normalizedSourceId);
+    await fsModule.mkdir(scratchPathForSourceId(scratchDir, normalizedSourceId), { recursive: true });
+    const listing = await generationBridge.listSourceDirectory({ path: normalizedSourceId });
+    for (const entry of listing?.entries ?? []) {
+      const name = String(entry?.name || "");
+      if (!name) continue;
+      const childSourceId = normalizedSourceId ? `${normalizedSourceId}/${name}` : name;
+      if (entry?.isDirectory === true) {
+        await materializeSourceDirectory(childSourceId);
+        continue;
+      }
+      await materializeSourceFile(childSourceId);
+    }
+  }
+
+  await materializeSourceDirectory(pluginRootSourceId);
+
   return {
-    entryPath: path.join(scratchPluginRoot, path.relative(canonicalPluginRoot, canonicalEntryPath)),
+    entryPath: scratchPathForSourceId(scratchDir, entrySourceId),
     materialized: true,
     scratchRoot: scratchDir
   };

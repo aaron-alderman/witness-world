@@ -58,7 +58,7 @@ function createHandlerHarness() {
   };
 }
 
-test("app.source.write fails closed outside supervised mode when witness-core ownership is declared but unavailable", async () => {
+test("app.source.write is blocked even when witness-core ownership is configured", async () => {
   let publishedTransactionCalls = 0;
   const bridge = {
     async statSource() {
@@ -121,16 +121,17 @@ test("app.source.write fails closed outside supervised mode when witness-core ow
   });
 
   const response = takeResponse();
-  assert.equal(response.status, 503);
-  assert.equal(response.body?.ok, false);
-  assert.equal(response.body?.code, "WITNESS_CORE_UNAVAILABLE");
-  assert.equal(response.body?.endpoint, undefined);
+  assert.equal(response.status, 403);
+  assert.equal(response.body?.error, "blocked by MCP-authoring-only policy");
+  assert.equal(response.body?.blockedHandoff?.attemptedAuthoringPath, APP_SOURCE_WRITE_PATH);
+  assert.equal(response.body?.blockedHandoff?.minimumHumanAction, "use MCP compute-module package authoring");
+  assert.match(response.body?.blockedHandoff?.proof?.join("\n") ?? "", /package materialized files/);
   assert.equal(publishedTransactionCalls, 0);
   assert.equal(snapshotManager.pendingDirtySources.size, 0);
   assert.equal(APP_SOURCE_WRITE_PATH, "/api/runtime/app-sources");
 });
 
-test("app.source.write fails closed outside supervised mode when witness-core is not configured at all", async () => {
+test("app.source.write is blocked before local fallback when witness-core is not configured", async () => {
   const snapshotManager = new AppSnapshotManager({
     manifestPath: "C:/tmp/app.wtoml",
     appRoot: "C:/tmp",
@@ -174,10 +175,9 @@ test("app.source.write fails closed outside supervised mode when witness-core is
   });
 
   const response = takeResponse();
-  assert.equal(response.status, 503);
-  assert.equal(response.body?.ok, false);
-  assert.equal(response.body?.code, "WITNESS_CORE_REQUIRED");
-  assert.match(String(response.body?.error || ""), /witness core published source stat is required|witness core published source writes are required/i);
-  assert.equal(response.body?.endpoint, undefined);
+  assert.equal(response.status, 403);
+  assert.equal(response.body?.error, "blocked by MCP-authoring-only policy");
+  assert.equal(response.body?.blockedHandoff?.attemptedAuthoringPath, APP_SOURCE_WRITE_PATH);
+  assert.equal(response.body?.blockedHandoff?.minimumHumanAction, "use MCP compute-module package authoring");
   assert.equal(snapshotManager.pendingDirtySources.size, 0);
 });

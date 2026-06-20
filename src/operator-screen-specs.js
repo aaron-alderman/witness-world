@@ -6,6 +6,12 @@ const VALID_SHORTCUTS = new Set(["F2", "F3", "F4", "F5", "F6", "F7", "F8"]);
 const VALID_PRIMARY_ACTIONS = new Set(["open-link", "source-open", "provenance-open", "inspect-record", "none"]);
 const VALID_SECTION_KINDS = new Set(["detail", "list", "table", "kv"]);
 const VALID_SCREEN_PANES = new Set(["right", "left"]);
+const VALID_VIEWPORT_SPLIT_ORIENTATIONS = new Set(["horizontal", "vertical"]);
+const VALID_VIEWPORT_BINDING_VERBS = new Set(["overlay", "action"]);
+const VALID_OVERLAY_KINDS = new Set(["menu", "doc_view"]);
+const VALID_HANDLE_KINDS = new Set(["splitter"]);
+const VALID_HANDLE_AXES = new Set(["horizontal", "vertical"]);
+const VALID_SURFACE_KINDS = new Set(["status_bar", "command_bar"]);
 
 const BUILTIN_DATASET_DEFINITIONS = Object.freeze([
   Object.freeze({
@@ -189,6 +195,86 @@ function cloneScreenSectionSpec(spec = {}) {
   };
 }
 
+function cloneViewportBindingSpec(spec = {}) {
+  return {
+    trigger: spec.trigger ?? "",
+    verb: spec.verb ?? "",
+    target: spec.target ?? ""
+  };
+}
+
+function cloneOverlaySpec(spec = {}) {
+  return {
+    id: spec.id,
+    title: spec.title ?? spec.id,
+    kind: spec.kind ?? "doc_view",
+    width: spec.width ?? null,
+    height: spec.height ?? null,
+    resizable: spec.resizable ?? null,
+    scroll: Array.isArray(spec.scroll) ? [...spec.scroll] : [],
+    origin: spec.origin ?? "authored",
+    pluginId: spec.pluginId ?? null,
+    source: spec.source ? { ...spec.source } : null
+  };
+}
+
+function cloneHandleSpec(spec = {}) {
+  return {
+    id: spec.id,
+    title: spec.title ?? spec.id,
+    kind: spec.kind ?? "splitter",
+    axis: spec.axis ?? null,
+    size: spec.size ?? null,
+    draggable: spec.draggable ?? null,
+    origin: spec.origin ?? "authored",
+    pluginId: spec.pluginId ?? null,
+    source: spec.source ? { ...spec.source } : null
+  };
+}
+
+function cloneSurfaceSpec(spec = {}) {
+  return {
+    id: spec.id,
+    title: spec.title ?? spec.id,
+    kind: spec.kind ?? "status_bar",
+    width: spec.width ?? null,
+    height: spec.height ?? null,
+    resizable: spec.resizable ?? null,
+    maxPrimaryChars: spec.maxPrimaryChars ?? null,
+    scroll: Array.isArray(spec.scroll) ? [...spec.scroll] : [],
+    origin: spec.origin ?? "authored",
+    pluginId: spec.pluginId ?? null,
+    source: spec.source ? { ...spec.source } : null
+  };
+}
+
+function cloneViewportSpec(spec = {}) {
+  return {
+    id: spec.id,
+    title: spec.title ?? spec.id,
+    theme: spec.theme ?? null,
+    screenId: spec.screenId ?? null,
+    leftScreenId: spec.leftScreenId ?? null,
+    topSurfaceId: spec.topSurfaceId ?? null,
+    bottomSurfaceId: spec.bottomSurfaceId ?? null,
+    topHandleId: spec.topHandleId ?? null,
+    bottomHandleId: spec.bottomHandleId ?? null,
+    splitHandleId: spec.splitHandleId ?? null,
+    width: spec.width ?? null,
+    height: spec.height ?? null,
+    top: spec.top ?? null,
+    bottom: spec.bottom ?? null,
+    splitOrientation: spec.splitOrientation ?? null,
+    leftWeight: spec.leftWeight ?? null,
+    rightWeight: spec.rightWeight ?? null,
+    overlays: Array.isArray(spec.overlays) ? [...spec.overlays] : [],
+    bindings: Array.isArray(spec.bindings) ? spec.bindings.map(cloneViewportBindingSpec) : [],
+    origin: spec.origin ?? "authored",
+    pluginId: spec.pluginId ?? null,
+    source: spec.source ? { ...spec.source } : null
+  };
+}
+
 function normalizeAuthoredDatasetSpec(residual = null) {
   const values = residual?.body?.values ?? {};
   const id = optionalText(values.id) ?? optionalText(residual?.name);
@@ -300,7 +386,122 @@ function normalizeAuthoredSetup(residual = null) {
       : [],
     shortcuts: normalizeSetupShortcutRows(values),
     defaultScreen: optionalText(values.defaultScreen) ?? optionalText(values.default_screen) ?? null,
-    defaultLeftScreen: optionalText(values.defaultLeftScreen) ?? optionalText(values.default_left_screen) ?? null
+    defaultLeftScreen: optionalText(values.defaultLeftScreen) ?? optionalText(values.default_left_screen) ?? null,
+    defaultViewport: optionalText(values.defaultViewport) ?? optionalText(values.default_viewport) ?? null
+  };
+}
+
+function normalizeOverlayScroll(values = []) {
+  return (Array.isArray(values) ? values : []).map(optionalText).filter(Boolean);
+}
+
+function normalizeAuthoredOverlaySpec(residual = null) {
+  const values = residual?.body?.values ?? {};
+  const id = optionalText(values.id) ?? optionalText(residual?.name);
+  const kind = optionalText(values.kind) ?? "doc_view";
+  if (!id || !VALID_OVERLAY_KINDS.has(kind)) return null;
+  return {
+    id,
+    title: optionalText(values.title) ?? id,
+    kind,
+    width: optionalInteger(values.width),
+    height: optionalInteger(values.height),
+    resizable: values.resizable === undefined || values.resizable === null ? null : Boolean(values.resizable),
+    scroll: normalizeOverlayScroll(values.scroll),
+    origin: "authored",
+    pluginId: residual?.body?.trace?.pluginId ?? residual?.meta?.pluginId ?? null,
+    source: {
+      file: residual?.body?.file ?? null,
+      line: residual?.body?.line ?? null
+    }
+  };
+}
+
+function normalizeAuthoredHandleSpec(residual = null) {
+  const values = residual?.body?.values ?? {};
+  const id = optionalText(values.id) ?? optionalText(residual?.name);
+  const kind = optionalText(values.kind) ?? "splitter";
+  const axis = optionalText(values.axis) ?? null;
+  if (!id || !VALID_HANDLE_KINDS.has(kind) || !VALID_HANDLE_AXES.has(axis)) return null;
+  return {
+    id,
+    title: optionalText(values.title) ?? id,
+    kind,
+    axis,
+    size: optionalInteger(values.size),
+    draggable: values.draggable === undefined || values.draggable === null ? null : Boolean(values.draggable),
+    origin: "authored",
+    pluginId: residual?.body?.trace?.pluginId ?? residual?.meta?.pluginId ?? null,
+    source: {
+      file: residual?.body?.file ?? null,
+      line: residual?.body?.line ?? null
+    }
+  };
+}
+
+function normalizeAuthoredSurfaceSpec(residual = null) {
+  const values = residual?.body?.values ?? {};
+  const id = optionalText(values.id) ?? optionalText(residual?.name);
+  const kind = optionalText(values.kind) ?? null;
+  if (!id || !VALID_SURFACE_KINDS.has(kind)) return null;
+  return {
+    id,
+    title: optionalText(values.title) ?? id,
+    kind,
+    width: optionalInteger(values.width),
+    height: optionalInteger(values.height),
+    resizable: values.resizable === undefined || values.resizable === null ? null : Boolean(values.resizable),
+    maxPrimaryChars: optionalInteger(values.maxPrimaryChars) ?? optionalInteger(values.max_primary_chars),
+    scroll: normalizeOverlayScroll(values.scroll),
+    origin: "authored",
+    pluginId: residual?.body?.trace?.pluginId ?? residual?.meta?.pluginId ?? null,
+    source: {
+      file: residual?.body?.file ?? null,
+      line: residual?.body?.line ?? null
+    }
+  };
+}
+
+function normalizeViewportBindings(values = []) {
+  return (Array.isArray(values) ? values : [])
+    .map(binding => ({
+      trigger: optionalText(binding?.trigger) ?? "",
+      verb: optionalText(binding?.verb) ?? "",
+      target: optionalText(binding?.target) ?? ""
+    }))
+    .filter(binding => binding.trigger && binding.verb && binding.target);
+}
+
+function normalizeAuthoredViewportSpec(residual = null) {
+  const values = residual?.body?.values ?? {};
+  const id = optionalText(values.id) ?? optionalText(residual?.name);
+  if (!id) return null;
+  return {
+    id,
+    title: optionalText(values.title) ?? id,
+    theme: optionalText(values.theme) ?? null,
+    screenId: optionalText(values.screen) ?? optionalText(values.screenId) ?? null,
+    leftScreenId: optionalText(values.leftScreen) ?? optionalText(values.left_screen) ?? null,
+    topSurfaceId: optionalText(values.topSurface) ?? optionalText(values.top_surface) ?? null,
+    bottomSurfaceId: optionalText(values.bottomSurface) ?? optionalText(values.bottom_surface) ?? null,
+    topHandleId: optionalText(values.topHandle) ?? optionalText(values.top_handle) ?? null,
+    bottomHandleId: optionalText(values.bottomHandle) ?? optionalText(values.bottom_handle) ?? null,
+    splitHandleId: optionalText(values.splitHandle) ?? optionalText(values.split_handle) ?? null,
+    width: optionalInteger(values.width),
+    height: optionalInteger(values.height),
+    top: optionalInteger(values.top),
+    bottom: optionalInteger(values.bottom),
+    splitOrientation: optionalText(values.splitOrientation) ?? optionalText(values.split_orientation) ?? null,
+    leftWeight: optionalInteger(values.leftWeight) ?? optionalInteger(values.left_weight),
+    rightWeight: optionalInteger(values.rightWeight) ?? optionalInteger(values.right_weight),
+    overlays: Array.isArray(values.overlays) ? values.overlays.map(optionalText).filter(Boolean) : [],
+    bindings: normalizeViewportBindings(values.bindings),
+    origin: "authored",
+    pluginId: residual?.body?.trace?.pluginId ?? residual?.meta?.pluginId ?? null,
+    source: {
+      file: residual?.body?.file ?? null,
+      line: residual?.body?.line ?? null
+    }
   };
 }
 
@@ -328,6 +529,10 @@ export function collectAuthoredOperatorWorkbenchSpecs(authoredDesireDocs = []) {
   const datasets = [];
   const screens = [];
   const sections = [];
+  const overlays = [];
+  const handles = [];
+  const surfaces = [];
+  const viewports = [];
   const setupRows = [];
   for (const desire of authoredDesireDocs ?? []) {
     for (const residual of desire?.runtimeResiduals ?? []) {
@@ -344,6 +549,22 @@ export function collectAuthoredOperatorWorkbenchSpecs(authoredDesireDocs = []) {
         const section = normalizeAuthoredScreenSectionSpec(residual);
         if (section) sections.push(section);
       }
+      if (kind === "operator_overlay") {
+        const overlay = normalizeAuthoredOverlaySpec(residual);
+        if (overlay) overlays.push(overlay);
+      }
+      if (kind === "operator_handle") {
+        const handle = normalizeAuthoredHandleSpec(residual);
+        if (handle) handles.push(handle);
+      }
+      if (kind === "operator_surface") {
+        const surface = normalizeAuthoredSurfaceSpec(residual);
+        if (surface) surfaces.push(surface);
+      }
+      if (kind === "operator_viewport") {
+        const viewport = normalizeAuthoredViewportSpec(residual);
+        if (viewport) viewports.push(viewport);
+      }
       if (kind === "operator_setup") {
         setupRows.push(normalizeAuthoredSetup(residual));
       }
@@ -353,6 +574,10 @@ export function collectAuthoredOperatorWorkbenchSpecs(authoredDesireDocs = []) {
     datasets,
     screens,
     sections,
+    overlays,
+    handles,
+    surfaces,
+    viewports,
     setupRows
   };
 }
@@ -375,6 +600,14 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
   }
   const authoredSectionsById = new Map();
   for (const section of authored.sections) authoredSectionsById.set(section.id, cloneScreenSectionSpec(section));
+  const authoredOverlaysById = new Map();
+  for (const overlay of authored.overlays) authoredOverlaysById.set(overlay.id, cloneOverlaySpec(overlay));
+  const authoredHandlesById = new Map();
+  for (const handle of authored.handles) authoredHandlesById.set(handle.id, cloneHandleSpec(handle));
+  const authoredSurfacesById = new Map();
+  for (const surface of authored.surfaces) authoredSurfacesById.set(surface.id, cloneSurfaceSpec(surface));
+  const authoredViewportsById = new Map();
+  for (const viewport of authored.viewports) authoredViewportsById.set(viewport.id, cloneViewportSpec(viewport));
   const rightScreensById = new Map();
   for (const screen of builtins) rightScreensById.set(screen.id, screen);
   for (const screen of authoredRightById.values()) rightScreensById.set(screen.id, screen);
@@ -486,6 +719,144 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
     };
   });
 
+  const overlays = [...authoredOverlaysById.values()].map(overlay => {
+    if (!VALID_OVERLAY_KINDS.has(overlay.kind)) {
+      throw new Error(`operator_overlay ${overlay.id} invalid kind: ${overlay.kind}`);
+    }
+    if (overlay.width !== null && overlay.width <= 0) {
+      throw new Error(`operator_overlay ${overlay.id} width must be positive`);
+    }
+    if (overlay.height !== null && overlay.height <= 0) {
+      throw new Error(`operator_overlay ${overlay.id} height must be positive`);
+    }
+    return cloneOverlaySpec(overlay);
+  });
+
+  const handles = [...authoredHandlesById.values()].map(handle => {
+    if (!VALID_HANDLE_KINDS.has(handle.kind)) {
+      throw new Error(`operator_handle ${handle.id} invalid kind: ${handle.kind}`);
+    }
+    if (!VALID_HANDLE_AXES.has(handle.axis)) {
+      throw new Error(`operator_handle ${handle.id} invalid axis: ${handle.axis}`);
+    }
+    if (handle.size !== null && handle.size <= 0) {
+      throw new Error(`operator_handle ${handle.id} size must be positive`);
+    }
+    return cloneHandleSpec(handle);
+  });
+
+  const surfaces = [...authoredSurfacesById.values()].map(surface => {
+    if (!VALID_SURFACE_KINDS.has(surface.kind)) {
+      throw new Error(`operator_surface ${surface.id} invalid kind: ${surface.kind}`);
+    }
+    if (surface.width !== null && surface.width <= 0) {
+      throw new Error(`operator_surface ${surface.id} width must be positive`);
+    }
+    if (surface.height !== null && surface.height <= 0) {
+      throw new Error(`operator_surface ${surface.id} height must be positive`);
+    }
+    if (surface.maxPrimaryChars !== null && surface.maxPrimaryChars <= 0) {
+      throw new Error(`operator_surface ${surface.id} max_primary_chars must be positive`);
+    }
+    return cloneSurfaceSpec(surface);
+  });
+
+  const viewports = [...authoredViewportsById.values()].map(viewport => {
+    if (viewport.screenId && !rightScreensById.has(viewport.screenId)) {
+      throw new Error(`operator_viewport ${viewport.id} screen not found: ${viewport.screenId}`);
+    }
+    if (viewport.leftScreenId && !leftScreensById.has(viewport.leftScreenId)) {
+      throw new Error(`operator_viewport ${viewport.id} left_screen not found: ${viewport.leftScreenId}`);
+    }
+    if (viewport.topSurfaceId && !authoredSurfacesById.has(viewport.topSurfaceId)) {
+      throw new Error(`operator_viewport ${viewport.id} top_surface not found: ${viewport.topSurfaceId}`);
+    }
+    if (viewport.bottomSurfaceId && !authoredSurfacesById.has(viewport.bottomSurfaceId)) {
+      throw new Error(`operator_viewport ${viewport.id} bottom_surface not found: ${viewport.bottomSurfaceId}`);
+    }
+    if (viewport.topHandleId && !authoredHandlesById.has(viewport.topHandleId)) {
+      throw new Error(`operator_viewport ${viewport.id} top_handle not found: ${viewport.topHandleId}`);
+    }
+    if (viewport.bottomHandleId && !authoredHandlesById.has(viewport.bottomHandleId)) {
+      throw new Error(`operator_viewport ${viewport.id} bottom_handle not found: ${viewport.bottomHandleId}`);
+    }
+    if (viewport.splitHandleId && !authoredHandlesById.has(viewport.splitHandleId)) {
+      throw new Error(`operator_viewport ${viewport.id} split_handle not found: ${viewport.splitHandleId}`);
+    }
+    if (viewport.width !== null && viewport.width <= 0) {
+      throw new Error(`operator_viewport ${viewport.id} width must be positive`);
+    }
+    if (viewport.height !== null && viewport.height <= 0) {
+      throw new Error(`operator_viewport ${viewport.id} height must be positive`);
+    }
+    if (viewport.top !== null && viewport.top <= 0) {
+      throw new Error(`operator_viewport ${viewport.id} top must be positive`);
+    }
+    if (viewport.bottom !== null && viewport.bottom <= 0) {
+      throw new Error(`operator_viewport ${viewport.id} bottom must be positive`);
+    }
+    if (viewport.splitOrientation && !VALID_VIEWPORT_SPLIT_ORIENTATIONS.has(viewport.splitOrientation)) {
+      throw new Error(`operator_viewport ${viewport.id} invalid split orientation: ${viewport.splitOrientation}`);
+    }
+    if (viewport.topSurfaceId) {
+      const topSurface = authoredSurfacesById.get(viewport.topSurfaceId) ?? null;
+      if (topSurface?.kind !== "status_bar") {
+        throw new Error(`operator_viewport ${viewport.id} top_surface must resolve to kind=status_bar`);
+      }
+    }
+    if (viewport.bottomSurfaceId) {
+      const bottomSurface = authoredSurfacesById.get(viewport.bottomSurfaceId) ?? null;
+      if (bottomSurface?.kind !== "command_bar") {
+        throw new Error(`operator_viewport ${viewport.id} bottom_surface must resolve to kind=command_bar`);
+      }
+    }
+    if (viewport.topHandleId) {
+      const topHandle = authoredHandlesById.get(viewport.topHandleId) ?? null;
+      if (topHandle?.axis !== "horizontal") {
+        throw new Error(`operator_viewport ${viewport.id} top_handle must resolve to axis=horizontal`);
+      }
+    }
+    if (viewport.bottomHandleId) {
+      const bottomHandle = authoredHandlesById.get(viewport.bottomHandleId) ?? null;
+      if (bottomHandle?.axis !== "horizontal") {
+        throw new Error(`operator_viewport ${viewport.id} bottom_handle must resolve to axis=horizontal`);
+      }
+    }
+    if (viewport.splitHandleId) {
+      const splitHandle = authoredHandlesById.get(viewport.splitHandleId) ?? null;
+      const expectedAxis = viewport.splitOrientation === "vertical" ? "horizontal" : "vertical";
+      if (splitHandle?.axis !== expectedAxis) {
+        throw new Error(`operator_viewport ${viewport.id} split_handle must resolve to axis=${expectedAxis}`);
+      }
+    }
+    const seenOverlays = new Set();
+    for (const overlayId of viewport.overlays) {
+      if (seenOverlays.has(overlayId)) {
+        throw new Error(`operator_viewport ${viewport.id} duplicate overlay reference: ${overlayId}`);
+      }
+      seenOverlays.add(overlayId);
+      if (!authoredOverlaysById.has(overlayId)) {
+        throw new Error(`operator_viewport ${viewport.id} overlay not found: ${overlayId}`);
+      }
+    }
+    const seenTriggers = new Set();
+    for (const binding of viewport.bindings) {
+      if (!binding.trigger) throw new Error(`operator_viewport ${viewport.id} binding trigger is required`);
+      if (!VALID_VIEWPORT_BINDING_VERBS.has(binding.verb)) {
+        throw new Error(`operator_viewport ${viewport.id} invalid binding verb: ${binding.verb}`);
+      }
+      if (!binding.target) throw new Error(`operator_viewport ${viewport.id} binding target is required`);
+      if (seenTriggers.has(binding.trigger)) {
+        throw new Error(`operator_viewport ${viewport.id} duplicate binding trigger: ${binding.trigger}`);
+      }
+      seenTriggers.add(binding.trigger);
+      if (binding.verb === "overlay" && !authoredOverlaysById.has(binding.target)) {
+        throw new Error(`operator_viewport ${viewport.id} binding overlay target not found: ${binding.target}`);
+      }
+    }
+    return cloneViewportSpec(viewport);
+  });
+
   const shortcuts = new Map();
   for (const screen of builtins) {
     if (screen.shortcut) shortcuts.set(screen.shortcut, screen.id);
@@ -512,8 +883,13 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
   if (invalidDefaultLeftScreen?.defaultLeftScreen) {
     throw new Error(`operator_setup ${invalidDefaultLeftScreen.id} default_left_screen not found: ${invalidDefaultLeftScreen.defaultLeftScreen}`);
   }
+  const invalidDefaultViewport = authored.setupRows.find(row => row.defaultViewport && !authoredViewportsById.has(row.defaultViewport)) ?? null;
+  if (invalidDefaultViewport?.defaultViewport) {
+    throw new Error(`operator_setup ${invalidDefaultViewport.id} default_viewport not found: ${invalidDefaultViewport.defaultViewport}`);
+  }
   const defaultScreen = authored.setupRows.find(row => row.defaultScreen && rightScreensById.has(row.defaultScreen))?.defaultScreen ?? null;
   const defaultLeftScreen = authored.setupRows.find(row => row.defaultLeftScreen && leftScreensById.has(row.defaultLeftScreen))?.defaultLeftScreen ?? null;
+  const defaultViewport = authored.setupRows.find(row => row.defaultViewport && authoredViewportsById.has(row.defaultViewport))?.defaultViewport ?? null;
   return {
     datasets: [...datasetsById.values()].map(cloneDatasetSpec),
     datasetsById,
@@ -521,10 +897,19 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
     screensById: new Map(screens.map(screen => [screen.id, screen])),
     leftScreens,
     leftScreensById: new Map(leftScreens.map(screen => [screen.id, screen])),
+    overlays,
+    overlaysById: new Map(overlays.map(overlay => [overlay.id, overlay])),
+    handles,
+    handlesById: new Map(handles.map(handle => [handle.id, handle])),
+    surfaces,
+    surfacesById: new Map(surfaces.map(surface => [surface.id, surface])),
+    viewports,
+    viewportsById: new Map(viewports.map(viewport => [viewport.id, viewport])),
     shortcuts,
     shortcutRows,
     defaultScreen,
-    defaultLeftScreen
+    defaultLeftScreen,
+    defaultViewport
   };
 }
 

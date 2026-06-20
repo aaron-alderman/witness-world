@@ -18,6 +18,8 @@ export function materializeCanonicalPackageBundleFromProject(project, {
 
   const packagePatchIndex = project(moduleProjectors.packagePatchIndex);
   const patches = packagePatchIndex?.byRevision?.[normalizedRevisionId] ?? [];
+  const packageMaterializedFileIndex = project(moduleProjectors.packageMaterializedFileIndex);
+  const projectedMaterializedFiles = packageMaterializedFileIndex?.byRevision?.[normalizedRevisionId] ?? [];
 
   const packageNamespaces = project(moduleProjectors.packageNamespaces) ?? [];
   const namespaces = packageNamespaces.filter(row =>
@@ -58,7 +60,13 @@ export function materializeCanonicalPackageBundleFromProject(project, {
     namespaces: bundleNamespaces,
     dependencies,
     transformers,
-    materializedFiles
+    materializedFiles: [
+      ...projectedMaterializedFiles.map(row => ({
+        path: row.path,
+        content: row.content
+      })),
+      ...materializedFiles
+    ]
   });
 }
 

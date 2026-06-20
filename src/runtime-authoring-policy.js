@@ -32,6 +32,12 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "message.create",
   "boundary.create",
   "policy.create",
+  "computeModule.create",
+  "computeModule.source.upsert",
+  "computeModule.source.markDeleted",
+  "computeModuleSmokeTest.upsert",
+  "computeModuleSmokeTest.markDeleted",
+  "computeModuleSmokeTest.run",
   "frontend.upliftLegacy",
   "package.create",
   "packageRevision.create",
@@ -79,6 +85,12 @@ export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
   "message.create",
   "boundary.create",
   "policy.create",
+  "computeModule.create",
+  "computeModule.source.upsert",
+  "computeModule.source.markDeleted",
+  "computeModuleSmokeTest.upsert",
+  "computeModuleSmokeTest.markDeleted",
+  "computeModuleSmokeTest.run",
   "frontend.upliftLegacy",
   "package.create",
   "packageRevision.create",
@@ -115,7 +127,10 @@ export const MCP_ONLY_FORBIDDEN_MUTATIONS = Object.freeze([
   "custom browser runtime files",
   "custom presenter/controller/client files",
   "automatic proposal creation",
-  "runtime app-source POST edits"
+  "runtime app-source POST edits",
+  "MCP fs.blob write/delete mutations",
+  "MCP fs.stream write/copy mutations",
+  "MCP platform.changeSet file edit/apply/remove operations"
 ]);
 
 export const BLOCKED_HANDOFF_FIELDS = Object.freeze([
@@ -194,7 +209,7 @@ export function createRuntimeAuthoringPolicy({
       ? [...MCP_ONLY_FORBIDDEN_MUTATIONS]
       : [],
     stopOnLimitation: normalizedMode === AUTHORING_MODE_MCP_ONLY,
-    canonicalFrontendModel: ["surface", "collection", "process", "projection", "message", "boundary", "policy", "capability"],
+    canonicalFrontendModel: ["surface", "collection", "process", "projection", "message", "boundary", "policy", "computeModule", "capability"],
     loweringLayer: "DESIRE+",
     interactiveStateOwner: "process",
     blockedHandoffFields: [...BLOCKED_HANDOFF_FIELDS],
@@ -318,6 +333,18 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       policy: capabilityState({
         publicAction: "policy.create",
         runtimeConsumers: ["page.surface"],
+        status: "supported"
+      }),
+      computeModule: capabilityState({
+        publicActions: [
+          "computeModule.create",
+          "computeModule.source.upsert",
+          "computeModule.source.markDeleted",
+          "computeModuleSmokeTest.upsert",
+          "computeModuleSmokeTest.markDeleted",
+          "computeModuleSmokeTest.run"
+        ],
+        runtimeConsumers: ["witness-core compute module build and shadow invocation"],
         status: "supported"
       }),
       capability: capabilityState({

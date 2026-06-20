@@ -287,9 +287,9 @@ test("db.sql supports multiple named datasources per runner, secret-backed conne
     assert.match((await unknownDatasource.json()).error, /datasource not found/i);
 
     const tested = await testDatasource(server, "pg_main");
-    assert.equal(tested.status, 500);
+    assert.equal(tested.status, 503);
     const testedBody = await tested.json();
-    assert.match(testedBody.error, /connect|connection|refused|package|secret/i);
+    assert.match(testedBody.error, /unavailable through the public db\.sql route/i);
     assert.equal(testedBody.operation.datasourceId, "pg_main");
     assert.equal(testedBody.operation.kind, "test");
     assert.equal(testedBody.operation.status, "failed");

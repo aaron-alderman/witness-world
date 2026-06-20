@@ -207,6 +207,49 @@ test("plugin discovery fails closed when a core-connected plugin root is outside
   }
 });
 
+test("plugin discovery treats a missing in-scope witness-core plugin root as an empty catalog", async () => {
+  const root = path.join(process.cwd(), ".tmp-missing-witness-plugin-root");
+  const relativeRoot = normalize(path.relative(process.cwd(), root));
+  const guardedFs = {
+    ...fs,
+    async readdir(target, options) {
+      throw new Error(`plugin discovery readdir escaped witness-core bridge for missing root: ${target} ${JSON.stringify(options ?? {})}`);
+    },
+    async readFile(target, encoding) {
+      throw new Error(`plugin discovery read escaped witness-core bridge for missing root: ${target} ${encoding ?? ""}`);
+    },
+    async stat(target) {
+      throw new Error(`plugin discovery stat escaped witness-core bridge for missing root: ${target}`);
+    }
+  };
+
+  const discovered = await discoverRuntimePluginPackages({
+    pluginRoot: root,
+    runtimeProfile: "minimal",
+    generationBridge: {
+      async readSource() {
+        throw new Error("bridge should not read a missing plugin root");
+      },
+      async statSource() {
+        throw new Error("bridge should not stat a missing plugin root");
+      },
+      async listSourceDirectory({ path: sourceId }) {
+        assert.equal(sourceId, relativeRoot);
+        const error = new Error("not found");
+        error.status = 404;
+        throw error;
+      }
+    },
+    fsModule: guardedFs,
+    cwd: process.cwd(),
+    requireGenerationBridgeForCanonicalReads: true
+  });
+
+  assert.equal(discovered.pluginRoot, path.resolve(root));
+  assert.equal(discovered.summary.discoveredCount, 0);
+  assert.deepEqual(discovered.packages, []);
+});
+
 test("plugin discovery fails closed when witness-core authority is required but the bridge is unavailable", async () => {
   const root = await tempPluginRoot();
   try {
