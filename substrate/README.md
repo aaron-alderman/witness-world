@@ -15,19 +15,41 @@ It provides:
 - append-only `.witness-core/events.jsonl`
 - JSON and SSE status endpoints
 
-Run from the repository root:
+The current mental model is:
+
+- `witness-core` is the platform substrate and control plane
+- Node currently runs app workers that can attach to or be supervised by the core
+- `bootstrap` is the empty-platform bring-up path
+- `engentus` is an example app fixture, not the platform identity
+
+Canonical developer flows from the repository root:
 
 ```powershell
-cargo run --manifest-path substrate\Cargo.toml -p witness-core -- --config witness-core.toml --addr 127.0.0.1:8788
+npm run bootstrap
+npm run platform:core
+npm run platform:supervised
+npm run app:engentus
 ```
 
-With the default `witness-core.toml`, `witness-core` will also start `npm run engentus` as a supervised child and inject `WITNESS_CORE_URL=http://127.0.0.1:8788`.
+Direct cargo invocation remains available:
 
-If you want to run the app separately instead, remove or blank the `[supervise]` section and then start the app with:
+```powershell
+cargo run --manifest-path substrate\Cargo.toml -p witness-core -- --config witness-core-standalone.toml --addr 127.0.0.1:8788
+```
+
+Execution-boundary roadmap:
+
+- [docs/RUST-OWNED-EXTERNAL-BOUNDARY-ROADMAP.md](../docs/RUST-OWNED-EXTERNAL-BOUNDARY-ROADMAP.md)
+
+`npm run platform:core` starts the Rust substrate only. It does not launch an app worker.
+
+`npm run platform:supervised` uses the example development config in `witness-core.toml` and supervises the example app worker via `npm run app:engentus`.
+
+If you want to run the example app separately against the core instead, keep the standalone core running and then start the app worker with:
 
 ```powershell
 $env:WITNESS_CORE_URL = "http://127.0.0.1:8788"
-npm run engentus
+npm run app:engentus
 ```
 
 Endpoints:
@@ -70,7 +92,7 @@ For supervised children behind the front door, use command and health templates 
 
 ```toml
 [supervise]
-command = "node src/cli.js serve examples/engentus --server app --port {runtime_port} --runtime-profile authoring"
+command = "node src/cli.js serve <app-root> --server app --port {runtime_port} --runtime-profile authoring"
 health_url = "http://127.0.0.1:{runtime_port}/api/runtime/process-health"
 restart_on_exit = true
 restart_on_unhealthy = true

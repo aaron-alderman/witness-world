@@ -222,11 +222,37 @@ function addToIndexedSet(map, key, value) {
   map.get(nextKey).add(nextValue);
 }
 
-function collectRuleStepReferences(steps = [], refs = { states: [], commands: [] }) {
+function collectProjectionInputReferences(body = {}, refs = { states: [], projections: [] }) {
+  const inputs = body?.inputs;
+  if (inputs && typeof inputs === "object" && !Array.isArray(inputs)) {
+    for (const source of Object.values(inputs)) collectValueSourceReferences(source, refs);
+    return refs;
+  }
+  if (trimString(body?.source)) refs.states.push(trimString(body.source));
+  return refs;
+}
+
+function collectValueSourceReferences(source, refs = { states: [], projections: [] }) {
+  const normalized = typeof source === "string"
+    ? { kind: "state", state: source }
+    : (source && typeof source === "object" ? source : null);
+  if (!normalized) return refs;
+  if (normalized.kind === "state" && trimString(normalized.state)) refs.states.push(trimString(normalized.state));
+  if (normalized.kind === "projection" && trimString(normalized.projection)) refs.projections.push(trimString(normalized.projection));
+  return refs;
+}
+
+function collectRuleStepReferences(steps = [], refs = { states: [], commands: [], projections: [] }) {
   for (const step of steps ?? []) {
     if (!step || typeof step !== "object") continue;
     if (trimString(step.state)) refs.states.push(trimString(step.state));
     if (trimString(step.command)) refs.commands.push(trimString(step.command));
+    if (Object.prototype.hasOwnProperty.call(step, "valueFrom")) collectValueSourceReferences(step.valueFrom, refs);
+    if (step.kind === "branch") {
+      collectValueSourceReferences(step.condition, refs);
+      collectRuleStepReferences(step.then ?? [], refs);
+      collectRuleStepReferences(step.else ?? [], refs);
+    }
     if (step.kind === "option") {
       collectRuleStepReferences(step.real ?? [], refs);
       collectRuleStepReferences(step.else ?? [], refs);
@@ -323,6 +349,9 @@ function collectRelevantProcessWitnesses(world, surfaceEntries = [], routeStateD
       if (action.kind === "setState") {
         markDefinition(action.state);
         if (action.value?.kind === "toggleState") markDefinition(action.value.state);
+        const refs = collectValueSourceReferences(action.valueFrom ?? action.value);
+        for (const stateId of refs.states ?? []) markDefinition(stateId);
+        for (const projectionId of refs.projections ?? []) markDefinition(projectionId);
       }
     }
   }
@@ -377,7 +406,9 @@ function collectRelevantProcessWitnesses(world, surfaceEntries = [], routeStateD
     for (const projectionId of [...relevant.projections]) {
       const projectionDef = catalog.definitions.get(projectionId);
       if (!projectionDef) continue;
-      changed = markDefinition(projectionDef.body?.source) || changed;
+      const refs = collectProjectionInputReferences(projectionDef.body);
+      for (const stateId of refs.states ?? []) changed = markDefinition(stateId) || changed;
+      for (const nextProjectionId of refs.projections ?? []) changed = markDefinition(nextProjectionId) || changed;
     }
     for (const policyId of [...relevant.policies]) {
       const policyDef = catalog.definitions.get(policyId);
@@ -413,6 +444,7 @@ function collectRelevantProcessWitnesses(world, surfaceEntries = [], routeStateD
         const refs = collectRuleStepReferences(rule.steps ?? []);
         for (const stateId of refs.states) changed = markDefinition(stateId) || changed;
         for (const commandId of refs.commands) changed = markDefinition(commandId) || changed;
+        for (const projectionId of refs.projections) changed = markDefinition(projectionId) || changed;
       }
     }
   }
@@ -953,28 +985,42 @@ function overlaySurfaceProps(surface, processRuntime, capabilityOutputs = {}) {
   return nextProps;
 }
 
-function eventValueFromSpec(spec, event, processRuntime) {
+function eventValuesFromDomEvent(event) {
+  const selected = event?.target?.selectedOptions;
+  if (selected && typeof selected.length === "number") {
+    return [...selected]
+      .map(option => option?.value == null ? "" : String(option.value))
+      .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
+  }
+  const options = event?.target?.options;
+  if (options && typeof options.length === "number") {
+    return [...options]
+      .filter(option => option?.selected)
+      .map(option => option?.value == null ? "" : String(option.value))
+      .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
+  }
+  return [];
+}
+
+function eventPayloadFromDomEvent(event) {
+  return {
+    value: event?.target && "value" in event.target ? event.target.value : null,
+    checked: event?.target && "checked" in event.target ? Boolean(event.target.checked) : false,
+    values: eventValuesFromDomEvent(event)
+  };
+}
+
+function runtimeValueFromSpec(spec, event, processRuntime, capabilityOutputs = {}) {
   if (!spec || typeof spec !== "object") return null;
   if (Object.prototype.hasOwnProperty.call(spec, "literal")) return spec.literal;
+  if (spec.kind === "literal") return spec.value;
   if (spec.kind === "toggleState") return !Boolean(processRuntime.value(spec.state));
+  if (spec.kind === "state") return processRuntime.value(spec.state);
+  if (spec.kind === "projection") return processRuntime.derive(spec.projection);
+  if (spec.kind === "capability") return readCapabilityOutput(spec, capabilityOutputs);
   if (spec.kind === "eventValue") return event?.target && "value" in event.target ? event.target.value : null;
   if (spec.kind === "eventChecked") return event?.target && "checked" in event.target ? Boolean(event.target.checked) : false;
-  if (spec.kind === "eventValues") {
-    const selected = event?.target?.selectedOptions;
-    if (selected && typeof selected.length === "number") {
-      return [...selected]
-        .map(option => option?.value == null ? "" : String(option.value))
-        .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
-    }
-    const options = event?.target?.options;
-    if (options && typeof options.length === "number") {
-      return [...options]
-        .filter(option => option?.selected)
-        .map(option => option?.value == null ? "" : String(option.value))
-        .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
-    }
-    return [];
-  }
+  if (spec.kind === "eventValues") return eventValuesFromDomEvent(event);
   return null;
 }
 
@@ -2262,7 +2308,7 @@ export function createSurfaceInteractionRuntime({
               if (typeof processRuntime.deliverAuthored === "function") {
                 await processRuntime.deliverAuthored(
                   action.message,
-                  null,
+                  eventPayloadFromDomEvent(event),
                   routeRequestContext ? { routeRequestContext } : undefined
                 );
               } else {
@@ -2272,7 +2318,10 @@ export function createSurfaceInteractionRuntime({
               return;
             }
             if (action.kind === "setState" && trimString(action.state)) {
-              processRuntime.set(action.state, eventValueFromSpec(action.value ?? {}, event, processRuntime));
+              processRuntime.set(
+                action.state,
+                runtimeValueFromSpec(action.valueFrom ?? action.value ?? {}, event, processRuntime, capabilityOutputs)
+              );
               await requestSyncRouteAndRefresh("set-state");
             }
           };

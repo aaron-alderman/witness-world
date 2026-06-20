@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use wasmtime::{Caller, Config as WasmtimeConfig, Engine as WasmtimeEngine, Extern, ExternType, Linker, Module as WasmtimeModule, Store as WasmtimeStore, ValType};
 
 const CAP_STORAGE_READ: &str = "storage.read";
 const CAP_STORAGE_WRITE: &str = "storage.write";
@@ -19,8 +20,12 @@ const CAP_FS_WRITE: &str = "capability.fs.write";
 const CAP_FS_PATCH: &str = "capability.fs.patch";
 const CAP_FS_STAT: &str = "capability.fs.stat";
 const CAP_PROCESS_SOAK: &str = "process.soak";
+const CAP_COMPUTE_EXECUTE: &str = "compute.execute";
 const AUTHORING_WRITE_CONFLICT: &str = "authoring.write.conflict";
 const AUTHORING_WRITE_REJECTED: &str = "authoring.write.rejected";
+const COMPUTE_MODULE_RUNTIME_TARGET_HOST_OPERATION: &str = "engentus.pipeline.health.classify";
+const COMPUTE_MODULE_IMPORT_NAMESPACE_V1: &str = "world_host_operation_v1";
+const COMPUTE_MODULE_STORE_ROOT_V1: &str = ".witness-core/artifacts/compute-modules";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ServingMode {
@@ -99,6 +104,28 @@ impl ProofStatus {
 
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ComputeModuleExecutionMode {
+    Disabled,
+    Shadow,
+}
+
+impl ComputeModuleExecutionMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::Shadow => "shadow",
+        }
+    }
+
+    fn from_str(value: &str) -> Self {
+        match value {
+            "shadow" => Self::Shadow,
+            _ => Self::Disabled,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Correlation {
     pub session_id: Option<String>,
@@ -134,16 +161,20 @@ pub struct ComputeModuleBuildRecord {
     pub source: String,
     pub artifact_path: Option<String>,
     pub artifact_hash: Option<String>,
+    pub store_path: Option<String>,
     pub language: String,
     pub abi: String,
     pub export_name: String,
+    pub max_memory_pages: Option<u64>,
+    pub timeout_ms: Option<u64>,
+    pub allowed_bindings: Vec<String>,
+    pub context: Option<String>,
     pub success: bool,
     pub error: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 struct BuildWorkerResult {
-    pub ok: bool,
     pub error: Option<String>,
     pub compute_module_count: usize,
     pub compute_modules: Vec<ComputeModuleBuildRecord>,
@@ -242,6 +273,13 @@ pub struct TransactionConfig {
 }
 
 #[derive(Clone, Debug)]
+pub struct ComputeModulesConfig {
+    pub engine: String,
+    pub execution_mode: ComputeModuleExecutionMode,
+    pub artifact_store_root: String,
+}
+
+#[derive(Clone, Debug)]
 pub struct CoreConfig {
     pub watch: WatchConfig,
     pub proof: ProofConfig,
@@ -250,6 +288,7 @@ pub struct CoreConfig {
     pub frontdoor: FrontDoorConfig,
     pub build_worker: BuildWorkerConfig,
     pub transaction: TransactionConfig,
+    pub compute_modules: ComputeModulesConfig,
 }
 
 impl Default for CoreConfig {
@@ -296,6 +335,11 @@ impl Default for CoreConfig {
             transaction: TransactionConfig {
                 build_timeout_ms: 30_000,
                 stage_root: ".witness-core/staging".to_string(),
+            },
+            compute_modules: ComputeModulesConfig {
+                engine: "wasmtime".to_string(),
+                execution_mode: ComputeModuleExecutionMode::Disabled,
+                artifact_store_root: COMPUTE_MODULE_STORE_ROOT_V1.to_string(),
             },
         }
     }
@@ -1143,9 +1187,49 @@ impl Registry {
     }
 }
 
+#[derive(Default)]
+struct ComputeModuleHostState {
+    output: Vec<u8>,
+    logs: Vec<String>,
+    metrics: Vec<String>,
+}
+
+#[derive(Clone)]
+struct ComputeModuleRuntime {
+    engine: WasmtimeEngine,
+    cache: Arc<Mutex<BTreeMap<String, WasmtimeModule>>>,
+}
+
+#[derive(Clone, Debug)]
+struct ComputeModuleShadowOutcome {
+    status: String,
+    reason: Option<String>,
+    guest_result_json: Option<String>,
+    generation_id: Option<String>,
+    module_id: Option<String>,
+    artifact_hash: Option<String>,
+    store_path: Option<String>,
+}
+
+impl ComputeModuleRuntime {
+    fn new() -> Result<Self, String> {
+        let mut config = WasmtimeConfig::new();
+        config.consume_fuel(true);
+        let engine = WasmtimeEngine::new(&config)
+            .map_err(|error| format!("wasmtime engine init failed: {}", error))?;
+        Ok(Self {
+            engine,
+            cache: Arc::new(Mutex::new(BTreeMap::new())),
+        })
+    }
+}
+
 pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
     let cwd = std::env::current_dir()?;
     let config = load_config(&config_path).unwrap_or_default();
+    let compute_module_runtime = Arc::new(
+        ComputeModuleRuntime::new().map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?
+    );
     let store: Arc<dyn CoreStore> = Arc::new(FileStore::new(cwd.join(".witness-core")));
     let registry = Arc::new(Mutex::new(Registry::new(store)));
     let process_state = Arc::new(Mutex::new(SupervisedProcessState {
@@ -1186,7 +1270,7 @@ pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
             Arc::clone(&process_state),
         );
     }
-    serve_http(addr, cwd, config, registry, process_state, watch_state)
+    serve_http(addr, cwd, config, registry, process_state, watch_state, compute_module_runtime)
 }
 
 pub fn load_config(path: &Path) -> std::io::Result<CoreConfig> {
@@ -1253,6 +1337,13 @@ pub fn parse_config(text: &str) -> CoreConfig {
                 config.transaction.build_timeout_ms = value.parse().unwrap_or(config.transaction.build_timeout_ms);
             }
             ("transaction", "stage_root") => config.transaction.stage_root = parse_string(value),
+            ("compute_modules", "engine") => config.compute_modules.engine = parse_string(value),
+            ("compute_modules", "execution_mode") => {
+                config.compute_modules.execution_mode = ComputeModuleExecutionMode::from_str(&parse_string(value));
+            }
+            ("compute_modules", "artifact_store_root") => {
+                config.compute_modules.artifact_store_root = parse_string(value);
+            }
             _ => {}
         }
     }
@@ -1405,6 +1496,7 @@ fn serve_http(
     registry: Arc<Mutex<Registry>>,
     process_state: Arc<Mutex<SupervisedProcessState>>,
     watch_state: Arc<Mutex<WatcherState>>,
+    compute_module_runtime: Arc<ComputeModuleRuntime>,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(addr)?;
     for stream in listener.incoming() {
@@ -1414,10 +1506,11 @@ fn serve_http(
         let registry = Arc::clone(&registry);
         let process_state = Arc::clone(&process_state);
         let watch_state = Arc::clone(&watch_state);
+        let compute_module_runtime = Arc::clone(&compute_module_runtime);
         let cwd = cwd.clone();
         let config = config.clone();
         thread::spawn(move || {
-            let _ = handle_client(stream, &cwd, &config, registry, process_state, watch_state);
+            let _ = handle_client(stream, &cwd, &config, registry, process_state, watch_state, compute_module_runtime);
         });
     }
     Ok(())
@@ -1430,6 +1523,7 @@ fn handle_client(
     registry: Arc<Mutex<Registry>>,
     process_state: Arc<Mutex<SupervisedProcessState>>,
     watch_state: Arc<Mutex<WatcherState>>,
+    compute_module_runtime: Arc<ComputeModuleRuntime>,
 ) -> std::io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut first_line = String::new();
@@ -1555,6 +1649,39 @@ fn handle_client(
                     }
                 }
                 Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, None)),
+            }
+        }
+        ("POST", "/compute-modules/shadow-invoke") => {
+            let body_text = String::from_utf8_lossy(&body).to_string();
+            let host_operation = extract_json_string_decoded(&body_text, "hostOperation").unwrap_or_default();
+            let input_json = extract_json_string_decoded(&body_text, "inputJson").unwrap_or_default();
+            let js_result_json = extract_json_string_decoded(&body_text, "jsResultJson").unwrap_or_default();
+            if host_operation.trim().is_empty() || input_json.trim().is_empty() || js_result_json.trim().is_empty() {
+                write_json(&mut stream, 400, "{\"error\":\"hostOperation, inputJson, and jsResultJson are required\"}")
+            } else {
+                let outcome = shadow_invoke_compute_module(
+                    cwd,
+                    config,
+                    &registry,
+                    &compute_module_runtime,
+                    &host_operation,
+                    &input_json,
+                    &js_result_json,
+                );
+                write_json(
+                    &mut stream,
+                    200,
+                    &format!(
+                        "{{\"ok\":true,\"status\":{},\"reason\":{},\"guestResultJson\":{},\"generationId\":{},\"moduleId\":{},\"artifactHash\":{},\"storePath\":{}}}",
+                        json_string(&outcome.status),
+                        json_optional_value(outcome.reason.as_deref()),
+                        json_optional_value(outcome.guest_result_json.as_deref()),
+                        json_optional_value(outcome.generation_id.as_deref()),
+                        json_optional_value(outcome.module_id.as_deref()),
+                        json_optional_value(outcome.artifact_hash.as_deref()),
+                        json_optional_value(outcome.store_path.as_deref())
+                    ),
+                )
             }
         }
         ("GET", "/capabilities/fs/read") => {
@@ -3389,6 +3516,69 @@ fn extract_json_object_array(text: &str, key: &str) -> Vec<String> {
     results
 }
 
+fn extract_json_value(text: &str, key: &str) -> Option<String> {
+    let needle = format!("\"{}\"", key);
+    let key_index = text.find(&needle)?;
+    let after_key = &text[key_index + needle.len()..];
+    let colon_index = after_key.find(':')?;
+    let value_text = after_key[colon_index + 1..].trim_start();
+    let bytes = value_text.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+    let first = bytes[0] as char;
+    if first == '"' {
+        let mut escaped = false;
+        for index in 1..bytes.len() {
+            let ch = bytes[index] as char;
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if ch == '\\' {
+                escaped = true;
+                continue;
+            }
+            if ch == '"' {
+                return Some(value_text[..=index].to_string());
+            }
+        }
+        return None;
+    }
+    if first == '{' || first == '[' {
+        let mut depth = 0i32;
+        let mut in_string = false;
+        let mut escaped = false;
+        for index in 0..bytes.len() {
+            let ch = bytes[index] as char;
+            if in_string {
+                if escaped {
+                    escaped = false;
+                } else if ch == '\\' {
+                    escaped = true;
+                } else if ch == '"' {
+                    in_string = false;
+                }
+                continue;
+            }
+            match ch {
+                '"' => in_string = true,
+                '{' | '[' => depth += 1,
+                '}' | ']' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(value_text[..=index].to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+        return None;
+    }
+    let end = value_text.find(',').or_else(|| value_text.find('}')).unwrap_or(value_text.len());
+    Some(value_text[..end].trim().to_string())
+}
+
 fn parse_published_authoring_request(body_text: &str) -> Result<PublishedAuthoringRequest, CapabilityError> {
     let manifest_path = extract_json_string_decoded(body_text, "manifestPath")
         .filter(|value| !value.trim().is_empty())
@@ -3496,7 +3686,6 @@ fn parse_build_worker_result(text: &str) -> BuildWorkerResult {
         error.clone().unwrap_or_else(|| "build worker failed".to_string())
     };
     BuildWorkerResult {
-        ok: extract_json_bool(text, "ok"),
         error,
         compute_module_count: extract_json_u64(text, "computeModuleCount")
             .map(|value| value as usize)
@@ -3570,7 +3759,6 @@ fn run_build_worker(
         .clone()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| BuildWorkerResult {
-            ok: false,
             error: Some("build worker is not configured".to_string()),
             compute_module_count: 0,
             compute_modules: Vec::new(),
@@ -3605,12 +3793,22 @@ fn run_build_worker(
             .output()
             .map_err(|error| format!("build worker spawn failed: {}", error))
     };
-    let output = if let Some(direct) = supervised_command(&command) {
+    let output = match if let Some(direct) = supervised_command(&command) {
         spawn(direct)
     } else {
         Err("shell command required".to_string())
     }
-    .or_else(|_| spawn(shell_command(&command)))?;
+    .or_else(|_| spawn(shell_command(&command))) {
+        Ok(output) => output,
+        Err(error) => {
+            return Err(BuildWorkerResult {
+                error: Some(error.clone()),
+                compute_module_count: 0,
+                compute_modules: Vec::new(),
+                raw_message: error,
+            });
+        }
+    };
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     let selected_text = if !stdout.is_empty() {
@@ -3664,6 +3862,503 @@ fn run_build_worker(
             emitted_at: now_iso(),
         });
         Err(build_result)
+    }
+}
+
+fn normalize_workspace_relative_path(root: &Path, path: &Path) -> String {
+    relative_under(root, path)
+        .map(|value| normalize_path(&value))
+        .unwrap_or_else(|_| normalize_path(path))
+}
+
+fn compute_module_artifact_store_path(
+    cwd: &Path,
+    config: &CoreConfig,
+    artifact_hash: &str,
+) -> Result<PathBuf, String> {
+    let hash = artifact_hash.trim().strip_prefix("sha256:").unwrap_or(artifact_hash.trim());
+    if hash.is_empty() || hash.chars().any(|ch| !ch.is_ascii_hexdigit()) {
+        return Err(format!("invalid compute module artifact hash: {}", artifact_hash));
+    }
+    Ok(cwd
+        .join(&config.compute_modules.artifact_store_root)
+        .join(format!("{}.wasm", hash.to_ascii_lowercase())))
+}
+
+fn store_compute_module_artifacts(
+    cwd: &Path,
+    stage_root: &Path,
+    config: &CoreConfig,
+    records: &[ComputeModuleBuildRecord],
+) -> Result<Vec<ComputeModuleBuildRecord>, String> {
+    let mut stored = Vec::with_capacity(records.len());
+    for record in records {
+        if !record.success {
+            stored.push(record.clone());
+            continue;
+        }
+        let artifact_hash = record
+            .artifact_hash
+            .as_deref()
+            .ok_or_else(|| format!("compute module {} missing artifactHash", record.id))?;
+        let artifact_path = record
+            .artifact_path
+            .as_deref()
+            .ok_or_else(|| format!("compute module {} missing artifactPath", record.id))?;
+        let source_path = stage_root.join(artifact_path);
+        if !source_path.exists() {
+            return Err(format!(
+                "staged compute module artifact not found for {}: {}",
+                record.id,
+                normalize_path(&source_path)
+            ));
+        }
+        let store_path = compute_module_artifact_store_path(cwd, config, artifact_hash)?;
+        if let Some(parent) = store_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("compute module artifact store mkdir failed: {}", error))?;
+        }
+        if !store_path.exists() {
+            fs::copy(&source_path, &store_path)
+                .map_err(|error| format!("compute module artifact store copy failed: {}", error))?;
+        }
+        let mut stored_record = record.clone();
+        stored_record.store_path = Some(normalize_workspace_relative_path(cwd, &store_path));
+        stored.push(stored_record);
+    }
+    Ok(stored)
+}
+
+fn active_generation_for_compute_modules(registry: &Registry) -> Option<Generation> {
+    match registry.effective_serving_mode() {
+        ServingMode::Stable => registry
+            .aliases
+            .current_stable
+            .as_deref()
+            .and_then(|id| registry.generation(id)),
+        ServingMode::Live => registry
+            .aliases
+            .current_green_local
+            .as_deref()
+            .and_then(|id| registry.generation(id))
+            .or_else(|| {
+                registry
+                    .aliases
+                    .current_stable
+                    .as_deref()
+                    .and_then(|id| registry.generation(id))
+            }),
+    }
+}
+
+fn guest_output_to_js_response(output_json: &str) -> Result<String, String> {
+    let status = extract_json_string(output_json, "status")
+        .ok_or_else(|| "guest output missing status".to_string())?;
+    match status.as_str() {
+        "success" => {
+            let payload = extract_json_value(output_json, "payload")
+                .ok_or_else(|| "guest success output missing payload".to_string())?;
+            Ok(format!("{{\"status\":\"success\",\"payload\":{}}}", payload))
+        }
+        "error" => {
+            let error = extract_json_value(output_json, "error")
+                .ok_or_else(|| "guest error output missing error object".to_string())?;
+            Ok(format!("{{\"status\":\"failure\",\"payload\":{}}}", error))
+        }
+        other => Err(format!("guest output has unsupported status {}", other)),
+    }
+}
+
+fn compute_module_shadow_message(outcome: &ComputeModuleShadowOutcome) -> String {
+    format!(
+        "{{{},{},{},{},{},{},{}}}",
+        json_pair("status", &outcome.status),
+        json_optional_pair("reason", outcome.reason.as_deref()),
+        json_optional_pair("guestResultJson", outcome.guest_result_json.as_deref()),
+        json_optional_pair("generationId", outcome.generation_id.as_deref()),
+        json_optional_pair("moduleId", outcome.module_id.as_deref()),
+        json_optional_pair("artifactHash", outcome.artifact_hash.as_deref()),
+        json_optional_pair("storePath", outcome.store_path.as_deref())
+    )
+}
+
+fn emit_compute_module_shadow_event(
+    registry: &Arc<Mutex<Registry>>,
+    kind: &str,
+    generation_id: Option<&str>,
+    outcome: &ComputeModuleShadowOutcome,
+) {
+    registry.lock().expect("registry lock").emit(CoreEvent {
+        kind: kind.to_string(),
+        capability: CAP_COMPUTE_EXECUTE.to_string(),
+        generation_id: generation_id.map(|value| value.to_string()),
+        message: Some(compute_module_shadow_message(outcome)),
+        generation: None,
+        serving: None,
+        emitted_at: now_iso(),
+    });
+}
+
+fn read_memory_bytes(caller: &mut Caller<'_, ComputeModuleHostState>, ptr: i32, len: i32) -> Vec<u8> {
+    if ptr < 0 || len < 0 {
+        return Vec::new();
+    }
+    let Some(Extern::Memory(memory)) = caller.get_export("memory") else {
+        return Vec::new();
+    };
+    let data = memory.data(&caller);
+    let start = ptr as usize;
+    let end = start.saturating_add(len as usize);
+    if end > data.len() {
+        return Vec::new();
+    }
+    data[start..end].to_vec()
+}
+
+fn validate_compute_module_runtime(module: &WasmtimeModule, record: &ComputeModuleBuildRecord) -> Result<(), String> {
+    let mut exports = BTreeSet::new();
+    let mut has_memory = false;
+    let mut has_invoke = false;
+    for export in module.exports() {
+        exports.insert(export.name().to_string());
+        match export.ty() {
+            ExternType::Memory(_) if export.name() == "memory" => {
+                has_memory = true;
+            }
+            ExternType::Func(function) if export.name() == record.export_name => {
+                let params = function.params().collect::<Vec<_>>();
+                let results = function.results().collect::<Vec<_>>();
+                has_invoke = matches!(params.as_slice(), [ValType::I32, ValType::I32])
+                    && matches!(results.as_slice(), [ValType::I32]);
+            }
+            _ => {}
+        }
+    }
+    if !has_memory {
+        return Err(format!("compute module {} is missing required memory export", record.id));
+    }
+    if !has_invoke {
+        return Err(format!(
+            "compute module {} is missing required {}(i32, i32) -> i32 export",
+            record.id, record.export_name
+        ));
+    }
+    let mut imported_functions = BTreeSet::new();
+    for import in module.imports() {
+        if import.module() != COMPUTE_MODULE_IMPORT_NAMESPACE_V1 {
+            return Err(format!(
+                "compute module {} imports unsupported module {}",
+                record.id,
+                import.module()
+            ));
+        }
+        let name = import.name();
+        match import.ty() {
+            ExternType::Func(_) => {}
+            _ => {
+                return Err(format!(
+                    "compute module {} import {} must be a function",
+                    record.id, name
+                ));
+            }
+        }
+        match name {
+            "output" => {
+                imported_functions.insert("output".to_string());
+            }
+            "log" => {
+                if !record.allowed_bindings.iter().any(|binding| binding == "host.log") {
+                    return Err(format!("compute module {} imports host.log without permission", record.id));
+                }
+                imported_functions.insert("log".to_string());
+            }
+            "metric" => {
+                if !record.allowed_bindings.iter().any(|binding| binding == "host.metric") {
+                    return Err(format!("compute module {} imports host.metric without permission", record.id));
+                }
+                imported_functions.insert("metric".to_string());
+            }
+            other => {
+                return Err(format!(
+                    "compute module {} imports unsupported binding {}",
+                    record.id, other
+                ));
+            }
+        }
+    }
+    if !imported_functions.contains("output") {
+        return Err(format!("compute module {} must import output", record.id));
+    }
+    Ok(())
+}
+
+fn load_cached_compute_module(
+    runtime: &Arc<ComputeModuleRuntime>,
+    cwd: &Path,
+    record: &ComputeModuleBuildRecord,
+) -> Result<WasmtimeModule, String> {
+    let artifact_hash = record
+        .artifact_hash
+        .clone()
+        .ok_or_else(|| format!("compute module {} missing artifactHash", record.id))?;
+    if let Some(module) = runtime.cache.lock().expect("compute module cache lock").get(&artifact_hash).cloned() {
+        return Ok(module);
+    }
+    let store_path = record
+        .store_path
+        .as_deref()
+        .ok_or_else(|| format!("compute module {} missing storePath", record.id))?;
+    let full_store_path = cwd.join(store_path);
+    let bytes = fs::read(&full_store_path)
+        .map_err(|error| format!("compute module artifact read failed: {}", error))?;
+    let module = WasmtimeModule::from_binary(&runtime.engine, &bytes)
+        .map_err(|error| format!("wasmtime compile failed: {}", error))?;
+    validate_compute_module_runtime(&module, record)?;
+    runtime
+        .cache
+        .lock()
+        .expect("compute module cache lock")
+        .insert(artifact_hash, module.clone());
+    Ok(module)
+}
+
+fn execute_compute_module_shadow(
+    runtime: &Arc<ComputeModuleRuntime>,
+    cwd: &Path,
+    record: &ComputeModuleBuildRecord,
+    input_json: &str,
+) -> Result<String, String> {
+    let module = load_cached_compute_module(runtime, cwd, record)?;
+    let mut linker = Linker::new(&runtime.engine);
+    linker
+        .func_wrap(COMPUTE_MODULE_IMPORT_NAMESPACE_V1, "output", |mut caller: Caller<'_, ComputeModuleHostState>, ptr: i32, len: i32| {
+            let bytes = read_memory_bytes(&mut caller, ptr, len);
+            caller.data_mut().output = bytes;
+        })
+        .map_err(|error| format!("link output binding failed: {}", error))?;
+    linker
+        .func_wrap(COMPUTE_MODULE_IMPORT_NAMESPACE_V1, "log", |mut caller: Caller<'_, ComputeModuleHostState>, ptr: i32, len: i32| {
+            let bytes = read_memory_bytes(&mut caller, ptr, len);
+            if let Ok(text) = String::from_utf8(bytes) {
+                caller.data_mut().logs.push(text);
+            }
+        })
+        .map_err(|error| format!("link log binding failed: {}", error))?;
+    linker
+        .func_wrap(COMPUTE_MODULE_IMPORT_NAMESPACE_V1, "metric", |mut caller: Caller<'_, ComputeModuleHostState>, ptr: i32, len: i32| {
+            let bytes = read_memory_bytes(&mut caller, ptr, len);
+            if let Ok(text) = String::from_utf8(bytes) {
+                caller.data_mut().metrics.push(text);
+            }
+        })
+        .map_err(|error| format!("link metric binding failed: {}", error))?;
+    let mut store = WasmtimeStore::new(&runtime.engine, ComputeModuleHostState::default());
+    let fuel_budget = record.timeout_ms.unwrap_or(100).max(1).saturating_mul(100_000);
+    let _ = store.set_fuel(fuel_budget);
+    let instance = linker
+        .instantiate(&mut store, &module)
+        .map_err(|error| format!("compute module instantiate failed: {}", error))?;
+    let memory = instance
+        .get_memory(&mut store, "memory")
+        .ok_or_else(|| format!("compute module {} missing memory export", record.id))?;
+    let input_bytes = input_json.as_bytes();
+    let input_ptr = 1024usize;
+    let required_bytes = input_ptr.saturating_add(input_bytes.len());
+    let current_bytes = memory.data_size(&store);
+    if required_bytes > current_bytes {
+        let current_pages = current_bytes.div_ceil(65_536);
+        let required_pages = required_bytes.div_ceil(65_536);
+        if let Some(limit) = record.max_memory_pages {
+            if required_pages as u64 > limit {
+                return Err(format!("compute module {} exceeded maxMemoryPages", record.id));
+            }
+        }
+        let delta_pages = required_pages.saturating_sub(current_pages);
+        if delta_pages > 0 {
+            memory
+                .grow(&mut store, delta_pages as u64)
+                .map_err(|error| format!("compute module memory grow failed: {}", error))?;
+        }
+    }
+    memory
+        .write(&mut store, input_ptr, input_bytes)
+        .map_err(|error| format!("compute module input write failed: {}", error))?;
+    let invoke = instance
+        .get_typed_func::<(i32, i32), i32>(&mut store, &record.export_name)
+        .map_err(|error| format!("compute module invoke load failed: {}", error))?;
+    let return_code = invoke
+        .call(&mut store, (input_ptr as i32, input_bytes.len() as i32))
+        .map_err(|error| {
+            let message = error.to_string();
+            if message.to_ascii_lowercase().contains("fuel") {
+                format!("timed out: {}", message)
+            } else {
+                format!("compute module trapped: {}", message)
+            }
+        })?;
+    let output_bytes = store.data().output.clone();
+    let output_text = String::from_utf8(output_bytes).map_err(|error| format!("guest output utf8 decode failed: {}", error))?;
+    if return_code == 0 {
+        if output_text.trim().is_empty() {
+            return Err("guest returned success without output envelope".to_string());
+        }
+        return Ok(output_text);
+    }
+    if !output_text.trim().is_empty() {
+        return Ok(output_text);
+    }
+    Err(format!("guest returned failure code {}", return_code))
+}
+
+fn shadow_invoke_compute_module(
+    cwd: &Path,
+    config: &CoreConfig,
+    registry: &Arc<Mutex<Registry>>,
+    runtime: &Arc<ComputeModuleRuntime>,
+    host_operation: &str,
+    input_json: &str,
+    js_result_json: &str,
+) -> ComputeModuleShadowOutcome {
+    if config.compute_modules.execution_mode != ComputeModuleExecutionMode::Shadow {
+        return ComputeModuleShadowOutcome {
+            status: "skipped".to_string(),
+            reason: Some("execution mode disabled".to_string()),
+            guest_result_json: None,
+            generation_id: None,
+            module_id: None,
+            artifact_hash: None,
+            store_path: None,
+        };
+    }
+    if host_operation != COMPUTE_MODULE_RUNTIME_TARGET_HOST_OPERATION {
+        return ComputeModuleShadowOutcome {
+            status: "skipped".to_string(),
+            reason: Some("host operation not shadow-enabled".to_string()),
+            guest_result_json: None,
+            generation_id: None,
+            module_id: None,
+            artifact_hash: None,
+            store_path: None,
+        };
+    }
+    let (generation, record) = {
+        let registry_guard = registry.lock().expect("registry lock");
+        let Some(generation) = active_generation_for_compute_modules(&registry_guard) else {
+            return ComputeModuleShadowOutcome {
+                status: "skipped".to_string(),
+                reason: Some("no active generation".to_string()),
+                guest_result_json: None,
+                generation_id: None,
+                module_id: None,
+                artifact_hash: None,
+                store_path: None,
+            };
+        };
+        let Some(record) = generation
+            .compute_modules
+            .iter()
+            .find(|entry| entry.success && entry.host_operation == host_operation && entry.store_path.is_some())
+            .cloned()
+        else {
+            return ComputeModuleShadowOutcome {
+                status: "skipped".to_string(),
+                reason: Some("no compute module artifact resolved".to_string()),
+                guest_result_json: None,
+                generation_id: Some(generation.id),
+                module_id: None,
+                artifact_hash: None,
+                store_path: None,
+            };
+        };
+        (generation, record)
+    };
+    let resolved = ComputeModuleShadowOutcome {
+        status: "resolved".to_string(),
+        reason: None,
+        guest_result_json: None,
+        generation_id: Some(generation.id.clone()),
+        module_id: Some(record.id.clone()),
+        artifact_hash: record.artifact_hash.clone(),
+        store_path: record.store_path.clone(),
+    };
+    emit_compute_module_shadow_event(registry, "host_operation.compute_module.resolved", Some(&generation.id), &resolved);
+    let started = ComputeModuleShadowOutcome { status: "started".to_string(), ..resolved.clone() };
+    emit_compute_module_shadow_event(registry, "host_operation.compute_module.shadow.started", Some(&generation.id), &started);
+    match execute_compute_module_shadow(runtime, cwd, &record, input_json) {
+        Ok(guest_output_json) => match guest_output_to_js_response(&guest_output_json) {
+            Ok(guest_result_json) => {
+                let status = if guest_result_json == js_result_json {
+                    "matched"
+                } else {
+                    "mismatched"
+                };
+                let outcome = ComputeModuleShadowOutcome {
+                    status: status.to_string(),
+                    reason: None,
+                    guest_result_json: Some(guest_result_json),
+                    generation_id: Some(generation.id.clone()),
+                    module_id: Some(record.id.clone()),
+                    artifact_hash: record.artifact_hash.clone(),
+                    store_path: record.store_path.clone(),
+                };
+                emit_compute_module_shadow_event(
+                    registry,
+                    if status == "matched" {
+                        "host_operation.compute_module.shadow.matched"
+                    } else {
+                        "host_operation.compute_module.shadow.mismatched"
+                    },
+                    Some(&generation.id),
+                    &outcome,
+                );
+                outcome
+            }
+            Err(error) => {
+                let outcome = ComputeModuleShadowOutcome {
+                    status: "trapped".to_string(),
+                    reason: Some(error),
+                    guest_result_json: Some(guest_output_json),
+                    generation_id: Some(generation.id.clone()),
+                    module_id: Some(record.id.clone()),
+                    artifact_hash: record.artifact_hash.clone(),
+                    store_path: record.store_path.clone(),
+                };
+                emit_compute_module_shadow_event(
+                    registry,
+                    "host_operation.compute_module.shadow.trapped",
+                    Some(&generation.id),
+                    &outcome,
+                );
+                outcome
+            }
+        },
+        Err(error) => {
+            let status = if error.to_ascii_lowercase().contains("timed out") {
+                "timed_out"
+            } else {
+                "trapped"
+            };
+            let outcome = ComputeModuleShadowOutcome {
+                status: status.to_string(),
+                reason: Some(error),
+                guest_result_json: None,
+                generation_id: Some(generation.id.clone()),
+                module_id: Some(record.id.clone()),
+                artifact_hash: record.artifact_hash.clone(),
+                store_path: record.store_path.clone(),
+            };
+            emit_compute_module_shadow_event(
+                registry,
+                if status == "timed_out" {
+                    "host_operation.compute_module.shadow.timed_out"
+                } else {
+                    "host_operation.compute_module.shadow.trapped"
+                },
+                Some(&generation.id),
+                &outcome,
+            );
+            outcome
+        }
     }
 }
 
@@ -3859,6 +4554,13 @@ fn apply_published_authoring_transaction(
             });
         }
     }
+    generation.compute_modules = store_compute_module_artifacts(cwd, &stage_root, config, &generation.compute_modules)
+        .map_err(|message| {
+            generation.state = GenerationState::CompileFailed;
+            registry.lock().expect("registry lock").upsert_generation(generation.clone(), "generation.compile_failed", CAP_STORAGE_WRITE);
+            let _ = fs::remove_dir_all(&stage_root);
+            capability_error(500, message)
+        })?;
     generation.state = GenerationState::ProofRunning;
     generation.proofs.push(ProofRecord {
         name: "fast".to_string(),
@@ -4203,19 +4905,29 @@ fn generation_to_json(generation: &Generation) -> String {
 }
 
 fn compute_module_build_record_to_json(record: &ComputeModuleBuildRecord) -> String {
-    format!(
-        "{{{},{},{},{},{},{},{},{},{},{}}}",
+    let allowed_bindings = record.allowed_bindings
+        .iter()
+        .map(|binding| json_string(binding))
+        .collect::<Vec<_>>()
+        .join(",");
+    let fields = vec![
         json_pair("id", &record.id),
         json_pair("hostOperation", &record.host_operation),
         json_pair("source", &record.source),
         json_optional_pair("artifactPath", record.artifact_path.as_deref()),
         json_optional_pair("artifactHash", record.artifact_hash.as_deref()),
+        json_optional_pair("storePath", record.store_path.as_deref()),
         json_pair("language", &record.language),
         json_pair("abi", &record.abi),
         json_pair("export", &record.export_name),
+        json_number_optional_pair("maxMemoryPages", record.max_memory_pages),
+        json_number_optional_pair("timeoutMs", record.timeout_ms),
+        format!("\"allowedBindings\":[{}]", allowed_bindings),
+        json_optional_pair("context", record.context.as_deref()),
         json_bool_pair("success", record.success),
         json_optional_pair("error", record.error.as_deref())
-    )
+    ];
+    format!("{{{}}}", fields.join(","))
 }
 
 fn proof_to_json(proof: &ProofRecord) -> String {
@@ -4340,6 +5052,13 @@ fn json_optional_pair(key: &str, value: Option<&str>) -> String {
     match value {
         Some(value) => json_pair(key, value),
         None => format!("\"{}\":null", key),
+    }
+}
+
+fn json_optional_value(value: Option<&str>) -> String {
+    match value {
+        Some(value) => json_string(value),
+        None => "null".to_string(),
     }
 }
 
@@ -4668,9 +5387,14 @@ fn compute_module_build_record_from_json(text: &str) -> Option<ComputeModuleBuil
         source: extract_json_string(text, "source").unwrap_or_default(),
         artifact_path: extract_json_string(text, "artifactPath"),
         artifact_hash: extract_json_string(text, "artifactHash"),
+        store_path: extract_json_string(text, "storePath"),
         language: extract_json_string(text, "language").unwrap_or_else(|| "assemblyscript".to_string()),
         abi: extract_json_string(text, "abi").unwrap_or_else(|| "world.hostOperation.v1".to_string()),
         export_name: extract_json_string(text, "export").unwrap_or_else(|| "invoke".to_string()),
+        max_memory_pages: extract_json_u64(text, "maxMemoryPages"),
+        timeout_ms: extract_json_u64(text, "timeoutMs"),
+        allowed_bindings: extract_json_string_array(text, "allowedBindings"),
+        context: extract_json_string_decoded(text, "context").or_else(|| extract_json_string(text, "context")),
         success: extract_json_bool(text, "success"),
         error: extract_json_string_decoded(text, "error").or_else(|| extract_json_string(text, "error")),
     })
@@ -4938,7 +5662,7 @@ slow_ms = 123
 include = ["src/**"]
 
 [supervise]
-command = "npm run engentus"
+command = "npm run app:engentus"
 working_dir = "."
 restart_on_exit = false
 restart_on_unhealthy = false
@@ -4956,13 +5680,18 @@ working_dir = "."
 [transaction]
 build_timeout_ms = 3210
 stage_root = ".witness-core/staging"
+
+[compute_modules]
+engine = "wasmtime"
+execution_mode = "shadow"
+artifact_store_root = ".witness-core/artifacts/compute-modules"
 "#);
         assert_eq!(config.watch.roots, vec!["src", "plugins"]);
         assert_eq!(config.watch.ignore, vec!["target"]);
         assert_eq!(config.proof.fast, "node --test a.test.js");
         assert_eq!(config.proof.slow_ms, 123);
         assert_eq!(config.package.include, vec!["src/**"]);
-        assert_eq!(config.supervise.command.as_deref(), Some("npm run engentus"));
+        assert_eq!(config.supervise.command.as_deref(), Some("npm run app:engentus"));
         assert_eq!(config.supervise.working_dir.as_deref(), Some("."));
         assert_eq!(config.supervise.restart_on_exit, false);
         assert_eq!(config.supervise.restart_on_unhealthy, false);
@@ -4979,6 +5708,41 @@ stage_root = ".witness-core/staging"
         assert_eq!(config.build_worker.working_dir.as_deref(), Some("."));
         assert_eq!(config.transaction.build_timeout_ms, 3210);
         assert_eq!(config.transaction.stage_root, ".witness-core/staging");
+        assert_eq!(config.compute_modules.engine, "wasmtime");
+        assert_eq!(config.compute_modules.execution_mode, ComputeModuleExecutionMode::Shadow);
+        assert_eq!(config.compute_modules.artifact_store_root, ".witness-core/artifacts/compute-modules");
+    }
+
+    #[test]
+    fn compute_module_artifacts_copy_into_durable_store() {
+        let root = test_root();
+        let stage_root = root.join(".witness-core/staging/generation-1");
+        let staged_artifact = stage_root.join(".witness-core/compute-modules/test.wasm");
+        fs::create_dir_all(staged_artifact.parent().unwrap()).unwrap();
+        let wasm_bytes = b"wasm-artifact".to_vec();
+        fs::write(&staged_artifact, &wasm_bytes).unwrap();
+        let record = ComputeModuleBuildRecord {
+            id: "engentus.health.classify".to_string(),
+            host_operation: COMPUTE_MODULE_RUNTIME_TARGET_HOST_OPERATION.to_string(),
+            source: "app/modules/health-classify/assembly/index.ts".to_string(),
+            artifact_path: Some(".witness-core/compute-modules/test.wasm".to_string()),
+            artifact_hash: Some(format!("sha256:{}", sha256_hex(wasm_bytes.clone()))),
+            store_path: None,
+            language: "assemblyscript".to_string(),
+            abi: "world.hostOperation.v1".to_string(),
+            export_name: "invoke".to_string(),
+            max_memory_pages: Some(2),
+            timeout_ms: Some(50),
+            allowed_bindings: Vec::new(),
+            context: None,
+            success: true,
+            error: None,
+        };
+        let stored = store_compute_module_artifacts(&root, &stage_root, &CoreConfig::default(), &[record]).unwrap();
+        let store_path = root.join(stored[0].store_path.as_deref().unwrap());
+        assert!(store_path.exists());
+        assert_eq!(fs::read(store_path).unwrap(), wasm_bytes);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -5052,7 +5816,16 @@ stage_root = ".witness-core/staging"
         let server_root = root.clone();
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, &server_root, &config, server_registry, server_process_state, watch_state).unwrap();
+            handle_client(
+                stream,
+                &server_root,
+                &config,
+                server_registry,
+                server_process_state,
+                watch_state,
+                Arc::new(ComputeModuleRuntime::new().unwrap()),
+            )
+            .unwrap();
         });
         let body = "{\"path\":\"content.wtoml\",\"content\":\"after\",\"reason\":\"test\"}";
         let mut client = TcpStream::connect(addr).unwrap();
@@ -5093,7 +5866,16 @@ stage_root = ".witness-core/staging"
         let server_root = root.clone();
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, &server_root, &config, server_registry, server_process_state, watch_state).unwrap();
+            handle_client(
+                stream,
+                &server_root,
+                &config,
+                server_registry,
+                server_process_state,
+                watch_state,
+                Arc::new(ComputeModuleRuntime::new().unwrap()),
+            )
+            .unwrap();
         });
         let body = "{\"path\":\"content.wtoml\",\"content\":\"after\",\"expectedHash\":\"sha256:stale\",\"reason\":\"app.source.write\"}";
         let mut client = TcpStream::connect(addr).unwrap();
@@ -5248,7 +6030,16 @@ stage_root = ".witness-core/staging"
         let server_process_state = Arc::clone(&process_state);
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, Path::new("."), &CoreConfig::default(), server_registry, server_process_state, watch_state).unwrap();
+            handle_client(
+                stream,
+                Path::new("."),
+                &CoreConfig::default(),
+                server_registry,
+                server_process_state,
+                watch_state,
+                Arc::new(ComputeModuleRuntime::new().unwrap()),
+            )
+            .unwrap();
         });
         let mut client = TcpStream::connect(addr).unwrap();
         client.write_all(b"GET /health HTTP/1.1\r\nhost: test\r\n\r\n").unwrap();
@@ -5382,7 +6173,16 @@ stage_root = ".witness-core/staging"
         let server_process_state = Arc::clone(&process_state);
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, Path::new("."), &CoreConfig::default(), server_registry, server_process_state, watch_state).unwrap();
+            handle_client(
+                stream,
+                Path::new("."),
+                &CoreConfig::default(),
+                server_registry,
+                server_process_state,
+                watch_state,
+                Arc::new(ComputeModuleRuntime::new().unwrap()),
+            )
+            .unwrap();
         });
         let body = "id=preview-1&state=green_local&contentHash=sha256%3Atest&sourcePaths=%5B%22app%2Fshell.rvm%22%5D&sessionId=user-session&surfaceId=route.goodman&actor=alice";
         let mut client = TcpStream::connect(addr).unwrap();
@@ -5446,7 +6246,7 @@ stage_root = ".witness-core/staging"
         let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
         let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
         let process_state = Arc::new(Mutex::new(SupervisedProcessState {
-            command: Some("npm run engentus".to_string()),
+            command: Some("npm run app:engentus".to_string()),
             restart_on_exit: true,
             running: false,
             ..SupervisedProcessState::default()

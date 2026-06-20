@@ -23,15 +23,85 @@ export function formatProjectionValue(value, props = {}) {
   return `${prefix}${body}${suffix}`;
 }
 
+export function trimString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function projectionPresent(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  return value != null && value !== "";
+}
+
+export function projectionValueEquals(left, right) {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    try {
+      return JSON.stringify(left) === JSON.stringify(right);
+    } catch {
+      return false;
+    }
+  }
+  return left === right;
+}
+
+export function projectionTemplateValue(body = {}, inputs = {}) {
+  const parts = Array.isArray(body?.parts) ? body.parts : [];
+  return parts.map(part => {
+    if (!part || typeof part !== "object") return "";
+    if (Object.prototype.hasOwnProperty.call(part, "literal")) return String(part.literal ?? "");
+    const inputName = trimString(part.input);
+    if (!inputName) return "";
+    const value = inputs[inputName];
+    if (Array.isArray(value)) return value.join(trimString(body?.props?.arraySeparator) ?? ", ");
+    return value == null ? "" : String(value);
+  }).join("");
+}
+
+export function projectionInputEntries(body = {}) {
+  const inputs = body?.inputs;
+  if (inputs && typeof inputs === "object" && !Array.isArray(inputs)) {
+    return Object.entries(inputs)
+      .map(([name, source]) => [trimString(name), source])
+      .filter(([name]) => name);
+  }
+  const legacySource = trimString(body?.source);
+  return legacySource ? [["value", { kind: "state", state: legacySource }]] : [];
+}
+
+export function resolveProjectionInputSource(source, {
+  readState,
+  readProjection
+} = {}) {
+  const normalized = typeof source === "string"
+    ? { kind: "state", state: source }
+    : (source && typeof source === "object" ? source : null);
+  if (!normalized) return undefined;
+  if (normalized.kind === "literal") return normalized.value;
+  if (normalized.kind === "state") return typeof readState === "function" ? readState(normalized.state) : undefined;
+  if (normalized.kind === "projection") return typeof readProjection === "function" ? readProjection(normalized.projection) : undefined;
+  return undefined;
+}
+
 const DERIVE_OPS = {
-  bool_not: value => !projectionTruthiness(value),
-  format: (value, body) => formatProjectionValue(value, body?.props ?? {}),
-  identity: value => value
+  bool_and: inputs => projectionTruthiness(inputs.left) && projectionTruthiness(inputs.right),
+  bool_not: inputs => !projectionTruthiness(inputs.value),
+  bool_or: inputs => projectionTruthiness(inputs.left) || projectionTruthiness(inputs.right),
+  equals: inputs => projectionValueEquals(inputs.left, inputs.right),
+  format: (inputs, body) => formatProjectionValue(inputs.value, body?.props ?? {}),
+  identity: inputs => inputs.value,
+  join: (inputs, body) => {
+    const separator = body?.props?.separator != null ? String(body.props.separator) : ", ";
+    return Array.isArray(inputs.value) ? inputs.value.map(value => String(value ?? "")).join(separator) : "";
+  },
+  present: inputs => projectionPresent(inputs.value),
+  template: (inputs, body) => projectionTemplateValue(body, inputs)
 };
 
-export function deriveProjectionValue(body = {}, value) {
+export function deriveProjectionValue(body = {}, valueOrInputs) {
+  const inputs = body?.inputs && typeof valueOrInputs === "object" && valueOrInputs !== null && !Array.isArray(valueOrInputs)
+    ? valueOrInputs
+    : { value: valueOrInputs };
   const derive = DERIVE_OPS[String(body?.projectionKind || "").trim()];
-  return typeof derive === "function" ? derive(value, body) : undefined;
+  return typeof derive === "function" ? derive(inputs, body) : undefined;
 }
 
 export function deriveProjectionSnapshot(projectionWitnesses = [], stateValues = new Map()) {
@@ -41,12 +111,30 @@ export function deriveProjectionSnapshot(projectionWitnesses = [], stateValues =
     if (stateValues && typeof stateValues === "object") return stateValues[stateId];
     return undefined;
   };
-  const derived = {};
+  const projectionBodies = new Map();
   for (const witness of projectionWitnesses ?? []) {
     const body = witness?.body ?? {};
-    const projectionId = typeof body.id === "string" && body.id.trim() ? body.id.trim() : null;
-    if (!projectionId) continue;
-    derived[projectionId] = deriveProjectionValue(body, readState(body.source));
+    const projectionId = trimString(body?.id);
+    if (projectionId) projectionBodies.set(projectionId, body);
   }
+  const derived = {};
+  const resolving = new Set();
+  const readProjection = projectionId => {
+    const trimmed = trimString(projectionId);
+    if (!trimmed) return undefined;
+    if (Object.prototype.hasOwnProperty.call(derived, trimmed)) return derived[trimmed];
+    if (resolving.has(trimmed)) return undefined;
+    const body = projectionBodies.get(trimmed);
+    if (!body) return undefined;
+    resolving.add(trimmed);
+    const inputs = {};
+    for (const [name, source] of projectionInputEntries(body)) {
+      inputs[name] = resolveProjectionInputSource(source, { readState, readProjection });
+    }
+    derived[trimmed] = deriveProjectionValue(body, inputs);
+    resolving.delete(trimmed);
+    return derived[trimmed];
+  };
+  for (const projectionId of projectionBodies.keys()) readProjection(projectionId);
   return derived;
 }

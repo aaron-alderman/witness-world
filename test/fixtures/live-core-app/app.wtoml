@@ -19,6 +19,16 @@ handles = []
 emits = []
 rules = []
 
+[[computeModule]]
+actor = "tester"
+id = "engentus.health.classify"
+source = "./app/modules/health-classify/assembly/index.ts"
+hostOperation = "engentus.health.classify"
+language = "assemblyscript"
+abi = "world.hostOperation.v1"
+export = "invoke"
+allowedBindings = ["host.log"]
+
 [[route]]
 actor = "tester"
 id = "live_core_home_route"

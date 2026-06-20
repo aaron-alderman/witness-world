@@ -111,6 +111,16 @@ async function postSoak(coreUrl, path, payload = {}) {
   return await response.json();
 }
 
+function fixtureNodeExecutable() {
+  if (typeof process.env.WITNESS_FIXTURE_NODE === "string" && process.env.WITNESS_FIXTURE_NODE.trim()) {
+    return process.env.WITNESS_FIXTURE_NODE.trim();
+  }
+  if (process.platform === "win32" && typeof process.env.NVM_SYMLINK === "string" && process.env.NVM_SYMLINK.trim()) {
+    return path.join(process.env.NVM_SYMLINK.trim(), "node.exe");
+  }
+  return process.execPath;
+}
+
 function flattenProcessHealthSample(health, { phase = null } = {}) {
   return {
     ...(phase ? { phase } : {}),
@@ -545,6 +555,8 @@ async function runPublishedAuthoringScenario() {
         shellPath(path.join(REPO_ROOT, "src", "witness-core-build-worker.js")),
         "--manifest",
         "{manifest_path}",
+        "--workspace-root",
+        "{workspace_root}",
         "--runtime-profile",
         "{runtime_profile}"
       ].join(" "),
@@ -573,6 +585,7 @@ async function runPublishedAuthoringScenario() {
     assert.equal(initialHealth.watchersEnabled, false);
 
     const routeUrl = `${appUrl}${workspace.servedRoutePath}`;
+    const computeModulePath = path.join(workspace.appRoot, "app", "modules", "health-classify", "assembly", "index.ts");
     const baselineHtml = await fetchText(routeUrl);
     assert.match(baselineHtml, /Live Core Baseline/);
 
@@ -610,11 +623,42 @@ async function runPublishedAuthoringScenario() {
     await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.activation\.passed"/, {
       description: "published transaction activation passed event"
     });
+    await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.compute_module\.compile\.passed"/, {
+      description: "published compute module compile passed event"
+    });
+    await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.compute_module\.artifact\.emitted"/, {
+      description: "published compute module artifact emitted event"
+    });
 
     assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Published/);
     await waitForText(routeUrl, html => html.includes("Live Core Published"), {
       description: "published authoring route update"
     });
+    const successfulGeneration = await waitForWitnessCoreStatus(core.url, status => {
+      return status.generations?.some(generation =>
+        generation?.state === "green_local"
+        && Array.isArray(generation?.computeModules)
+        && generation.computeModules.some(module => module.id === "engentus.health.classify" && module.success === true)
+      );
+    }, {
+      description: "published generation with compute module metadata"
+    });
+    const successfulGenerationRecord = successfulGeneration.generations.find(generation =>
+      generation?.state === "green_local"
+      && Array.isArray(generation?.computeModules)
+      && generation.computeModules.some(module => module.id === "engentus.health.classify" && module.success === true)
+    ) ?? null;
+    const successfulComputeModule = successfulGenerationRecord?.computeModules?.[0] ?? null;
+    assert.equal(successfulGenerationRecord?.computeModuleCount, 1);
+    assert.equal(successfulComputeModule?.id, "engentus.health.classify");
+    assert.equal(successfulComputeModule?.hostOperation, "engentus.health.classify");
+    assert.equal(successfulComputeModule?.language, "assemblyscript");
+    assert.equal(successfulComputeModule?.abi, "world.hostOperation.v1");
+    assert.equal(successfulComputeModule?.export, "invoke");
+    assert.equal(successfulComputeModule?.success, true);
+    assert.match(String(successfulComputeModule?.artifactPath ?? ""), /\.witness-core\/compute-modules\/.+\.wasm$/);
+    assert.match(String(successfulComputeModule?.artifactHash ?? ""), /^sha256:/);
+    assert.match(String(successfulComputeModule?.storePath ?? ""), /\.witness-core\/artifacts\/compute-modules\/[a-f0-9]+\.wasm$/);
 
     const staleHash = (await readJson(`${core.url}/capabilities/fs/stat?path=${encodeURIComponent("app/content.wtoml")}`)).body?.hash;
     assert.equal(typeof staleHash, "string");
@@ -646,21 +690,76 @@ async function runPublishedAuthoringScenario() {
       description: "published source conflict journal event"
     });
 
-    const compileFailWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
+    const originalComputeModuleSource = await fs.readFile(computeModulePath, "utf8");
+    let computeModuleFailWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         edits: [{
-          path: "app/content.wtoml",
-          content: '[[surface]]\nactor = "tester"\nid = "LiveCoreRoot"\nsurfaceKind = '
+          path: "app/modules/health-classify/assembly/index.ts",
+          content: "export function invoke(): i32 { return ; }\n"
         }]
       })
     });
-    assert.equal(compileFailWrite.response.status, 400);
-    assert.equal(compileFailWrite.body?.code, "COMPILE_FAILED");
-    assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Out Of Band/);
+    if (computeModuleFailWrite.response.status === 503) {
+      await waitForWitnessCoreHealthState(core.url, health =>
+        health.process?.running === true && health.process?.ready === true,
+      {
+        timeoutMs: 45000,
+        description: "published transaction process ready before compute module failure retry"
+      });
+      await waitForProcessHealth(appUrl, health =>
+        health.ready === true && health.status === "healthy",
+      {
+        description: "fixture process health before compute module failure retry"
+      });
+      computeModuleFailWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          edits: [{
+            path: "app/modules/health-classify/assembly/index.ts",
+            content: "export function invoke(): i32 { return ; }\n"
+          }]
+        })
+      });
+    }
+    assert.equal(computeModuleFailWrite.response.status, 400);
+    assert.equal(computeModuleFailWrite.body?.code, "COMPILE_FAILED");
+    assert.equal(await fs.readFile(computeModulePath, "utf8"), originalComputeModuleSource);
+    await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.compute_module\.compile\.failed"/, {
+      description: "published compute module compile failed event"
+    });
+    const computeModuleFailedGeneration = await waitForWitnessCoreStatus(core.url, status => {
+      return status.generations?.some(generation =>
+        generation?.state === "compile_failed"
+        && Array.isArray(generation?.computeModules)
+        && generation.computeModules.some(module => module.id === "engentus.health.classify" && module.success === false)
+      );
+    }, {
+      description: "published generation with compute module compile failure"
+    });
+    const failedGenerationRecord = computeModuleFailedGeneration.generations.find(generation =>
+      generation?.state === "compile_failed"
+      && Array.isArray(generation?.computeModules)
+      && generation.computeModules.some(module => module.id === "engentus.health.classify" && module.success === false)
+    ) ?? null;
+    const failedComputeModule = failedGenerationRecord?.computeModules?.[0] ?? null;
+    assert.equal(failedComputeModule?.success, false);
+    assert.match(String(failedComputeModule?.error ?? ""), /compile|export|artifact/i);
+    await waitForWitnessCoreHealthState(core.url, health =>
+      health.process?.running === true && health.process?.ready === true,
+    {
+      timeoutMs: 45000,
+      description: "published transaction process ready after compute module failure"
+    });
+    await waitForProcessHealth(appUrl, health =>
+      health.ready === true && health.status === "healthy",
+    {
+      description: "fixture process health after compute module failure"
+    });
 
-    const proofFailWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
+    let proofFailWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -670,6 +769,29 @@ async function runPublishedAuthoringScenario() {
         }]
       })
     });
+    if (proofFailWrite.response.status === 503) {
+      await waitForWitnessCoreHealthState(core.url, health =>
+        health.process?.running === true && health.process?.ready === true,
+      {
+        timeoutMs: 45000,
+        description: "published transaction process ready before proof failure retry"
+      });
+      await waitForProcessHealth(appUrl, health =>
+        health.ready === true && health.status === "healthy",
+      {
+        description: "fixture process health before proof failure retry"
+      });
+      proofFailWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          edits: [{
+            path: "app/content.wtoml",
+            content: outOfBandSource.replace('text = "Live Core Out Of Band"', 'text = "FAIL_PROOF_TOKEN keep compile valid"')
+          }]
+        })
+      });
+    }
     assert.equal(proofFailWrite.response.status, 400);
     assert.equal(proofFailWrite.body?.code, "PROOF_FAILED");
     assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Out Of Band/);
@@ -1377,7 +1499,7 @@ async function runFrontdoorScenario() {
       description: "frontdoor routes new requests to replacement instance"
     });
     assert.equal(newProcessHealth.mutationsEnabled, true);
-    assert.equal(newProcessHealth.watchersEnabled, true);
+    assert.equal(newProcessHealth.watchersEnabled, false);
 
     const previewAfterCutover = await fetchText(`${publicUrl}${workspace.servedRoutePath}?previewSessionId=${encodeURIComponent(previewSessionId)}`);
     assert.match(previewAfterCutover, /Live Core Frontdoor Preview/);

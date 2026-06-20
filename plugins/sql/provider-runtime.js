@@ -1,7 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { moduleProjectors } from "../../src/modules.js";
+
+async function loadDatabaseSync(loadSqliteModule = () => import("node:sqlite")) {
+  const sqliteModule = await loadSqliteModule();
+  if (typeof sqliteModule?.DatabaseSync !== "function") {
+    throw new Error("node:sqlite did not export DatabaseSync");
+  }
+  return sqliteModule.DatabaseSync;
+}
 
 function quoteSqlIdentifier(identifier) {
   return `"${String(identifier).replaceAll("\"", "\"\"")}"`;
@@ -45,19 +52,28 @@ export function createDbSqlRuntime({
   serverRunnerId,
   getAppContext,
   postgresAdapter = null,
-  mysqlAdapter = null
+  mysqlAdapter = null,
+  loadSqliteModule = () => import("node:sqlite")
 }) {
   const sqliteConnections = new Map();
+  let sqliteSupportError = null;
   const listDatasources = () => datasourcesForRunner(project, serverRunnerId);
   const getDatasource = datasourceId => datasourceForRunner(project, serverRunnerId, datasourceId);
 
   const openSqlite = async datasource => {
     const sqlitePath = sqlitePathFor(runtimeRoot, datasource);
-    if (sqliteConnections.has(sqlitePath)) return { database: sqliteConnections.get(sqlitePath), sqlitePath };
+    if (sqliteConnections.has(sqlitePath)) return { ok: true, database: sqliteConnections.get(sqlitePath), sqlitePath };
     await fs.mkdir(path.dirname(sqlitePath), { recursive: true });
+    let DatabaseSync = null;
+    try {
+      DatabaseSync = await loadDatabaseSync(loadSqliteModule);
+    } catch (error) {
+      sqliteSupportError = error;
+      return { ok: false, reason: error instanceof Error ? error.message : "node:sqlite unavailable" };
+    }
     const database = new DatabaseSync(sqlitePath);
     sqliteConnections.set(sqlitePath, database);
-    return { database, sqlitePath };
+    return { ok: true, database, sqlitePath };
   };
 
   const withPostgresClient = async (resolved, callback) => {
@@ -142,7 +158,20 @@ export function createDbSqlRuntime({
     if (!resolved.ok) return resolved;
     try {
       if (resolved.datasource.provider === "sqlite") {
-        const { database } = await openSqlite(resolved.datasource);
+        const opened = await openSqlite(resolved.datasource);
+        if (!opened.ok) {
+          return {
+            ok: false,
+            status: 503,
+            reason: `sqlite runtime unavailable: ${opened.reason}`,
+            datasource: {
+              ...resolved.datasource,
+              adapterStatus: "unavailable",
+              lastError: sqliteSupportError instanceof Error ? sqliteSupportError.message : opened.reason
+            }
+          };
+        }
+        const { database } = opened;
         database.prepare("select 1 as ok").get();
         return { ok: true, datasource: resolved.datasource };
       }
@@ -166,7 +195,20 @@ export function createDbSqlRuntime({
     if (resolved.datasource.provider !== "sqlite") {
       return { ok: false, status: 501, reason: `${resolved.datasource.provider} adapter not wired for this operation`, datasource: resolved.datasource };
     }
-    const { database, sqlitePath } = await openSqlite(resolved.datasource);
+    const opened = await openSqlite(resolved.datasource);
+    if (!opened.ok) {
+      return {
+        ok: false,
+        status: 503,
+        reason: `sqlite runtime unavailable: ${opened.reason}`,
+        datasource: {
+          ...resolved.datasource,
+          adapterStatus: "unavailable",
+          lastError: sqliteSupportError instanceof Error ? sqliteSupportError.message : opened.reason
+        }
+      };
+    }
+    const { database, sqlitePath } = opened;
     return {
       ok: true,
       datasource: {

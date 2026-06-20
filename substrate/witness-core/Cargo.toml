@@ -9,3 +9,6 @@ path = "src/lib.rs"
 [[bin]]
 name = "witness-core"
 path = "src/main.rs"
+
+[dependencies]
+wasmtime = "30"

@@ -88,7 +88,7 @@ test("createWitnessCoreStatusStore merges generation and health process state", 
             ok: true,
             service: "witness-core",
             process: {
-              command: "npm run engentus",
+              command: "npm run app:engentus",
               workingDir: ".",
               running: true,
               pid: 4242,
@@ -253,6 +253,11 @@ test("createWitnessCoreBridge serving and generation control helpers serialize r
 
   await bridge.promoteGeneration({ id: "gen-green" });
   await bridge.rollbackGeneration({ id: "gen-stable" });
+  await bridge.shadowInvokeComputeModule({
+    hostOperation: "engentus.pipeline.health.classify",
+    inputJson: "{\"hostOperation\":\"engentus.pipeline.health.classify\",\"request\":{\"hour_start\":\"2026-01-01T00:00:00Z\"}}",
+    jsResultJson: "{\"status\":\"success\",\"payload\":{\"hour_start\":\"2026-01-01T00:00:00Z\",\"n_valid_channels\":5,\"n_bolts_evaluated\":3}}"
+  });
   await bridge.requestServeLive();
   await bridge.requestServeStable();
   await bridge.readServing();
@@ -260,10 +265,16 @@ test("createWitnessCoreBridge serving and generation control helpers serialize r
   assert.deepEqual(requests.map(entry => [entry.url, entry.options.method ?? "GET"]), [
     ["http://127.0.0.1:8788/generations/gen-green/promote", "POST"],
     ["http://127.0.0.1:8788/generations/gen-stable/rollback", "POST"],
+    ["http://127.0.0.1:8788/compute-modules/shadow-invoke", "POST"],
     ["http://127.0.0.1:8788/serving/live", "POST"],
     ["http://127.0.0.1:8788/serving/stable", "POST"],
     ["http://127.0.0.1:8788/serving", "GET"]
   ]);
+  assert.deepEqual(JSON.parse(requests[2].options.body), {
+    hostOperation: "engentus.pipeline.health.classify",
+    inputJson: "{\"hostOperation\":\"engentus.pipeline.health.classify\",\"request\":{\"hour_start\":\"2026-01-01T00:00:00Z\"}}",
+    jsResultJson: "{\"status\":\"success\",\"payload\":{\"hour_start\":\"2026-01-01T00:00:00Z\",\"n_valid_channels\":5,\"n_bolts_evaluated\":3}}"
+  });
 });
 
 test("createWitnessCoreBridge soak helpers serialize requests", async () => {

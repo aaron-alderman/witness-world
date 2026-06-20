@@ -326,6 +326,25 @@ export function createWitnessCoreBridge({
       if (!generationId) throw new Error("generation id is required");
       return await postJson(`/generations/${encodeURIComponent(generationId)}/rollback`);
     },
+    async shadowInvokeComputeModule({
+      hostOperation,
+      inputJson,
+      jsResultJson
+    } = {}) {
+      const normalizedHostOperation = String(hostOperation || "").trim();
+      const normalizedInputJson = String(inputJson || "").trim();
+      const normalizedJsResultJson = String(jsResultJson || "").trim();
+      if (!normalizedHostOperation) throw new Error("hostOperation is required");
+      if (!normalizedInputJson) throw new Error("inputJson is required");
+      if (!normalizedJsResultJson) throw new Error("jsResultJson is required");
+      return await postJson("/compute-modules/shadow-invoke", {
+        body: {
+          hostOperation: normalizedHostOperation,
+          inputJson: normalizedInputJson,
+          jsResultJson: normalizedJsResultJson
+        }
+      });
+    },
     async readServing() {
       const response = await fetchImpl(`${normalizedCoreUrl}/serving`, { cache: "no-store" });
       if (!response?.ok) {

@@ -331,3 +331,72 @@ test("process runtime option rules branch from runtime config truthiness", async
   await stringFalse.deliverAuthored("BeginFlow");
   assert.equal(stringFalse.value("ShellStatus"), "else");
 });
+
+test("process runtime lowers event payload, branch rules, and projection-backed state writes natively", async () => {
+  const world = [
+    {
+      process: "desire.defineType",
+      body: { id: "InputValue", role: "state", initial: "", valueType: "text" }
+    },
+    {
+      process: "desire.defineType",
+      body: { id: "InputVisible", role: "state", initial: false, valueType: "bool" }
+    },
+    {
+      process: "desire.defineType",
+      body: { id: "GreetingText", role: "state", initial: "", valueType: "text" }
+    },
+    {
+      process: "desire.defineProjection",
+      body: {
+        id: "GreetingProjection",
+        projectionKind: "template",
+        inputs: {
+          value: { kind: "state", state: "InputValue" }
+        },
+        parts: [
+          { literal: "Hello " },
+          { input: "value" }
+        ]
+      }
+    },
+    {
+      process: "desire.defineMessage",
+      body: { id: "InputChanged", role: "event", writes: {} }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "InputProcess",
+        state: ["InputValue", "InputVisible", "GreetingText"],
+        handles: ["InputChanged"],
+        emits: [],
+        rules: [
+          {
+            trigger: "InputChanged",
+            steps: [
+              { kind: "setState", state: "InputValue", valueFrom: { kind: "eventValue" } },
+              {
+                kind: "branch",
+                condition: { kind: "eventChecked" },
+                then: [{ kind: "setState", state: "InputVisible", value: true }],
+                else: [{ kind: "setState", state: "InputVisible", value: false }]
+              },
+              { kind: "setState", state: "GreetingText", valueFrom: { kind: "projection", projection: "GreetingProjection" } }
+            ]
+          }
+        ]
+      }
+    }
+  ];
+
+  const runtime = createProcessRuntime(world);
+  await runtime.deliverAuthored("InputChanged", {
+    value: "Ada",
+    checked: true
+  });
+
+  assert.equal(runtime.value("InputValue"), "Ada");
+  assert.equal(runtime.value("InputVisible"), true);
+  assert.equal(runtime.value("GreetingText"), "Hello Ada");
+});

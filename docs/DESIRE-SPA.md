@@ -105,8 +105,10 @@ Current truth:
   `submit` effects, timed same-origin input-read effects, timed route-backed
   input-write effects through authored interaction `timing`, the canonical
   `/api/session` read and mutation lane through an explicit authored
-  session-summary state subset, and interactive execution through authored
-  process rules
+  session-summary state subset, native conditional process branching, exact
+  event/state-derived value writes, template-computed UI updates through
+  authored projections and state bindings, and interactive execution through
+  authored process rules
 - it now claims native `surface + process + projection + collection + boundary
   + policy + capability` runtime support
 - it no longer treats `dispatchDomEvent` or `witness:*` host-event bridges as
@@ -160,10 +162,10 @@ clean floor proved by the canonical authoring pathway probe.
   `frontendStep` construction as the default app-building lane
 - arbitrary external network targets or host-only legacy behavior that still
   lacks a first-class native expression
-- richer object or dynamic session payload branches plus external or
-  non-route-backed input effects that still remain outside the current native
-  timed input and session subset and therefore stay in structured
-  `frontendLegacyUplift.blocked[]`
+- arbitrary expressions beyond the supported exact event/state subset,
+  richer object or dynamic session payload branches, plus external or
+  non-route-backed legacy effects that still remain outside the current native
+  floor and therefore stay in structured `frontendLegacyUplift.blocked[]`
 
 ### Newly proved
 
@@ -181,6 +183,8 @@ clean floor proved by the canonical authoring pathway probe.
 - route-authored preload execution on canonical `page.surface`
 - same-origin route-backed `click` / `change` / `submit` effects on canonical
   `page.surface`
+- native conditional branches plus exact event/state-derived writes and
+  template-computed UI updates on canonical `page.surface`
 - native query-state bindings on canonical `page.surface`
 - faithful live Engentus shell behavior through the constrained pathway
 - route-local runtime transport for served `page.surface` output, so an active

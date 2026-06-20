@@ -24,9 +24,13 @@ export function delay(ms) {
 }
 
 export async function ensureWitnessCoreBuilt() {
+  try {
+    await fs.access(WITNESS_CORE_BINARY);
+    return WITNESS_CORE_BINARY;
+  } catch {}
   if (!witnessCoreBuildPromise) {
     witnessCoreBuildPromise = new Promise((resolve, reject) => {
-      const child = spawn("cargo", ["build", "--manifest-path", WITNESS_CORE_MANIFEST, "-p", "witness-core"], {
+      const child = spawn("cargo", ["build", "--offline", "--manifest-path", WITNESS_CORE_MANIFEST, "-p", "witness-core"], {
         cwd: REPO_ROOT,
         stdio: ["ignore", "pipe", "pipe"]
       });
@@ -217,6 +221,9 @@ export async function startWitnessCoreProcess({ cwd, configPath, port }) {
     logs,
     async stop() {
       if (child.exitCode != null) return;
+      try {
+        child.kill();
+      } catch {}
       if (process.platform === "win32") {
         await new Promise(resolve => {
           const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
@@ -228,10 +235,17 @@ export async function startWitnessCoreProcess({ cwd, configPath, port }) {
       } else {
         child.kill("SIGTERM");
       }
-      await new Promise(resolve => {
-        child.once("exit", () => resolve());
-        setTimeout(resolve, 5000).unref?.();
-      });
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        if (child.exitCode != null) return;
+        try {
+          await fetch(`${url}/health`, { cache: "no-store" });
+        } catch {
+          return;
+        }
+        await delay(100);
+      }
+      throw new Error(`witness-core did not stop at ${url}`);
     }
   };
 }

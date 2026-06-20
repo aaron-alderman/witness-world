@@ -1,8 +1,14 @@
 ﻿import fs from "node:fs/promises";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { isoAt, runtimeConfigLookup } from "../../src/runtime-config-utils.js";
 import { dbSqlDatasourceId, dbSqlDatasourceTitle } from "./glue.js";
+async function loadDatabaseSync(loadSqliteModule = () => import("node:sqlite")) {
+  const sqliteModule = await loadSqliteModule();
+  if (typeof sqliteModule?.DatabaseSync !== "function") {
+    throw new Error("node:sqlite did not export DatabaseSync");
+  }
+  return sqliteModule.DatabaseSync;
+}
 function normalizeDbSqlIdentifier(value, fallback) {
   const identifier = typeof value === "string" && value.trim() ? value.trim() : fallback;
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier) ? identifier : null;
@@ -75,8 +81,14 @@ function applyDbSqlParams(statement, method, normalizedParams) {
   return statement[method]();
 }
 
-export function createDbSqlRuntime({ runtimeConfig, runtimeRoot, serverRunnerId }) {
+export function createDbSqlRuntime({
+  runtimeConfig,
+  runtimeRoot,
+  serverRunnerId,
+  loadSqliteModule = () => import("node:sqlite")
+}) {
   const sqliteConnections = new Map();
+  let sqliteSupportError = null;
   const currentConfig = () => normalizeDbSqlConfig(runtimeConfig, runtimeRoot, serverRunnerId);
 
   const datasourceStatus = () => {
@@ -100,17 +112,37 @@ export function createDbSqlRuntime({ runtimeConfig, runtimeRoot, serverRunnerId 
   };
 
   const openSqlite = async datasource => {
-    if (sqliteConnections.has(datasource.path)) return sqliteConnections.get(datasource.path);
+    if (sqliteConnections.has(datasource.path)) return { ok: true, database: sqliteConnections.get(datasource.path) };
     await fs.mkdir(path.dirname(datasource.path), { recursive: true });
+    let DatabaseSync = null;
+    try {
+      DatabaseSync = await loadDatabaseSync(loadSqliteModule);
+    } catch (error) {
+      sqliteSupportError = error;
+      return { ok: false, reason: error instanceof Error ? error.message : "node:sqlite unavailable" };
+    }
     const database = new DatabaseSync(datasource.path);
     sqliteConnections.set(datasource.path, database);
-    return database;
+    return { ok: true, database };
   };
 
   const ensureReady = async () => {
     const resolved = datasourceStatus();
     if (!resolved.ok) return resolved;
-    const database = await openSqlite(resolved.datasource);
+    const opened = await openSqlite(resolved.datasource);
+    if (!opened.ok) {
+      return {
+        ok: false,
+        status: 503,
+        reason: `sqlite runtime unavailable: ${opened.reason}`,
+        datasource: {
+          ...resolved.datasource,
+          adapterStatus: "unavailable",
+          lastError: sqliteSupportError instanceof Error ? sqliteSupportError.message : opened.reason
+        }
+      };
+    }
+    const { database } = opened;
     return { ok: true, datasource: resolved.datasource, database };
   };
 

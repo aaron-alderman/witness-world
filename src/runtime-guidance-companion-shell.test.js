@@ -226,7 +226,7 @@ test("witness core suggestions expose promote and rollback actions from status a
       last_good: "gen_stable"
     },
     process: {
-      command: "npm run engentus",
+      command: "npm run app:engentus",
       workingDir: ".",
       running: true,
       pid: 1234,

@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { createWorld, createThing, relation } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
+import { createDbSqlRuntime } from "./provider-runtime.js";
 import { bundleId, handlerCatalog, providers, routes, createHandlers } from "./runtime.js";
 
 test("sqlite plugin owns DB SQL bundle catalog, routes, and handler factory", () => {
@@ -94,3 +98,24 @@ test("sqlite plugin registers DB SQL read-model projectors", () => withRegistere
     operationCount: 1
   }]);
 }));
+
+test("sqlite plugin runtime reports sqlite unavailability without crashing when node:sqlite is missing", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sqlite-runtime-unavailable-"));
+  const runtime = createDbSqlRuntime({
+    runtimeConfig: {},
+    runtimeRoot,
+    serverRunnerId: "runner.demo",
+    loadSqliteModule: async () => {
+      throw new Error("No such built-in module: node:sqlite");
+    }
+  });
+  try {
+    const result = await runtime.query({ sql: "select 1 as ok" });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 503);
+    assert.match(result.reason, /sqlite runtime unavailable/i);
+  } finally {
+    runtime.close();
+    await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
+  }
+});

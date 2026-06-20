@@ -84,16 +84,17 @@ async function pathExists(targetPath) {
 async function resolveAssemblyScriptCompilerScript() {
   const localRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "node_modules", "assemblyscript");
   const candidates = [
-    path.join(localRoot, "dist", "asc.js"),
-    path.join(localRoot, "bin", "asc.js")
+    path.join(localRoot, "bin", "asc.js"),
+    path.join(localRoot, "dist", "asc.js")
   ];
   if (typeof import.meta.resolve === "function") {
     try {
       const resolved = await import.meta.resolve("assemblyscript");
       const mainPath = fileURLToPath(resolved);
       candidates.unshift(
-        path.join(path.dirname(mainPath), "asc.js"),
-        path.join(path.dirname(mainPath), "cli", "asc.js")
+        path.join(path.dirname(mainPath), "..", "bin", "asc.js"),
+        path.join(path.dirname(mainPath), "cli", "asc.js"),
+        path.join(path.dirname(mainPath), "asc.js")
       );
     } catch {}
   }
@@ -163,9 +164,14 @@ async function compileComputeModule(computeModule, {
     source: computeModule.source,
     artifactPath: null,
     artifactHash: null,
+    storePath: null,
     language: computeModule.language ?? COMPUTE_MODULE_LANGUAGE_V1,
     abi: computeModule.abi ?? COMPUTE_MODULE_ABI_V1,
     export: computeModule.export ?? COMPUTE_MODULE_EXPORT_V1,
+    maxMemoryPages: Number.isInteger(computeModule.maxMemoryPages) ? computeModule.maxMemoryPages : null,
+    timeoutMs: Number.isInteger(computeModule.timeoutMs) ? computeModule.timeoutMs : null,
+    allowedBindings: Array.isArray(computeModule.allowedBindings) ? [...computeModule.allowedBindings] : [],
+    context: computeModule.context ?? null,
     success: false,
     error: null
   };

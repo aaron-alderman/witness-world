@@ -99,6 +99,23 @@ const KIND_BY_PROCESS = {
   "desire.defineBoundary": "boundary"
 };
 
+function stableValue(value) {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort((left, right) => left.localeCompare(right))
+      .reduce((result, key) => {
+        result[key] = stableValue(value[key]);
+        return result;
+      }, {});
+  }
+  return value ?? null;
+}
+
+function stableJson(value) {
+  return JSON.stringify(stableValue(value));
+}
+
 function witnessesOf(world) {
   if (world && typeof world.allWitnesses === "function") return world.allWitnesses();
   if (Array.isArray(world)) return world;
@@ -140,7 +157,7 @@ export function extractHostOperationContracts(world) {
 
 // ── The runtime: host_operation id → handler, with request/response validation ──
 
-export function createHostOperationRuntime({ handlers = {}, contracts = null } = {}) {
+export function createHostOperationRuntime({ handlers = {}, contracts = null, shadowInvoker = null } = {}) {
   const registry = new Map(Object.entries(handlers));
   const schemas = contracts?.schemas ?? {};
   const operations = contracts?.operations ?? {};
@@ -169,6 +186,15 @@ export function createHostOperationRuntime({ handlers = {}, contracts = null } =
       if (response.status === "success") validate(contract.successResultSchema, payload, `success payload for ${hostOp}`);
       else validate(contract.failureResultSchema, payload, `failure payload for ${hostOp}`);
     }
+    if (typeof shadowInvoker === "function") {
+      try {
+        await shadowInvoker({
+          hostOperation: hostOp,
+          envelope: { host_operation: hostOp, request: request ?? {} },
+          response: { status: response.status, payload }
+        });
+      } catch {}
+    }
     return { status: response.status, payload };
   }
 
@@ -177,6 +203,23 @@ export function createHostOperationRuntime({ handlers = {}, contracts = null } =
     has: hostOp => registry.has(hostOp),
     list: () => [...registry.keys()],
     register(hostOp, handler) { registry.set(hostOp, handler); return this; }
+  };
+}
+
+export function createWitnessCoreShadowInvoker(bridge = null) {
+  if (!bridge || typeof bridge.shadowInvokeComputeModule !== "function") return null;
+  return async ({ hostOperation, envelope, response }) => {
+    await bridge.shadowInvokeComputeModule({
+      hostOperation,
+      inputJson: stableJson({
+        hostOperation,
+        request: envelope?.request ?? {}
+      }),
+      jsResultJson: stableJson({
+        status: response?.status === "success" ? "success" : "failure",
+        payload: response?.payload ?? {}
+      })
+    });
   };
 }
 

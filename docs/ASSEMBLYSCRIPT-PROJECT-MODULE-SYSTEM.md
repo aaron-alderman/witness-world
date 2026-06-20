@@ -155,13 +155,45 @@ The module should satisfy the same stable conceptual contract already used by ho
 - input: `{ host_operation, request }`
 - output: `{ status, payload }`
 
-For Wasm guest execution, the initial wire format can be UTF-8 JSON in linear memory. That is not the final highest-performance shape, but it is the simplest safe bootstrap because:
+For Wasm guest execution, the V1 runtime ABI is frozen as UTF-8 JSON in linear memory. That is not the final highest-performance shape, but it is the simplest safe bootstrap because:
 
 - it matches the current host-op boundary
 - it keeps parity and migration simple
 - it avoids inventing a second compute model
 
 Later versions may introduce a typed ABI or component-model form, but V1 should not block on that.
+
+### `world.hostOperation.v1`
+
+The canonical V1 guest ABI is:
+
+- required export: `memory`
+- required export: `invoke(inputPtr: i32, inputLen: i32) -> i32`
+- required import module name: `world_host_operation_v1`
+
+Supported host imports:
+
+- `output(ptr: i32, len: i32) -> void`
+- `log(ptr: i32, len: i32) -> void` only when `allowedBindings` includes `host.log`
+- `metric(ptr: i32, len: i32) -> void` only when `allowedBindings` includes `host.metric`
+
+Wire format:
+
+- input JSON: `{ "hostOperation": string, "request": any }`
+- output success JSON: `{ "status": "success", "payload": any }`
+- output failure JSON: `{ "status": "error", "error": { "code": string, "message": string } }`
+
+Return-code rule:
+
+- `0` means the guest wrote an output envelope through `output(...)`
+- non-zero means guest failure; if no valid error envelope was written, Rust synthesizes a guest failure from the return code
+
+Runtime validation before execution:
+
+- the module must export `memory`
+- the module must export `invoke(i32, i32) -> i32`
+- imports must be limited to the declared `allowedBindings` plus required `output`
+- any undeclared, ambient, or non-`world_host_operation_v1` import is rejected for runtime use
 
 ### Controlled host bindings
 
@@ -196,6 +228,41 @@ The Wasm module system should plug into the same continuity model as other autho
 4. The smallest impacted proof set runs.
 5. Candidate stays rejected on compile or proof failure.
 6. Candidate promotes only through the same generation model already used by the live core.
+
+### Durable artifact ownership
+
+Candidate-local Wasm artifacts are build outputs, not runtime-trusted assets.
+
+The runtime-owned store lives under:
+
+```text
+.witness-core/artifacts/compute-modules/<sha256>.wasm
+```
+
+For the live-core runtime tranche:
+
+- the build worker still emits candidate-local staged artifacts
+- `witness-core` copies successful artifacts into the durable store keyed by `artifactHash`
+- generation metadata records both the staged `artifactPath` and durable `storePath`
+- only durable stored artifacts are eligible for runtime execution
+
+### Runtime modes
+
+`witness-core` owns the first runtime execution policy:
+
+```toml
+[compute_modules]
+engine = "wasmtime"
+execution_mode = "disabled" # or "shadow"
+artifact_store_root = ".witness-core/artifacts/compute-modules"
+```
+
+Mode semantics:
+
+- `disabled`: no guest execution
+- `shadow`: eligible guest modules execute beside the incumbent JS handler, parity is observed, and JS remains authoritative
+
+The first live target is only `engentus.pipeline.health.classify`.
 
 ### Required proof lanes
 

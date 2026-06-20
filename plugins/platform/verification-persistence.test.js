@@ -22,6 +22,55 @@ async function createPersistence(runtimeRoot) {
   });
 }
 
+test("verification persistence falls back to JSON when node:sqlite is unavailable", async () => {
+  const runtimeRoot = await createTempRoot("verification-persistence-fallback");
+  let persistence = null;
+  let reopened = null;
+  try {
+    persistence = await createRuntimeVerificationPersistence({
+      serverRunner: { id: "runner.main", values: {} },
+      runtimeRoot,
+      runtimeProfile: "full",
+      loadSqliteModule: async () => {
+        throw new Error("No such built-in module: node:sqlite");
+      }
+    });
+    const inspect = persistence.inspect();
+    assert.equal(inspect.ledgerBackend.runtimeProvider, "json-fallback");
+    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_sqlite_unavailable"), true);
+
+    await persistence.recordPolicyRows([{ id: "verificationPolicy:fallback", enabled: true }]);
+    await persistence.persistTestRunBundle({
+      testRun: { id: "testRun:fallback", gateId: "gate:fallback", status: "passed" },
+      testResults: [{ id: "testResult:fallback", runId: "testRun:fallback", status: "passed", cacheIdentity: { cacheKey: "cache:fallback" } }],
+      testArtifacts: [{ id: "testArtifact:fallback", runId: "testRun:fallback", artifactKind: "stdout", contentType: "text/plain", content: "fallback stdout" }],
+      testSuites: [],
+      testCases: [],
+      testReports: []
+    });
+    persistence.close();
+
+    reopened = await createRuntimeVerificationPersistence({
+      serverRunner: { id: "runner.main", values: {} },
+      runtimeRoot,
+      runtimeProfile: "full",
+      loadSqliteModule: async () => {
+        throw new Error("No such built-in module: node:sqlite");
+      }
+    });
+    const rows = reopened.readModelRows();
+    assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:fallback"), true);
+    assert.equal(rows.testRuns.some(row => row.id === "testRun:fallback"), true);
+    const artifact = await reopened.readArtifactContent("artifact:fallback");
+    assert.equal(artifact.ok, true);
+    assert.equal(artifact.content, "fallback stdout");
+  } finally {
+    try { persistence?.close?.(); } catch {}
+    try { reopened?.close?.(); } catch {}
+    await rm(runtimeRoot, { recursive: true, force: true });
+  }
+});
+
 test("verification persistence synthesizes sqlite and disk backends and survives restart", async () => {
   const runtimeRoot = await createTempRoot("verification-persistence");
   let persistence = null;

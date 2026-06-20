@@ -34,7 +34,13 @@ import {
   deriveProjectionSnapshot,
   deriveProjectionValue,
   formatProjectionValue,
-  projectionTruthiness
+  projectionInputEntries,
+  projectionPresent,
+  projectionTruthiness,
+  projectionTemplateValue,
+  projectionValueEquals,
+  resolveProjectionInputSource,
+  trimString
 } from "./projection-eval.js";
 
 const KIND_BY_PROCESS = {
@@ -64,6 +70,30 @@ function coerce(raw, valueType) {
   if (valueType === "bool") return raw === true || raw === "true";
   if (valueType === "number") return raw === "" || raw == null ? 0 : Number(raw);
   return raw == null ? "" : String(raw);
+}
+
+function eventPayloadValue(kind, payload = null) {
+  if (!payload || typeof payload !== "object") return kind === "eventValues" ? [] : null;
+  if (kind === "eventValue") return Object.prototype.hasOwnProperty.call(payload, "value") ? payload.value : null;
+  if (kind === "eventChecked") return Boolean(payload.checked);
+  if (kind === "eventValues") return Array.isArray(payload.values) ? payload.values : [];
+  return null;
+}
+
+function resolveProcessValueSource(source, {
+  readState,
+  readProjection,
+  eventPayload
+} = {}) {
+  const normalized = source && typeof source === "object" ? source : null;
+  if (!normalized) return undefined;
+  if (normalized.kind === "literal") return normalized.value;
+  if (normalized.kind === "state") return typeof readState === "function" ? readState(normalized.state) : undefined;
+  if (normalized.kind === "projection") return typeof readProjection === "function" ? readProjection(normalized.projection) : undefined;
+  if (normalized.kind === "eventValue" || normalized.kind === "eventChecked" || normalized.kind === "eventValues") {
+    return eventPayloadValue(normalized.kind, eventPayload);
+  }
+  return undefined;
 }
 
 export function createProcessRuntime(world, options = {}) {
@@ -133,6 +163,10 @@ export function createProcessRuntime(world, options = {}) {
       derives.map(d => ({ body: d.body })),
       state
     );
+  }
+
+  function readProjectionValue(projectionId) {
+    return deriveSnapshot()[projectionId];
   }
 
   function snapshot(processId) {
@@ -243,11 +277,18 @@ export function createProcessRuntime(world, options = {}) {
     return current;
   }
 
-  async function runRuleSteps(steps, eventId, proc, runtimeOptions = null) {
+  async function runRuleSteps(steps, eventId, proc, runtimeOptions = null, eventPayload = null) {
     let lastObservation = null;
     for (const step of steps ?? []) {
       if (step?.kind === "setState") {
-        const changes = applyWrites({ [step.state]: step.value }, `${eventId}:${step.state}`);
+        const nextValue = Object.prototype.hasOwnProperty.call(step ?? {}, "valueFrom")
+          ? resolveProcessValueSource(step.valueFrom, {
+              readState: id => state.get(id),
+              readProjection: readProjectionValue,
+              eventPayload
+            })
+          : step.value;
+        const changes = applyWrites({ [step.state]: nextValue }, `${eventId}:${step.state}`);
         lastObservation = record("rule.setState", `${eventId}:${step.state}`, proc, changes);
         continue;
       }
@@ -287,9 +328,19 @@ export function createProcessRuntime(world, options = {}) {
         }
         throw new Error(`rule command '${step.command}' has no runtime handler`);
       }
+      if (step?.kind === "branch") {
+        const condition = resolveProcessValueSource(step.condition, {
+          readState: id => state.get(id),
+          readProjection: readProjectionValue,
+          eventPayload
+        });
+        const branch = projectionTruthiness(condition) ? (step.then ?? []) : (step.else ?? []);
+        lastObservation = await runRuleSteps(branch, eventId, proc, runtimeOptions, eventPayload) ?? lastObservation;
+        continue;
+      }
       if (step?.kind === "option") {
         const branch = projectionTruthiness(configValue(step.config)) ? (step.real ?? []) : (step.else ?? []);
-        lastObservation = await runRuleSteps(branch, eventId, proc, runtimeOptions) ?? lastObservation;
+        lastObservation = await runRuleSteps(branch, eventId, proc, runtimeOptions, eventPayload) ?? lastObservation;
         continue;
       }
       throw new Error(`unknown process rule step kind '${step?.kind}'`);
@@ -303,7 +354,7 @@ export function createProcessRuntime(world, options = {}) {
     const rule = ruleFor(eventId);
     const delivered = deliver(eventId, payload);
     if (!rule) return delivered;
-    const outcome = await trackAsync("process.rule", () => runRuleSteps(rule.steps ?? [], eventId, proc, runtimeOptions), {
+    const outcome = await trackAsync("process.rule", () => runRuleSteps(rule.steps ?? [], eventId, proc, runtimeOptions, payload), {
       label: eventId,
       processRef: proc,
       correlationId: eventId,
@@ -489,14 +540,35 @@ const KIND_BY_PROCESS = {
 };
 
 const DERIVE_OPS = {
-  bool_not: value => !projectionTruthiness(value),
-  format: (value, body) => formatProjectionValue(value, body?.props ?? {}),
-  identity: value => value
+  bool_and: inputs => projectionTruthiness(inputs.left) && projectionTruthiness(inputs.right),
+  bool_not: inputs => !projectionTruthiness(inputs.value),
+  bool_or: inputs => projectionTruthiness(inputs.left) || projectionTruthiness(inputs.right),
+  equals: inputs => projectionValueEquals(inputs.left, inputs.right),
+  format: (inputs, body) => formatProjectionValue(inputs.value, body?.props ?? {}),
+  identity: inputs => inputs.value,
+  join: (inputs, body) => {
+    const separator = body?.props?.separator != null ? String(body.props.separator) : ", ";
+    return Array.isArray(inputs.value) ? inputs.value.map(value => String(value ?? "")).join(separator) : "";
+  },
+  present: inputs => projectionPresent(inputs.value),
+  template: (inputs, body) => projectionTemplateValue(body, inputs)
 };
 
 ${projectionTruthiness.toString()}
 
 ${formatProjectionValue.toString()}
+
+${trimString.toString()}
+
+${projectionPresent.toString()}
+
+${projectionValueEquals.toString()}
+
+${projectionTemplateValue.toString()}
+
+${projectionInputEntries.toString()}
+
+${resolveProjectionInputSource.toString()}
 
 ${deriveProjectionValue.toString()}
 
@@ -505,6 +577,10 @@ ${deriveProjectionSnapshot.toString()}
 ${witnessesOf.toString()}
 
 ${coerce.toString()}
+
+${eventPayloadValue.toString()}
+
+${resolveProcessValueSource.toString()}
 
 ${createExecutionRunner.toString()}
 

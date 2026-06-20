@@ -104,7 +104,9 @@ Current constrained truth is:
   on `click` / `change` / `submit`, timed same-origin input-read and
   route-backed input-write effects through authored interaction `timing`,
   including the canonical `/api/session` read and mutation lane on an explicit
-  authored session-summary state subset, and route/query synchronization
+  authored session-summary state subset, native conditional process branches,
+  exact event/state-derived value writes, template-computed UI updates through
+  authored projections and state bindings, and route/query synchronization
 - served runtime transport is sliced to the reachable fragment used by the
   active authored route subtree instead of serializing the whole broad process
   closure by default
@@ -122,7 +124,8 @@ Current constrained truth is:
 - `dispatchDomEvent` and the old `witness:*` page bridge lane are retired from
   the supported public frontend model
 - the remaining honest gaps are blocked legacy semantics that still lack a
-  first-class native expression, including richer object or dynamic
+  first-class native expression, including arbitrary expressions beyond the
+  supported exact event/state subset, richer object or dynamic
   session-payload branches, external/non-route-backed effects, and other
   unsupported legacy behavior, not permission to reintroduce hidden host JS
 

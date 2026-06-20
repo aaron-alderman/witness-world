@@ -92,7 +92,7 @@ test("operator workbench settings store persists normalized workspace-scoped dis
 
 test("package scripts promote the rich tui host while keeping the raw shell explicit", async () => {
   const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(packageJson.scripts.tui, "node src/cli.js operator");
+  assert.equal(packageJson.scripts.tui, "node scripts/run-tui.mjs");
   assert.equal(packageJson.scripts["tui:shell"], "node src/cli.js tui");
   assert.equal(packageJson.scripts.operator, "node src/cli.js operator");
 });

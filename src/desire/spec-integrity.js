@@ -28,6 +28,70 @@ function witnessesOf(world) {
   throw new Error("checkSpecIntegrity expects a world (with allWitnesses()) or a witness array");
 }
 
+function trimString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function collectProjectionInputRefs(body = {}) {
+  const refs = [];
+  const inputs = body?.inputs;
+  if (inputs && typeof inputs === "object" && !Array.isArray(inputs)) {
+    for (const source of Object.values(inputs)) refs.push(source);
+    return refs;
+  }
+  const source = trimString(body?.source);
+  return source ? [{ kind: "state", state: source }] : [];
+}
+
+function validateSourceRef(source, {
+  stateDef,
+  def,
+  err,
+  subject,
+  missingStateCode,
+  missingProjectionCode
+}) {
+  const normalized = typeof source === "string"
+    ? { kind: "state", state: source }
+    : (source && typeof source === "object" ? source : null);
+  if (!normalized) return;
+  if (normalized.kind === "state" && !stateDef(normalized.state)) {
+    err(missingStateCode, subject, `source state '${normalized.state}' is not a declared state`);
+  }
+  if (normalized.kind === "projection") {
+    const projection = def(normalized.projection);
+    if (!projection || projection.kind !== "projection") {
+      err(missingProjectionCode, subject, `source projection '${normalized.projection}' is not a declared projection`);
+    }
+  }
+}
+
+function validateRuleSteps(steps = [], context) {
+  for (const step of steps ?? []) {
+    if (!step || typeof step !== "object") continue;
+    if (Object.prototype.hasOwnProperty.call(step, "valueFrom")) {
+      validateSourceRef(step.valueFrom, {
+        ...context,
+        missingStateCode: "rule.value_from.state.dangling",
+        missingProjectionCode: "rule.value_from.projection.dangling"
+      });
+    }
+    if (step.kind === "branch") {
+      validateSourceRef(step.condition, {
+        ...context,
+        missingStateCode: "rule.branch.state.dangling",
+        missingProjectionCode: "rule.branch.projection.dangling"
+      });
+      validateRuleSteps(step.then ?? [], context);
+      validateRuleSteps(step.else ?? [], context);
+    }
+    if (step.kind === "option") {
+      validateRuleSteps(step.real ?? [], context);
+      validateRuleSteps(step.else ?? [], context);
+    }
+  }
+}
+
 export function checkSpecIntegrity(world) {
   const witnesses = witnessesOf(world);
 
@@ -93,6 +157,12 @@ export function checkSpecIntegrity(world) {
       if (!m) err("process.emits.dangling", p.id, `emitted message '${e}' is not declared`);
       else if (m.role && m.role !== "command") err("process.emits.role", p.id, `emitted '${e}' has role '${m.role}', expected command`);
     }
+    validateRuleSteps(p.body.rules?.flatMap(rule => rule?.steps ?? []) ?? [], {
+      stateDef,
+      def,
+      err,
+      subject: p.id
+    });
   }
 
   // ── 2. Adapters: command + success_event + failure_event + request_schema + host_operation ──
@@ -166,9 +236,18 @@ export function checkSpecIntegrity(world) {
   // ── 5. Derives (projections): source resolves to a real state ──
   const derives = all.filter(d => d.kind === "projection");
   for (const d of derives) {
-    const src = d.body.source;
-    if (!src) err("derive.source.missing", d.id, "derive declares no source");
-    else if (!stateDef(src)) err("derive.source.dangling", d.id, `source '${src}' is not a declared state`);
+    const refs = collectProjectionInputRefs(d.body);
+    if (!refs.length) err("derive.source.missing", d.id, "derive declares no source or inputs");
+    for (const source of refs) {
+      validateSourceRef(source, {
+        stateDef,
+        def,
+        err,
+        subject: d.id,
+        missingStateCode: "derive.source.dangling",
+        missingProjectionCode: "derive.projection.dangling"
+      });
+    }
   }
 
   // ── 6. Stage wiring: each emitted command has a bound adapter whose

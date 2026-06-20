@@ -220,7 +220,6 @@ function runtimeMutationsBlocked(appContext) {
 function supervisedPublishedTransactionEnabled(appContext) {
   return Boolean(
     appContext?.witnessCoreBridge
-    && appContext?.runtimeSupervision?.instanceId
     && appContext?.runtimeSupervision?.watchersEnabled === false
   );
 }

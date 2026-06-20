@@ -1219,6 +1219,231 @@ params = { from = "credentials", url = "https://example.com/api/session" }
   ), true);
 });
 
+test("legacy frontend native uplift lowers conditional and computed UI updates onto native branches and projections", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "conditional_route"
+path = "/conditional"
+serves = "conditional_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "conditional_page", frontendProgram = "conditional_program" }
+
+[[widget]]
+actor = "system"
+id = "conditional_page"
+kind = "Page"
+props = { title = "Conditional" }
+
+[[widget]]
+actor = "system"
+id = "conditional_form"
+kind = "Form"
+props = { }
+
+[[widget]]
+actor = "system"
+id = "search_input"
+kind = "Input"
+props = { name = "q", value = "" }
+
+[[widget]]
+actor = "system"
+id = "toggle_input"
+kind = "Input"
+props = { name = "enabled", type = "checkbox", checked = false }
+
+[[widget]]
+actor = "system"
+id = "status_text"
+kind = "Text"
+props = { text = "" }
+
+[[attachWidget]]
+actor = "system"
+parent = "conditional_page"
+child = "conditional_form"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "conditional_form"
+child = "search_input"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "conditional_form"
+child = "toggle_input"
+order = 1
+
+[[attachWidget]]
+actor = "system"
+parent = "conditional_page"
+child = "status_text"
+order = 1
+
+[[frontendProgram]]
+actor = "system"
+id = "conditional_program"
+rootWidget = "conditional_page"
+
+[[frontendStep]]
+actor = "system"
+program = "conditional_program"
+event = "submit:conditional_form"
+order = 0
+op = "readForm"
+params = { widget = "conditional_form", into = "search" }
+
+[[frontendStep]]
+actor = "system"
+program = "conditional_program"
+event = "input:search_input"
+order = 0
+op = "setText"
+params = { widget = "status_text", text = "Hello \${search.q}" }
+
+[[frontendStep]]
+actor = "system"
+program = "conditional_program"
+event = "change:toggle_input"
+order = 0
+op = "setHidden"
+when = { path = "event.checked", equals = true }
+params = { widget = "status_text", hidden = true }
+  `);
+
+  const preview = previewLegacyFrontendUplift(world);
+  assert.deepEqual(preview.blocked, []);
+  assert.equal(preview.pending.some(row => row.kind === "projection" && row.action === "projection.define"), true);
+
+  const result = applyLegacyFrontendUplift(world, { actor: "callan" });
+  assert.equal(result.ok, true);
+
+  const projections = world.allWitnesses()
+    .filter(witness => witness.process === "desire.defineProjection")
+    .map(witness => witness.body);
+  assert.equal(projections.some(body =>
+    body?.id === "legacyUplift.conditional_route.projection.input:search_input.setText.0.status_text.text"
+    && body?.projectionKind === "template"
+  ), true);
+  assert.equal(projections.some(body =>
+    body?.id === "legacyUplift.conditional_route.projection.change:toggle_input.setHidden.0.equals"
+    && body?.projectionKind === "equals"
+  ), true);
+
+  const process = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineProcess"
+    && witness.body?.id === "legacyUplift.conditional_route.process"
+  )?.body;
+  const inputRule = process?.rules?.find(rule =>
+    rule.trigger === "legacyUplift.conditional_route.message.trigger.input:search_input"
+  );
+  assert.equal(inputRule?.steps?.some(step =>
+    step.kind === "setState"
+    && step.state === "legacyUplift.conditional_route.type.state.status_text.text"
+    && step.valueFrom?.kind === "projection"
+    && step.valueFrom?.projection === "legacyUplift.conditional_route.projection.input:search_input.setText.0.status_text.text"
+  ), true);
+  const changeRule = process?.rules?.find(rule =>
+    rule.trigger === "legacyUplift.conditional_route.message.trigger.change:toggle_input"
+  );
+  assert.equal(changeRule?.steps?.some(step => step.kind === "branch" && step.condition?.kind === "projection"), true);
+});
+
+test("legacy frontend native uplift lowers computed post-command UI updates onto native success rules", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "computed_success_route"
+path = "/computed-success"
+serves = "computed_success_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "computed_success_page", frontendProgram = "computed_success_program" }
+
+[[widget]]
+actor = "system"
+id = "computed_success_page"
+kind = "Page"
+props = { title = "Computed Success" }
+
+[[widget]]
+actor = "system"
+id = "computed_success_button"
+kind = "Button"
+props = { text = "Load" }
+
+[[widget]]
+actor = "system"
+id = "computed_success_status"
+kind = "Text"
+props = { text = "" }
+
+[[attachWidget]]
+actor = "system"
+parent = "computed_success_page"
+child = "computed_success_button"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "computed_success_page"
+child = "computed_success_status"
+order = 1
+
+[[frontendProgram]]
+actor = "system"
+id = "computed_success_program"
+rootWidget = "computed_success_page"
+
+[[frontendStep]]
+actor = "system"
+program = "computed_success_program"
+event = "click:computed_success_button"
+order = 0
+op = "fetchJson"
+params = { url = "/api/search", into = "payload" }
+
+[[frontendStep]]
+actor = "system"
+program = "computed_success_program"
+event = "click:computed_success_button"
+order = 1
+op = "setText"
+params = { widget = "computed_success_status", text = "Result \${payload}" }
+  `);
+
+  const preview = previewLegacyFrontendUplift(world);
+  assert.deepEqual(preview.blocked, []);
+
+  const result = applyLegacyFrontendUplift(world, { actor: "callan" });
+  assert.equal(result.ok, true);
+
+  const process = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineProcess"
+    && witness.body?.id === "legacyUplift.computed_success_route.process"
+  )?.body;
+  const successRule = process?.rules?.find(rule =>
+    rule.trigger === "legacyUplift.computed_success_route.message.success.click:computed_success_button.fetchJson.0"
+  );
+  assert.equal(successRule?.steps?.some(step =>
+    step.kind === "setState"
+    && step.state === "legacyUplift.computed_success_route.type.state.computed_success_status.text"
+    && step.valueFrom?.kind === "projection"
+    && step.valueFrom?.projection === "legacyUplift.computed_success_route.projection.legacyUplift.computed_success_route.message.success.click:computed_success_button.fetchJson.0.setText.1.computed_success_status.text"
+  ), true);
+  assert.equal(world.allWitnesses().some(witness =>
+    witness.process === "desire.defineProjection"
+    && witness.body?.id === "legacyUplift.computed_success_route.projection.legacyUplift.computed_success_route.message.success.click:computed_success_button.fetchJson.0.setText.1.computed_success_status.text"
+    && witness.body?.projectionKind === "template"
+  ), true);
+});
+
 test("legacy frontend native uplift keeps input-driven external writes honestly blocked", () => {
   const world = createWorld();
   applyWitnessToml(world, `

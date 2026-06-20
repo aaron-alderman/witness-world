@@ -65,6 +65,25 @@ function isInterpolatedString(value) {
   return typeof value === "string" && value.includes("${") && !exactExpression(value);
 }
 
+function interpolatedParts(value) {
+  if (typeof value !== "string" || !value.includes("${")) return null;
+  const parts = [];
+  const pattern = /\$\{([^}]+)\}/g;
+  let lastIndex = 0;
+  let matched = false;
+  let match = pattern.exec(value);
+  while (match) {
+    matched = true;
+    if (match.index > lastIndex) parts.push({ literal: value.slice(lastIndex, match.index) });
+    parts.push({ expr: match[1].trim() });
+    lastIndex = match.index + match[0].length;
+    match = pattern.exec(value);
+  }
+  if (!matched) return null;
+  if (lastIndex < value.length) parts.push({ literal: value.slice(lastIndex) });
+  return parts;
+}
+
 function surfaceRowsFromWitnesses(witnesses = []) {
   const rows = new Map();
   for (const witness of witnesses ?? []) {
@@ -138,6 +157,10 @@ function queryStateIdFor(routeId, param) {
   return `legacyUplift.${routeId}.type.state.query.${sanitizeIdPart(param, "param")}`;
 }
 
+function projectionIdFor(routeId, name) {
+  return `legacyUplift.${routeId}.projection.${sanitizeIdPart(name, "projection")}`;
+}
+
 function enumIdFor(routeId, name) {
   return `legacyUplift.${routeId}.type.enum.${sanitizeIdPart(name, "enum")}`;
 }
@@ -153,6 +176,7 @@ function definitionIdsForPlan(plan = null) {
     ...Object.values(plan.ids?.surfaces ?? {}),
     ...Object.values(plan.ids?.messages ?? {}),
     ...Object.values(plan.ids?.types ?? {}),
+    ...Object.values(plan.ids?.projections ?? {}),
     ...Object.values(plan.ids?.enums ?? {}),
     ...Object.values(plan.ids?.boundaries ?? {}),
     ...Object.values(plan.ids?.policies ?? {}),
@@ -269,6 +293,7 @@ function analyzeRouteSource(world, source) {
     surfaces: { root: nativeRootSurfaceIdForRoute(routeId) },
     messages: {},
     types: {},
+    projections: {},
     enums: {},
     boundaries: {},
     policies: {},
@@ -294,9 +319,11 @@ function analyzeRouteSource(world, source) {
   const surfaceBindings = new Map();
   const surfaceInteractions = new Map();
   const surfaceRepeats = new Map();
+  const surfaceProjectionRefs = new Map();
   const uiStateSpecs = new Map();
   const messages = new Map();
   const typeDocs = new Map();
+  const projectionDocs = new Map();
   const enumDocs = new Map();
   const boundaryDocs = new Map();
   const policyDocs = new Map();
@@ -314,6 +341,7 @@ function analyzeRouteSource(world, source) {
   function ensureSurface(surfaceId) {
     if (!surfaceBindings.has(surfaceId)) surfaceBindings.set(surfaceId, []);
     if (!surfaceInteractions.has(surfaceId)) surfaceInteractions.set(surfaceId, []);
+    if (!surfaceProjectionRefs.has(surfaceId)) surfaceProjectionRefs.set(surfaceId, new Set());
   }
 
   function ensureState(name, {
@@ -358,6 +386,18 @@ function analyzeRouteSource(world, source) {
       collectionDocs.set(collectionId, { id: collectionId });
     }
     return collectionId;
+  }
+
+  function ensureProjection(name, body = {}) {
+    const projectionId = projectionIdFor(routeId, name);
+    ids.projections[name] = projectionId;
+    if (!projectionDocs.has(projectionId)) {
+      projectionDocs.set(projectionId, {
+        id: projectionId,
+        ...structuredClone(body)
+      });
+    }
+    return projectionId;
   }
 
   function ensureQueryBinding(param, {
@@ -415,6 +455,235 @@ function analyzeRouteSource(world, source) {
     return Object.fromEntries(
       SESSION_SUMMARY_STATE_SPECS.map(spec => [stateIds[spec.field], cloneInitialValue(spec.initial)])
     );
+  }
+
+  function resolveNamedStateSource(expr) {
+    const fieldMatch = expr.match(/^([A-Za-z0-9_.-]+)\.([A-Za-z0-9_.-]+)$/);
+    if (fieldMatch) {
+      const fieldState = fieldStateForAlias(fieldMatch[1], fieldMatch[2]);
+      if (fieldState) return { kind: "state", state: fieldState };
+      if (fieldMatch[1] === "session") {
+        const sessionStates = ensureSessionSummaryStates();
+        if (sessionStates[fieldMatch[2]]) return { kind: "state", state: sessionStates[fieldMatch[2]] };
+      }
+    }
+    const candidateStateId = stateIdFor(routeId, expr);
+    if (typeDocs.has(candidateStateId)) return { kind: "state", state: candidateStateId };
+    return null;
+  }
+
+  function resolveExpressionSource(expr, { allowEvent = true } = {}) {
+    if (allowEvent && expr === "event.value") return { kind: "eventValue" };
+    if (allowEvent && expr === "event.checked") return { kind: "eventChecked" };
+    if (allowEvent && expr === "event.values") return { kind: "eventValues" };
+    const stateSource = resolveNamedStateSource(expr);
+    if (stateSource) return stateSource;
+    return null;
+  }
+
+  function resolveDirectValueSpec(rawValue, { allowEvent = true } = {}) {
+    if (rawValue === undefined) return { kind: "literal", value: "" };
+    if (typeof rawValue === "boolean" || typeof rawValue === "number") return { kind: "literal", value: rawValue };
+    if (isInterpolatedString(rawValue)) {
+      const parts = interpolatedParts(rawValue);
+      if (!parts?.length) return { kind: "blocked", reason: "string interpolation could not be parsed into native template parts" };
+      const templateParts = [];
+      for (const part of parts) {
+        if (Object.prototype.hasOwnProperty.call(part, "literal")) {
+          templateParts.push({ literal: part.literal });
+          continue;
+        }
+        const source = resolveExpressionSource(part.expr, { allowEvent });
+        if (!source) return { kind: "blocked", reason: `exact expression ${part.expr} cannot be lowered in this tranche` };
+        templateParts.push({ source });
+      }
+      return { kind: "template", parts: templateParts };
+    }
+    const expr = exactExpression(rawValue);
+    if (!expr) return { kind: "literal", value: rawValue };
+    const source = resolveExpressionSource(expr, { allowEvent });
+    if (!source) return { kind: "blocked", reason: `exact expression ${expr} cannot be lowered in this tranche` };
+    return { kind: "source", source };
+  }
+
+  function ensureEventCaptureState(eventName, label, sourceKind, preSteps, eventCaptureStates) {
+    const cacheKey = `${eventName}:${label}:${sourceKind}`;
+    if (eventCaptureStates.has(cacheKey)) return eventCaptureStates.get(cacheKey);
+    const stateId = ensureState(`event.${sanitizeIdPart(eventName)}.${sanitizeIdPart(label)}.${sanitizeIdPart(sourceKind)}`, {
+      valueType: sourceKind === "eventChecked" ? "bool" : (sourceKind === "eventValues" ? "text[]" : "text"),
+      initial: sourceKind === "eventChecked" ? false : (sourceKind === "eventValues" ? [] : "")
+    });
+    preSteps.push({
+      kind: "setState",
+      state: stateId,
+      valueFrom: { kind: sourceKind }
+    });
+    const source = { kind: "state", state: stateId };
+    eventCaptureStates.set(cacheKey, source);
+    return source;
+  }
+
+  function materializeProjectionInputSource(source, {
+    eventName,
+    label,
+    preSteps,
+    eventCaptureStates
+  } = {}) {
+    if (!source || typeof source !== "object") return source;
+    if (["eventValue", "eventChecked", "eventValues"].includes(source.kind)) {
+      return ensureEventCaptureState(eventName, label, source.kind, preSteps, eventCaptureStates);
+    }
+    return source;
+  }
+
+  function ensureTemplateProjectionSource(name, templateSpec, options = {}) {
+    const projectionInputs = {};
+    const parts = [];
+    let inputIndex = 0;
+    for (const part of templateSpec.parts ?? []) {
+      if (Object.prototype.hasOwnProperty.call(part, "literal")) {
+        parts.push({ literal: part.literal });
+        continue;
+      }
+      const inputName = `part${inputIndex++}`;
+      projectionInputs[inputName] = materializeProjectionInputSource(part.source, {
+        eventName: options.eventName,
+        label: `${name}.${inputName}`,
+        preSteps: options.preSteps ?? [],
+        eventCaptureStates: options.eventCaptureStates ?? new Map()
+      });
+      parts.push({ input: inputName });
+    }
+    const projectionId = ensureProjection(name, {
+      projectionKind: "template",
+      inputs: projectionInputs,
+      parts
+    });
+    return { kind: "projection", projection: projectionId };
+  }
+
+  function resolveQueryMutationSpec(rawValue) {
+    const direct = resolveDirectValueSpec(rawValue);
+    if (direct.kind === "source" || direct.kind === "literal") return direct;
+    if (direct.kind === "template") {
+      return {
+        kind: "blocked",
+        reason: "query mutation must lower to one explicit state-backed scalar or array value"
+      };
+    }
+    const expr = exactExpression(rawValue);
+    const fieldMatch = expr ? expr.match(/^([A-Za-z0-9_.-]+)\.([A-Za-z0-9_.-]+)$/) : null;
+    if (fieldMatch) {
+      return {
+        kind: "blocked",
+        reason: `query binding source ${expr} is not backed by explicit native field state`
+      };
+    }
+    return direct;
+  }
+
+  function buildWhenConditionSource(when, options = {}) {
+    const condition = when && typeof when === "object" && !Array.isArray(when) ? when : null;
+    const path = trimString(condition?.path);
+    if (!condition || !path) {
+      return { kind: "blocked", reason: "conditional lowering requires a concrete when.path" };
+    }
+    const source = resolveExpressionSource(path);
+    if (!source) {
+      return { kind: "blocked", reason: `exact expression ${path} cannot be lowered in this tranche` };
+    }
+    if (condition.truthy === true) return { kind: "source", source };
+    const projectionSource = materializeProjectionInputSource(source, {
+      eventName: options.eventName,
+      label: `${options.label || "when"}.condition`,
+      preSteps: options.preSteps ?? [],
+      eventCaptureStates: options.eventCaptureStates ?? new Map()
+    });
+    if (condition.falsy === true) {
+      return {
+        kind: "source",
+        source: {
+          kind: "projection",
+          projection: ensureProjection(`${options.label || "when"}.falsy`, {
+            projectionKind: "bool_not",
+            inputs: { value: projectionSource }
+          })
+        }
+      };
+    }
+    if (Object.prototype.hasOwnProperty.call(condition, "equals")) {
+      return {
+        kind: "source",
+        source: {
+          kind: "projection",
+          projection: ensureProjection(`${options.label || "when"}.equals`, {
+            projectionKind: "equals",
+            inputs: {
+              left: projectionSource,
+              right: { kind: "literal", value: condition.equals }
+            }
+          })
+        }
+      };
+    }
+    return { kind: "source", source: projectionSource };
+  }
+
+  function defaultInitialValueForType(valueType) {
+    if (valueType === "bool") return false;
+    if (valueType === "number") return 0;
+    if (typeof valueType === "string" && valueType.endsWith("[]")) return [];
+    return "";
+  }
+
+  function valueTypeForLiteral(value) {
+    if (Array.isArray(value)) return "text[]";
+    if (typeof value === "boolean") return "bool";
+    if (typeof value === "number") return "number";
+    return "text";
+  }
+
+  function valueTypeForResolvedSource(source, fallback = "text") {
+    if (!source || typeof source !== "object") return fallback;
+    if (source.kind === "eventChecked") return "bool";
+    if (source.kind === "eventValues") return "text[]";
+    if (source.kind === "state") return typeDocs.get(source.state)?.valueType ?? fallback;
+    if (source.kind === "projection") return fallback;
+    return fallback;
+  }
+
+  function appendConditionalRuleSteps(targetSteps, step, generatedSteps, options = {}) {
+    if (!(generatedSteps?.length)) return true;
+    if (!step?.when) {
+      targetSteps.push(...generatedSteps);
+      return true;
+    }
+    const condition = buildWhenConditionSource(step.when, {
+      eventName: options.eventName,
+      label: options.label,
+      preSteps: targetSteps,
+      eventCaptureStates: options.eventCaptureStates
+    });
+    if (condition.kind === "blocked") {
+      blocked.push({
+        id: `legacyFrontendUplift:blocked:${routeId}:when:${step.event}:${step.order}`,
+        routeId,
+        limitationType: "missing-primitive",
+        goal: `uplift conditional legacy step ${step.event}`,
+        attemptedAuthoringPath: "surface interactions + process rules",
+        missingPrimitive: condition.reason,
+        minimumHumanAction: "replace the conditional legacy step with explicit native state and supported exact event/state predicates before uplift",
+        proof: [`step ${step.event}#${step.order} uses when=${JSON.stringify(step.when)}`]
+      });
+      return false;
+    }
+    targetSteps.push({
+      kind: "branch",
+      condition: condition.source,
+      then: generatedSteps,
+      else: []
+    });
+    return true;
   }
 
   function ensureRouteCommand({
@@ -533,6 +802,9 @@ function analyzeRouteSource(world, source) {
     ensureSurface(surfaceId);
     const list = surfaceBindings.get(surfaceId);
     if (!list.some(row => JSON.stringify(row) === JSON.stringify(binding))) list.push(binding);
+    if (binding?.source?.kind === "projection" && trimString(binding.source.projection)) {
+      surfaceProjectionRefs.get(surfaceId).add(trimString(binding.source.projection));
+    }
   }
 
   function fieldStateForAlias(alias, field) {
@@ -614,19 +886,6 @@ function analyzeRouteSource(world, source) {
 
   const programSteps = Array.isArray(program?.steps) ? [...program.steps].sort((a, b) => a.order - b.order) : [];
   for (const step of programSteps) {
-    if (step?.when) {
-      blocked.push({
-        id: `legacyFrontendUplift:blocked:${routeId}:when:${step.event}:${step.order}`,
-        routeId,
-        limitationType: "missing-primitive",
-        goal: `uplift conditional legacy step ${step.event}`,
-        attemptedAuthoringPath: "surface interactions + process rules",
-        missingPrimitive: "public conditional interaction/process rule authoring",
-        minimumHumanAction: "replace the conditional legacy step with explicit native state and route branching before uplift",
-        proof: [`step ${step.event}#${step.order} uses when=${JSON.stringify(step.when)}`]
-      });
-      continue;
-    }
     if (step?.repeat) {
       blocked.push({
         id: `legacyFrontendUplift:blocked:${routeId}:repeat:${step.event}:${step.order}`,
@@ -718,7 +977,8 @@ function analyzeRouteSource(world, source) {
             interactions: surfaceInteractions.get(surfaceId) ?? [],
             repeat: null,
             processRef: null,
-            capabilityRefs: []
+            capabilityRefs: [],
+            projectionRefs: [...(surfaceProjectionRefs.get(surfaceId) ?? new Set())]
           });
         }
       });
@@ -828,38 +1088,6 @@ function analyzeRouteSource(world, source) {
     stepsByEvent.get(eventName).push(step);
   }
 
-  function resolveDirectValueSpec(rawValue) {
-    if (rawValue === undefined) return { kind: "literal", value: "" };
-    if (typeof rawValue === "boolean" || typeof rawValue === "number") return { kind: "literal", value: rawValue };
-    if (isInterpolatedString(rawValue)) return { kind: "blocked", reason: "string interpolation requires a missing native string-composition primitive" };
-    const expr = exactExpression(rawValue);
-    if (!expr) return { kind: "literal", value: rawValue };
-    if (expr === "event.value") return { kind: "eventValue" };
-    if (expr === "event.checked") return { kind: "eventChecked" };
-    if (expr === "event.values") return { kind: "eventValues" };
-    return { kind: "blocked", reason: `exact expression ${expr} cannot be lowered in this tranche` };
-  }
-
-  function resolveQueryMutationSpec(rawValue) {
-    const direct = resolveDirectValueSpec(rawValue);
-    if (direct.kind !== "blocked") return direct;
-    const expr = exactExpression(rawValue);
-    if (!expr) return direct;
-    const fieldMatch = expr.match(/^([A-Za-z0-9_.-]+)\.([A-Za-z0-9_.-]+)$/);
-    if (!fieldMatch) return direct;
-    const stateId = fieldStateForAlias(fieldMatch[1], fieldMatch[2]);
-    if (!stateId) {
-      return {
-        kind: "blocked",
-        reason: `query binding source ${expr} is not backed by explicit native field state`
-      };
-    }
-    return {
-      kind: "state",
-      state: stateId
-    };
-  }
-
   for (const [eventName, steps] of stepsByEvent.entries()) {
     const eventParts = eventName.split(":");
     const eventKind = eventParts[0];
@@ -884,6 +1112,8 @@ function analyzeRouteSource(world, source) {
     ensureSurface(targetSurfaceId);
 
     let directActionEmitted = false;
+    const eventRuleSteps = [];
+    const eventCaptureStates = new Map();
     const preCommandSteps = asyncIndex >= 0 ? steps.slice(0, asyncIndex) : steps;
     const postCommandSteps = asyncIndex >= 0 ? steps.slice(asyncIndex + 1) : [];
 
@@ -891,15 +1121,19 @@ function analyzeRouteSource(world, source) {
       if (step?.op === "readForm") continue;
       if (step?.op === "navigate") {
         const href = trimString(step?.params?.url) || trimString(step?.params?.href);
-        if (!sameOriginRoute(href) || steps.length !== 1) {
+        if (step?.when || !sameOriginRoute(href) || steps.length !== 1) {
           blocked.push({
             id: `legacyFrontendUplift:blocked:${routeId}:navigate:${step.order}`,
             routeId,
             limitationType: "missing-primitive",
             goal: `uplift navigate on ${routeId}`,
             attemptedAuthoringPath: "native surface interaction navigate",
-            missingPrimitive: "compound navigate flows beyond a direct literal interaction",
-            minimumHumanAction: "reduce the legacy navigate event to a single literal same-origin navigation step before uplift",
+            missingPrimitive: step?.when
+              ? "conditional navigate lowering is not part of the native conditional subset"
+              : "compound navigate flows beyond a direct literal interaction",
+            minimumHumanAction: step?.when
+              ? "rewrite the conditional navigate with explicit native state and a supported routed interaction before uplift"
+              : "reduce the legacy navigate event to a single literal same-origin navigation step before uplift",
             proof: [`step ${eventName}#${step.order} navigates to ${href || "(missing href)"}`]
           });
           continue;
@@ -941,44 +1175,29 @@ function analyzeRouteSource(world, source) {
           });
           continue;
         }
-        const queryStateId = spec.kind === "state"
-          ? spec.state
-          : ensureStateDoc(`query.${param}`, queryStateIdFor(routeId, param), {
-              valueType: spec.kind === "eventChecked" ? "bool" : (spec.kind === "eventValues" ? "text[]" : "text"),
-              initial: spec.kind === "literal" ? spec.value : (spec.kind === "eventValues" ? [] : "")
-            });
+        const queryValueType = spec.kind === "literal"
+          ? valueTypeForLiteral(spec.value)
+          : valueTypeForResolvedSource(spec.source);
+        const queryStateId = ensureStateDoc(`query.${param}`, queryStateIdFor(routeId, param), {
+          valueType: queryValueType,
+          initial: spec.kind === "literal" ? spec.value : defaultInitialValueForType(queryValueType)
+        });
         ensureQueryBinding(param, {
           stateId: queryStateId,
           ...(spec.kind === "literal" ? { defaultValue: spec.value } : {})
         });
-        if (spec.kind === "literal") {
-          processRules.push({
-            trigger: directEventMessageId,
-            steps: [{ kind: "setState", state: queryStateId, value: spec.value }]
-          });
-          addSurfaceInteraction(targetSurfaceId, {
-            target: "self",
-            event: eventKind,
-            action: { kind: "deliver", message: directEventMessageId }
-          });
-        } else if (spec.kind === "state") {
-          directActionEmitted = true;
-        } else {
-          addSurfaceInteraction(targetSurfaceId, {
-            target: "self",
-            event: eventKind,
-            action: {
-              kind: "setState",
-              state: queryStateId,
-              value: spec.kind === "eventValue"
-                ? { kind: "eventValue" }
-                : spec.kind === "eventChecked"
-                  ? { kind: "eventChecked" }
-                  : { kind: "eventValues" }
-            }
-          });
-          directActionEmitted = true;
-        }
+        appendConditionalRuleSteps(
+          eventRuleSteps,
+          step,
+          [spec.kind === "literal"
+            ? { kind: "setState", state: queryStateId, value: spec.value }
+            : { kind: "setState", state: queryStateId, valueFrom: spec.source }],
+          {
+            eventName,
+            label: `${sanitizeIdPart(eventName)}.setQueryParam.${step.order}`,
+            eventCaptureStates
+          }
+        );
         continue;
       }
       if (!["setText", "setValue", "setHidden", "setDisabled"].includes(step?.op)) {
@@ -1020,7 +1239,7 @@ function analyzeRouteSource(world, source) {
           goal: `uplift ${step?.op} value on ${routeId}`,
           attemptedAuthoringPath: "native state bindings",
           missingPrimitive: spec.reason,
-          minimumHumanAction: "rewrite the legacy step to a literal or direct event-value native binding before uplift",
+          minimumHumanAction: "rewrite the legacy step to a supported exact expression, explicit state source, or native template composition before uplift",
           proof: [`step ${eventName}#${step.order} value=${JSON.stringify(rawValue)}`]
         });
         continue;
@@ -1038,32 +1257,27 @@ function analyzeRouteSource(world, source) {
         prop,
         source: { kind: "state", state: uiState.stateId }
       });
+      const generatedSteps = [];
       if (spec.kind === "literal") {
-        processRules.push({
-          trigger: directEventMessageId,
-          steps: [{ kind: "setState", state: uiState.stateId, value: spec.value }]
+        generatedSteps.push({ kind: "setState", state: uiState.stateId, value: spec.value });
+      } else if (spec.kind === "source") {
+        generatedSteps.push({ kind: "setState", state: uiState.stateId, valueFrom: spec.source });
+      } else if (spec.kind === "template") {
+        generatedSteps.push({
+          kind: "setState",
+          state: uiState.stateId,
+          valueFrom: ensureTemplateProjectionSource(
+            `${sanitizeIdPart(eventName)}.${sanitizeIdPart(step.op)}.${step.order}.${sanitizeIdPart(targetWidgetId)}.${sanitizeIdPart(prop)}`,
+            spec,
+            { eventName, preSteps: eventRuleSteps, eventCaptureStates }
+          )
         });
-        addSurfaceInteraction(targetSurfaceId, {
-          target: "self",
-          event: eventKind,
-          action: { kind: "deliver", message: directEventMessageId }
-        });
-      } else {
-        addSurfaceInteraction(targetSurfaceId, {
-          target: "self",
-          event: eventKind,
-          action: {
-            kind: "setState",
-            state: uiState.stateId,
-            value: spec.kind === "eventValue"
-              ? { kind: "eventValue" }
-              : spec.kind === "eventChecked"
-                ? { kind: "eventChecked" }
-                : { kind: "eventValues" }
-          }
-        });
-        directActionEmitted = true;
       }
+      appendConditionalRuleSteps(eventRuleSteps, step, generatedSteps, {
+        eventName,
+        label: `${sanitizeIdPart(eventName)}.${sanitizeIdPart(step.op)}.${step.order}`,
+        eventCaptureStates
+      });
     }
 
     if (asyncIndex >= 0) {
@@ -1185,7 +1399,7 @@ function analyzeRouteSource(world, source) {
       });
       processHandles.add(directEventMessageId);
 
-      const triggerSteps = [];
+      const triggerSteps = [...eventRuleSteps];
       if (directActionEmitted !== true) {
         addSurfaceInteraction(targetSurfaceId, {
           target: "self",
@@ -1196,10 +1410,15 @@ function analyzeRouteSource(world, source) {
             : {})
         });
       }
-      triggerSteps.push({ kind: "command", command: commandId });
-      processRules.push({ trigger: directEventMessageId, steps: triggerSteps });
+      appendConditionalRuleSteps(triggerSteps, step, [{ kind: "command", command: commandId }], {
+        eventName,
+        label: `${sanitizeIdPart(eventName)}.${sanitizeIdPart(step.op)}.${step.order}.command`,
+        eventCaptureStates
+      });
+      if (triggerSteps.length) processRules.push({ trigger: directEventMessageId, steps: triggerSteps });
 
       const successSteps = [];
+      const successCaptureStates = new Map();
       for (const stepAfter of postCommandSteps) {
         if (stepAfter?.op === "renderCollection") {
           continue;
@@ -1220,11 +1439,17 @@ function analyzeRouteSource(world, source) {
             });
             continue;
           }
+          const generatedSteps = [];
           for (const [key, stateId] of fieldStates.entries()) {
             if (!key.startsWith(`${alias}.`)) continue;
             const type = typeDocs.get(stateId);
-            successSteps.push({ kind: "setState", state: stateId, value: type?.initial ?? "" });
+            generatedSteps.push({ kind: "setState", state: stateId, value: cloneInitialValue(type?.initial ?? "") });
           }
+          appendConditionalRuleSteps(successSteps, stepAfter, generatedSteps, {
+            eventName: successId,
+            label: `${sanitizeIdPart(successId)}.clearForm.${stepAfter.order}`,
+            eventCaptureStates: successCaptureStates
+          });
           continue;
         }
         if (!["setText", "setValue", "setHidden", "setDisabled"].includes(stepAfter?.op)) {
@@ -1234,8 +1459,8 @@ function analyzeRouteSource(world, source) {
             limitationType: "missing-primitive",
             goal: `uplift post-command ${stepAfter?.op} on ${routeId}`,
             attemptedAuthoringPath: "success-event process rule",
-            missingPrimitive: "only explicit state reset and literal UI updates lower after route-backed commands in this tranche",
-            minimumHumanAction: "rewrite the post-command behavior to literal state updates or keep the route on the bridge",
+            missingPrimitive: "only explicit state reset and supported computed UI updates lower after route-backed commands in this tranche",
+            minimumHumanAction: "rewrite the post-command behavior to explicit state resets or supported exact/template UI updates",
             proof: [`step ${eventName}#${stepAfter.order} follows async ${step.op}`]
           });
           continue;
@@ -1245,15 +1470,19 @@ function analyzeRouteSource(world, source) {
         const prop = stepAfter.op === "setText" ? "text" : stepAfter.op === "setValue" ? "value" : stepAfter.op === "setHidden" ? "hidden" : "disabled";
         const rawValue = prop === "text" ? stepAfter?.params?.text : prop === "value" ? stepAfter?.params?.value : stepAfter?.params?.[prop];
         const spec = resolveDirectValueSpec(rawValue);
-        if (!targetWidget || spec.kind !== "literal") {
+        if (!targetWidget || spec.kind === "blocked") {
           blocked.push({
             id: `legacyFrontendUplift:blocked:${routeId}:postAsyncValue:${stepAfter.order}`,
             routeId,
             limitationType: "missing-primitive",
             goal: `uplift post-command ${stepAfter?.op} on ${routeId}`,
             attemptedAuthoringPath: "success-event state write",
-            missingPrimitive: "post-command UI updates must be literal authored state writes in this tranche",
-            minimumHumanAction: "rewrite the post-command UI update as a literal native state target before uplift",
+            missingPrimitive: !targetWidget
+              ? "post-command UI updates require a resolvable target widget"
+              : spec.reason,
+            minimumHumanAction: !targetWidget
+              ? "repair the post-command target widget reference before uplift"
+              : "rewrite the post-command UI update to a supported exact expression or native template composition",
             proof: [`step ${eventName}#${stepAfter.order} value=${JSON.stringify(rawValue)}`]
           });
           continue;
@@ -1271,15 +1500,36 @@ function analyzeRouteSource(world, source) {
           prop,
           source: { kind: "state", state: uiState.stateId }
         });
-        successSteps.push({ kind: "setState", state: uiState.stateId, value: spec.value });
+        const generatedSteps = [];
+        if (spec.kind === "literal") {
+          generatedSteps.push({ kind: "setState", state: uiState.stateId, value: spec.value });
+        } else if (spec.kind === "source") {
+          generatedSteps.push({ kind: "setState", state: uiState.stateId, valueFrom: spec.source });
+        } else if (spec.kind === "template") {
+          generatedSteps.push({
+            kind: "setState",
+            state: uiState.stateId,
+            valueFrom: ensureTemplateProjectionSource(
+              `${sanitizeIdPart(successId)}.${sanitizeIdPart(stepAfter.op)}.${stepAfter.order}.${sanitizeIdPart(targetWidgetId)}.${sanitizeIdPart(prop)}`,
+              spec,
+              { eventName: successId, preSteps: successSteps, eventCaptureStates: successCaptureStates }
+            )
+          });
+        }
+        appendConditionalRuleSteps(successSteps, stepAfter, generatedSteps, {
+          eventName: successId,
+          label: `${sanitizeIdPart(successId)}.${sanitizeIdPart(stepAfter.op)}.${stepAfter.order}`,
+          eventCaptureStates: successCaptureStates
+        });
       }
       if (successSteps.length) processRules.push({ trigger: successId, steps: successSteps });
-    } else if (!directActionEmitted && preCommandSteps.length) {
+    } else if (!directActionEmitted && eventRuleSteps.length) {
       addSurfaceInteraction(targetSurfaceId, {
         target: "self",
         event: eventKind,
         action: { kind: "deliver", message: directEventMessageId }
       });
+      processRules.push({ trigger: directEventMessageId, steps: eventRuleSteps });
     }
   }
 
@@ -1315,7 +1565,8 @@ function analyzeRouteSource(world, source) {
       interactions: surfaceInteractions.get(surfaceId) ?? [],
       repeat: surfaceRepeats.get(surfaceId) ?? null,
       processRef: isRootWidget ? ids.process : null,
-      capabilityRefs: []
+      capabilityRefs: [],
+      projectionRefs: [...(surfaceProjectionRefs.get(surfaceId) ?? new Set())]
     });
   });
 
@@ -1332,7 +1583,8 @@ function analyzeRouteSource(world, source) {
     interactions: [],
     repeat: null,
     processRef: ids.process,
-    capabilityRefs: []
+    capabilityRefs: [],
+    projectionRefs: []
   });
 
   const definitionIds = definitionIdsForPlan({ ids });
@@ -1345,6 +1597,7 @@ function analyzeRouteSource(world, source) {
         surfaces: surfaceDocs,
         messages: [...messages.values()],
         types: [...typeDocs.values()],
+        projections: [...projectionDocs.values()],
         enums: [...enumDocs.values()],
         boundaries: [...boundaryDocs.values()],
         policies: [...policyDocs.values()],
@@ -1395,6 +1648,7 @@ function previewRowsForAnalysis(project, analysis) {
   for (const doc of analysis.plan.collections ?? []) pushIfMissing(doc.id, "collection", "collection.define");
   for (const doc of analysis.plan.enums ?? []) pushIfMissing(doc.id, "enum", "type.define");
   for (const doc of analysis.plan.types ?? []) pushIfMissing(doc.id, "type", "type.define");
+  for (const doc of analysis.plan.projections ?? []) pushIfMissing(doc.id, "projection", "projection.define");
   for (const doc of analysis.plan.messages ?? []) pushIfMissing(doc.id, "message", "message.define");
   for (const doc of analysis.plan.boundaries ?? []) pushIfMissing(doc.id, "boundary", "boundary.define");
   for (const doc of analysis.plan.policies ?? []) pushIfMissing(doc.id, "policy", "policy.define");
@@ -1459,6 +1713,18 @@ function applyPlan(world, analysis, actor) {
       body: { role: doc.role, valueType: doc.valueType, initial: doc.initial },
       meta: provenanceMeta("type", doc.id)
     })),
+    ...analysis.plan.projections.map(doc => createDesireNode({
+      kind: "projection",
+      name: doc.id,
+      body: {
+        projectionKind: doc.projectionKind,
+        ...(doc.source ? { source: doc.source } : {}),
+        ...(doc.inputs ? { inputs: doc.inputs } : {}),
+        ...(doc.parts ? { parts: doc.parts } : {}),
+        ...(doc.props ? { props: doc.props } : {})
+      },
+      meta: provenanceMeta("projection", doc.id)
+    })),
     ...analysis.plan.messages.map(doc => createDesireNode({
       kind: "message",
       name: doc.id,
@@ -1509,7 +1775,7 @@ function applyPlan(world, analysis, actor) {
         interactions: doc.interactions,
         repeat: doc.repeat ?? null,
         capabilityRefs: doc.capabilityRefs,
-        projectionRefs: []
+        projectionRefs: doc.projectionRefs ?? []
       },
       meta: provenanceMeta("surface", doc.id)
     }))

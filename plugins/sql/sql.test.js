@@ -203,6 +203,41 @@ test("sql runtime resolves multiple datasources explicitly and uses secret-backe
   }
 });
 
+test("sql runtime reports sqlite unavailability without crashing when node:sqlite is missing", async () => {
+  const rows = [{
+    id: "sqlite.main",
+    serverRunner: "runner.demo",
+    provider: "sqlite",
+    datasourceName: "main",
+    path: "db/main.sqlite",
+    migrationTable: "witness_sql_migrations"
+  }];
+  const byId = Object.fromEntries(rows.map(row => [row.id, row]));
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sql-runtime-unavailable-"));
+  const runtime = createDbSqlRuntime({
+    project(projector) {
+      if (projector === moduleProjectors.sqlDatasources) return rows;
+      if (projector === moduleProjectors.sqlDatasourceIndex) return { rows, byId };
+      return [];
+    },
+    runtimeRoot,
+    serverRunnerId: "runner.demo",
+    getAppContext: () => ({}),
+    loadSqliteModule: async () => {
+      throw new Error("No such built-in module: node:sqlite");
+    }
+  });
+  try {
+    const result = await runtime.query({ datasourceId: "sqlite.main", sql: "select 1 as ok" });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 503);
+    assert.match(result.reason, /sqlite runtime unavailable/i);
+  } finally {
+    runtime.close();
+    await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
 test("sql runtime supports pipeline mysql reads and postgres writes", async () => {
   const rows = [
     {

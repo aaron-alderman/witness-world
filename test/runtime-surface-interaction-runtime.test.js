@@ -3558,6 +3558,97 @@ test("createSurfaceInteractionRuntime debounces timed deliver interactions and u
   runtime.destroy();
 });
 
+test("createSurfaceInteractionRuntime forwards normalized event payloads to authored deliver actions", async () => {
+  const listeners = new Map();
+  const node = {
+    addEventListener(eventName, listener) {
+      listeners.set(eventName, listener);
+    },
+    removeEventListener(eventName) {
+      listeners.delete(eventName);
+    }
+  };
+  const deliveries = [];
+  const runtime = createSurfaceInteractionRuntime({
+    document: {
+      getElementById(id) {
+        return id === "filter-input" ? node : null;
+      }
+    },
+    window: {
+      location: { pathname: "/filters", href: "http://127.0.0.1:3000/filters" },
+      history: { replaceState() {}, pushState() {} },
+      addEventListener() {},
+      removeEventListener() {},
+      console: { error() {} }
+    },
+    manifest: {
+      activeSurfaceId: "Surface.Filters",
+      surfaces: [
+        {
+          id: "Surface.Filters",
+          runtime: {
+            processRef: "FilterFlow",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: [{
+              target: "field",
+              event: "input",
+              action: { kind: "deliver", message: "FilterChanged" }
+            }]
+          },
+          view: {
+            rootId: "surface-filters",
+            propTargets: {},
+            interactionTargets: { field: [{ id: "filter-input" }] }
+          }
+        }
+      ],
+      processWitnesses: []
+    },
+    createProcessRuntimeImpl() {
+      return {
+        deliver() {},
+        async deliverAuthored(message, payload) {
+          deliveries.push({ message, payload });
+        },
+        subscribe() {
+          return () => {};
+        },
+        value() {
+          return "";
+        },
+        derive() {
+          return "";
+        },
+        set() {}
+      };
+    }
+  });
+
+  const listener = listeners.get("input");
+  assert.equal(typeof listener, "function");
+  await listener({
+    preventDefault() {},
+    target: {
+      value: "Ada",
+      checked: true,
+      selectedOptions: [{ value: "one" }, { value: "two" }]
+    }
+  });
+
+  assert.deepEqual(deliveries, [{
+    message: "FilterChanged",
+    payload: {
+      value: "Ada",
+      checked: true,
+      values: ["one", "two"]
+    }
+  }]);
+  runtime.destroy();
+});
+
 test("createSurfaceInteractionRuntime throttles timed deliver interactions to one authoritative request per interval", async () => {
   const listeners = new Map();
   const node = {

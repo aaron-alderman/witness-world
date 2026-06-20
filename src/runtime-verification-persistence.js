@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 
 function optionalText(value) {
   if (value === undefined || value === null) return null;
@@ -181,6 +180,276 @@ async function ensureDirectory(targetPath) {
   await fs.mkdir(targetPath, { recursive: true });
 }
 
+async function loadDatabaseSync(loadSqliteModule = () => import("node:sqlite")) {
+  try {
+    const sqliteModule = await loadSqliteModule();
+    if (typeof sqliteModule?.DatabaseSync !== "function") {
+      throw new Error("node:sqlite did not export DatabaseSync");
+    }
+    return sqliteModule.DatabaseSync;
+  } catch (error) {
+    const wrapped = new Error(`node:sqlite unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    wrapped.code = "SQLITE_UNAVAILABLE";
+    wrapped.cause = error;
+    throw wrapped;
+  }
+}
+
+function createEmptyLedgerState() {
+  return {
+    verificationPolicies: {},
+    verificationFreshness: {},
+    verificationInvalidations: {},
+    verificationQueue: {},
+    verificationExecutions: {},
+    testRuns: {},
+    testResults: {},
+    artifacts: {},
+    testArtifacts: {},
+    testSuites: {},
+    testCases: {},
+    testReports: {},
+    cacheEntries: {}
+  };
+}
+
+function cloneRow(row = null) {
+  return parseJson(stableJson(row), row);
+}
+
+function upsertStateRow(state, bucket, id, row) {
+  if (!id) return;
+  state[bucket][String(id)] = cloneRow(row);
+}
+
+function rowsFromStateBucket(state, bucket) {
+  return Object.values(state?.[bucket] ?? {}).map(row => cloneRow(row)).filter(Boolean);
+}
+
+async function createJsonFallbackVerificationPersistence({
+  resolved,
+  sqliteError
+}) {
+  const ledgerPath = path.join(resolved.verificationRoot, "ledger.json");
+  let state = createEmptyLedgerState();
+  try {
+    const loaded = parseJson(await fs.readFile(ledgerPath, "utf8"), null);
+    if (loaded && typeof loaded === "object" && !Array.isArray(loaded)) {
+      state = { ...createEmptyLedgerState(), ...loaded };
+    }
+  } catch {}
+
+  const inspectResolved = {
+    ...resolved,
+    ledgerBackend: {
+      ...resolved.ledgerBackend,
+      runtimeProvider: "json-fallback",
+      adapterStatus: "fallback",
+      path: ledgerPath
+    },
+    diagnostics: [
+      ...resolved.diagnostics,
+      {
+        id: `verificationPersistenceDiagnostic:${resolved.serverRunnerId || "runner"}:${resolved.runtimeProfile || "profile"}:sqlite_unavailable`,
+        severity: "warning",
+        code: "verification_persistence_sqlite_unavailable",
+        message: `Verification persistence is using a JSON fallback because node:sqlite is unavailable. (${sqliteError instanceof Error ? sqliteError.message : String(sqliteError)})`
+      }
+    ]
+  };
+
+  const artifactFilePathFor = artifactId => path.join(
+    resolved.artifactBackend.root,
+    encodeURIComponent(String(artifactId || "")),
+    "blob"
+  );
+
+  const cacheFilePathFor = cacheKey => path.join(
+    resolved.cacheBackend.root,
+    `${encodeURIComponent(String(cacheKey || ""))}.json`
+  );
+
+  async function persistLedger() {
+    await fs.writeFile(ledgerPath, stableJson(state), "utf8");
+  }
+
+  async function persistArtifactRow(row) {
+    const content = optionalText(row?.content);
+    const canonicalArtifactId = canonicalArtifactIdForTestArtifact(row?.artifactId ?? row?.id);
+    if (content == null) {
+      const canonicalRow = buildCanonicalArtifactRow(row);
+      if (canonicalRow?.id) upsertStateRow(state, "artifacts", canonicalRow.id, canonicalRow);
+      const testArtifactRow = {
+        ...row,
+        artifactId: canonicalArtifactId ?? row?.artifactId ?? null
+      };
+      upsertStateRow(state, "testArtifacts", row?.id, testArtifactRow);
+      return;
+    }
+    const contentKey = canonicalArtifactId ?? String(row.id);
+    const artifactPath = artifactFilePathFor(contentKey);
+    await ensureDirectory(path.dirname(artifactPath));
+    await fs.writeFile(artifactPath, content, "utf8");
+    const canonicalRow = buildCanonicalArtifactRow({
+      ...row,
+      artifactId: canonicalArtifactId ?? row?.artifactId ?? null,
+      contentRef: artifactPath,
+      preview: normalizePreview(content)
+    });
+    const durableRow = {
+      ...row,
+      artifactId: canonicalArtifactId ?? row?.artifactId ?? null,
+      content: undefined,
+      contentRef: artifactPath,
+      contentUrl: `/api/platform-test-artifacts/${encodeURIComponent(String(row.id))}/content`,
+      preview: normalizePreview(content)
+    };
+    if (canonicalRow?.id) upsertStateRow(state, "artifacts", canonicalRow.id, canonicalRow);
+    upsertStateRow(state, "testArtifacts", row?.id, durableRow);
+  }
+
+  return {
+    resolved: inspectResolved,
+    inspect() {
+      return {
+        source: inspectResolved.source,
+        verificationRoot: inspectResolved.verificationRoot,
+        ledgerBackend: { ...inspectResolved.ledgerBackend },
+        artifactBackend: { ...inspectResolved.artifactBackend },
+        cacheBackend: { ...inspectResolved.cacheBackend },
+        retention: inspectResolved.retention ? { ...inspectResolved.retention } : null,
+        diagnostics: inspectResolved.diagnostics.map(row => ({ ...row }))
+      };
+    },
+    async recordPolicyRows(rows = []) {
+      for (const row of ensureArray(rows)) {
+        if (!row?.id) continue;
+        upsertStateRow(state, "verificationPolicies", row.id, row);
+      }
+      await persistLedger();
+    },
+    async recordFreshnessRows(rows = []) {
+      for (const row of ensureArray(rows)) {
+        if (!row?.id) continue;
+        upsertStateRow(state, "verificationFreshness", row.id, row);
+      }
+      await persistLedger();
+    },
+    async recordInvalidationRows(rows = []) {
+      for (const row of ensureArray(rows)) {
+        if (!row?.id) continue;
+        upsertStateRow(state, "verificationInvalidations", row.id, row);
+      }
+      await persistLedger();
+    },
+    async recordQueueRow(row = null) {
+      if (!row?.id) return;
+      upsertStateRow(state, "verificationQueue", row.id, row);
+      await persistLedger();
+    },
+    async recordExecutionRow(row = null) {
+      if (!row?.id) return;
+      upsertStateRow(state, "verificationExecutions", row.id, row);
+      await persistLedger();
+    },
+    async persistTestRunBundle(bundle = {}) {
+      const testRun = bundle.testRun ?? null;
+      if (testRun?.id) upsertStateRow(state, "testRuns", testRun.id, testRun);
+      for (const row of ensureArray(bundle.testResults)) {
+        if (!row?.id) continue;
+        upsertStateRow(state, "testResults", row.id, row);
+        const cacheKey = optionalText(row?.cacheIdentity?.cacheKey);
+        if (cacheKey && String(row.status || "") === "passed") {
+          const cacheRow = {
+            cacheKey,
+            gateId: row.gateId ?? null,
+            runId: row.runId ?? null,
+            resultId: row.id,
+            producedAt: row.producedAt ?? null,
+            latestResult: row,
+            testRun,
+            regressionSummary: bundle.regressionSummary ?? null,
+            testReports: ensureArray(bundle.testReports)
+          };
+          upsertStateRow(state, "cacheEntries", cacheKey, cacheRow);
+          const cachePath = cacheFilePathFor(cacheKey);
+          await ensureDirectory(path.dirname(cachePath));
+          await fs.writeFile(cachePath, stableJson(cacheRow), "utf8");
+        }
+      }
+      for (const row of ensureArray(bundle.testArtifacts)) {
+        if (!row?.id) continue;
+        await persistArtifactRow(row);
+      }
+      for (const row of ensureArray(bundle.testSuites)) {
+        if (!row?.id) continue;
+        upsertStateRow(state, "testSuites", row.id, row);
+      }
+      for (const row of ensureArray(bundle.testCases)) {
+        if (!row?.id) continue;
+        upsertStateRow(state, "testCases", row.id, row);
+      }
+      for (const row of ensureArray(bundle.testReports)) {
+        if (!row?.id) continue;
+        upsertStateRow(state, "testReports", row.id, row);
+      }
+      await persistLedger();
+    },
+    readModelRows() {
+      return {
+        verificationPolicies: rowsFromStateBucket(state, "verificationPolicies"),
+        verificationFreshness: rowsFromStateBucket(state, "verificationFreshness"),
+        verificationInvalidations: rowsFromStateBucket(state, "verificationInvalidations"),
+        verificationQueue: rowsFromStateBucket(state, "verificationQueue"),
+        verificationExecutions: rowsFromStateBucket(state, "verificationExecutions"),
+        testRuns: rowsFromStateBucket(state, "testRuns"),
+        testResults: rowsFromStateBucket(state, "testResults"),
+        artifacts: rowsFromStateBucket(state, "artifacts"),
+        testArtifacts: rowsFromStateBucket(state, "testArtifacts"),
+        testSuites: rowsFromStateBucket(state, "testSuites"),
+        testCases: rowsFromStateBucket(state, "testCases"),
+        testReports: rowsFromStateBucket(state, "testReports")
+      };
+    },
+    async findReusablePassedResult(cacheKey) {
+      return cloneRow(state.cacheEntries?.[String(cacheKey || "")]?.latestResult ?? null);
+    },
+    async readArtifactContent(artifactId, { compatibility = "canonical" } = {}) {
+      const canonicalRows = rowsFromStateBucket(state, "artifacts");
+      const testArtifactRows = rowsFromStateBucket(state, "testArtifacts");
+      const requestedId = String(artifactId || "");
+      const artifact = compatibility === "testArtifact"
+        ? (
+          testArtifactRows.find(row => String(row?.id || "") === requestedId)
+          ?? testArtifactRows.find(row => String(row?.artifactId || "") === requestedId)
+          ?? null
+        )
+        : (
+          canonicalRows.find(row => String(row?.id || "") === requestedId)
+          ?? testArtifactRows.find(row => String(row?.id || "") === requestedId)
+          ?? testArtifactRows.find(row => String(row?.artifactId || "") === requestedId)
+          ?? (requestedId.startsWith("artifact:")
+            ? testArtifactRows.find(row => canonicalArtifactIdForTestArtifact(row?.id) === requestedId)
+            : null)
+        );
+      if (!artifact?.contentRef) return { ok: false, status: 404, error: "artifact content not found" };
+      try {
+        const content = await fs.readFile(String(artifact.contentRef), "utf8");
+        return {
+          ok: true,
+          status: 200,
+          artifact,
+          content,
+          contentType: artifact.contentType ? String(artifact.contentType) : "text/plain"
+        };
+      } catch {
+        return { ok: false, status: 404, error: "artifact content not found" };
+      }
+    },
+    close() {}
+  };
+}
+
 function upsertStatement(database, table, idColumn = "id") {
   return database.prepare(`
     insert into ${table} (${idColumn}, row_json)
@@ -255,7 +524,8 @@ export async function createRuntimeVerificationPersistence({
   appProject = null,
   runtimeRoot = null,
   runtimeOperatorContract = null,
-  runtimeProfile = null
+  runtimeProfile = null,
+  loadSqliteModule = () => import("node:sqlite")
 } = {}) {
   const resolved = resolveRuntimeVerificationPersistence({
     serverRunner,
@@ -268,6 +538,15 @@ export async function createRuntimeVerificationPersistence({
   await ensureDirectory(resolved.verificationRoot);
   if (resolved.artifactBackend.root) await ensureDirectory(resolved.artifactBackend.root);
   if (resolved.cacheBackend.root) await ensureDirectory(resolved.cacheBackend.root);
+  let DatabaseSync = null;
+  try {
+    DatabaseSync = await loadDatabaseSync(loadSqliteModule);
+  } catch (error) {
+    return createJsonFallbackVerificationPersistence({
+      resolved,
+      sqliteError: error
+    });
+  }
   await ensureDirectory(path.dirname(resolved.ledgerBackend.path));
   const database = new DatabaseSync(resolved.ledgerBackend.path);
   setupDatabase(database);

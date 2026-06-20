@@ -12,6 +12,18 @@ default = true
 allowActorHeader = false
 runtimeConfig = { "mcp.engentus_mcp.token" = { value = "engentus-dev-token" } }
 
+[[computeModule]]
+actor = "aaron"
+id = "engentus.health.classify"
+source = "./app/modules/health-classify/assembly/index.ts"
+hostOperation = "engentus.pipeline.health.classify"
+language = "assemblyscript"
+abi = "world.hostOperation.v1"
+export = "invoke"
+maxMemoryPages = 2
+timeoutMs = 100
+allowedBindings = ["host.log"]
+
 [[materializedView]]
 actor = "aaron"
 id = "platform.view.overview.summary"
