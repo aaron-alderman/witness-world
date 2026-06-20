@@ -64,6 +64,18 @@ handler = "identity.claim"
 serverRunner = "tilth_net_server"
 route = "tilth_net_identity_claim_route"
 
+# Membership: add a peer by pasting their identity card (their signed claim)
+[[route]]
+id = "tilth_net_identity_card_route"
+method = "POST"
+path = "/api/identity/card"
+serves = "tilthNetMembers"
+handler = "identity.card"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_identity_card_route"
+
 # Membership: recognize another member ("I recognize X")
 [[route]]
 id = "tilth_net_identity_recognize_route"
@@ -75,6 +87,30 @@ handler = "identity.recognize"
 [[serve]]
 serverRunner = "tilth_net_server"
 route = "tilth_net_identity_recognize_route"
+
+# Membership: record a Recognize-click intent (browser, unsigned; daemon signs it)
+[[route]]
+id = "tilth_net_recognize_intent_route"
+method = "POST"
+path = "/api/identity/recognize-intent"
+serves = "tilthNetMembers"
+handler = "identity.recognize.intent"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_recognize_intent_route"
+
+# Pending recognize-intents the daemon must sign (projection)
+[[route]]
+id = "tilth_net_recognize_intents_read_route"
+method = "GET"
+path = "/api/identity/recognize-intents"
+serves = "tilthNetMembers"
+handler = "recognize-intents.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_recognize_intents_read_route"
 
 # The recognized roster (projection over claims + recognitions)
 [[route]]
@@ -193,3 +229,75 @@ handler = "session.unshare"
 [[serve]]
 serverRunner = "tilth_net_server"
 route = "tilth_net_session_unshare_route"
+
+# Commons: the daemon couriers the bridge feed here (ephemeral observation)
+[[route]]
+id = "tilth_net_commons_observe_route"
+method = "POST"
+path = "/api/commons/observe"
+serves = "tilthNetCommons"
+handler = "commons.observe"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_commons_observe_route"
+
+# Commons catalog: what's available to pull, verified + recognition-checked
+[[route]]
+id = "tilth_net_commons_read_route"
+method = "GET"
+path = "/api/commons"
+serves = "tilthNetCommons"
+handler = "commons.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_commons_read_route"
+
+# Commons: set the local folder pulls sync into (witnessed setting)
+[[route]]
+id = "tilth_net_pull_folder_route"
+method = "POST"
+path = "/api/commons/pull-folder"
+serves = "tilthNetCommons"
+handler = "commons.pull.folder"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_pull_folder_route"
+
+# Commons: request a pull (witnessed intent; the daemon writes the files)
+[[route]]
+id = "tilth_net_pull_route"
+method = "POST"
+path = "/api/commons/pull"
+serves = "tilthNetCommons"
+handler = "commons.pull"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_pull_route"
+
+# Commons: daemon reports a pull result (witnessed completion)
+[[route]]
+id = "tilth_net_pull_result_route"
+method = "POST"
+path = "/api/commons/pull/result"
+serves = "tilthNetCommons"
+handler = "commons.pull.result"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_pull_result_route"
+
+# Commons: pending pulls for the daemon to perform
+[[route]]
+id = "tilth_net_pulls_read_route"
+method = "GET"
+path = "/api/commons/pulls"
+serves = "tilthNetCommons"
+handler = "commons.pulls.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_pulls_read_route"

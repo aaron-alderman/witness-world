@@ -50,10 +50,12 @@ Two core processes write, one projection reads:
 - **`sessions` projection** — folds the append-only log into the current set of
   sessions, preserving a DESIRE mark across a re-import.
 
-Repo-location indexing adds a request/result loop: Tilth witnesses that a known
-local session should be indexed, then the external daemon reads the full local
-transcript and filesystem/git state before reporting discovered repos back
-across the membrane.
+Repo-location indexing adds request/result loops. Tilth can witness that a
+known local session should be indexed, then the Claude Code daemon reads the
+full local transcript and filesystem/git state before reporting discovered
+repos back across the membrane. Tilth can also witness a manual repo-recognition
+request for a user-entered path; `tilth-daemon` validates it with local `git`
+without needing the Claude Code daemon.
 
 Marking is idiomatic to witness-world precisely because it is witnessed: the
 `actor` is who marked it, the `cause` chain is the provenance trail. "Cloned
@@ -95,6 +97,16 @@ Boundary leaf (JS, the only writers/readers of witnesses):
 | GET    | `/api/repo-index/requests` | `repoIndex.requests.read` | pending daemon work queue |
 | GET    | `/api/repo-index/repos` | `repoIndex.repos.read` | repo-centric projection with sessions |
 | POST   | `/api/repo-index/requests/:requestId/result` | `repoIndex.request.result` | daemon repo-index result |
+| POST   | `/api/repos/recognitions/request` | `repo.recognition.request` | manually request repo recognition for a local path |
+| GET    | `/api/repos/recognitions/requests` | `repoRecognition.requests.read` | pending manual repo-recognition work queue |
+| POST   | `/api/repos/recognitions/requests/:requestId/result` | `repoRecognition.request.result` | manual repo-recognition result |
+| POST   | `/api/repos/:repoId/snapshot/request` | `repo.snapshot.request` | request a local prepared repo snapshot |
+| POST   | `/api/repo-snapshot/request` | `repo.snapshot.request` | body-based snapshot request for slash-containing repo ids |
+| GET    | `/api/repo-snapshot/requests` | `repoSnapshot.requests.read` | pending repo-snapshot work queue |
+| POST   | `/api/repo-snapshot/requests/:requestId/result` | `repoSnapshot.request.result` | repo-snapshot daemon result |
+| POST   | `/api/sessions/:id/ai-summary/request` | `session.aiSummary.request` | request an AI summary for a DESIRE session |
+| GET    | `/api/ai-summary/requests` | `aiSummary.requests.read` | pending AI-summary work queue |
+| POST   | `/api/ai-summary/requests/:requestId/result` | `aiSummary.request.result` | AI-summary daemon result |
 
 Import payload: `{ id, title, preview, project, origin, started, msgCount }`.
 Import is **idempotent on content** — the same title/preview/msgCount is a
@@ -110,6 +122,23 @@ Repo-index result payload:
 `{ status: "completed", repos: [{ root, name, mentions: [{ path, raw, role, timestamp }] }] }`
 or `{ status: "failed", error }`. Paths are absolute in v1.
 
+Manual repo-recognition result payload:
+`{ status: "completed", root, name, remotes: [{ name, url }] }` or
+`{ status: "failed", error }`. The repo projection merges manual recognition
+with Claude-daemon session indexing by canonical repo root and shows both
+sources when both have happened.
+
+Repo-snapshot result payload:
+`{ status: "completed", snapshotId, repoName, remote, fileCount }` or
+`{ status: "failed", error }`. Tilth witnesses only the manifest. Source file
+contents stay in `tilth-daemon`'s local cache for `tilth-net-daemon` to sign and
+publish.
+
+AI-summary result payload:
+`{ status: "completed", text, bullets }` or `{ status: "failed", error }`.
+The summary daemon only sees sessions explicitly requested from the browser; it
+uses the sanitized transcript preview already witnessed by Tilth.
+
 ---
 
 ## Run
@@ -122,6 +151,23 @@ node src/cli.js serve examples/tilth --runtime-profile minimal \
   --world-home "$PWD/.tilth-world" --port 3000
 # then open http://localhost:3000/
 ```
+
+The local workbench uses two boundary daemons:
+
+```bash
+# From meta/tilth-claude-code-daemon:
+node index.mjs --watch
+
+# From meta/tilth-daemon, after filling .env:
+node --env-file=.env index.mjs --watch
+```
+
+`tilth-claude-code-daemon` reads `~/.claude`, imports sessions, and handles
+session transcript-preview and session repo-index requests. `tilth-daemon`
+handles manual repo recognition, local repo snapshot preparation, and AI-summary
+requests; it sends selected DESIRE transcript preview text to the configured
+OpenAI-compatible API only after the browser `Summarize` button creates a
+request.
 
 - `--runtime-profile minimal` is deliberate: the `full` profile pulls in
   `plugin.sql` / `plugin.sqlite`, which need `node:sqlite` — unavailable in the

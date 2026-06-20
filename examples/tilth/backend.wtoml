@@ -23,7 +23,7 @@ method = "GET"
 path = "/"
 serves = "tilthView"
 handler = "page.home"
-params = { rootWidget = "tilth_page_repo_filters", frontendProgram = "tilth_program_repo_filters", page = "home" }
+params = { rootWidget = "tilth_page_workbench_v7", frontendProgram = "tilth_program_workbench_v7", page = "home" }
 
 [[serve]]
 serverRunner = "tilth_server"
@@ -104,6 +104,44 @@ handler = "session.aiSummary.request"
 serverRunner = "tilth_server"
 route = "tilth_ai_summary_request_route"
 
+# Request manual repo recognition. The browser records intent; tilth-daemon
+# validates the local git repo and reports the witnessed result.
+[[route]]
+id = "tilth_repo_recognition_request_route"
+method = "POST"
+path = "/api/repos/recognitions/request"
+serves = "tilthSessions"
+handler = "repo.recognition.request"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_recognition_request_route"
+
+# Request a prepared local repo snapshot. Tilth witnesses intent/status only;
+# tilth-daemon reads the repo and writes the source snapshot to its local cache.
+[[route]]
+id = "tilth_repo_snapshot_request_route"
+method = "POST"
+path = "/api/repos/:repoId/snapshot/request"
+serves = "tilthSessions"
+handler = "repo.snapshot.request"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_snapshot_request_route"
+
+# Body-based repo snapshot request for repo ids that naturally contain slashes.
+[[route]]
+id = "tilth_repo_snapshot_request_body_route"
+method = "POST"
+path = "/api/repo-snapshot/request"
+serves = "tilthSessions"
+handler = "repo.snapshot.request"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_snapshot_request_body_route"
+
 # Pending repo-index jobs for the daemon worker.
 [[route]]
 id = "tilth_repo_index_requests_read_route"
@@ -139,6 +177,30 @@ handler = "aiSummary.requests.read"
 [[serve]]
 serverRunner = "tilth_server"
 route = "tilth_ai_summary_requests_read_route"
+
+# Pending manual repo-recognition jobs for tilth-daemon.
+[[route]]
+id = "tilth_repo_recognition_requests_read_route"
+method = "GET"
+path = "/api/repos/recognitions/requests"
+serves = "tilthRepoRecognitionRequests"
+handler = "repoRecognition.requests.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_recognition_requests_read_route"
+
+# Pending repo-snapshot jobs for tilth-daemon.
+[[route]]
+id = "tilth_repo_snapshot_requests_read_route"
+method = "GET"
+path = "/api/repo-snapshot/requests"
+serves = "tilthRepoSnapshotRequests"
+handler = "repoSnapshot.requests.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_snapshot_requests_read_route"
 
 # Repo-centric projection: each repo with the DESIRE sessions that mention it.
 [[route]]
@@ -187,3 +249,27 @@ handler = "aiSummary.request.result"
 [[serve]]
 serverRunner = "tilth_server"
 route = "tilth_ai_summary_result_route"
+
+# Manual repo-recognition result reporting from tilth-daemon.
+[[route]]
+id = "tilth_repo_recognition_result_route"
+method = "POST"
+path = "/api/repos/recognitions/requests/:requestId/result"
+serves = "tilthRepoRecognitionRequests"
+handler = "repoRecognition.request.result"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_recognition_result_route"
+
+# Repo-snapshot result reporting from tilth-daemon.
+[[route]]
+id = "tilth_repo_snapshot_result_route"
+method = "POST"
+path = "/api/repo-snapshot/requests/:requestId/result"
+serves = "tilthRepoSnapshotRequests"
+handler = "repoSnapshot.request.result"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_snapshot_result_route"

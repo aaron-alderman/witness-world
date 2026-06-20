@@ -10,7 +10,10 @@ export const handlerCatalog = Object.freeze({
     "recognized.read",
     "identities.read",
     "identity.claim",
+    "identity.card",
     "identity.recognize",
+    "identity.recognize.intent",
+    "recognize-intents.read",
     "doc.put",
     "repos.read",
     "repo.announce",
@@ -19,7 +22,13 @@ export const handlerCatalog = Object.freeze({
     "sessions.read",
     "session.announce",
     "session.share",
-    "session.unshare"
+    "session.unshare",
+    "commons.observe",
+    "commons.read",
+    "commons.pull.folder",
+    "commons.pull",
+    "commons.pull.result",
+    "commons.pulls.read"
   ]),
   handlerMetadata: Object.freeze({})
 });

@@ -24,11 +24,19 @@ import path from "node:path";
 // roster is the recognition closure from the founder (see projectRecognized).
 // Each member is sovereign over their own scheme + key; the world stays
 // scheme-agnostic and only verifies what a claim declares (the verify leaf).
+// Each node has its own sovereign root, set per-process via env (so a second
+// node on this machine can found a different identity). Defaults to callan, so
+// an unconfigured node is unchanged.
 const FOUNDER = Object.freeze({
-  label: "callan",
-  scheme: "eth",
-  id: "0x151ac82fa54c3b31defee8b0a4c4fd6d4443c01b"   // derived from callan's eth phrase
+  label: process.env.TILTH_NET_FOUNDER_LABEL || "callan",
+  scheme: process.env.TILTH_NET_FOUNDER_SCHEME || "eth",
+  id: process.env.TILTH_NET_FOUNDER_ID || "0x151ac82fa54c3b31defee8b0a4c4fd6d4443c01b"
 });
+
+// The last commons feed the daemon couriered in. This is an OBSERVATION of
+// external state, not witnessed truth — it's ephemeral process state, recomputed
+// from the feed each time the daemon reports. Witnessing happens only on Pull.
+let observedCommons = [];
 
 // --- the rvm reconciliation model (loaded once, evaluated per projection) ----
 const RECONCILE_RVM = path.join(
@@ -117,6 +125,80 @@ export function projectDocs(witnesses) {
   return out;
 }
 
+// --- pull: witnessed gestures; the daemon does the irreducible file-write -----
+// Pulling a peer's repo lands the bytes on your disk (a syscall — the boundary
+// leaf, in the daemon). But the GESTURES are witnessed: the folder you chose,
+// the intent to pull, and the completion are all facts in your world's log — so
+// you have a provenance trail of what you pulled and where.
+const DEFAULT_PULL_FOLDER = "~/tilth-pulled";
+
+export function requestSetPullFolder(world, { body }) {
+  const folder = stringOrNull(body?.folder);
+  if (!folder) return { ok: false, status: 400, error: "folder required" };
+  const witness = world.emit({
+    process: "commons.pull.folder",
+    actor: "local",
+    claims: [relation("commons", "pullFolder", folder)],
+    body: { folder, at: new Date().toISOString() }
+  });
+  return { ok: true, status: 200, folder, witness };
+}
+
+export function projectPullFolder(witnesses) {
+  let folder = DEFAULT_PULL_FOLDER;
+  for (const w of witnesses) {
+    if (w.process === "commons.pull.folder" && w.body?.folder) folder = String(w.body.folder);
+  }
+  return folder;
+}
+
+export function requestPull(world, { body }) {
+  const repoName = stringOrNull(body?.repoName);
+  const signerId = stringOrNull(body?.signerId);
+  if (!repoName || !signerId) return { ok: false, status: 400, error: "repoName, signerId required" };
+  const witness = world.emit({
+    process: "commons.pull.requested",
+    actor: "local",
+    claims: [thing(`pull:${repoName}`), relation(`pull:${repoName}`, "fromSigner", signerId)],
+    body: { repoName, signerId, at: new Date().toISOString() }
+  });
+  return { ok: true, status: 200, repoName, signerId, witness };
+}
+
+// the daemon reports back after writing the bytes
+export function requestPullResult(world, { body }) {
+  const repoName = stringOrNull(body?.repoName);
+  if (!repoName) return { ok: false, status: 400, error: "repoName required" };
+  const ok = String(body?.status || "").toLowerCase() !== "failed";
+  const witness = world.emit({
+    process: ok ? "commons.pull.completed" : "commons.pull.failed",
+    actor: "daemon",
+    claims: [relation(`pull:${repoName}`, "pullStatus", ok ? "completed" : "failed")],
+    body: {
+      repoName, dest: String(body?.dest || ""), fileCount: Number(body?.fileCount || 0),
+      error: String(body?.error || ""), at: new Date().toISOString()
+    }
+  });
+  return { ok: true, status: 200, repoName, witness };
+}
+
+// fold pull witnesses into per-repo state: requested -> completed/failed (+ dest)
+export function projectPulls(witnesses) {
+  const pulls = new Map();
+  for (const w of witnesses) {
+    const b = w.body ?? {};
+    if (!b.repoName) continue;
+    if (w.process === "commons.pull.requested") {
+      if (!pulls.has(b.repoName)) pulls.set(b.repoName, { repoName: b.repoName, status: "pending", dest: "", fileCount: 0 });
+    } else if (w.process === "commons.pull.completed") {
+      pulls.set(b.repoName, { repoName: b.repoName, status: "completed", dest: String(b.dest || ""), fileCount: Number(b.fileCount || 0) });
+    } else if (w.process === "commons.pull.failed") {
+      pulls.set(b.repoName, { repoName: b.repoName, status: "failed", dest: String(b.dest || ""), fileCount: 0, error: String(b.error || "") });
+    }
+  }
+  return pulls;
+}
+
 // --- membership: claims + recognitions, folded into the recognized set -------
 // "I am X" = a self-signed identity.claim (proves control of the key, claims a
 // label). "I recognize X" = an identity.recognize signed by the recognizer.
@@ -192,6 +274,51 @@ export function requestIdentityClaim(world, { body }) {
     body: { label, scheme, id, sig, at }
   });
   return { ok: true, status: 201, label, scheme, id, witness };
+}
+
+// "Add a peer" — register a peer's identity card (their self-signed claim,
+// base64-encoded) that you received out of band. Decodes to a normal claim and
+// runs the same verification: the card proves the peer holds the key it names.
+// After this they appear as `· pending` until you recognize them.
+export function requestIdentityCard(world, { body }) {
+  let parsed;
+  try {
+    parsed = JSON.parse(Buffer.from(String(body?.card || "").trim(), "base64").toString("utf8"));
+  } catch {
+    return { ok: false, status: 400, error: "could not read that card" };
+  }
+  return requestIdentityClaim(world, { body: parsed });
+}
+
+// "Recognize" click — record your INTENT to recognize a peer. Unsigned (the
+// browser has no key): this is your node's policy. Your daemon picks it up,
+// signs the real identity.recognize with your key, and submits it.
+export function requestRecognizeIntent(world, { body }) {
+  const ofLabel = stringOrNull(body?.ofLabel);
+  const ofId = stringOrNull(body?.ofId);
+  if (!ofLabel || !ofId) return { ok: false, status: 400, error: "ofLabel, ofId required" };
+  const witness = world.emit({
+    process: "identity.recognize.intent",
+    actor: "local",
+    claims: [relation(`identity:${ofId}`, "recognizeIntent", ofLabel)],
+    body: { ofLabel, ofId, at: new Date().toISOString() }
+  });
+  return { ok: true, status: 200, ofLabel, ofId, witness };
+}
+
+// Pending recognition intents the daemon still has to sign: an intent whose
+// target isn't recognized yet. Once the daemon submits the signed recognition,
+// the target joins the recognized set and drops out of this list (idempotent).
+export function projectRecognizeIntents(witnesses) {
+  const recognized = projectRecognized(witnesses);
+  const intents = new Map();
+  for (const w of witnesses) {
+    const b = w.body ?? {};
+    if (w.process === "identity.recognize.intent" && b.ofId) {
+      intents.set(b.ofId, { ofLabel: String(b.ofLabel || ""), ofId: b.ofId });
+    }
+  }
+  return [...intents.values()].filter(i => !recognized.has(i.ofId));
 }
 
 // "I recognize <ofLabel> as <ofId>" — signed by the recognizer's key.
@@ -369,6 +496,76 @@ export function projectSessions(witnesses) {
   })).sort((a, b) => a.title.localeCompare(b.title));
 }
 
+// --- the commons catalog: what's available to pull, with facts ---------------
+// The daemon couriers the bridge feed (the socket read is the boundary); HERE,
+// in-world, we judge it: verify each item's signature (the verify leaf), check
+// the signer against OUR recognized roster, and aggregate the flat per-file
+// items into bundles (a repo, a conversation) with the facts you'd weigh before
+// pulling. Read-only — nothing is witnessed; Pull is a separate, later gesture.
+export function projectCommons(witnesses, items) {
+  const recognized = projectRecognized(witnesses);
+  const pulls = projectPulls(witnesses);
+  const bundles = new Map();
+  for (const it of (items || [])) {
+    if (it.kind !== "doc.put" || !it.docId || !it.id) continue;
+    const verified = verifyIdentity({
+      scheme: it.scheme, id: it.id,
+      message: canonical.docPut({ docId: it.docId, content: it.content ?? "", id: it.id }),
+      sig: it.sig
+    });
+    const isConvo = String(it.docId).startsWith("conversation/");
+    const slash = String(it.docId).indexOf("/");
+    const name = isConvo ? String(it.docId).slice("conversation/".length)
+      : (slash > 0 ? String(it.docId).slice(0, slash) : String(it.docId));
+    const key = `${it.id}|${isConvo ? "conversation" : "repo"}|${name}`;
+    if (!bundles.has(key)) {
+      bundles.set(key, {
+        kind: isConvo ? "conversation" : "repo", name,
+        signerId: it.id, scheme: String(it.scheme || ""),
+        files: new Set(), verifiedCount: 0, totalCount: 0, lastSeq: 0
+      });
+    }
+    const b = bundles.get(key);
+    b.totalCount++;
+    if (verified) b.verifiedCount++;
+    b.files.add(String(it.docId));
+    b.lastSeq = Math.max(b.lastSeq, Number(it.seq || 0));
+  }
+  return [...bundles.values()].map(b => {
+    const member = recognized.get(b.signerId);
+    const allVerified = b.totalCount > 0 && b.verifiedCount === b.totalCount;
+    const pull = pulls.get(b.name);
+    const pulled = pull?.status === "completed";
+    return {
+      kind: b.kind,
+      name: b.name,
+      scheme: b.scheme,
+      signerId: b.signerId,
+      mine: b.signerId === FOUNDER.id,    // signed by this node's own identity
+      recognized: !!member,
+      fromText: member
+        ? `from ${member.label} ✓ recognized`
+        : `from ${String(b.signerId).slice(0, 16)}… · signed, not in your net`,
+      integrityText: allVerified
+        ? `${b.kind === "repo" ? b.files.size + " files · " : ""}signatures verified ✓`
+        : `${b.verifiedCount}/${b.totalCount} verified ✗`,
+      verified: allVerified,
+      fileCount: b.files.size,
+      // pullable only if recognized + verified + not already pulled; show pull state
+      pullable: !!member && allVerified && !pulled && pull?.status !== "pending",
+      pullStatus: pull?.status || "",
+      pulled,
+      pulledTo: pulled ? pull.dest : "",
+      statusText: pulled
+        ? `pulled ✓ → ${pull.dest}`
+        : pull?.status === "pending" ? "pulling…"
+        : pull?.status === "failed" ? `pull failed: ${pull.error || "error"}`
+        : "",
+      lastSeq: b.lastSeq
+    };
+  }).sort((a, b) => b.lastSeq - a.lastSeq);
+}
+
 export function createTilthNetHandlers({ world, sendJson, readJson }) {
   const dispatch = (fn) => async ({ req, res }) => {
     await ensureModel();
@@ -389,7 +586,12 @@ export function createTilthNetHandlers({ world, sendJson, readJson }) {
       sendJson(res, 200, { identities: projectIdentities(world.allWitnesses()) });
     },
     "identity.claim": dispatch(requestIdentityClaim),
+    "identity.card": dispatch(requestIdentityCard),
     "identity.recognize": dispatch(requestIdentityRecognize),
+    "identity.recognize.intent": dispatch(requestRecognizeIntent),
+    "recognize-intents.read": async ({ res }) => {
+      sendJson(res, 200, { intents: projectRecognizeIntents(world.allWitnesses()) });
+    },
     "doc.put": dispatch(requestDocPut),
 
     "repos.read": async ({ res }) => {
@@ -407,6 +609,53 @@ export function createTilthNetHandlers({ world, sendJson, readJson }) {
 
     "sessions.read": async ({ res }) => {
       sendJson(res, 200, { sessions: projectSessions(world.allWitnesses()) });
+    },
+
+    // the daemon couriers the bridge feed here (ephemeral, not witnessed)
+    "commons.observe": async ({ req, res }) => {
+      const body = await readJson(req);
+      observedCommons = Array.isArray(body?.items) ? body.items : [];
+      sendJson(res, 200, { ok: true, count: observedCommons.length });
+    },
+    "commons.read": async ({ res }) => {
+      const w = world.allWitnesses();
+      const commons = projectCommons(w, observedCommons);
+      const sessions = projectSessions(w);
+      const repos = projectRepos(w);
+      const title = new Map(sessions.map(s => [s.sessionId, s.title]));
+      const named = (b) => ({ ...b, displayName: b.kind === "conversation" ? (title.get(b.name) || b.name) : b.name });
+      sendJson(res, 200, {
+        pullFolder: projectPullFolder(w),
+        // SHARE OUT — mine
+        couldShareConvos: sessions.filter(s => !s.shared),     // could put up
+        couldOpenRepos: repos.filter(r => !r.open),            // could put up
+        putUp: commons.filter(b => b.mine).map(named),         // put up ✓ (confirmed in commons)
+        // PULL IN — peers'
+        couldPull: commons.filter(b => !b.mine && b.pullable).map(named),  // could pull
+        pulled: commons.filter(b => b.pulled).map(named),                  // pulled ✓
+        commons   // full list (back-compat)
+      });
+    },
+    "commons.pull.folder": dispatch(requestSetPullFolder),
+    "commons.pull": dispatch(requestPull),
+    "commons.pull.result": dispatch(requestPullResult),
+    // pending pulls for the daemon: requested-but-not-completed, with the folder + the bundle's signer
+    "commons.pulls.read": async ({ res }) => {
+      const w = world.allWitnesses();
+      const pulls = projectPulls(w);
+      const folder = projectPullFolder(w);
+      const pending = [];
+      for (const w2 of w) {
+        if (w2.process === "commons.pull.requested" && w2.body?.repoName) {
+          const st = pulls.get(w2.body.repoName);
+          if (st && st.status === "pending") {
+            pending.push({ repoName: w2.body.repoName, signerId: String(w2.body.signerId || ""), folder });
+          }
+        }
+      }
+      // de-dup by repoName
+      const seen = new Set();
+      sendJson(res, 200, { pulls: pending.filter(p => !seen.has(p.repoName) && seen.add(p.repoName)) });
     },
     "session.announce": dispatch(requestSessionAnnounce),
     "session.share": async ({ res, params }) => {

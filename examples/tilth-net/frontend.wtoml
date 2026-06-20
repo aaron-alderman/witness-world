@@ -1,5 +1,7 @@
-# tilth-net frontend: your node's control surface.
-# Conversations you marked DESIRE (in tilth) + the repos they touched + members.
+# tilth-net frontend: your node, organised by flow.
+#   Share out — what's yours: could put up vs put up ✓
+#   Pull in   — the commons: could pull vs pulled ✓
+#   Members   — identity (its own thing)
 # (No keys, no signing here — the browser reads and toggles; the daemon signs.)
 
 [[defaults]]
@@ -8,129 +10,279 @@ program = "tilth_net_program"
 
 [[page]]
 id = "tilth_net_page"
-children = ["tilth_net_title", "tilth_net_intro", "tilth_net_convos_title", "tilth_net_convos", "tilth_net_members_title", "tilth_net_members", "tilth_net_repos_title", "tilth_net_repos"]
+children = ["tn_title", "tn_intro", "tn_shareout_h", "tn_couldput_h", "tn_convos", "tn_repos", "tn_putup_h", "tn_putup", "tn_pullin_h", "tn_folder_current", "tn_folder_form", "tn_couldpull_h", "tn_couldpull", "tn_pulled_h", "tn_pulled", "tn_members_h", "tn_addpeer", "tn_members"]
 title = "Tilth-Net — your node"
 
 [[heading]]
-id = "tilth_net_title"
+id = "tn_title"
 text = "Your node"
 level = 1
 
 [[text]]
-id = "tilth_net_intro"
-text = "Your control surface. The conversations you marked DESIRE in tilth show up here with their AI summary — share one to publish it (summary included) to the shared commons. The repos those conversations touched can be opened/closed for sync; a repo shares its working files, minus anything git ignores (so .env, keys and node_modules never leave). The browser holds no key: your daemon does the signing and the syncing."
+id = "tn_intro"
+text = "Two flows. Share out: your conversations and repos move into the shared commons when you put them up. Pull in: a recognised peer's published work, verified here, synced to a local folder you choose. The browser holds no key — your daemon signs and syncs."
 class = "surface-lede"
 
-# --- conversations: DESIRE-marked sessions, shareable -----------------------
+# ===== SHARE OUT ============================================================
 [[heading]]
-id = "tilth_net_convos_title"
-text = "Conversations (DESIRE)"
+id = "tn_shareout_h"
+text = "Share out"
 level = 2
 
+[[heading]]
+id = "tn_couldput_h"
+text = "Could put up"
+level = 3
+
+# conversations not yet shared
 [[box]]
-id = "tilth_net_convos"
+id = "tn_convos"
 role = "convos-list"
 class = "surface-list"
 
 [[box]]
-id = "convo_item_template"
+id = "convo_tpl"
 template = true
-children = ["convo_item_title", "convo_item_summary", "convo_item_repos", "convo_item_share"]
-class = "${item.shared ? 'surface-card desire' : 'surface-card'}"
+children = ["convo_title", "convo_summary", "convo_meta", "convo_btn"]
+class = "surface-card"
 
 [[heading]]
-id = "convo_item_title"
+id = "convo_title"
 template = true
 text = "${item.title}"
-level = 3
+level = 4
 
 [[text]]
-id = "convo_item_summary"
+id = "convo_summary"
 template = true
 text = "${item.aiSummary || '(no AI summary yet)'}"
 class = "surface-lede"
 
 [[text]]
-id = "convo_item_repos"
+id = "convo_meta"
 template = true
 text = "${item.project} · ${item.reposText}"
 class = "surface-status"
 
 [[button]]
-id = "convo_item_share"
+id = "convo_btn"
 template = true
-text = "${item.shared ? 'Shared ✓ — unshare' : 'Share conversation'}"
+text = "Share conversation"
 type = "button"
 action = "shareConversation"
 data-id = "${item.sessionId}"
-data-target = "${item.shared ? 'unshare' : 'share'}"
+data-target = "share"
 
-# --- members directory ------------------------------------------------------
-[[heading]]
-id = "tilth_net_members_title"
-text = "Members"
-level = 2
-
+# repos not yet open
 [[box]]
-id = "tilth_net_members"
-role = "members-list"
-class = "surface-list"
-
-[[box]]
-id = "member_item_template"
-template = true
-children = ["member_item_label", "member_item_meta"]
-class = "surface-card"
-
-[[heading]]
-id = "member_item_label"
-template = true
-text = "${item.label} ${item.recognized ? '✓' : '· pending'}"
-level = 3
-
-[[text]]
-id = "member_item_meta"
-template = true
-text = "${item.scheme} · ${item.id} · ${item.recognized ? 'recognized by ' + item.recognizedBy : 'awaiting recognition'}"
-class = "surface-status"
-
-# --- repos: touched by DESIRE conversations, opened/closed from here --------
-[[heading]]
-id = "tilth_net_repos_title"
-text = "Repos"
-level = 2
-
-[[box]]
-id = "tilth_net_repos"
+id = "tn_repos"
 role = "repos-list"
 class = "surface-list"
 
 [[box]]
-id = "repo_item_template"
+id = "repo_tpl"
 template = true
-children = ["repo_item_name", "repo_item_meta", "repo_item_toggle"]
-class = "${item.open ? 'surface-card desire' : 'surface-card'}"
+children = ["repo_name", "repo_meta", "repo_btn"]
+class = "surface-card"
 
 [[heading]]
-id = "repo_item_name"
+id = "repo_name"
 template = true
 text = "${item.repoName}"
-level = 3
+level = 4
 
 [[text]]
-id = "repo_item_meta"
+id = "repo_meta"
 template = true
-text = "${item.fileCount} files · ${item.open ? 'OPEN — sharing to the commons' : 'closed'}${item.sessionsText ? ' · ' + item.sessionsText : ''}"
+text = "${item.fileCount} files${item.sessionsText ? ' · ' + item.sessionsText : ''}"
 class = "surface-status"
 
 [[button]]
-id = "repo_item_toggle"
+id = "repo_btn"
 template = true
-text = "${item.open ? 'Close sync' : 'Open sync'}"
+text = "Open sync"
 type = "button"
 action = "toggleSync"
 data-name = "${item.repoName}"
-data-target = "${item.open ? 'close' : 'open'}"
+data-target = "open"
+
+[[heading]]
+id = "tn_putup_h"
+text = "Put up ✓"
+level = 3
+
+[[box]]
+id = "tn_putup"
+role = "putup-list"
+class = "surface-list"
+
+[[box]]
+id = "putup_tpl"
+template = true
+children = ["putup_name", "putup_meta"]
+class = "surface-card desire"
+
+[[heading]]
+id = "putup_name"
+template = true
+text = "${item.kind} · ${item.displayName}"
+level = 4
+
+[[text]]
+id = "putup_meta"
+template = true
+text = "in the commons · ${item.integrityText}"
+class = "surface-status"
+
+# ===== PULL IN ==============================================================
+[[heading]]
+id = "tn_pullin_h"
+text = "Pull in"
+level = 2
+
+[[text]]
+id = "tn_folder_current"
+text = "Pulls sync into: ~/tilth-pulled"
+class = "surface-status"
+
+[[form]]
+id = "tn_folder_form"
+children = ["folder_input", "folder_btn"]
+role = "pull-folder-form"
+
+[[input]]
+id = "folder_input"
+name = "folder"
+placeholder = "local folder to sync pulls into (default ~/tilth-pulled)"
+
+[[button]]
+id = "folder_btn"
+text = "Set sync folder"
+type = "submit"
+
+[[heading]]
+id = "tn_couldpull_h"
+text = "Could pull"
+level = 3
+
+[[box]]
+id = "tn_couldpull"
+role = "couldpull-list"
+class = "surface-list"
+
+[[box]]
+id = "couldpull_tpl"
+template = true
+children = ["cp_name", "cp_from", "cp_integrity", "cp_btn"]
+class = "surface-card"
+
+[[heading]]
+id = "cp_name"
+template = true
+text = "${item.kind} · ${item.displayName}"
+level = 4
+
+[[text]]
+id = "cp_from"
+template = true
+text = "${item.fromText}"
+class = "surface-status"
+
+[[text]]
+id = "cp_integrity"
+template = true
+text = "${item.integrityText}"
+class = "surface-status"
+
+[[button]]
+id = "cp_btn"
+template = true
+text = "Pull to folder"
+type = "button"
+action = "pullBundle"
+data-name = "${item.name}"
+data-signer = "${item.signerId}"
+
+[[heading]]
+id = "tn_pulled_h"
+text = "Pulled ✓"
+level = 3
+
+[[box]]
+id = "tn_pulled"
+role = "pulled-list"
+class = "surface-list"
+
+[[box]]
+id = "pulled_tpl"
+template = true
+children = ["pl_name", "pl_status"]
+class = "surface-card desire"
+
+[[heading]]
+id = "pl_name"
+template = true
+text = "${item.kind} · ${item.displayName}"
+level = 4
+
+[[text]]
+id = "pl_status"
+template = true
+text = "${item.statusText}"
+class = "surface-status"
+
+# ===== MEMBERS ==============================================================
+[[heading]]
+id = "tn_members_h"
+text = "Members"
+level = 2
+
+[[form]]
+id = "tn_addpeer"
+children = ["addpeer_input", "addpeer_btn"]
+role = "add-peer-form"
+
+[[input]]
+id = "addpeer_input"
+name = "card"
+placeholder = "paste a peer's identity card (from their `card` command)"
+
+[[button]]
+id = "addpeer_btn"
+text = "Add peer"
+type = "submit"
+
+[[box]]
+id = "tn_members"
+role = "members-list"
+class = "surface-list"
+
+[[box]]
+id = "member_tpl"
+template = true
+children = ["m_label", "m_meta", "m_btn"]
+class = "${item.recognized ? 'surface-card desire' : 'surface-card'}"
+
+[[heading]]
+id = "m_label"
+template = true
+text = "${item.label} ${item.recognized ? '✓' : '· pending'}"
+level = 4
+
+[[text]]
+id = "m_meta"
+template = true
+text = "${item.scheme} · ${item.id} · ${item.recognized ? 'recognized by ' + item.recognizedBy : 'awaiting recognition'}"
+class = "surface-status"
+
+[[button]]
+id = "m_btn"
+template = true
+text = "${item.recognized ? '✓ recognized' : 'Recognize'}"
+type = "button"
+action = "recognizeMember"
+data-id = "${item.id}"
+data-label = "${item.label}"
 
 [[frontendProgram]]
 id = "tilth_net_program"
@@ -141,46 +293,110 @@ rootWidget = "tilth_net_page"
 order = 0
 op = "fetchJson"
 on = "load"
-url = "/api/sessions"
-into = "sessionsResponse"
+url = "/api/commons"
+into = "commonsResponse"
 
 [[step]]
 order = 1
 op = "renderCollection"
 on = "load"
-widget = "tilth_net_convos"
-from = "sessionsResponse.sessions"
-template = "convo_item_template"
+widget = "tn_convos"
+from = "commonsResponse.couldShareConvos"
+template = "convo_tpl"
 
 [[step]]
 order = 2
+op = "renderCollection"
+on = "load"
+widget = "tn_repos"
+from = "commonsResponse.couldOpenRepos"
+template = "repo_tpl"
+
+[[step]]
+order = 3
+op = "renderCollection"
+on = "load"
+widget = "tn_putup"
+from = "commonsResponse.putUp"
+template = "putup_tpl"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "load"
+widget = "tn_couldpull"
+from = "commonsResponse.couldPull"
+template = "couldpull_tpl"
+
+[[step]]
+order = 5
+op = "renderCollection"
+on = "load"
+widget = "tn_pulled"
+from = "commonsResponse.pulled"
+template = "pulled_tpl"
+
+[[step]]
+order = 6
+op = "setText"
+on = "load"
+widget = "tn_folder_current"
+text = "Pulls sync into: ${state.commonsResponse.pullFolder || '~/tilth-pulled'}"
+
+[[step]]
+order = 7
 op = "fetchJson"
 on = "load"
 url = "/api/identities"
 into = "identitiesResponse"
 
 [[step]]
-order = 3
+order = 8
 op = "renderCollection"
 on = "load"
-widget = "tilth_net_members"
+widget = "tn_members"
 from = "identitiesResponse.identities"
-template = "member_item_template"
+template = "member_tpl"
+
+# --- submit: set the local folder pulls sync into ---------------------------
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:tn_folder_form"
+widget = "tn_folder_form"
+into = "folderDraft"
 
 [[step]]
-order = 4
-op = "fetchJson"
-on = "load"
-url = "/api/repos"
-into = "reposResponse"
+order = 1
+op = "postJson"
+on = "submit:tn_folder_form"
+url = "/api/commons/pull-folder"
+method = "POST"
+from = "folderDraft"
+pick = ["folder"]
+into = "folderSet"
 
 [[step]]
-order = 5
-op = "renderCollection"
-on = "load"
-widget = "tilth_net_repos"
-from = "reposResponse.repos"
-template = "repo_item_template"
+order = 2
+op = "run"
+on = "submit:tn_folder_form"
+event = "load"
+
+# --- click: pull a commons bundle into the sync folder ----------------------
+[[step]]
+order = 0
+op = "postJson"
+on = "click:pullBundle"
+url = "/api/commons/pull"
+method = "POST"
+body = { repoName = "${event.name}", signerId = "${event.signer}" }
+into = "pullQueued"
+
+[[step]]
+order = 1
+op = "run"
+on = "click:pullBundle"
+event = "load"
 
 # --- click: share / unshare a conversation ----------------------------------
 [[step]]
@@ -190,7 +406,7 @@ on = "click:shareConversation"
 url = "/api/sessions/${event.id}/${event.target}"
 method = "POST"
 body = {}
-into = "sharedToggle"
+into = "shared"
 
 [[step]]
 order = 1
@@ -212,4 +428,44 @@ into = "toggled"
 order = 1
 op = "run"
 on = "click:toggleSync"
+event = "load"
+
+# --- submit: add a peer by pasting their identity card ----------------------
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:tn_addpeer"
+widget = "tn_addpeer"
+into = "peerCard"
+
+[[step]]
+order = 1
+op = "postJson"
+on = "submit:tn_addpeer"
+url = "/api/identity/card"
+method = "POST"
+from = "peerCard"
+pick = ["card"]
+into = "addedPeer"
+
+[[step]]
+order = 2
+op = "run"
+on = "submit:tn_addpeer"
+event = "load"
+
+# --- click: recognize a pending peer (intent; the daemon signs it) ----------
+[[step]]
+order = 0
+op = "postJson"
+on = "click:recognizeMember"
+url = "/api/identity/recognize-intent"
+method = "POST"
+body = { ofLabel = "${event.label}", ofId = "${event.id}" }
+into = "recognizeQueued"
+
+[[step]]
+order = 1
+op = "run"
+on = "click:recognizeMember"
 event = "load"

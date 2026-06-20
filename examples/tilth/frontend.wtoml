@@ -3,11 +3,11 @@
 
 [[defaults]]
 context = "frontend"
-program = "tilth_program_repo_filters"
+program = "tilth_program_workbench_v7"
 
 [[page]]
-id = "tilth_page_repo_filters"
-children = ["tilth_title_repo_filters", "tilth_status_repo_filters", "tilth_nav_repo_filters", "tilth_filter_bar_repo_filters", "repo_section_repo_filters", "sessions_section_repo_filters"]
+id = "tilth_page_workbench_v7"
+children = ["tilth_title_repo_filters", "tilth_status_repo_filters", "tilth_search_box", "tilth_nav_repo_filters", "tilth_filter_bar_repo_filters", "repo_section_repo_filters", "sessions_section_repo_filters"]
 title = "Tilth"
 
 [[heading]]
@@ -21,6 +21,24 @@ text = ""
 class = "status"
 role = "app-status"
 
+[[input]]
+id = "tilth_search_input"
+name = "q"
+placeholder = "search sessions, repos, remotes, summaries"
+type = "search"
+
+[[box]]
+id = "tilth_search_box"
+children = ["tilth_search_input", "tilth_search_clear_button"]
+role = "search"
+class = "surface-actions"
+
+[[button]]
+id = "tilth_search_clear_button"
+text = "Clear"
+type = "button"
+action = "clearSearch"
+
 [[box]]
 id = "tilth_nav_repo_filters"
 children = ["repo_nav_button_repo_filters", "sessions_nav_button_repo_filters"]
@@ -29,9 +47,10 @@ class = "surface-actions"
 
 [[button]]
 id = "repo_nav_button_repo_filters"
-text = "Repos"
+text = "Repos ✓"
 type = "button"
 action = "showRepos"
+disabled = true
 
 [[button]]
 id = "sessions_nav_button_repo_filters"
@@ -47,9 +66,10 @@ class = "surface-actions"
 
 [[button]]
 id = "filter_all_button_repo_filters"
-text = "All"
+text = "All ✓"
 type = "button"
 action = "filterAll"
+disabled = true
 
 [[button]]
 id = "filter_desire_button_repo_filters"
@@ -65,8 +85,29 @@ action = "filterIndexed"
 
 [[box]]
 id = "repo_section_repo_filters"
-children = ["repo_index_list_repo_filters"]
+children = ["repo_recognition_form", "repo_recognition_status", "repo_index_list_repo_filters"]
 role = "repo-view"
+
+[[form]]
+id = "repo_recognition_form"
+children = ["repo_recognition_input", "repo_recognition_submit"]
+role = "repo-recognition-form"
+class = "surface-actions"
+
+[[input]]
+id = "repo_recognition_input"
+name = "path"
+placeholder = "recognize repo path, e.g. ~/work/my-repo"
+
+[[button]]
+id = "repo_recognition_submit"
+text = "Recognize repo"
+type = "submit"
+
+[[text]]
+id = "repo_recognition_status"
+text = ""
+class = "surface-status"
 
 [[box]]
 id = "repo_index_list_repo_filters"
@@ -85,14 +126,14 @@ role = "session-list"
 class = "surface-list"
 
 [[frontendProgram]]
-id = "tilth_program_repo_filters"
-rootWidget = "tilth_page_repo_filters"
+id = "tilth_program_workbench_v7"
+rootWidget = "tilth_page_workbench_v7"
 
 # --- repo template ----------------------------------------------------------
 [[box]]
 id = "repo_item_template_clean"
 template = true
-children = ["repo_item_title_clean", "repo_item_meta_clean", "repo_item_remote_clean", "repo_item_sessions_clean", "repo_item_paths_preview_clean", "repo_item_paths_details_clean"]
+children = ["repo_item_title_clean", "repo_item_meta_clean", "repo_item_recognition_clean", "repo_item_snapshot_clean", "repo_item_remote_clean", "repo_item_sessions_clean", "repo_item_paths_preview_clean", "repo_item_paths_details_clean"]
 class = "surface-card repo-card"
 
 [[heading]]
@@ -105,6 +146,18 @@ level = 3
 id = "repo_item_meta_clean"
 template = true
 text = "${item.displayRoot || item.root} · ${item.sessionCount} ${item.sessionCount === 1 ? 'session' : 'sessions'} · ${item.mentionText || (item.mentionCount + ' mentions')}"
+class = "surface-status"
+
+[[text]]
+id = "repo_item_recognition_clean"
+template = true
+text = "${item.recognitionText || 'Recognition source unknown'}"
+class = "surface-status"
+
+[[text]]
+id = "repo_item_snapshot_clean"
+template = true
+text = "${item.snapshotText || 'Snapshot not prepared'}"
 class = "surface-status"
 
 [[text]]
@@ -145,32 +198,32 @@ class = "surface-state-list surface-note surface-mono repo-paths-list"
 
 # --- session template -------------------------------------------------------
 [[box]]
-id = "session_item_template_repo_clean"
+id = "session_card_v3_template"
 template = true
-children = ["session_item_title_repo_clean", "session_item_meta_repo_clean", "session_item_preview_repo_clean", "session_item_desire_button_repo_clean", "session_item_transcript_button_repo_clean", "session_item_ai_summary_button_repo_clean", "session_item_repo_button_repo_clean", "session_item_repo_index_repo_clean", "session_item_transcript_status_repo_clean", "session_item_ai_summary_status_repo_clean", "session_item_ai_summary_details_repo_clean", "session_item_transcript_details_repo_clean"]
+children = ["session_card_v2_title", "session_card_v2_meta", "session_card_v2_preview", "session_card_v2_desire_button", "session_card_v2_transcript_button", "session_card_v2_ai_summary_button", "session_card_v2_repo_button", "session_card_v2_status_line", "session_card_v2_repo_chips", "session_card_v2_ai_summary_details", "session_card_v2_repo_details", "session_card_v2_transcript_details"]
 class = "${item.desire ? 'surface-card session-card desire' : 'surface-card session-card'}"
 
 [[heading]]
-id = "session_item_title_repo_clean"
+id = "session_card_v2_title"
 template = true
 text = "${item.title || item.id}"
 level = 3
 class = "session-title"
 
 [[text]]
-id = "session_item_meta_repo_clean"
+id = "session_card_v2_meta"
 template = true
 text = "${item.project} · ${item.msgCount} msgs · origin ${item.origin || '—'}${item.desire ? ' · marked by ' + (item.markedBy || '—') : ''}"
 class = "surface-status"
 
 [[text]]
-id = "session_item_preview_repo_clean"
+id = "session_card_v2_preview"
 template = true
-text = "${item.preview || ''}"
+text = "${item.previewBrief || item.preview || ''}"
 class = "surface-lede session-preview"
 
 [[button]]
-id = "session_item_desire_button_repo_clean"
+id = "session_card_v2_desire_button"
 template = true
 text = "${item.desire ? 'DESIRE ✓' : 'Mark DESIRE'}"
 type = "button"
@@ -178,91 +231,115 @@ action = "markDesire"
 data-id = "${item.id}"
 
 [[button]]
-id = "session_item_transcript_button_repo_clean"
+id = "session_card_v2_transcript_button"
 template = true
-text = "${item.transcriptPreview && item.transcriptPreview.status === 'completed' ? 'Refresh text' : 'Preview text'}"
+text = "${item.transcriptPreview && item.transcriptPreview.actionText ? item.transcriptPreview.actionText : 'Preview text'}"
 type = "button"
 action = "previewTranscript"
 data-id = "${item.id}"
 
 [[button]]
-id = "session_item_ai_summary_button_repo_clean"
+id = "session_card_v2_ai_summary_button"
 template = true
-text = "${item.aiSummary && item.aiSummary.status === 'completed' ? 'Refresh summary' : 'Summarize'}"
+text = "${item.aiSummary && item.aiSummary.actionText ? item.aiSummary.actionText : 'Summarize'}"
 type = "button"
 action = "summarizeSession"
 data-id = "${item.id}"
 
 [[button]]
-id = "session_item_repo_button_repo_clean"
+id = "session_card_v2_repo_button"
 template = true
-text = "${item.repoIndex && item.repoIndex.status === 'completed' ? 'Refresh repo index' : 'Index repos'}"
+text = "${item.repoIndex && item.repoIndex.actionText ? item.repoIndex.actionText : 'Index repos'}"
 type = "button"
 action = "indexRepos"
 data-id = "${item.id}"
 
 [[text]]
-id = "session_item_repo_index_repo_clean"
+id = "session_card_v2_status_line"
 template = true
-text = "${item.repoIndex && item.repoIndex.summary ? item.repoIndex.summary : 'Repo index not run'}"
+text = "${(item.repoStatusText || 'Repos not indexed') + ' · ' + (item.transcriptStatusText || 'Text not loaded') + ' · ' + (item.aiStatusText || 'Summary not run')}"
 class = "surface-status"
 
 [[text]]
-id = "session_item_transcript_status_repo_clean"
+id = "session_card_v2_repo_chips"
 template = true
-text = "${item.transcriptPreview && item.transcriptPreview.summary ? item.transcriptPreview.summary : 'Transcript preview not loaded'}"
-class = "surface-status"
-
-[[text]]
-id = "session_item_ai_summary_status_repo_clean"
-template = true
-text = "${item.aiSummary && item.aiSummary.summary ? item.aiSummary.summary : 'AI summary not run'}"
-class = "surface-status"
+text = "${item.repoChipText ? item.repoChipText : ''}"
+class = "surface-status surface-mono"
 
 [[details]]
-id = "session_item_ai_summary_details_repo_clean"
+id = "session_card_v2_ai_summary_details"
 template = true
-children = ["session_item_ai_summary_summary_repo_clean", "session_item_ai_summary_error_repo_clean", "session_item_ai_summary_text_repo_clean", "session_item_ai_summary_bullets_repo_clean"]
+children = ["session_card_v2_ai_summary_summary", "session_card_v2_ai_summary_error", "session_card_v2_ai_summary_text", "session_card_v2_ai_summary_bullets"]
 class = "session-transcript-panel"
 
 [[summary]]
-id = "session_item_ai_summary_summary_repo_clean"
+id = "session_card_v2_ai_summary_summary"
 template = true
-text = "AI summary"
+text = "Summary"
 class = "surface-card-title"
 
 [[text]]
-id = "session_item_ai_summary_text_repo_clean"
+id = "session_card_v2_ai_summary_text"
 template = true
 text = "${item.aiSummary && item.aiSummary.text ? item.aiSummary.text : ''}"
 class = "surface-note"
 
 [[text]]
-id = "session_item_ai_summary_error_repo_clean"
+id = "session_card_v2_ai_summary_error"
 template = true
 text = "${item.aiSummary && item.aiSummary.errorText ? item.aiSummary.errorText : ''}"
 class = "surface-state-list surface-note surface-mono session-transcript-preview"
 
 [[text]]
-id = "session_item_ai_summary_bullets_repo_clean"
+id = "session_card_v2_ai_summary_bullets"
 template = true
 text = "${item.aiSummary && item.aiSummary.bulletText ? item.aiSummary.bulletText : ''}"
 class = "surface-state-list surface-note session-transcript-preview"
 
 [[details]]
-id = "session_item_transcript_details_repo_clean"
+id = "session_card_v2_repo_details"
 template = true
-children = ["session_item_transcript_summary_repo_clean", "session_item_transcript_text_repo_clean"]
+children = ["session_card_v2_repo_summary", "session_card_v2_repo_error", "session_card_v2_repo_result"]
 class = "session-transcript-panel"
 
 [[summary]]
-id = "session_item_transcript_summary_repo_clean"
+id = "session_card_v2_repo_summary"
+template = true
+text = "Repos"
+class = "surface-card-title"
+
+[[text]]
+id = "session_card_v2_repo_error"
+template = true
+text = "${item.repoIndex && item.repoIndex.errorText ? item.repoIndex.errorText : ''}"
+class = "surface-state-list surface-note surface-mono session-transcript-preview"
+
+[[text]]
+id = "session_card_v2_repo_result"
+template = true
+text = "${item.repoIndex && item.repoIndex.detailText ? item.repoIndex.detailText : ''}"
+class = "surface-note"
+
+[[details]]
+id = "session_card_v2_transcript_details"
+template = true
+children = ["session_card_v2_transcript_summary", "session_card_v2_transcript_error", "session_card_v2_transcript_text"]
+class = "session-transcript-panel"
+
+[[summary]]
+id = "session_card_v2_transcript_summary"
 template = true
 text = "Transcript"
 class = "surface-card-title"
 
 [[text]]
-id = "session_item_transcript_text_repo_clean"
+id = "session_card_v2_transcript_error"
+template = true
+text = "${item.transcriptPreview && item.transcriptPreview.errorText ? item.transcriptPreview.errorText : ''}"
+class = "surface-state-list surface-note surface-mono session-transcript-preview"
+
+[[text]]
+id = "session_card_v2_transcript_text"
 template = true
 text = "${item.transcriptPreview && item.transcriptPreview.text ? item.transcriptPreview.text : ''}"
 class = "surface-state-list surface-note surface-mono session-transcript-preview"
@@ -303,7 +380,7 @@ op = "renderCollection"
 on = "load"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_item_template_repo_clean"
+template = "session_card_v3_template"
 
 [[step]]
 order = 5
@@ -328,6 +405,34 @@ widget = "sessions_section_repo_filters"
 hidden = true
 
 [[step]]
+order = 2
+op = "setText"
+on = "click:showRepos"
+widget = "repo_nav_button_repo_filters"
+text = "Repos ✓"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:showRepos"
+widget = "sessions_nav_button_repo_filters"
+text = "Sessions"
+
+[[step]]
+order = 4
+op = "setDisabled"
+on = "click:showRepos"
+widget = "repo_nav_button_repo_filters"
+disabled = true
+
+[[step]]
+order = 5
+op = "setDisabled"
+on = "click:showRepos"
+widget = "sessions_nav_button_repo_filters"
+disabled = false
+
+[[step]]
 order = 0
 op = "setHidden"
 on = "click:showSessions"
@@ -340,6 +445,34 @@ op = "setHidden"
 on = "click:showSessions"
 widget = "sessions_section_repo_filters"
 hidden = false
+
+[[step]]
+order = 2
+op = "setText"
+on = "click:showSessions"
+widget = "repo_nav_button_repo_filters"
+text = "Repos"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:showSessions"
+widget = "sessions_nav_button_repo_filters"
+text = "Sessions ✓"
+
+[[step]]
+order = 4
+op = "setDisabled"
+on = "click:showSessions"
+widget = "repo_nav_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 5
+op = "setDisabled"
+on = "click:showSessions"
+widget = "sessions_nav_button_repo_filters"
+disabled = true
 
 # --- filters ----------------------------------------------------------------
 [[step]]
@@ -377,7 +510,7 @@ op = "renderCollection"
 on = "click:filterAll"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_item_template_repo_clean"
+template = "session_card_v3_template"
 
 [[step]]
 order = 5
@@ -385,6 +518,55 @@ op = "setText"
 on = "click:filterAll"
 widget = "tilth_status_repo_filters"
 text = "${state.sessionsResponse && state.sessionsResponse.sessions ? 'All · ' + state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : 'All'}"
+
+[[step]]
+order = 6
+op = "setText"
+on = "click:filterAll"
+widget = "filter_all_button_repo_filters"
+text = "All ✓"
+
+[[step]]
+order = 7
+op = "setText"
+on = "click:filterAll"
+widget = "filter_desire_button_repo_filters"
+text = "DESIRE"
+
+[[step]]
+order = 8
+op = "setText"
+on = "click:filterAll"
+widget = "filter_indexed_button_repo_filters"
+text = "Indexed"
+
+[[step]]
+order = 9
+op = "setDisabled"
+on = "click:filterAll"
+widget = "filter_all_button_repo_filters"
+disabled = true
+
+[[step]]
+order = 10
+op = "setDisabled"
+on = "click:filterAll"
+widget = "filter_desire_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 11
+op = "setDisabled"
+on = "click:filterAll"
+widget = "filter_indexed_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 12
+op = "setValue"
+on = "click:filterAll"
+widget = "tilth_search_input"
+value = ""
 
 [[step]]
 order = 0
@@ -421,7 +603,7 @@ op = "renderCollection"
 on = "click:filterDesire"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_item_template_repo_clean"
+template = "session_card_v3_template"
 
 [[step]]
 order = 5
@@ -429,6 +611,55 @@ op = "setText"
 on = "click:filterDesire"
 widget = "tilth_status_repo_filters"
 text = "${state.sessionsResponse && state.sessionsResponse.sessions ? 'DESIRE · ' + state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : 'DESIRE'}"
+
+[[step]]
+order = 6
+op = "setText"
+on = "click:filterDesire"
+widget = "filter_all_button_repo_filters"
+text = "All"
+
+[[step]]
+order = 7
+op = "setText"
+on = "click:filterDesire"
+widget = "filter_desire_button_repo_filters"
+text = "DESIRE ✓"
+
+[[step]]
+order = 8
+op = "setText"
+on = "click:filterDesire"
+widget = "filter_indexed_button_repo_filters"
+text = "Indexed"
+
+[[step]]
+order = 9
+op = "setDisabled"
+on = "click:filterDesire"
+widget = "filter_all_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 10
+op = "setDisabled"
+on = "click:filterDesire"
+widget = "filter_desire_button_repo_filters"
+disabled = true
+
+[[step]]
+order = 11
+op = "setDisabled"
+on = "click:filterDesire"
+widget = "filter_indexed_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 12
+op = "setValue"
+on = "click:filterDesire"
+widget = "tilth_search_input"
+value = ""
 
 [[step]]
 order = 0
@@ -465,7 +696,7 @@ op = "renderCollection"
 on = "click:filterIndexed"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_item_template_repo_clean"
+template = "session_card_v3_template"
 
 [[step]]
 order = 5
@@ -473,6 +704,265 @@ op = "setText"
 on = "click:filterIndexed"
 widget = "tilth_status_repo_filters"
 text = "${state.sessionsResponse && state.sessionsResponse.sessions ? 'Indexed · ' + state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : 'Indexed'}"
+
+[[step]]
+order = 6
+op = "setText"
+on = "click:filterIndexed"
+widget = "filter_all_button_repo_filters"
+text = "All"
+
+[[step]]
+order = 7
+op = "setText"
+on = "click:filterIndexed"
+widget = "filter_desire_button_repo_filters"
+text = "DESIRE"
+
+[[step]]
+order = 8
+op = "setText"
+on = "click:filterIndexed"
+widget = "filter_indexed_button_repo_filters"
+text = "Indexed ✓"
+
+[[step]]
+order = 9
+op = "setDisabled"
+on = "click:filterIndexed"
+widget = "filter_all_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 10
+op = "setDisabled"
+on = "click:filterIndexed"
+widget = "filter_desire_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 11
+op = "setDisabled"
+on = "click:filterIndexed"
+widget = "filter_indexed_button_repo_filters"
+disabled = true
+
+[[step]]
+order = 12
+op = "setValue"
+on = "click:filterIndexed"
+widget = "tilth_search_input"
+value = ""
+
+# --- search -----------------------------------------------------------------
+[[step]]
+order = 0
+op = "setText"
+on = "input:tilth_search_input"
+widget = "tilth_status_repo_filters"
+text = "${event.value ? 'Searching: ' + event.value + '...' : 'Loading all...'}"
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "input:tilth_search_input"
+url = "/api/sessions?q=${encodeURIComponent(event.value || '')}"
+into = "sessionsResponse"
+
+[[step]]
+order = 2
+op = "fetchJson"
+on = "input:tilth_search_input"
+url = "/api/repo-index/repos?q=${encodeURIComponent(event.value || '')}"
+into = "repoIndexResponse"
+
+[[step]]
+order = 3
+op = "renderCollection"
+on = "input:tilth_search_input"
+widget = "repo_index_list_repo_filters"
+from = "repoIndexResponse.repos"
+template = "repo_item_template_clean"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "input:tilth_search_input"
+widget = "sessions_list_repo_filters"
+from = "sessionsResponse.sessions"
+template = "session_card_v3_template"
+
+[[step]]
+order = 5
+op = "setText"
+on = "input:tilth_search_input"
+widget = "tilth_status_repo_filters"
+text = "${state.sessionsResponse && state.sessionsResponse.sessions ? (event.value ? 'Search · ' + state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos') : 'No matches'}"
+
+[[step]]
+order = 6
+op = "setText"
+on = "input:tilth_search_input"
+widget = "filter_all_button_repo_filters"
+text = "All ✓"
+
+[[step]]
+order = 7
+op = "setText"
+on = "input:tilth_search_input"
+widget = "filter_desire_button_repo_filters"
+text = "DESIRE"
+
+[[step]]
+order = 8
+op = "setText"
+on = "input:tilth_search_input"
+widget = "filter_indexed_button_repo_filters"
+text = "Indexed"
+
+[[step]]
+order = 9
+op = "setDisabled"
+on = "input:tilth_search_input"
+widget = "filter_all_button_repo_filters"
+disabled = true
+
+[[step]]
+order = 10
+op = "setDisabled"
+on = "input:tilth_search_input"
+widget = "filter_desire_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 11
+op = "setDisabled"
+on = "input:tilth_search_input"
+widget = "filter_indexed_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 0
+op = "setValue"
+on = "click:clearSearch"
+widget = "tilth_search_input"
+value = ""
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "click:clearSearch"
+url = "/api/sessions"
+into = "sessionsResponse"
+
+[[step]]
+order = 2
+op = "fetchJson"
+on = "click:clearSearch"
+url = "/api/repo-index/repos"
+into = "repoIndexResponse"
+
+[[step]]
+order = 3
+op = "renderCollection"
+on = "click:clearSearch"
+widget = "repo_index_list_repo_filters"
+from = "repoIndexResponse.repos"
+template = "repo_item_template_clean"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "click:clearSearch"
+widget = "sessions_list_repo_filters"
+from = "sessionsResponse.sessions"
+template = "session_card_v3_template"
+
+[[step]]
+order = 5
+op = "setText"
+on = "click:clearSearch"
+widget = "tilth_status_repo_filters"
+text = "${state.sessionsResponse && state.sessionsResponse.sessions ? state.sessionsResponse.sessions.length + ' conversations · ' + ((state.repoIndexResponse && state.repoIndexResponse.repos) ? state.repoIndexResponse.repos.length : 0) + ' repos' : 'No conversations yet'}"
+
+[[step]]
+order = 6
+op = "setText"
+on = "click:clearSearch"
+widget = "filter_all_button_repo_filters"
+text = "All ✓"
+
+[[step]]
+order = 7
+op = "setText"
+on = "click:clearSearch"
+widget = "filter_desire_button_repo_filters"
+text = "DESIRE"
+
+[[step]]
+order = 8
+op = "setText"
+on = "click:clearSearch"
+widget = "filter_indexed_button_repo_filters"
+text = "Indexed"
+
+[[step]]
+order = 9
+op = "setDisabled"
+on = "click:clearSearch"
+widget = "filter_all_button_repo_filters"
+disabled = true
+
+[[step]]
+order = 10
+op = "setDisabled"
+on = "click:clearSearch"
+widget = "filter_desire_button_repo_filters"
+disabled = false
+
+[[step]]
+order = 11
+op = "setDisabled"
+on = "click:clearSearch"
+widget = "filter_indexed_button_repo_filters"
+disabled = false
+
+# --- submit: manually recognize a repo path ---------------------------------
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:repo_recognition_form"
+widget = "repo_recognition_form"
+into = "repoRecognitionDraft"
+
+[[step]]
+order = 1
+op = "setText"
+on = "submit:repo_recognition_form"
+widget = "repo_recognition_status"
+text = "Queueing repo recognition..."
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:repo_recognition_form"
+url = "/api/repos/recognitions/request"
+method = "POST"
+body = { path = "${state.repoRecognitionDraft.path || ''}" }
+into = "repoRecognitionResponse"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:repo_recognition_form"
+widget = "repo_recognition_status"
+text = "${state.repoRecognitionResponse && state.repoRecognitionResponse.requestId ? 'Repo recognition queued.' : 'Repo recognition queued.'}"
+
+[[step]]
+order = 4
+op = "clearForm"
+on = "submit:repo_recognition_form"
+widget = "repo_recognition_form"
 
 # --- click: mark a session DESIRE-related -----------------------------------
 [[step]]
