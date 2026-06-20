@@ -19,11 +19,16 @@ async function createTempRoot(name) {
   return root;
 }
 
-async function createPersistence(runtimeRoot) {
+async function createRemotePersistence(runtimeRoot, {
+  fetchImpl = createWitnessCoreVerificationPersistenceFetch(),
+  coreUrl = "http://127.0.0.1:8788"
+} = {}) {
   return createRuntimeVerificationPersistence({
     serverRunner: { id: "runner.main", values: {} },
     runtimeRoot,
-    runtimeProfile: "full"
+    runtimeProfile: "full",
+    witnessCoreBridge: { coreUrl },
+    fetchImpl
   });
 }
 
@@ -143,10 +148,9 @@ function createWitnessCoreVerificationPersistenceFetch() {
   };
 }
 
-test("verification persistence uses local JSON compatibility mode when witness-core is unavailable", async () => {
-  const runtimeRoot = await createTempRoot("verification-persistence-fallback");
+test("verification persistence requires witness-core and fails closed when unavailable", async () => {
+  const runtimeRoot = await createTempRoot("verification-persistence-unavailable");
   let persistence = null;
-  let reopened = null;
   try {
     persistence = await createRuntimeVerificationPersistence({
       serverRunner: { id: "runner.main", values: {} },
@@ -154,52 +158,55 @@ test("verification persistence uses local JSON compatibility mode when witness-c
       runtimeProfile: "full"
     });
     const inspect = persistence.inspect();
-    assert.equal(inspect.ledgerBackend.runtimeProvider, "json-fallback");
-    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_json_compatibility"), true);
+    assert.equal(inspect.ledgerBackend.runtimeProvider, "witness-core");
+    assert.equal(inspect.ledgerBackend.adapterStatus, "witness-core-required");
+    assert.equal(inspect.ledgerBackend.boundaryOwner, "witness-core");
+    assert.equal(inspect.ledgerBackend.boundaryAuthority, "rust-owned");
+    assert.equal(inspect.ledgerBackend.boundaryTransport, "verification.persistence");
+    assert.equal(inspect.ledgerBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.ledgerBackend.canonicalBoundary, true);
+    assert.equal(inspect.ledgerBackend.boundaryFallbackAllowed, false);
+    assert.equal(inspect.artifactBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.artifactBackend.canonicalBoundary, true);
+    assert.equal(inspect.cacheBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.cacheBackend.canonicalBoundary, true);
+    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_witness_core_required"), true);
 
-    await persistence.recordPolicyRows([{ id: "verificationPolicy:fallback", enabled: true }]);
-    await persistence.persistTestRunBundle({
-      testRun: { id: "testRun:fallback", gateId: "gate:fallback", status: "passed" },
-      testResults: [{ id: "testResult:fallback", runId: "testRun:fallback", status: "passed", cacheIdentity: { cacheKey: "cache:fallback" } }],
-      testArtifacts: [{ id: "testArtifact:fallback", runId: "testRun:fallback", artifactKind: "stdout", contentType: "text/plain", content: "fallback stdout" }],
-      testSuites: [],
-      testCases: [],
-      testReports: []
-    });
-    persistence.close();
-
-    reopened = await createRuntimeVerificationPersistence({
-      serverRunner: { id: "runner.main", values: {} },
-      runtimeRoot,
-      runtimeProfile: "full"
-    });
-    const rows = reopened.readModelRows();
-    assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:fallback"), true);
-    assert.equal(rows.testRuns.some(row => row.id === "testRun:fallback"), true);
-    const artifact = await reopened.readArtifactContent("artifact:fallback");
-    assert.equal(artifact.ok, true);
-    assert.equal(artifact.content, "fallback stdout");
+    await assert.rejects(
+      persistence.recordPolicyRows([{ id: "verificationPolicy:should-fail" }]),
+      error => error?.status === 503 && error?.code === "WITNESS_CORE_REQUIRED"
+    );
+    const artifact = await persistence.readArtifactContent("artifact:missing");
+    assert.equal(artifact.ok, false);
+    assert.equal(artifact.status, 503);
+    assert.equal(artifact.code, "WITNESS_CORE_REQUIRED");
   } finally {
     try { persistence?.close?.(); } catch {}
-    try { reopened?.close?.(); } catch {}
     await rm(runtimeRoot, { recursive: true, force: true });
   }
 });
 
-test("verification persistence keeps synthesized backend metadata while using local JSON compatibility mode", async () => {
+test("verification persistence keeps synthesized backend metadata while mediated through witness-core", async () => {
   const runtimeRoot = await createTempRoot("verification-persistence");
+  const fetchImpl = createWitnessCoreVerificationPersistenceFetch();
   let persistence = null;
   let reopened = null;
   try {
-    persistence = await createPersistence(runtimeRoot);
+    persistence = await createRemotePersistence(runtimeRoot, { fetchImpl });
     const inspect = persistence.inspect();
     assert.equal(inspect.source, "synthesized");
     assert.equal(inspect.ledgerBackend.provider, "sqlite");
-    assert.equal(inspect.ledgerBackend.runtimeProvider, "json-fallback");
+    assert.equal(inspect.ledgerBackend.runtimeProvider, "witness-core");
+    assert.equal(inspect.ledgerBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.ledgerBackend.canonicalBoundary, true);
     assert.equal(inspect.artifactBackend.provider, "disk");
+    assert.equal(inspect.artifactBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.artifactBackend.canonicalBoundary, true);
     assert.equal(inspect.cacheBackend.provider, "disk");
+    assert.equal(inspect.cacheBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.cacheBackend.canonicalBoundary, true);
     assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_synthesized"), true);
-    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_json_compatibility"), true);
+    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_witness_core"), true);
 
     await persistence.recordPolicyRows([{
       id: "verificationPolicy:runner.main:full:defaults",
@@ -321,7 +328,7 @@ test("verification persistence keeps synthesized backend metadata while using lo
     });
     persistence.close();
 
-    reopened = await createPersistence(runtimeRoot);
+    reopened = await createRemotePersistence(runtimeRoot, { fetchImpl });
     const rows = reopened.readModelRows();
     assert.equal(rows.testRuns.some(row => row.id === "testRun:durable"), true);
     assert.equal(rows.testReports.some(row => row.id === "testReport:testRun:durable:summary"), true);
@@ -352,10 +359,49 @@ test("verification persistence keeps synthesized backend metadata while using lo
   }
 });
 
+test("verification persistence fails closed in canonical app-serving mode when witness-core is required but unavailable", async () => {
+  const runtimeRoot = await createTempRoot("verification-persistence-canonical-required");
+  let persistence = null;
+  try {
+    persistence = await createRuntimeVerificationPersistence({
+      serverRunner: { id: "runner.main", values: {} },
+      runtimeRoot,
+      runtimeProfile: "full",
+      requireCanonicalBoundary: true
+    });
+    const inspect = persistence.inspect();
+    assert.equal(inspect.ledgerBackend.runtimeProvider, "witness-core");
+    assert.equal(inspect.ledgerBackend.adapterStatus, "witness-core-required");
+    assert.equal(inspect.ledgerBackend.boundaryOwner, "witness-core");
+    assert.equal(inspect.ledgerBackend.boundaryAuthority, "rust-owned");
+    assert.equal(inspect.ledgerBackend.boundaryTransport, "verification.persistence");
+    assert.equal(inspect.ledgerBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.ledgerBackend.canonicalBoundary, true);
+    assert.equal(inspect.ledgerBackend.boundaryFallbackAllowed, false);
+    assert.equal(inspect.ledgerBackend.boundaryAvailability, "unavailable");
+    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_witness_core_required"), true);
+
+    await assert.rejects(
+      persistence.recordPolicyRows([{ id: "verificationPolicy:should-fail" }]),
+      error => error?.status === 503 && error?.code === "WITNESS_CORE_REQUIRED"
+    );
+
+    const rows = persistence.readModelRows();
+    assert.deepEqual(rows.verificationPolicies, []);
+    assert.deepEqual(rows.testRuns, []);
+    const artifact = await persistence.readArtifactContent("artifact:missing");
+    assert.equal(artifact.ok, false);
+    assert.equal(artifact.status, 503);
+    assert.equal(artifact.code, "WITNESS_CORE_REQUIRED");
+  } finally {
+    try { persistence?.close?.(); } catch {}
+    await rm(runtimeRoot, { recursive: true, force: true });
+  }
+});
+
 test("verification persistence can be mediated through witness-core without loading node:sqlite", async () => {
   const runtimeRoot = await createTempRoot("verification-persistence-remote");
   const fetchImpl = createWitnessCoreVerificationPersistenceFetch();
-  let sqliteLoads = 0;
   let persistence = null;
   let reopened = null;
   try {
@@ -364,14 +410,20 @@ test("verification persistence can be mediated through witness-core without load
       runtimeRoot,
       runtimeProfile: "full",
       witnessCoreBridge: { coreUrl: "http://127.0.0.1:8788" },
-      fetchImpl,
-      loadSqliteModule: async () => {
-        sqliteLoads += 1;
-        throw new Error("node:sqlite should not load when witness-core is configured");
-      }
+      fetchImpl
     });
     const inspect = persistence.inspect();
     assert.equal(inspect.ledgerBackend.runtimeProvider, "witness-core");
+    assert.equal(inspect.ledgerBackend.boundaryOwner, "witness-core");
+    assert.equal(inspect.ledgerBackend.boundaryAuthority, "rust-owned");
+    assert.equal(inspect.ledgerBackend.boundaryTransport, "verification.persistence");
+    assert.equal(inspect.ledgerBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.ledgerBackend.canonicalBoundary, true);
+    assert.equal(inspect.ledgerBackend.boundaryFallbackAllowed, false);
+    assert.equal(inspect.artifactBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.artifactBackend.canonicalBoundary, true);
+    assert.equal(inspect.cacheBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.cacheBackend.canonicalBoundary, true);
     assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_witness_core"), true);
 
     await persistence.recordPolicyRows([{ id: "verificationPolicy:remote", enabled: true }]);
@@ -390,11 +442,7 @@ test("verification persistence can be mediated through witness-core without load
       runtimeRoot,
       runtimeProfile: "full",
       witnessCoreBridge: { coreUrl: "http://127.0.0.1:8788" },
-      fetchImpl,
-      loadSqliteModule: async () => {
-        sqliteLoads += 1;
-        throw new Error("node:sqlite should not load when witness-core is configured");
-      }
+      fetchImpl
     });
     const rows = reopened.readModelRows();
     assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:remote"), true);
@@ -405,7 +453,6 @@ test("verification persistence can be mediated through witness-core without load
     const artifact = await reopened.readArtifactContent("artifact:remote");
     assert.equal(artifact.ok, true);
     assert.equal(artifact.content, "remote stdout");
-    assert.equal(sqliteLoads, 0);
   } finally {
     try { persistence?.close?.(); } catch {}
     try { reopened?.close?.(); } catch {}
@@ -417,7 +464,6 @@ test("verification persistence survives worker reopen and witness-core restart w
   const workspace = await createLiveCoreWorkspace({ proofDelayMs: 100 });
   const port = await reservePort();
   let core = null;
-  let sqliteLoads = 0;
   let persistence = null;
   let reopened = null;
   let restarted = null;
@@ -432,16 +478,16 @@ test("verification persistence survives worker reopen and witness-core restart w
       serverRunner: { id: "runner.main", values: {} },
       runtimeRoot: workspace.appRoot,
       runtimeProfile: "full",
-      witnessCoreBridge: { coreUrl: core.url },
-      loadSqliteModule: async () => {
-        sqliteLoads += 1;
-        throw new Error("node:sqlite should not load when witness-core is configured");
-      }
+      witnessCoreBridge: { coreUrl: core.url }
     });
 
     persistence = await createRemotePersistence();
     const inspect = persistence.inspect();
     assert.equal(inspect.ledgerBackend.runtimeProvider, "witness-core");
+    assert.equal(inspect.ledgerBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.ledgerBackend.canonicalBoundary, true);
+    assert.equal(inspect.artifactBackend.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.cacheBackend.boundaryScope, "canonical-runtime");
     assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_witness_core"), true);
 
     await persistence.recordPolicyRows([{
@@ -515,7 +561,6 @@ test("verification persistence survives worker reopen and witness-core restart w
     artifact = await restarted.readArtifactContent("artifact:restart:stdout");
     assert.equal(artifact.ok, true);
     assert.equal(artifact.content, "restart stdout");
-    assert.equal(sqliteLoads, 0);
   } finally {
     try { persistence?.close?.(); } catch {}
     try { reopened?.close?.(); } catch {}
@@ -527,10 +572,11 @@ test("verification persistence survives worker reopen and witness-core restart w
 
 test("platform verification reads durable rows and serves persisted artifact content by id", async () => {
   const runtimeRoot = await createTempRoot("verification-platform");
+  const fetchImpl = createWitnessCoreVerificationPersistenceFetch();
   const world = createWorld();
   let persistence = null;
   try {
-    persistence = await createPersistence(runtimeRoot);
+    persistence = await createRemotePersistence(runtimeRoot, { fetchImpl });
     await persistence.persistTestRunBundle({
       testRun: {
         id: "testRun:verification",

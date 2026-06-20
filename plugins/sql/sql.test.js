@@ -190,10 +190,13 @@ test("sql runtime resolves multiple datasources explicitly and uses secret-backe
   try {
     const listed = runtime.listDatasources();
     assert.deepEqual(listed.map(row => row.id), ["sqlite.main", "pg.main", "pg.reporting"]);
-    assert.equal(listed[0].boundaryOwner, "node");
-    assert.equal(listed[0].boundaryAuthority, "transitional-node-fallback");
-    assert.equal(listed[0].boundaryTransport, "node:sqlite");
-    assert.equal(listed[0].boundaryFallbackAllowed, true);
+    assert.equal(listed[0].adapterStatus, "witness-core-required");
+    assert.equal(listed[0].boundaryOwner, "witness-core");
+    assert.equal(listed[0].boundaryAuthority, "rust-owned");
+    assert.equal(listed[0].boundaryTransport, "capability.db.sqlite");
+    assert.equal(listed[0].boundaryScope, "canonical-runtime");
+    assert.equal(listed[0].canonicalBoundary, true);
+    assert.equal(listed[0].boundaryFallbackAllowed, false);
     assert.equal((await runtime.testConnection({ datasourceId: "pg.main" })).ok, true);
     assert.equal(seenConfigs.length, 1);
     assert.equal(seenConfigs[0].password, "super-secret");
@@ -208,7 +211,7 @@ test("sql runtime resolves multiple datasources explicitly and uses secret-backe
   }
 });
 
-test("sql runtime reports sqlite unavailability without crashing when node:sqlite is missing", async () => {
+test("sql runtime requires witness-core sqlite capability and fails closed when unavailable", async () => {
   const rows = [{
     id: "sqlite.main",
     serverRunner: "runner.demo",
@@ -227,16 +230,20 @@ test("sql runtime reports sqlite unavailability without crashing when node:sqlit
     },
     runtimeRoot,
     serverRunnerId: "runner.demo",
-    getAppContext: () => ({}),
-    loadSqliteModule: async () => {
-      throw new Error("No such built-in module: node:sqlite");
-    }
+    getAppContext: () => ({})
   });
   try {
+    const listed = runtime.listDatasources();
+    assert.equal(listed[0].adapterStatus, "witness-core-required");
+    assert.equal(listed[0].boundaryOwner, "witness-core");
+    assert.equal(listed[0].boundaryAuthority, "rust-owned");
+    assert.equal(listed[0].boundaryTransport, "capability.db.sqlite");
+    assert.equal(listed[0].boundaryScope, "canonical-runtime");
+    assert.equal(listed[0].canonicalBoundary, true);
     const result = await runtime.query({ datasourceId: "sqlite.main", sql: "select 1 as ok" });
     assert.equal(result.ok, false);
     assert.equal(result.status, 503);
-    assert.match(result.reason, /sqlite runtime unavailable/i);
+    assert.match(result.reason, /witness-core sqlite capability required/i);
   } finally {
     runtime.close();
     await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
@@ -254,7 +261,6 @@ test("sql runtime uses witness-core sqlite capability when configured", async ()
   }];
   const byId = Object.fromEntries(rows.map(row => [row.id, row]));
   const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sql-runtime-witness-core-"));
-  let sqliteLoads = 0;
   const seen = [];
   const runtime = createDbSqlRuntime({
     project(projector) {
@@ -276,11 +282,7 @@ test("sql runtime uses witness-core sqlite capability when configured", async ()
           return { ok: true, rows: [{ ok: 1 }], rowCount: 1 };
         }
       }
-    }),
-    loadSqliteModule: async () => {
-      sqliteLoads += 1;
-      throw new Error("node:sqlite should stay unloaded when witness-core handles sqlite");
-    }
+    })
   });
   try {
     const listed = runtime.listDatasources();
@@ -288,6 +290,8 @@ test("sql runtime uses witness-core sqlite capability when configured", async ()
     assert.equal(listed[0].boundaryOwner, "witness-core");
     assert.equal(listed[0].boundaryAuthority, "rust-owned");
     assert.equal(listed[0].boundaryTransport, "capability.db.sqlite");
+    assert.equal(listed[0].boundaryScope, "canonical-runtime");
+    assert.equal(listed[0].canonicalBoundary, true);
     assert.equal(listed[0].boundaryFallbackAllowed, false);
     const tested = await runtime.testConnection({ datasourceId: "sqlite.main" });
     assert.equal(tested.ok, true);
@@ -297,7 +301,6 @@ test("sql runtime uses witness-core sqlite capability when configured", async ()
     assert.deepEqual(queried.rows, [{ ok: 1 }]);
     assert.deepEqual(seen.map(entry => entry.op), ["testConnection", "query"]);
     assert.match(String(seen[0].input.path || ""), /db[\\/]main\.sqlite$/i);
-    assert.equal(sqliteLoads, 0);
   } finally {
     runtime.close();
     await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
@@ -342,6 +345,58 @@ test("sql runtime fails closed with structured errors when witness-core sqlite c
     assert.equal(result.datasource?.adapterStatus, "witness-core-unavailable");
     assert.equal(result.datasource?.boundaryOwner, "witness-core");
     assert.equal(result.datasource?.boundaryAuthority, "rust-owned");
+    assert.equal(result.datasource?.boundaryScope, "canonical-runtime");
+    assert.equal(result.datasource?.canonicalBoundary, true);
+    assert.equal(result.datasource?.boundaryAvailability, "unavailable");
+  } finally {
+    runtime.close();
+    await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test("sql runtime keeps the same rust-owned boundary in canonical app-serving mode", async () => {
+  const rows = [{
+    id: "sqlite.main",
+    serverRunner: "runner.demo",
+    provider: "sqlite",
+    datasourceName: "main",
+    path: "db/main.sqlite",
+    migrationTable: "witness_sql_migrations"
+  }];
+  const byId = Object.fromEntries(rows.map(row => [row.id, row]));
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sql-runtime-canonical-required-"));
+  const runtime = createDbSqlRuntime({
+    project(projector) {
+      if (projector === moduleProjectors.sqlDatasources) return rows;
+      if (projector === moduleProjectors.sqlDatasourceIndex) return { rows, byId };
+      return [];
+    },
+    runtimeRoot,
+    serverRunnerId: "runner.demo",
+    getAppContext: () => ({
+      appRoot: "C:/tmp/app",
+      runtimeSupervision: {
+        watchersEnabled: false
+      }
+    })
+  });
+  try {
+    const listed = runtime.listDatasources();
+    assert.equal(listed[0].adapterStatus, "witness-core-required");
+    assert.equal(listed[0].boundaryOwner, "witness-core");
+    assert.equal(listed[0].boundaryAuthority, "rust-owned");
+    assert.equal(listed[0].boundaryTransport, "capability.db.sqlite");
+    assert.equal(listed[0].boundaryScope, "canonical-runtime");
+    assert.equal(listed[0].canonicalBoundary, true);
+    assert.equal(listed[0].boundaryFallbackAllowed, false);
+    assert.equal(listed[0].boundaryAvailability, "unavailable");
+
+    const result = await runtime.query({ datasourceId: "sqlite.main", sql: "select 1 as ok" });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 503);
+    assert.match(result.reason, /witness-core sqlite capability required/i);
+    assert.equal(result.datasource?.adapterStatus, "witness-core-required");
+    assert.equal(result.datasource?.boundaryOwner, "witness-core");
     assert.equal(result.datasource?.boundaryAvailability, "unavailable");
   } finally {
     runtime.close();

@@ -1683,7 +1683,11 @@ export async function startRuntimeServer(world, {
         runtimeRoot,
         runtimeOperatorContract: appContext.runtimeOperatorContract,
         runtimeProfile: appContext.runtimeProfile,
-        witnessCoreBridge: appContext.witnessCoreBridge
+        witnessCoreBridge: appContext.witnessCoreBridge,
+        requireCanonicalBoundary: Boolean(
+          appContext.appRoot
+          && appContext.runtimeSupervision?.watchersEnabled === false
+        )
       });
       if (serverClosing) {
         try {

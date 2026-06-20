@@ -233,8 +233,8 @@ Executable bundle-bridge manifest example:
 
 Activation remains startup-local in this tranche:
 
-- `node src/cli.js bootstrap --runtime-profile minimal --runtime-plugin plugin.inspect`
-- `RUNTIME_PLUGINS=plugin.inspect node src/cli.js bootstrap --runtime-profile minimal`
+- `node src/cli.js utility-bootstrap --runtime-profile minimal --runtime-plugin plugin.inspect`
+- `RUNTIME_PLUGINS=plugin.inspect node src/cli.js utility-bootstrap --runtime-profile minimal`
 
 Those inputs change runtime composition for the current process only. They do not author install state into the world model and they do not load executable code from plugin directories.
 

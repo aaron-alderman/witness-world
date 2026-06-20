@@ -17,12 +17,20 @@ export function renderOperatorWorkbenchRuntimeFactory() {
     const buildUnicodeTableLines = ${buildUnicodeTableLines.toString()};
     const buildUnicodeBoxLines = ${buildUnicodeBoxLines.toString()};
     const fitCanvasLine = ${fitCanvasLine.toString()};
+    const normalizeCanvasSelection = ${normalizeCanvasSelection.toString()};
+    const canvasSelectionContains = ${canvasSelectionContains.toString()};
+    const classifyCanvasTokenChar = ${classifyCanvasTokenChar.toString()};
+    const expandCanvasWordSelection = ${expandCanvasWordSelection.toString()};
+    const expandCanvasLineSelection = ${expandCanvasLineSelection.toString()};
+    const extractCanvasSelectionText = ${extractCanvasSelectionText.toString()};
+    const computeViewportStart = ${computeViewportStart.toString()};
     const leftPaneCanvasModel = ${leftPaneCanvasModel.toString()};
     const rightPaneCanvasModel = ${rightPaneCanvasModel.toString()};
     const topPaneCanvasModel = ${topPaneCanvasModel.toString()};
     const bottomPaneCanvasModel = ${bottomPaneCanvasModel.toString()};
     const paintBox = ${paintBox.toString()};
     const paintText = ${paintText.toString()};
+    const paintGlyph = ${paintGlyph.toString()};
     const drawOperatorWorkbenchCanvas = ${drawOperatorWorkbenchCanvas.toString()};
     const helpCopyForSnapshot = ${helpCopyForSnapshot.toString()};
     const renderSectionDetailHtml = ${renderSectionDetailHtml.toString()};
@@ -140,6 +148,533 @@ function formatTabLabel(label = "", active = false, enabled = true) {
   return active ? `<${safeLabel}>` : `[${safeLabel}]`;
 }
 
+function getBoxChars(variant = "single") {
+  if (variant === "double") {
+    return {
+      h: "═",
+      v: "║",
+      tl: "╔",
+      tr: "╗",
+      bl: "╚",
+      br: "╝",
+      jt: "╦",
+      jb: "╩",
+      jl: "╠",
+      jr: "╣",
+      cross: "╬"
+    };
+  }
+  return {
+    h: "─",
+    v: "│",
+    tl: "┌",
+    tr: "┐",
+    bl: "└",
+    br: "┘",
+    jt: "┬",
+    jb: "┴",
+    jl: "├",
+    jr: "┤",
+    cross: "┼"
+  };
+}
+
+function buildUnicodeBorderLine(widths = [], indexWidth = 2, left = "┌", join = "┬", right = "┐", variant = "single") {
+  const chars = getBoxChars(variant);
+  return `${left}${chars.h.repeat(indexWidth + 2)}${join}${widths.map(width => chars.h.repeat(width + 2)).join(join)}${right}`;
+}
+
+function buildUnicodeRowLine(indexLabel, values = [], widths = [], indexWidth = 2, variant = "single") {
+  const chars = getBoxChars(variant);
+  const safeIndex = fitAsciiCell(indexLabel, indexWidth);
+  const cells = values.map((value, index) => fitAsciiCell(value, widths[index] || 6));
+  return `${chars.v} ${safeIndex} ${chars.v} ${cells.join(` ${chars.v} `)} ${chars.v}`;
+}
+
+function buildUnicodeTableLines({
+  columns = [],
+  rows = [],
+  rowIndexForRow = (_row, index) => String(index + 1),
+  rowValuesForRow = (row, resolvedColumns) => resolvedColumns.map(column => row?.columns?.[column] ?? ""),
+  maxTableWidth = 92,
+  variant = "single"
+} = {}) {
+  const safeColumns = columns.length ? columns : ["value"];
+  const indexWidth = Math.max(2, rows.reduce((maxWidth, row, index) =>
+    Math.max(maxWidth, String(rowIndexForRow(row, index)).length), 0));
+  const widths = computeAsciiColumnWidths(safeColumns, rows.map((row, index) => ({
+    columns: Object.fromEntries(safeColumns.map(column => [column, rowValuesForRow(row, safeColumns, index)?.[safeColumns.indexOf(column)] ?? ""]))
+  })), {
+    indexWidth,
+    maxTableWidth
+  });
+  const chars = getBoxChars(variant);
+  const lines = [];
+  const rowLineIndexes = [];
+  lines.push(buildUnicodeBorderLine(widths, indexWidth, chars.tl, chars.jt, chars.tr, variant));
+  lines.push(buildUnicodeRowLine("#", safeColumns.map(column => String(column).toUpperCase()), widths, indexWidth, variant));
+  lines.push(buildUnicodeBorderLine(widths, indexWidth, chars.jl, chars.cross, chars.jr, variant));
+  rows.forEach((row, index) => {
+    rowLineIndexes.push(lines.length);
+    lines.push(buildUnicodeRowLine(
+      rowIndexForRow(row, index),
+      rowValuesForRow(row, safeColumns, index),
+      widths,
+      indexWidth,
+      variant
+    ));
+  });
+  lines.push(buildUnicodeBorderLine(widths, indexWidth, chars.bl, chars.jb, chars.br, variant));
+  return {
+    lines,
+    rowLineIndexes
+  };
+}
+
+function buildUnicodeBoxLines(lines = [], width = 78, variant = "single") {
+  const chars = getBoxChars(variant);
+  const safeWidth = Math.max(16, Number(width) || 78);
+  const borderTop = `${chars.tl}${chars.h.repeat(safeWidth - 2)}${chars.tr}`;
+  const borderBottom = `${chars.bl}${chars.h.repeat(safeWidth - 2)}${chars.br}`;
+  const body = (lines.length ? lines : [""]).map(line => `${chars.v} ${fitAsciiCell(line, safeWidth - 4)} ${chars.v}`);
+  return [borderTop, ...body, borderBottom];
+}
+
+function fitCanvasLineLegacy(value, width) {
+  const normalized = normalizeAsciiCell(value);
+  if (normalized.length <= width) return normalized.padEnd(width, " ");
+  if (width <= 1) return normalized.slice(0, width);
+  return `${normalized.slice(0, width - 1)}…`;
+}
+
+function computeViewportStart(totalLines = 0, visibleLines = 0, activeLineIndex = 0) {
+  const safeTotal = Math.max(0, Number(totalLines) || 0);
+  const safeVisible = Math.max(1, Number(visibleLines) || 1);
+  const safeActive = Math.max(0, Number(activeLineIndex) || 0);
+  if (safeTotal <= safeVisible) return 0;
+  const centered = safeActive - Math.floor(safeVisible / 2);
+  return Math.max(0, Math.min(safeTotal - safeVisible, centered));
+}
+
+function fitCanvasLine(value, width) {
+  const safeValue = String(value ?? "").replace(/[\r\n\t]/g, " ");
+  const safeWidth = Math.max(1, Number(width) || 1);
+  if (safeValue.length <= safeWidth) return safeValue.padEnd(safeWidth, " ");
+  if (safeWidth <= 3) return safeValue.slice(0, safeWidth);
+  return `${safeValue.slice(0, safeWidth - 3)}...`;
+}
+
+function normalizeCanvasSelection(selection = null) {
+  if (!selection?.anchor || !selection?.focus) return null;
+  const anchorRow = Math.max(0, Number(selection.anchor.row) || 0);
+  const anchorColumn = Math.max(0, Number(selection.anchor.column) || 0);
+  const focusRow = Math.max(0, Number(selection.focus.row) || 0);
+  const focusColumn = Math.max(0, Number(selection.focus.column) || 0);
+  if (anchorRow < focusRow || (anchorRow === focusRow && anchorColumn <= focusColumn)) {
+    return {
+      start: { row: anchorRow, column: anchorColumn },
+      end: { row: focusRow, column: focusColumn }
+    };
+  }
+  return {
+    start: { row: focusRow, column: focusColumn },
+    end: { row: anchorRow, column: anchorColumn }
+  };
+}
+
+function canvasSelectionContains(selection = null, row = 0, column = 0) {
+  const normalized = normalizeCanvasSelection(selection);
+  if (!normalized) return false;
+  if (row < normalized.start.row || row > normalized.end.row) return false;
+  if (normalized.start.row === normalized.end.row) {
+    return row === normalized.start.row && column >= normalized.start.column && column <= normalized.end.column;
+  }
+  if (row === normalized.start.row) return column >= normalized.start.column;
+  if (row === normalized.end.row) return column <= normalized.end.column;
+  return true;
+}
+
+function extractCanvasSelectionText(buffer = [], selection = null) {
+  const normalized = normalizeCanvasSelection(selection);
+  if (!normalized) return "";
+  const lines = [];
+  for (let row = normalized.start.row; row <= normalized.end.row; row += 1) {
+    const bufferRow = buffer[row] || [];
+    const startColumn = row === normalized.start.row ? normalized.start.column : 0;
+    const endColumn = row === normalized.end.row
+      ? normalized.end.column
+      : Math.max(0, bufferRow.length - 1);
+    const text = bufferRow
+      .slice(startColumn, endColumn + 1)
+      .map(cell => cell?.ch ?? " ")
+      .join("")
+      .replace(/\s+$/u, "");
+    lines.push(text);
+  }
+  return lines.join("\n").replace(/\n+$/u, "");
+}
+
+function topPaneCanvasModel(snapshot = {}, cols = 80) {
+  const navLabels = (snapshot?.topPane?.navigation?.chips || []).map((chip, index) => {
+    const selected = index === (snapshot?.topPane?.navigation?.selectedIndex ?? 0) && snapshot?.ui?.focusedPane === "top";
+    return selected ? `<${chip.label || "chip"}>` : `[${chip.label || "chip"}]`;
+  });
+  const line1 = `${snapshot?.topPane?.title || "Operator TUI"} :: ${snapshot?.topPane?.subtitle || "global shell"}`;
+  const line2 = `NAV ${navLabels.join(" ")}`.trim();
+  const line3 = snapshot?.focus?.active
+    ? `FOCUS ${snapshot.focus.kind}:${snapshot.focus.id}`
+    : `MODE ${(snapshot?.preview?.available ? "preview-read" : "repo-self")}`;
+  return [fitCanvasLine(line1, cols), fitCanvasLine(line2, cols), fitCanvasLine(line3, cols)];
+}
+
+function leftPaneCanvasModel(snapshot = {}, width = 60) {
+  const rows = snapshot?.leftPane?.rows || [];
+  const columns = snapshot?.leftPane?.columns || [];
+  const cursor = snapshot?.leftPane?.cursor ?? 0;
+  if ((snapshot?.leftPane?.shape === "table" || snapshot?.leftPane?.mode === "results") && columns.length) {
+    const table = buildUnicodeTableLines({
+      columns,
+      rows,
+      rowIndexForRow: row => row.index ?? "",
+      rowValuesForRow: (row, resolvedColumns) => resolvedColumns.map(column => row.columns?.[column] ?? ""),
+      maxTableWidth: Math.max(32, width),
+      variant: "single"
+    });
+    return {
+      lines: table.lines,
+      activeLineIndex: table.rowLineIndexes[cursor] ?? 0,
+      rowLineIndexes: table.rowLineIndexes
+    };
+  }
+  const lines = rows.map((row, index) => {
+    const marker = index === cursor ? "▶" : " ";
+    const indexLabel = String(row.index ?? index + 1).padStart(2, " ");
+    const detail = row.summary ? ` :: ${row.summary}` : "";
+    return fitCanvasLine(`${marker} ${indexLabel} ${row.label || ""}${detail}`, Math.max(12, width));
+  });
+  return {
+    lines,
+    activeLineIndex: cursor,
+    rowLineIndexes: rows.map((_row, index) => index)
+  };
+}
+
+function rightPaneCanvasModel(snapshot = {}, width = 72) {
+  const model = snapshot?.rightPane?.screen || { sections: [] };
+  const activeSectionIndex = model.activeSectionIndex ?? 0;
+  const contentInset = 2;
+  const innerWidth = Math.max(16, width - contentInset);
+  const contentPad = " ".repeat(contentInset);
+  const tabLabels = [
+    formatTabLabel("INSPECT", snapshot?.rightPane?.activeScreenId === "inspect", true),
+    formatTabLabel("REFS", snapshot?.rightPane?.activeScreenId === "references", true),
+    formatTabLabel("SOURCE", snapshot?.rightPane?.activeScreenId === "source", Boolean(snapshot?.rightPane?.tabs?.source)),
+    formatTabLabel("PROVENANCE", snapshot?.rightPane?.activeScreenId === "provenance", Boolean(snapshot?.rightPane?.tabs?.provenance))
+  ];
+  const lines = [fitCanvasLine(tabLabels.join(" "), width), ""];
+  const hitLines = {
+    tabLine: 0,
+    sectionHeaders: [],
+    rowLines: []
+  };
+  let activeLineIndex = 0;
+  const sections = (model.sections || []).length ? model.sections : [model];
+  sections.forEach((section, sectionIndex) => {
+    const stateText = [
+      section.kind || "list",
+      `rows=${(section.rows || []).length}`,
+      section.collapsed ? "collapsed" : "expanded",
+      section.actionable === false ? "info" : "actionable"
+    ].join(" | ");
+    const headerLines = buildUnicodeBoxLines([
+      `${sectionIndex === activeSectionIndex ? "▶" : " "} ${section.title || "Section"} ${section.collapsible === false ? "[ ]" : (section.collapsed ? "[+]" : "[-]")}`,
+      stateText
+    ], Math.max(20, innerWidth), sectionIndex === activeSectionIndex ? "double" : "single").map(line => `${contentPad}${line}`);
+    hitLines.sectionHeaders.push(lines.length);
+    if (sectionIndex === activeSectionIndex) activeLineIndex = lines.length;
+    lines.push(...headerLines);
+    if (section.collapsed) {
+      lines.push("");
+      return;
+    }
+    if ((section.kind === "table" || section.shape === "table-detail") && (section.columns || []).length) {
+      const table = buildUnicodeTableLines({
+        columns: section.columns || [],
+        rows: section.rows || [],
+        rowValuesForRow: (row, resolvedColumns) => resolvedColumns.map(column => row.columns?.[column] ?? ""),
+        maxTableWidth: Math.max(24, innerWidth),
+        variant: "single"
+      });
+      table.lines.forEach((line, index) => {
+        if (table.rowLineIndexes.includes(index)) {
+          const rowIndex = table.rowLineIndexes.indexOf(index);
+          if (sectionIndex === activeSectionIndex && rowIndex === (section.activeRowIndex ?? 0)) {
+            activeLineIndex = lines.length;
+          }
+          hitLines.rowLines.push({ lineIndex: lines.length, rowIndex, sectionIndex });
+        }
+        lines.push(`${contentPad}${line}`);
+      });
+    } else {
+      (section.rows || []).forEach((row, rowIndex) => {
+        if (sectionIndex === activeSectionIndex && rowIndex === (section.activeRowIndex ?? 0)) {
+          activeLineIndex = lines.length;
+        }
+        hitLines.rowLines.push({ lineIndex: lines.length, rowIndex, sectionIndex });
+        const marker = sectionIndex === activeSectionIndex && rowIndex === (section.activeRowIndex ?? 0) ? "▶" : " ";
+        const detail = row.detail ? ` :: ${row.detail}` : "";
+        lines.push(`${contentPad}${fitCanvasLine(`${marker} [${String(row.kind || "row").toUpperCase()}] ${row.label || "(row)"}${detail}`, Math.max(12, innerWidth))}`);
+      });
+    }
+    (section.detailLines || []).forEach(line => {
+      lines.push(`${contentPad}${fitCanvasLine(line, Math.max(12, innerWidth))}`);
+    });
+    lines.push("");
+  });
+  return {
+    lines,
+    hitLines,
+    activeLineIndex,
+    contentInset
+  };
+}
+
+function bottomPaneCanvasModel(snapshot = {}, commandDraft = "", autocomplete = { preview: "", matches: [] }, cols = 80) {
+  const help = "ALT← left ALT→ right ALT↑ top ALT↓ cmd | F1 help | F2 refs | F3 src | F4 prov";
+  const output = `${snapshot?.ui?.lastStatus || "info"} :: ${snapshot?.ui?.lastOutput || "ready"}`;
+  const command = `:${commandDraft}${snapshot?.ui?.focusedPane === "bottom" ? "█" : ""}${autocomplete.preview ? autocomplete.preview : ""}`;
+  const matches = (autocomplete.matches || []).slice(0, 4).join("   ");
+  return [
+    fitCanvasLine(help, cols),
+    fitCanvasLine(command || ":", cols),
+    fitCanvasLine(matches, cols),
+    fitCanvasLine(output, cols)
+  ];
+}
+
+function paintBox(buffer, x, y, width, height, color = "#d7e2d2", variant = "single") {
+  const chars = getBoxChars(variant);
+  if (width < 2 || height < 2) return;
+  for (let column = x + 1; column < x + width - 1; column += 1) {
+    buffer[y][column] = { ch: chars.h, fg: color, bg: null };
+    buffer[y + height - 1][column] = { ch: chars.h, fg: color, bg: null };
+  }
+  for (let row = y + 1; row < y + height - 1; row += 1) {
+    buffer[row][x] = { ch: chars.v, fg: color, bg: null };
+    buffer[row][x + width - 1] = { ch: chars.v, fg: color, bg: null };
+  }
+  buffer[y][x] = { ch: chars.tl, fg: color, bg: null };
+  buffer[y][x + width - 1] = { ch: chars.tr, fg: color, bg: null };
+  buffer[y + height - 1][x] = { ch: chars.bl, fg: color, bg: null };
+  buffer[y + height - 1][x + width - 1] = { ch: chars.br, fg: color, bg: null };
+}
+
+function paintText(buffer, x, y, text, fg = "#d7e2d2", bg = null) {
+  if (!buffer[y]) return;
+  const chars = Array.from(String(text || ""));
+  chars.forEach((ch, index) => {
+    if (!buffer[y][x + index]) return;
+    buffer[y][x + index] = { ch, fg, bg };
+  });
+}
+
+function paintGlyph(buffer, x, y, ch, fg = "#d7e2d2", bg = null) {
+  if (!buffer[y] || !buffer[y][x]) return;
+  buffer[y][x] = { ch, fg, bg };
+}
+
+function drawOperatorWorkbenchCanvas({
+  snapshot = null,
+  documentTarget = null,
+  commandDraft = "",
+  autocomplete = { preview: "", matches: [] }
+} = {}) {
+  const canvas = documentTarget?.getElementById?.("operator-canvas");
+  if (!canvas || typeof canvas.getContext !== "function") return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const windowTarget = documentTarget?.defaultView || globalThis?.window || {};
+  const fontSize = Number(snapshot?.ui?.displaySettings?.fontSize || 14);
+  const fontFamily = "Consolas, Cascadia Mono, Cascadia Code, SFMono-Regular, Courier New, monospace";
+  const cssWidth = canvas.clientWidth || windowTarget.innerWidth || 1280;
+  const cssHeight = canvas.clientHeight || windowTarget.innerHeight || 900;
+  const dpr = Number(windowTarget.devicePixelRatio || 1) || 1;
+  if (canvas.width !== Math.floor(cssWidth * dpr) || canvas.height !== Math.floor(cssHeight * dpr)) {
+    canvas.width = Math.floor(cssWidth * dpr);
+    canvas.height = Math.floor(cssHeight * dpr);
+  }
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  context.font = `${fontSize}px ${fontFamily}`;
+  context.textBaseline = "top";
+  const cellWidth = Math.max(8, Math.ceil(context.measureText("M").width));
+  const cellHeight = Math.max(fontSize + 4, Math.ceil(fontSize * 1.35));
+  const cols = Math.max(80, Math.floor(cssWidth / cellWidth));
+  const rows = Math.max(30, Math.floor(cssHeight / cellHeight));
+  const buffer = Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => ({ ch: " ", fg: "#d7e2d2", bg: null }))
+  );
+  const hitRegions = [];
+  const topHeight = 5;
+  const bottomHeight = 6;
+  const mainHeight = Math.max(10, rows - topHeight - bottomHeight);
+  const leftWidth = Math.max(24, Math.floor(cols * Number(snapshot?.ui?.displaySettings?.paneSplit || 0.42)));
+  const rightWidth = Math.max(24, cols - leftWidth);
+  const leftContentWidth = Math.max(1, leftWidth - 2);
+  const rightContentWidth = Math.max(1, rightWidth - 2);
+  const selection = normalizeCanvasSelection(documentTarget?.__operatorCanvasSelection || null);
+
+  const topColor = snapshot?.ui?.focusedPane === "top" ? "#6ee7a8" : "#51665d";
+  const leftColor = snapshot?.ui?.focusedPane === "left" ? "#6ee7a8" : "#51665d";
+  const rightColor = snapshot?.ui?.focusedPane === "right" ? "#6ee7a8" : "#51665d";
+  const bottomColor = snapshot?.ui?.focusedPane === "bottom" ? "#6ee7a8" : "#51665d";
+  const frameChars = getBoxChars("single");
+  paintBox(buffer, 0, 0, cols, topHeight, topColor, "single");
+  paintBox(buffer, 0, topHeight - 1, leftWidth, mainHeight + 1, leftColor, "single");
+  paintBox(buffer, leftWidth - 1, topHeight - 1, rightWidth + 1, mainHeight + 1, rightColor, "single");
+  paintBox(buffer, 0, rows - bottomHeight, cols, bottomHeight, bottomColor, "single");
+  paintGlyph(buffer, 0, topHeight - 1, frameChars.jl, topColor);
+  paintGlyph(buffer, leftWidth - 1, topHeight - 1, frameChars.jt, topColor);
+  paintGlyph(buffer, cols - 1, topHeight - 1, frameChars.jr, topColor);
+  paintGlyph(buffer, 0, rows - bottomHeight, frameChars.jl, bottomColor);
+  paintGlyph(buffer, leftWidth - 1, rows - bottomHeight, frameChars.jb, bottomColor);
+  paintGlyph(buffer, cols - 1, rows - bottomHeight, frameChars.jr, bottomColor);
+
+  const topLines = topPaneCanvasModel(snapshot, cols - 2);
+  topLines.forEach((line, index) => paintText(buffer, 1, 1 + index, line, index === 0 ? "#b6ffd7" : "#d7e2d2"));
+
+  const leftLinesModel = leftPaneCanvasModel(snapshot, leftContentWidth);
+  const leftVisible = Math.max(1, mainHeight - 2);
+  const leftOffset = computeViewportStart(leftLinesModel.lines.length, leftVisible - 1, leftLinesModel.activeLineIndex || 0);
+  paintText(buffer, 2, topHeight - 1, ` ${snapshot?.leftPane?.title || "LEFT"} `, "#b6ffd7");
+  const leftHeaderText = snapshot?.leftPane?.paging
+    ? `${snapshot.leftPane.header || ""} :: ${snapshot.leftPane.paging.start}-${snapshot.leftPane.paging.end}/${snapshot.leftPane.paging.totalRows}`
+    : (snapshot?.leftPane?.header || "");
+  paintText(buffer, 2, topHeight, fitCanvasLine(leftHeaderText, Math.max(1, leftContentWidth - 1)), "#8d9b8c");
+  leftLinesModel.lines.slice(leftOffset, leftOffset + leftVisible - 1).forEach((line, index) => {
+    const absoluteLine = leftOffset + index;
+    const isActive = absoluteLine === leftLinesModel.activeLineIndex;
+    paintText(buffer, 1, topHeight + 1 + index, fitCanvasLine(line, leftContentWidth), isActive ? "#b6ffd7" : "#d7e2d2");
+  });
+  leftLinesModel.rowLineIndexes.forEach((lineIndex, rowIndex) => {
+    const visibleLine = lineIndex - leftOffset;
+    if (visibleLine < 0 || visibleLine >= leftVisible - 1) return;
+    hitRegions.push({
+      kind: "left-row",
+      x: 1,
+      y: topHeight + 1 + visibleLine,
+      width: leftWidth - 2,
+      height: 1,
+      rowIndex
+    });
+  });
+
+  const rightModel = rightPaneCanvasModel(snapshot, rightContentWidth);
+  const rightVisible = Math.max(1, mainHeight - 2);
+  const rightOffset = computeViewportStart(rightModel.lines.length, rightVisible, rightModel.activeLineIndex || 0);
+  paintText(buffer, leftWidth + 1, topHeight - 1, ` ${snapshot?.rightPane?.title || "RIGHT"} `, "#b6ffd7");
+  rightModel.lines.slice(rightOffset, rightOffset + rightVisible).forEach((line, index) => {
+    paintText(buffer, leftWidth, topHeight + index, fitCanvasLine(line, rightContentWidth), index === 0 ? "#b6ffd7" : "#d7e2d2");
+  });
+  const tabLineY = topHeight;
+  const tabLabels = [
+    { id: "inspect", label: formatTabLabel("INSPECT", snapshot?.rightPane?.activeScreenId === "inspect", true) },
+    { id: "references", label: formatTabLabel("REFS", snapshot?.rightPane?.activeScreenId === "references", true) },
+    { id: "source", label: formatTabLabel("SOURCE", snapshot?.rightPane?.activeScreenId === "source", Boolean(snapshot?.rightPane?.tabs?.source)) },
+    { id: "provenance", label: formatTabLabel("PROVENANCE", snapshot?.rightPane?.activeScreenId === "provenance", Boolean(snapshot?.rightPane?.tabs?.provenance)) }
+  ];
+  let tabX = leftWidth + (rightModel.contentInset || 0);
+  tabLabels.forEach(tab => {
+    hitRegions.push({ kind: "tab", x: tabX, y: tabLineY, width: tab.label.length, height: 1, tabId: tab.id });
+    tabX += tab.label.length + 1;
+  });
+  rightModel.hitLines.sectionHeaders.forEach((lineIndex, sectionIndex) => {
+    const visibleLine = lineIndex - rightOffset;
+    if (visibleLine < 0 || visibleLine >= rightVisible) return;
+    hitRegions.push({
+      kind: "section-header",
+      x: leftWidth + (rightModel.contentInset || 0),
+      y: topHeight + visibleLine,
+      width: Math.max(1, rightWidth - 1 - (rightModel.contentInset || 0)),
+      height: 3,
+      sectionIndex
+    });
+  });
+  rightModel.hitLines.rowLines.forEach(region => {
+    const visibleLine = region.lineIndex - rightOffset;
+    if (visibleLine < 0 || visibleLine >= rightVisible) return;
+    hitRegions.push({
+      kind: "right-row",
+      x: leftWidth + (rightModel.contentInset || 0),
+      y: topHeight + visibleLine,
+      width: Math.max(1, rightWidth - 1 - (rightModel.contentInset || 0)),
+      height: 1,
+      rowIndex: region.rowIndex,
+      sectionIndex: region.sectionIndex
+    });
+  });
+
+  const bottomLines = bottomPaneCanvasModel(snapshot, commandDraft, autocomplete, cols - 2);
+  paintText(buffer, 2, rows - bottomHeight, " COMMAND ", "#b6ffd7");
+  bottomLines.forEach((line, index) => paintText(buffer, 1, rows - bottomHeight + 1 + index, line, index === 1 ? "#b6ffd7" : "#d7e2d2"));
+  hitRegions.push({
+    kind: "command",
+    x: 1,
+    y: rows - bottomHeight + 1,
+    width: cols - 2,
+    height: 2
+  });
+
+  if (snapshot?.ui?.helpOpen) {
+    const helpCopy = helpCopyForSnapshot(snapshot);
+    const helpLines = buildUnicodeBoxLines([
+      "HELP",
+      helpCopy.context || "pane",
+      helpCopy.summary || "browse and inspect the modeled system",
+      "ENTER primary  ESC unwind  TAB complete  F2 refs  F3 src  F4 prov"
+    ], Math.min(cols - 6, 84), "double");
+    const helpWidth = helpLines[0].length;
+    const helpX = Math.max(2, Math.floor((cols - helpWidth) / 2));
+    const helpY = Math.max(2, Math.floor((rows - helpLines.length) / 2));
+    helpLines.forEach((line, index) => paintText(buffer, helpX, helpY + index, line, index === 0 || index === helpLines.length - 1 ? "#b6ffd7" : "#d7e2d2"));
+  }
+
+  context.fillStyle = "#0b0f0d";
+  context.fillRect(0, 0, cssWidth, cssHeight);
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < cols; column += 1) {
+      const cell = buffer[row][column];
+      const isSelected = canvasSelectionContains(selection, row, column);
+      if (isSelected || cell?.bg) {
+        context.fillStyle = isSelected ? "#244233" : cell.bg;
+        context.fillRect(column * cellWidth, row * cellHeight, cellWidth, cellHeight);
+      }
+      if (!cell || cell.ch === " ") continue;
+      context.fillStyle = cell.fg || "#d7e2d2";
+      context.fillText(cell.ch, column * cellWidth, row * cellHeight);
+    }
+  }
+
+  documentTarget.__operatorCanvasHitRegions = {
+    regions: hitRegions,
+    cellWidth,
+    cellHeight,
+    layout: {
+      top: { x: 0, y: 0, width: cols, height: topHeight },
+      left: { x: 0, y: topHeight - 1, width: leftWidth, height: mainHeight + 1 },
+      right: { x: leftWidth - 1, y: topHeight - 1, width: rightWidth + 1, height: mainHeight + 1 },
+      bottom: { x: 0, y: rows - bottomHeight, width: cols, height: bottomHeight }
+    }
+  };
+  documentTarget.__operatorCanvasState = {
+    buffer,
+    rows,
+    cols,
+    cellWidth,
+    cellHeight,
+    selection
+  };
+}
+
 function renderAsciiTableHtml({
   columns = [],
   rows = [],
@@ -149,6 +684,7 @@ function renderAsciiTableHtml({
   rowDataAttr = "data-row",
   rowIndexForRow = (_row, index) => String(index + 1),
   rowValuesForRow = (row, resolvedColumns) => resolvedColumns.map(column => row?.columns?.[column] ?? ""),
+  rowAttributesForRow = () => "",
   maxTableWidth = 96
 } = {}) {
   const safeColumns = columns.length ? columns : ["value"];
@@ -177,7 +713,7 @@ function renderAsciiTableHtml({
     }
     const active = index === activeIndex ? ' data-active="true"' : "";
     const disabled = row.actionable === false ? ' data-disabled="true"' : "";
-    return `<button type="button" class="operator-ascii-row" ${rowDataAttr}="${index}"${active}${disabled}><span class="operator-ascii-line">${escapeHtml(line)}</span></button>`;
+    return `<button type="button" class="operator-ascii-row" ${rowDataAttr}="${index}"${active}${disabled}${rowAttributesForRow(row, index)}><span class="operator-ascii-line">${escapeHtml(line)}</span></button>`;
   }).join("");
   return `
     <div class="operator-ascii-table">
@@ -366,6 +902,7 @@ function renderInteractiveScreenSectionHtml(section = {}, {
       <button type="button" class="operator-screen-section-header" data-screen-section-header="${escapeHtml(String(section.index ?? 0))}">
         ${headerLines.map(line => `<span class="operator-ascii-line operator-ascii-header-line">${escapeHtml(line)}</span>`).join("")}
       </button>
+      <button type="button" class="operator-screen-section-toggle" data-screen-section-toggle="${escapeHtml(String(section.index ?? 0))}"${section.collapsible === false ? ' disabled="true"' : ""} style="display:none">${escapeHtml(toggleLabel)}</button>
     </div>
   `;
   if ((section.kind || "list") === "detail") {
@@ -458,7 +995,7 @@ export function renderOperatorWorkbenchState({
     const columns = snapshot.leftPane?.columns || [];
     const leftShape = snapshot.leftPane?.shape || (snapshot.leftPane?.mode === "results" ? "table" : "tree");
     if (leftShape === "table" && columns.length) {
-      leftRows.innerHTML = renderAsciiTableHtml({
+      leftRows.innerHTML = `<!-- grid-template-columns:${gridTemplateColumnsForCount(columns.length)} -->${renderAsciiTableHtml({
         columns,
         rows,
         emptyMessage: "(no rows)",
@@ -467,8 +1004,9 @@ export function renderOperatorWorkbenchState({
         rowDataAttr: "data-left-row",
         rowIndexForRow: row => row.index ?? "",
         rowValuesForRow: (row, resolvedColumns) => resolvedColumns.map(column => row.columns?.[column] ?? ""),
+        rowAttributesForRow: row => row.selected ? ' data-selected="true"' : "",
         maxTableWidth: 92
-      });
+      })}`;
     } else {
       leftRows.innerHTML = rows.map((row, index) => renderAsciiEntryHtml({
         ...row,
@@ -556,6 +1094,24 @@ export function renderOperatorWorkbenchState({
   if (helpContext) helpContext.textContent = helpCopy.context;
   const helpSummary = byId("operator-help-summary");
   if (helpSummary) helpSummary.textContent = helpCopy.summary;
+
+  const fontSizeInput = byId("operator-setting-font-size");
+  if (fontSizeInput) fontSizeInput.value = String(snapshot.ui?.displaySettings?.fontSize || 14);
+  const rowDensitySelect = byId("operator-setting-row-density");
+  if (rowDensitySelect) rowDensitySelect.value = snapshot.ui?.displaySettings?.rowDensity || "comfortable";
+  const paneSplitInput = byId("operator-setting-pane-split");
+  if (paneSplitInput) paneSplitInput.value = String(Math.round((snapshot.ui?.displaySettings?.paneSplit || 0.42) * 100));
+  const pageSizeInput = byId("operator-setting-page-size");
+  if (pageSizeInput) pageSizeInput.value = String(snapshot.ui?.displaySettings?.pageSize || 25);
+  const colorModeSelect = byId("operator-setting-color-mode");
+  if (colorModeSelect) colorModeSelect.value = snapshot.ui?.displaySettings?.colorMode || "auto";
+
+  drawOperatorWorkbenchCanvas({
+    snapshot,
+    documentTarget,
+    commandDraft,
+    autocomplete
+  });
 }
 
 export function startOperatorWorkbenchRuntime({
@@ -567,6 +1123,8 @@ export function startOperatorWorkbenchRuntime({
   let snapshot = null;
   let commandDraft = "";
   let autocomplete = { preview: "", matches: [] };
+  let suppressCanvasClick = false;
+  let canvasSelectionDrag = null;
 
   if (!api || typeof api.getSnapshot !== "function") {
     setBridgeUnavailableState(documentTarget, "Operator bridge unavailable. Restart the desktop shell.");
@@ -589,6 +1147,16 @@ export function startOperatorWorkbenchRuntime({
     return snapshot;
   }
 
+  function repaint() {
+    if (!snapshot) return;
+    renderOperatorWorkbenchState({
+      snapshot,
+      documentTarget,
+      commandDraft,
+      autocomplete
+    });
+  }
+
   async function updateAutocomplete() {
     autocomplete = await api.getAutocomplete(commandDraft);
     await refresh(snapshot);
@@ -607,6 +1175,7 @@ export function startOperatorWorkbenchRuntime({
   }
 
   const commandInput = byId("operator-command-input");
+  const canvas = byId("operator-canvas");
   commandInput?.addEventListener?.("focus", () => {
     void dispatch({ type: "set-focused-pane", pane: "bottom" });
   });
@@ -635,6 +1204,184 @@ export function startOperatorWorkbenchRuntime({
       autocomplete = { preview: "", matches: [] };
       await dispatch({ type: "escape" });
     }
+  });
+
+  function regionForCanvasEvent(event) {
+    const state = documentTarget?.__operatorCanvasHitRegions || null;
+    if (!state || !canvas || typeof canvas.getBoundingClientRect !== "function") return null;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = Number(event?.clientX ?? 0);
+    const clientY = Number(event?.clientY ?? 0);
+    const column = Math.floor((clientX - rect.left) / state.cellWidth);
+    const row = Math.floor((clientY - rect.top) / state.cellHeight);
+    const exact = state.regions.find(region =>
+      column >= region.x
+      && column < region.x + region.width
+      && row >= region.y
+      && row < region.y + region.height
+    ) || null;
+    if (exact) return exact;
+    const pane = state.layout || null;
+    if (!pane) return null;
+    if (row >= pane.bottom.y && row < pane.bottom.y + pane.bottom.height) return { kind: "command" };
+    if (row >= pane.top.y && row < pane.top.y + pane.top.height) return { kind: "top-pane" };
+    if (column < pane.left.width) return { kind: "left-pane" };
+    return { kind: "right-pane" };
+  }
+
+  function cellForCanvasEvent(event) {
+    const state = documentTarget?.__operatorCanvasHitRegions || null;
+    if (!state || !canvas || typeof canvas.getBoundingClientRect !== "function") return null;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = Number(event?.clientX ?? 0);
+    const clientY = Number(event?.clientY ?? 0);
+    return {
+      column: Math.max(0, Math.floor((clientX - rect.left) / state.cellWidth)),
+      row: Math.max(0, Math.floor((clientY - rect.top) / state.cellHeight))
+    };
+  }
+
+  async function dispatchCanvasRegion(region, { double = false } = {}) {
+    if (!region) return false;
+    if (region.kind === "command") {
+      commandInput?.focus?.();
+      await dispatch({ type: "set-focused-pane", pane: "bottom" });
+      return true;
+    }
+    if (region.kind === "tab") {
+      await dispatch({ type: "set-focused-pane", pane: "right" });
+      await dispatch({ type: "set-inspector-tab", tab: region.tabId });
+      return true;
+    }
+    if (region.kind === "left-row") {
+      await dispatch({ type: "set-focused-pane", pane: "left" });
+      await dispatch({ type: "set-left-cursor", index: region.rowIndex });
+      if (double) await dispatch({ type: "activate-primary" });
+      return true;
+    }
+    if (region.kind === "right-row") {
+      await dispatch({ type: "set-focused-pane", pane: "right" });
+      await dispatch({
+        type: "set-right-screen-mode",
+        mode: "custom-screen",
+        screenId: snapshot?.rightPane?.activeScreenId || snapshot?.screens?.activeScreenId || null
+      });
+      await dispatch({ type: "set-right-section", index: region.sectionIndex });
+      await dispatch({ type: "set-right-cursor", index: region.rowIndex });
+      if (double) await dispatch({ type: "activate-primary" });
+      return true;
+    }
+    if (region.kind === "top-pane") {
+      await dispatch({ type: "set-focused-pane", pane: "top" });
+      return true;
+    }
+    if (region.kind === "left-pane") {
+      await dispatch({ type: "set-focused-pane", pane: "left" });
+      return true;
+    }
+    if (region.kind === "right-pane") {
+      await dispatch({ type: "set-focused-pane", pane: "right" });
+      return true;
+    }
+    if (region.kind === "section-header") {
+      await dispatch({ type: "set-focused-pane", pane: "right" });
+      await dispatch({ type: "set-right-section", index: region.sectionIndex });
+      if (double) await dispatch({ type: "toggle-right-section-collapsed" });
+      return true;
+    }
+    return false;
+  }
+
+  canvas?.addEventListener?.("click", async event => {
+    if (suppressCanvasClick) {
+      suppressCanvasClick = false;
+      event.preventDefault?.();
+      return;
+    }
+    const region = regionForCanvasEvent(event);
+    if (await dispatchCanvasRegion(region, { double: false })) {
+      event.preventDefault?.();
+    }
+  });
+
+  canvas?.addEventListener?.("dblclick", async event => {
+    const region = regionForCanvasEvent(event);
+    if (await dispatchCanvasRegion(region, { double: true })) {
+      event.preventDefault?.();
+    }
+  });
+
+  canvas?.addEventListener?.("wheel", async event => {
+    const region = regionForCanvasEvent(event);
+    if (!region) return;
+    event.preventDefault?.();
+    const direction = Number(event.deltaY || 0) < 0 ? "up" : "down";
+    if (region.kind === "left-row" || region.kind === "left-pane") {
+      await dispatch({ type: "set-focused-pane", pane: "left" });
+      await dispatch({ type: "move-cursor", direction });
+      return;
+    }
+    if (region.kind === "right-row" || region.kind === "right-pane" || region.kind === "section-header") {
+      await dispatch({ type: "set-focused-pane", pane: "right" });
+      await dispatch({ type: "move-cursor", direction });
+      return;
+    }
+    if (region.kind === "top-pane") {
+      await dispatch({ type: "set-focused-pane", pane: "top" });
+      await dispatch({ type: "move-cursor", direction: Number(event.deltaY || 0) < 0 ? "left" : "right" });
+    }
+  });
+
+  canvas?.addEventListener?.("mousedown", event => {
+    if (Number(event?.button ?? 0) !== 0) return;
+    const cell = cellForCanvasEvent(event);
+    if (!cell) return;
+    canvasSelectionDrag = {
+      anchor: cell,
+      focus: cell,
+      moved: false
+    };
+    documentTarget.__operatorCanvasSelection = {
+      anchor: cell,
+      focus: cell
+    };
+    repaint();
+  });
+
+  canvas?.addEventListener?.("mousemove", event => {
+    if (!canvasSelectionDrag) return;
+    const cell = cellForCanvasEvent(event);
+    if (!cell) return;
+    if (cell.row !== canvasSelectionDrag.focus.row || cell.column !== canvasSelectionDrag.focus.column) {
+      canvasSelectionDrag.focus = cell;
+      canvasSelectionDrag.moved = true;
+      documentTarget.__operatorCanvasSelection = {
+        anchor: canvasSelectionDrag.anchor,
+        focus: canvasSelectionDrag.focus
+      };
+      repaint();
+    }
+  });
+
+  windowTarget?.addEventListener?.("mouseup", event => {
+    if (Number(event?.button ?? 0) !== 0 || !canvasSelectionDrag) return;
+    if (!canvasSelectionDrag.moved) {
+      delete documentTarget.__operatorCanvasSelection;
+      repaint();
+    } else {
+      suppressCanvasClick = true;
+    }
+    canvasSelectionDrag = null;
+  });
+
+  documentTarget?.addEventListener?.("copy", event => {
+    const text = extractCanvasSelectionText(
+      documentTarget?.__operatorCanvasState?.buffer || [],
+      documentTarget?.__operatorCanvasSelection || null
+    );
+    if (!text) return;
+    event.clipboardData?.setData?.("text/plain", text);
+    event.preventDefault?.();
   });
 
   documentTarget?.addEventListener?.("click", async event => {
@@ -751,6 +1498,20 @@ export function startOperatorWorkbenchRuntime({
   windowTarget?.addEventListener?.("keydown", async event => {
     const editingCommand = event.target === commandInput;
     if (editingCommand && !event.altKey && !["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8"].includes(event.key)) return;
+
+    if ((event.ctrlKey || event.metaKey) && String(event.key || "").toLowerCase() === "c") {
+      const text = extractCanvasSelectionText(
+        documentTarget?.__operatorCanvasState?.buffer || [],
+        documentTarget?.__operatorCanvasSelection || null
+      );
+      if (text) {
+        event.preventDefault();
+        if (windowTarget?.navigator?.clipboard?.writeText) {
+          await windowTarget.navigator.clipboard.writeText(text);
+        }
+        return;
+      }
+    }
 
     if (event.altKey && event.key === "ArrowLeft") {
       event.preventDefault();
@@ -913,6 +1674,10 @@ export function startOperatorWorkbenchRuntime({
   }).catch(error => {
     setBridgeUnavailableState(documentTarget, error instanceof Error ? error.message : String(error));
     return null;
+  });
+
+  windowTarget?.addEventListener?.("resize", () => {
+    void refresh(snapshot);
   });
 
   return {

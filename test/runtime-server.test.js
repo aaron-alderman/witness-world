@@ -344,6 +344,8 @@ test("runtime server exposes startup telemetry and defers app snapshot boot behi
     createRuntimeAppContextForRunner: async () => ({
       ok: true,
       actors: [],
+      appRoot: "C:/app",
+      manifestPath: "C:/app/app.wtoml",
       storage: {},
       runtimeConfig: {},
       providerRuntimes: {
@@ -554,6 +556,136 @@ test("runtime server requires witness-core preview access whenever witness-core 
   await sharedLibServer.startupReady;
   assert.equal(sharedLibServer.runtimeContext.appPreviewSessionManager.requireGenerationBridgeForPreviewAccess, true);
   await sharedLibServer.close();
+});
+
+test("runtime server requires canonical verification persistence for supervised app-serving runtimes", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  const createdSnapshotManager = {
+    diagnostics() {
+      return { sourceCount: 0 };
+    },
+    close() {}
+  };
+  const calls = [];
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    appProject: {
+      appRoot: "C:/app",
+      manifestPath: "C:/app/app.wtoml",
+      diagnostics: { imports: {} }
+    },
+    env: {
+      ...process.env,
+      WITNESS_RUNTIME_WATCHERS_ENABLED: "false"
+    },
+    backgroundStartupPolicy: {
+      verificationPersistence: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 },
+      testMonitor: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 },
+      appSnapshotInitialBuild: { minDelayMs: 0, quietWindowMs: 0, maxDelayMs: 0 }
+    },
+    logger: { info() {}, error() {}, warn() {} },
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: (_world, hostId) => hostId === "backendHost"
+      ? new Set(["http.serve", "runtime.config"])
+      : new Set(["dom.render", "http.fetch"]),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: () => {},
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    readRuntimePluginCatalog: async input => ({
+      pluginRoot: input.pluginRoot,
+      activeProfile: input.runtimeProfile,
+      packages: [],
+      summary: {},
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: [],
+      configuredPluginIds: [],
+      activePluginIds: [],
+      rejectedPlugins: [],
+      addedBundleIds: [],
+      selection: { hasBlockingErrors: false }
+    }),
+    loadRuntimePluginModules: async () => ({
+      bundleOverrides: {},
+      failures: [],
+      hasBlockingErrors: false
+    }),
+    applyRuntimePluginLoadState: catalog => catalog,
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: [] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render", "http.fetch"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      appRoot: "C:/app",
+      manifestPath: "C:/app/app.wtoml",
+      storage: {},
+      runtimeConfig: {},
+      providerRuntimes: {
+        "platform.testMonitor": {
+          async initialize() {},
+          close() {}
+        }
+      },
+      close() {},
+      visibleWitnesses: () => []
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map(),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    createRuntimeVerificationPersistence: async input => {
+      calls.push(input);
+      return {
+        inspect: () => ({ diagnostics: [] }),
+        close() {}
+      };
+    },
+    AppSnapshotManagerClass: {
+      async create() {
+        return createdSnapshotManager;
+      }
+    },
+    httpModule: {
+      createServer() {
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+  await server.startupReady;
+  assert.equal(calls.length > 0, true);
+  assert.equal(calls[0].requireCanonicalBoundary, true);
+  await server.close();
 });
 
 test("runtime server waits for pre-ready startup persistence flush before returning", async () => {

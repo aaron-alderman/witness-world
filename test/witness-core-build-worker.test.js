@@ -3,7 +3,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { spawn } from "node:child_process";
 import { BuildWorkerError, runBuildWorker } from "../src/witness-core-build-worker.js";
+import {
+  WITNESS_WORKER_OPERATIONS,
+  WITNESS_WORKER_PROTOCOL_VERSION,
+  parseWorkerEnvelope
+} from "../src/witness-worker-protocol.js";
 
 const LIVE_CORE_FIXTURE_ROOT = path.join(process.cwd(), "test", "fixtures", "live-core-app");
 
@@ -65,6 +71,52 @@ test("witness-core build worker returns structured compute module failures when 
         return true;
       }
     );
+  } finally {
+    await fs.rm(workspace.tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("witness-core build worker CLI emits the versioned worker protocol envelope", async () => {
+  const workspace = await copyFixtureWorkspace();
+  try {
+    const stdout = await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [
+        path.join(process.cwd(), "src", "witness-core-build-worker.js"),
+        "--manifest",
+        workspace.manifestPath,
+        "--runtime-profile",
+        "authoring",
+        "--workspace-root",
+        workspace.tempRoot
+      ], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      let output = "";
+      let errorOutput = "";
+      child.stdout.on("data", chunk => {
+        output += String(chunk);
+      });
+      child.stderr.on("data", chunk => {
+        errorOutput += String(chunk);
+      });
+      child.once("error", reject);
+      child.once("exit", code => {
+        if (code !== 0) {
+          reject(new Error(errorOutput || output || `build worker exited ${code}`));
+          return;
+        }
+        resolve(output.trim());
+      });
+    });
+    const envelope = parseWorkerEnvelope(stdout);
+    assert.ok(envelope);
+    assert.equal(envelope.protocol, WITNESS_WORKER_PROTOCOL_VERSION);
+    assert.equal(envelope.operation, WITNESS_WORKER_OPERATIONS.build);
+    assert.equal(envelope.ok, true);
+    assert.equal(envelope.payload?.ok, true);
+    assert.equal(envelope.payload?.computeModuleCount, 1);
+    assert.equal(envelope.metadata?.scratchState, "worker-local");
   } finally {
     await fs.rm(workspace.tempRoot, { recursive: true, force: true });
   }

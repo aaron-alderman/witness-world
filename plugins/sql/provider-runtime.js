@@ -1,14 +1,5 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { moduleProjectors } from "../../src/modules.js";
-
-async function loadDatabaseSync(loadSqliteModule = () => import("node:sqlite")) {
-  const sqliteModule = await loadSqliteModule();
-  if (typeof sqliteModule?.DatabaseSync !== "function") {
-    throw new Error("node:sqlite did not export DatabaseSync");
-  }
-  return sqliteModule.DatabaseSync;
-}
 
 function quoteSqlIdentifier(identifier) {
   return `"${String(identifier).replaceAll("\"", "\"\"")}"`;
@@ -65,23 +56,28 @@ function witnessCoreSqliteFailureResult(error, datasource, fallbackReason = "wit
 
 function sqliteBoundaryMetadata({
   bridgeActive = false,
-  adapterStatus = bridgeActive ? "witness-core" : "ready",
+  adapterStatus = bridgeActive ? "witness-core" : "witness-core-required",
   lastError = null
 } = {}) {
   return {
     adapterStatus,
     lastError,
-    boundaryOwner: bridgeActive ? "witness-core" : "node",
-    boundaryAuthority: bridgeActive ? "rust-owned" : "transitional-node-fallback",
-    boundaryTransport: bridgeActive ? "capability.db.sqlite" : "node:sqlite",
-    boundaryFallbackAllowed: bridgeActive !== true,
-    boundaryAvailability: String(adapterStatus || "").includes("unavailable") ? "unavailable" : "available"
+    boundaryOwner: "witness-core",
+    boundaryAuthority: "rust-owned",
+    boundaryTransport: "capability.db.sqlite",
+    boundaryScope: "canonical-runtime",
+    canonicalBoundary: true,
+    boundaryFallbackAllowed: false,
+    boundaryAvailability: String(adapterStatus || "").includes("unavailable")
+      || String(adapterStatus || "").includes("required")
+      ? "unavailable"
+      : "available"
   };
 }
 
 function decorateSqliteDatasource(datasource, {
   bridgeActive = false,
-  adapterStatus = datasource?.adapterStatus ?? (bridgeActive ? "witness-core" : "ready"),
+  adapterStatus = datasource?.adapterStatus ?? (bridgeActive ? "witness-core" : "witness-core-required"),
   lastError = datasource?.lastError ?? null
 } = {}) {
   if (!datasource || datasource.provider !== "sqlite") return datasource ? { ...datasource } : datasource;
@@ -97,20 +93,19 @@ export function createDbSqlRuntime({
   serverRunnerId,
   getAppContext,
   postgresAdapter = null,
-  mysqlAdapter = null,
-  loadSqliteModule = () => import("node:sqlite")
+  mysqlAdapter = null
 }) {
-  const sqliteConnections = new Map();
-  let sqliteSupportError = null;
   const witnessCoreBridge = () => getAppContext?.()?.witnessCoreBridge ?? null;
   const sqliteBridgeActive = () => Boolean(witnessCoreBridge()?.coreUrl);
   const decorateRuntimeDatasource = datasource => {
     if (!datasource || datasource.provider !== "sqlite") return datasource ? { ...datasource } : datasource;
+    const bridgeActive = sqliteBridgeActive();
     return decorateSqliteDatasource({
       ...datasource,
       resolvedPath: sqlitePathFor(runtimeRoot, datasource)
     }, {
-      bridgeActive: sqliteBridgeActive()
+      bridgeActive,
+      adapterStatus: bridgeActive ? "witness-core" : "witness-core-required"
     });
   };
   const listDatasources = () => datasourcesForRunner(project, serverRunnerId).map(decorateRuntimeDatasource);
@@ -122,18 +117,11 @@ export function createDbSqlRuntime({
     if (bridge?.coreUrl) {
       return { ok: true, remote: true, bridge, sqlitePath };
     }
-    if (sqliteConnections.has(sqlitePath)) return { ok: true, database: sqliteConnections.get(sqlitePath), sqlitePath };
-    await fs.mkdir(path.dirname(sqlitePath), { recursive: true });
-    let DatabaseSync = null;
-    try {
-      DatabaseSync = await loadDatabaseSync(loadSqliteModule);
-    } catch (error) {
-      sqliteSupportError = error;
-      return { ok: false, reason: error instanceof Error ? error.message : "node:sqlite unavailable" };
-    }
-    const database = new DatabaseSync(sqlitePath);
-    sqliteConnections.set(sqlitePath, database);
-    return { ok: true, database, sqlitePath };
+    void datasource;
+    return {
+      ok: false,
+      reason: "witness-core sqlite capability required for SQL runtime execution"
+    };
   };
 
   const withPostgresClient = async (resolved, callback) => {
@@ -180,13 +168,15 @@ export function createDbSqlRuntime({
     if (!datasource) return { ok: false, status: 404, reason: "datasource not found", datasource: null };
     if (!datasource.provider) return { ok: false, status: 400, reason: "datasource provider required", datasource };
     if (datasource.provider === "sqlite") {
+      const bridgeActive = sqliteBridgeActive();
       return {
         ok: true,
         datasource: decorateSqliteDatasource({
           ...datasource,
           path: sqlitePathFor(runtimeRoot, datasource)
         }, {
-          bridgeActive: sqliteBridgeActive()
+          bridgeActive,
+          adapterStatus: bridgeActive ? "witness-core" : "witness-core-required"
         })
       };
     }
@@ -227,8 +217,8 @@ export function createDbSqlRuntime({
             reason: `sqlite runtime unavailable: ${opened.reason}`,
             datasource: decorateSqliteDatasource(resolved.datasource, {
               bridgeActive: false,
-              adapterStatus: "unavailable",
-              lastError: sqliteSupportError instanceof Error ? sqliteSupportError.message : opened.reason
+              adapterStatus: "witness-core-required",
+              lastError: opened.reason
             })
           };
         }
@@ -243,9 +233,16 @@ export function createDbSqlRuntime({
             return witnessCoreSqliteFailureResult(error, resolved.datasource, "witness-core sqlite testConnection failed");
           }
         }
-        const { database } = opened;
-        database.prepare("select 1 as ok").get();
-        return { ok: true, datasource: resolved.datasource };
+        return {
+          ok: false,
+          status: 503,
+          reason: "sqlite runtime unavailable: witness-core sqlite capability required for SQL runtime execution",
+          datasource: decorateSqliteDatasource(resolved.datasource, {
+            bridgeActive: false,
+            adapterStatus: "witness-core-required",
+            lastError: "witness-core sqlite capability required for SQL runtime execution"
+          })
+        };
       }
       if (resolved.datasource.provider === "postgres") {
         await withPostgresClient(resolved, client => client.query("select 1 as ok"));
@@ -275,8 +272,8 @@ export function createDbSqlRuntime({
         reason: `sqlite runtime unavailable: ${opened.reason}`,
         datasource: decorateSqliteDatasource(resolved.datasource, {
           bridgeActive: false,
-          adapterStatus: "unavailable",
-          lastError: sqliteSupportError instanceof Error ? sqliteSupportError.message : opened.reason
+          adapterStatus: "witness-core-required",
+          lastError: opened.reason
         })
       };
     }
@@ -294,14 +291,15 @@ export function createDbSqlRuntime({
         bridge: opened.bridge
       };
     }
-    const { database, sqlitePath } = opened;
     return {
-      ok: true,
-      datasource: {
-        ...resolved.datasource,
-        path: sqlitePath
-      },
-      database
+      ok: false,
+      status: 503,
+      reason: "sqlite runtime unavailable: witness-core sqlite capability required for SQL runtime execution",
+      datasource: decorateSqliteDatasource(resolved.datasource, {
+        bridgeActive: false,
+        adapterStatus: "witness-core-required",
+        lastError: "witness-core sqlite capability required for SQL runtime execution"
+      })
     };
   };
 
@@ -610,15 +608,6 @@ export function createDbSqlRuntime({
     transaction,
     readOrderedBatch,
     writeRows,
-    close() {
-      for (const database of sqliteConnections.values()) {
-        try {
-          database.close();
-        } catch {
-          // ignore close failure
-        }
-      }
-      sqliteConnections.clear();
-    }
+    close() {}
   };
 }

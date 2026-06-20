@@ -1,5 +1,5 @@
 [watch]
-roots = ["src", "plugins", "examples/engentus", "examples/_lib"]
+roots = ["src", "plugins"]
 ignore = ["node_modules", "target", ".git", ".witness-core"]
 
 [proof]
@@ -8,14 +8,13 @@ full = "npm test"
 slow_ms = 15000
 
 [package]
-include = ["src/**", "plugins/**", "examples/engentus/**", "examples/_lib/**"]
+include = ["src/**", "plugins/**"]
 
 [supervise]
-command = "node src/cli.js utility-serve examples/engentus --server engentus_server --port {runtime_port} --runtime-profile full --startup-telemetry"
+command = "node src/cli.js utility-bootstrap --port {runtime_port}"
 working_dir = "."
 restart_on_exit = true
 health_url = "http://127.0.0.1:{runtime_port}/api/runtime/process-health"
-reload_url = "http://127.0.0.1:{runtime_port}/api/runtime/app-snapshot/reload"
 health_interval_ms = 1000
 health_timeout_ms = 5000
 restart_on_unhealthy = true

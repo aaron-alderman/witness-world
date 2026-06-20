@@ -249,17 +249,19 @@ test("AppSnapshotManager applySourceEdits uses witness-core bridge for persisted
   assert.deepEqual(writeFileCalls, []);
 });
 
-test("AppSnapshotManager applySourceEdits falls back to local fs when witness-core bridge write fails", async () => {
+test("AppSnapshotManager applySourceEdits fails closed when witness-core bridge write is unavailable", async () => {
   const mkdirCalls = [];
   const writeFileCalls = [];
   const manager = new AppSnapshotManager({
     manifestPath: "C:/tmp/app.wtoml",
     appRoot: "C:/tmp",
     runtimeProfile: "full",
-    logger: { warn() {} },
     generationBridge: {
-      async writeSource() {
-        throw new Error("bridge offline");
+      async statSource() {
+        const error = new Error("bridge offline");
+        error.status = 503;
+        error.code = "WITNESS_CORE_UNAVAILABLE";
+        throw error;
       }
     },
     fsModule: {
@@ -273,16 +275,18 @@ test("AppSnapshotManager applySourceEdits falls back to local fs when witness-co
   });
   manager.consumeDirtyAndRebuild = async () => ({ appRevision: 4 });
 
-  const result = await manager.applySourceEdits([{
-    path: "app/shell.rvm",
-    content: "(surface LocalFallback)"
-  }], {
-    persist: true
-  });
+  await assert.rejects(
+    manager.applySourceEdits([{
+      path: "app/shell.rvm",
+      content: "(surface LocalFallback)"
+    }], {
+      persist: true
+    }),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_UNAVAILABLE"
+  );
 
-  assert.equal(result.ok, true);
-  assert.deepEqual(mkdirCalls, ["C:\\tmp\\app"]);
-  assert.deepEqual(writeFileCalls, [["C:\\tmp\\app\\shell.rvm", "(surface LocalFallback)"]]);
+  assert.deepEqual(mkdirCalls, []);
+  assert.deepEqual(writeFileCalls, []);
 });
 
 test("AppSnapshotManager applySourceEdits fails closed when witness-core published writes are required", async () => {
@@ -328,6 +332,26 @@ test("AppSnapshotManager applySourceEdits fails closed when witness-core publish
 
   assert.deepEqual(mkdirCalls, []);
   assert.deepEqual(writeFileCalls, []);
+});
+
+test("AppSnapshotManager applySourceEdits requires witness-core source stat and write capabilities even without the legacy flag", async () => {
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    generationBridge: null
+  });
+  manager.consumeDirtyAndRebuild = async () => ({ appRevision: 4 });
+
+  await assert.rejects(
+    manager.applySourceEdits([{
+      path: "app/shell.rvm",
+      content: "(surface NeedsCore)"
+    }], {
+      persist: true
+    }),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_REQUIRED"
+  );
 });
 
 test("AppPreviewSessionManager stores overlay edits without publishing to disk", async () => {

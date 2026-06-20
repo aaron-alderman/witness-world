@@ -122,7 +122,7 @@ function deleteSecret(server, secretId, headers = asAdam) {
   });
 }
 
-test("db.sql uses explicit sqlite datasource resources for migration, query, command, transaction, and diagnostics", async () => {
+test("db.sql declares sqlite datasources but fails closed on execution when witness-core ownership is unavailable", async () => {
   const { world, server, runtimeRoot } = await startDbSqlServer();
   try {
     const created = await createDatasource(server, {
@@ -142,9 +142,14 @@ test("db.sql uses explicit sqlite datasource resources for migration, query, com
     assert.equal(inspectedBody.datasources[0].provider, "sqlite");
     assert.equal(inspectedBody.datasources[0].path, "db/main.sqlite");
     assert.match(String(inspectedBody.datasources[0].resolvedPath || ""), /db[\\/]main\.sqlite$/i);
-    assert.equal(inspectedBody.datasources[0].boundaryOwner, "node");
-    assert.equal(inspectedBody.datasources[0].boundaryAuthority, "transitional-node-fallback");
-    assert.equal(inspectedBody.datasources[0].boundaryTransport, "node:sqlite");
+    assert.equal(inspectedBody.datasources[0].adapterStatus, "witness-core-required");
+    assert.equal(inspectedBody.datasources[0].boundaryOwner, "witness-core");
+    assert.equal(inspectedBody.datasources[0].boundaryAuthority, "rust-owned");
+    assert.equal(inspectedBody.datasources[0].boundaryTransport, "capability.db.sqlite");
+    assert.equal(inspectedBody.datasources[0].boundaryScope, "canonical-runtime");
+    assert.equal(inspectedBody.datasources[0].canonicalBoundary, true);
+    assert.equal(inspectedBody.datasources[0].boundaryFallbackAllowed, false);
+    assert.equal(inspectedBody.datasources[0].boundaryAvailability, "unavailable");
     assert.equal(inspectedBody.operations.length, 0);
 
     const migrated = await migrateDbSql(server, {
@@ -153,22 +158,16 @@ test("db.sql uses explicit sqlite datasource resources for migration, query, com
         { id: "001_create_todos", sql: "create table todos (id integer primary key, title text not null)" }
       ]
     });
-    assert.equal(migrated.status, 200);
-    assert.deepEqual(await migrated.json(), {
-      applied: ["001_create_todos"],
-      skipped: []
-    });
+    assert.equal(migrated.status, 503);
+    assert.match((await migrated.json()).error, /witness-core sqlite capability required/i);
 
     const inserted = await commandDbSql(server, {
       datasourceId: "sqlite_main",
       sql: "insert into todos(title) values (?)",
       params: ["first"]
     });
-    assert.equal(inserted.status, 200);
-    assert.deepEqual(await inserted.json(), {
-      changes: 1,
-      lastInsertRowid: 1
-    });
+    assert.equal(inserted.status, 503);
+    assert.match((await inserted.json()).error, /witness-core sqlite capability required/i);
 
     const transaction = await transactionDbSql(server, {
       datasourceId: "sqlite_main",
@@ -177,19 +176,15 @@ test("db.sql uses explicit sqlite datasource resources for migration, query, com
         { kind: "query", sql: "select count(*) as count from todos" }
       ]
     });
-    assert.equal(transaction.status, 200);
-    const transactionBody = await transaction.json();
-    assert.equal(transactionBody.results.length, 2);
-    assert.equal(transactionBody.results[1].rows[0].count, 2);
+    assert.equal(transaction.status, 503);
+    assert.match((await transaction.json()).error, /witness-core sqlite capability required/i);
 
     const queried = await queryDbSql(server, {
       datasourceId: "sqlite_main",
       sql: "select id, title from todos order by id"
     });
-    assert.equal(queried.status, 200);
-    const queriedBody = await queried.json();
-    assert.equal(queriedBody.rowCount, 2);
-    assert.deepEqual(queriedBody.rows.map(row => row.title), ["first", "second"]);
+    assert.equal(queried.status, 503);
+    assert.match((await queried.json()).error, /witness-core sqlite capability required/i);
 
     const inspectedAfter = await inspectDbSql(server);
     assert.equal(inspectedAfter.status, 200);
@@ -202,19 +197,20 @@ test("db.sql uses explicit sqlite datasource resources for migration, query, com
     const readBackBody = await readBack.json();
     assert.equal(readBackBody.datasource.id, "sqlite_main");
     assert.equal(readBackBody.datasource.path, "db/main.sqlite");
+    assert.equal(readBackBody.datasource.adapterStatus, "witness-core-required");
 
     const diagnostics = await fetch(`${server.url}/api/backend-seams`, { headers: { "x-witness-actor": "adam" } });
     assert.equal(diagnostics.status, 200);
     const diagnosticsBody = await diagnostics.json();
     assert.equal(diagnosticsBody.dbSql.datasourceCount, 1);
     assert.equal(diagnosticsBody.dbSql.operationCount, 4);
-    assert.equal(diagnosticsBody.dbSql.failedCount, 0);
+    assert.equal(diagnosticsBody.dbSql.failedCount, 4);
 
     assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.datasource.create" && witness.body?.id === "sqlite_main"), true);
-    assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.migrate" && witness.body?.datasourceId === "sqlite_main"), true);
-    assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.command" && witness.body?.datasourceId === "sqlite_main"), true);
-    assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.query" && witness.body?.datasourceId === "sqlite_main"), true);
-    assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.transaction" && witness.body?.datasourceId === "sqlite_main"), true);
+    assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.migrate.failed" && witness.body?.datasourceId === "sqlite_main"), true);
+    assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.command.failed" && witness.body?.datasourceId === "sqlite_main"), true);
+    assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.query.failed" && witness.body?.datasourceId === "sqlite_main"), true);
+    assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.transaction.failed" && witness.body?.datasourceId === "sqlite_main"), true);
     assert.equal(path.resolve(runtimeRoot, "db", "main.sqlite").endsWith(path.join("db", "main.sqlite")), true);
   } finally {
     await server.close();
@@ -320,7 +316,7 @@ test("db.sql supports multiple named datasources per runner, secret-backed conne
   }
 });
 
-test("db.sql rolls back failed sqlite transactions and witnesses the failure", async () => {
+test("db.sql witnesses sqlite transaction failure when runtime ownership is unavailable", async () => {
   const { world, server, runtimeRoot } = await startDbSqlServer();
   try {
     await createDatasource(server, {
@@ -329,34 +325,15 @@ test("db.sql rolls back failed sqlite transactions and witnesses the failure", a
       datasourceName: "main",
       path: "db/main.sqlite"
     });
-    await migrateDbSql(server, {
-      datasourceId: "sqlite_main",
-      migrations: [
-        { id: "001_create_accounts", sql: "create table accounts (id integer primary key, name text not null)" }
-      ]
-    });
-    await commandDbSql(server, {
-      datasourceId: "sqlite_main",
-      sql: "insert into accounts(name) values (?)",
-      params: ["before"]
-    });
 
     const failed = await transactionDbSql(server, {
       datasourceId: "sqlite_main",
       steps: [
-        { kind: "command", sql: "insert into accounts(name) values (?)", params: ["rolled-back"] },
-        { kind: "command", sql: "insert into missing_table(name) values (?)", params: ["boom"] }
+        { kind: "command", sql: "insert into accounts(name) values (?)", params: ["rolled-back"] }
       ]
     });
-    assert.equal(failed.status, 500);
-    assert.match((await failed.json()).error, /missing_table/i);
-
-    const queried = await queryDbSql(server, {
-      datasourceId: "sqlite_main",
-      sql: "select name from accounts order by id"
-    });
-    assert.equal(queried.status, 200);
-    assert.deepEqual((await queried.json()).rows.map(row => row.name), ["before"]);
+    assert.equal(failed.status, 503);
+    assert.match((await failed.json()).error, /witness-core sqlite capability required/i);
 
     assert.equal(world.allWitnesses().some(witness => witness.process === "db.sql.transaction.failed" && witness.body?.datasourceId === "sqlite_main"), true);
   } finally {

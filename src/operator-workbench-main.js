@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createOperatorWorkbenchCore } from "./operator-workbench-core.js";
 import { OPERATOR_WORKBENCH_IPC_CHANNELS } from "./operator-workbench-bridge.js";
 import {
@@ -9,8 +9,16 @@ import {
 } from "./operator-workbench-settings.js";
 import { renderOperatorWorkbenchPage } from "./operator-workbench-page.js";
 
-function toDataUrl(html) {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+async function writeWorkbenchPageFile({
+  html,
+  userDataRoot,
+  fsModule = fs
+} = {}) {
+  const shellDir = path.join(userDataRoot, "operator-workbench");
+  const pagePath = path.join(shellDir, "shell.html");
+  await fsModule.mkdir(shellDir, { recursive: true });
+  await fsModule.writeFile(pagePath, html, "utf8");
+  return pagePath;
 }
 
 function directModuleExecution() {
@@ -95,7 +103,16 @@ export async function createOperatorWorkbenchShell({
   });
   window.once?.("ready-to-show", () => window.show?.());
   window.on?.("closed", cleanup);
-  await window.loadURL(toDataUrl(renderPageImpl()));
+  const pagePath = await writeWorkbenchPageFile({
+    html: renderPageImpl(),
+    userDataRoot,
+    fsModule
+  });
+  if (typeof window.loadFile === "function") {
+    await window.loadFile(pagePath);
+  } else {
+    await window.loadURL(pathToFileURL(pagePath).href);
+  }
   return {
     close: cleanup,
     core

@@ -8,7 +8,7 @@ import { createWorld } from "../src/kernel.js";
 import { MCP_PROTOCOL_VERSION } from "../plugins/mcp/mcp-tools.js";
 
 test("bootstrap CLI starts a blank-world bootstrap server", async () => {
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--port", "0"], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-bootstrap", "--port", "0"], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -76,7 +76,7 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
 
 test("bootstrap CLI honors --world-home for a named warm world layout", async () => {
   const worldHome = path.join(os.tmpdir(), `witness-world-home-${Date.now()}`);
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--port", "0", "--world-home", worldHome], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-bootstrap", "--port", "0", "--world-home", worldHome], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -131,7 +131,7 @@ tool = "world.read"
 actingMode = "service"
 `);
 
-  const child = spawn(process.execPath, ["src/cli.js", "mcp", appRoot, "--mcp", "cli_world", "--transport", "stdio"], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-mcp", appRoot, "--mcp", "cli_world", "--transport", "stdio"], {
     cwd: process.cwd(),
     stdio: ["pipe", "pipe", "pipe"]
   });
@@ -187,7 +187,7 @@ actingMode = "service"
 });
 
 test("bootstrap CLI rejects explicitly unknown runtime profiles", async () => {
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "nope"], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-bootstrap", "--runtime-profile", "nope"], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -208,7 +208,7 @@ test("bootstrap CLI rejects explicitly unknown runtime profiles", async () => {
 });
 
 test("bootstrap CLI activates local runtime plugins through --runtime-plugin", async () => {
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.authoring", "--port", "0"], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.authoring", "--port", "0"], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -251,7 +251,7 @@ test("bootstrap CLI activates local runtime plugins through --runtime-plugin", a
 test("serve CLI runs the maintained demo on minimal with authored runtime plugins", async () => {
   const child = spawn(process.execPath, [
     "src/cli.js",
-    "serve",
+    "utility-serve",
     "examples/demo-todo-app/app.wtoml",
     "--runtime-profile",
     "minimal",
@@ -290,7 +290,7 @@ test("serve CLI runs the maintained demo on minimal with authored runtime plugin
 });
 
 test("bootstrap CLI rejects explicitly unknown runtime plugins with actionable reasons", async () => {
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-plugin", "plugin.nope"], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-bootstrap", "--runtime-plugin", "plugin.nope"], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -326,7 +326,7 @@ test("bootstrap CLI rejects plugin-owned runtime plugins when runtime.js is miss
     contributes: {}
   }, null, 2));
 
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.inspect"], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.inspect"], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
     env: {
@@ -369,7 +369,7 @@ test("bootstrap CLI rejects plugin.assets when runtime.js is missing", async () 
     contributes: {}
   }, null, 2));
 
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.assets"], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.assets"], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
     env: {
@@ -412,7 +412,7 @@ test("bootstrap CLI rejects plugin.mcp when runtime.js is missing", async () => 
     contributes: {}
   }, null, 2));
 
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.mcp"], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.mcp"], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
     env: {
@@ -570,7 +570,7 @@ test("bootstrap CLI default activation fails when plugin.authoring-core runtime.
   }, null, 2));
   await fs.writeFile(path.join(tutorialDir, "runtime.js"), `export const bundleId = "bundle-tutorial"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["tutorial.progress.read"], handlerMetadata: {} }; export const routes = [{ kind: "pattern", method: "GET", pattern: /^\\/api\\/tutorial-progress\\/([^/]+)$/, handler: "tutorial.progress.read", paramNames: ["tutorialId"] }]; export const surfaces = []; export function createHandlers() { return { "tutorial.progress.read": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
 
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap"], {
+  const child = spawn(process.execPath, ["src/cli.js", "utility-bootstrap"], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
     env: {

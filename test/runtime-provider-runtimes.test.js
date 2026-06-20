@@ -25,7 +25,7 @@ async function waitFor(check, { timeoutMs = 1500, intervalMs = 10 } = {}) {
   throw new Error("timed out waiting for condition");
 }
 
-test("runtime provider runtimes keep sqlite migration, query, command, and rollback behavior outside host.js", async () => {
+test("runtime provider runtimes require witness-core sqlite capability and fail closed outside host.js", async () => {
   const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "runtime-provider-db-"));
   const datasources = [{
     id: "sqlite.main",
@@ -54,9 +54,13 @@ test("runtime provider runtimes keep sqlite migration, query, command, and rollb
     const listed = runtime.listDatasources();
     assert.equal(listed.length, 1);
     assert.equal(listed[0].provider, "sqlite");
-    assert.equal(listed[0].boundaryOwner, "node");
-    assert.equal(listed[0].boundaryAuthority, "transitional-node-fallback");
-    assert.equal(listed[0].boundaryTransport, "node:sqlite");
+    assert.equal(listed[0].adapterStatus, "witness-core-required");
+    assert.equal(listed[0].boundaryOwner, "witness-core");
+    assert.equal(listed[0].boundaryAuthority, "rust-owned");
+    assert.equal(listed[0].boundaryTransport, "capability.db.sqlite");
+    assert.equal(listed[0].boundaryScope, "canonical-runtime");
+    assert.equal(listed[0].canonicalBoundary, true);
+    assert.equal(listed[0].boundaryFallbackAllowed, false);
 
     const migrated = await runtime.migrate({
       datasourceId: "sqlite.main",
@@ -64,16 +68,18 @@ test("runtime provider runtimes keep sqlite migration, query, command, and rollb
         { id: "001_create_items", sql: "create table items (id integer primary key, title text not null)" }
       ]
     });
-    assert.equal(migrated.ok, true);
-    assert.deepEqual(migrated.applied, ["001_create_items"]);
+    assert.equal(migrated.ok, false);
+    assert.equal(migrated.status, 503);
+    assert.match(migrated.reason, /witness-core sqlite capability required/i);
 
     const inserted = await runtime.command({
       datasourceId: "sqlite.main",
       sql: "insert into items(title) values (?)",
       params: ["first"]
     });
-    assert.equal(inserted.ok, true);
-    assert.equal(inserted.changes, 1);
+    assert.equal(inserted.ok, false);
+    assert.equal(inserted.status, 503);
+    assert.match(inserted.reason, /witness-core sqlite capability required/i);
 
     const rolledBack = await runtime.transaction({
       datasourceId: "sqlite.main",
@@ -83,11 +89,13 @@ test("runtime provider runtimes keep sqlite migration, query, command, and rollb
       ]
     });
     assert.equal(rolledBack.ok, false);
-    assert.match(rolledBack.reason, /missing_table/i);
+    assert.equal(rolledBack.status, 503);
+    assert.match(rolledBack.reason, /witness-core sqlite capability required/i);
 
     const queried = await runtime.query({ datasourceId: "sqlite.main", sql: "select title from items order by id" });
-    assert.equal(queried.ok, true);
-    assert.deepEqual(queried.rows.map(row => row.title), ["first"]);
+    assert.equal(queried.ok, false);
+    assert.equal(queried.status, 503);
+    assert.match(queried.reason, /witness-core sqlite capability required/i);
   } finally {
     runtime.close();
     await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});

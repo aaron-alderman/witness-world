@@ -1,12 +1,19 @@
 import { spawn } from "node:child_process";
 
-const coreUrl = typeof process.env.WITNESS_CORE_URL === "string" && process.env.WITNESS_CORE_URL.trim()
-  ? process.env.WITNESS_CORE_URL.trim()
-  : "http://127.0.0.1:8788";
-const defaultWorkerPort = typeof process.env.WITNESS_WORKER_PORT === "string" && process.env.WITNESS_WORKER_PORT.trim()
-  ? process.env.WITNESS_WORKER_PORT.trim()
-  : "4011";
 const forwardedArgs = process.argv.slice(2);
+
+if (forwardedArgs.length === 0) {
+  console.error("usage: node scripts/run-example-app-worker.mjs <app-path> [--default-port <n>] [-- ...runtime args]");
+  process.exit(1);
+}
+
+const appPath = forwardedArgs.shift();
+let defaultPort = null;
+if (forwardedArgs[0] === "--default-port") {
+  defaultPort = forwardedArgs[1] ?? null;
+  forwardedArgs.splice(0, 2);
+}
+
 const hasExplicitPort = forwardedArgs.some((argument, index) => {
   if (argument === "--port") return true;
   if (argument.startsWith("--port=")) return true;
@@ -21,18 +28,14 @@ const child = spawn(
   [
     "src/cli.js",
     "serve",
-    "examples/engentus",
-    ...(hasExplicitPort ? [] : ["--port", defaultWorkerPort]),
-    "--runtime-profile",
-    "full",
-    "--startup-telemetry",
+    appPath,
+    ...(defaultPort && !hasExplicitPort ? ["--port", String(defaultPort)] : []),
     ...forwardedArgs
   ],
   {
     stdio: "inherit",
     env: {
-      ...process.env,
-      WITNESS_CORE_URL: coreUrl
+      ...process.env
     }
   }
 );

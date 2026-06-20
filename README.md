@@ -43,12 +43,25 @@ The demo is a Todo app that is intentionally more complicated than a normal Todo
 ```bash
 npm install
 npm test
-npm run bootstrap
-npm run demo
 npm run desktop
 ```
 
-Then open:
+Supported public/browser-facing startup should prefer one Rust-frontdoored command at a time, for example:
+
+```bash
+npm run bootstrap   # blank-world authoring through the Rust frontdoor
+# or
+npm run engentus    # supervised Engentus app through the Rust frontdoor
+```
+
+Utility worker-only example flows still exist separately:
+
+```bash
+npm run utility:demo
+npm run utility:engentus-worker
+```
+
+Then open the supported frontdoor surface:
 
 ```text
 http://127.0.0.1:3000/
@@ -175,32 +188,42 @@ The project deliberately avoids TypeScript for now. Instead it relies on:
 ```bash
 npm test      # run all tests (unit + integration, no browser required)
 npm run bootstrap # start a blank-world bootstrap server
-npm run demo  # start the demo server
+npm run engentus # start the supervised Engentus app through the Rust frontdoor
+npm run utility:demo  # start the demo example worker on its private utility port
 npm run desktop # start the first desktop ownership shell
 ```
 
 ## CLI
 
-The runtime starts through one generic CLI entrypoint:
+Supported public/browser-facing startup uses the checked-in Rust frontdoor wrappers such as:
 
 ```bash
-node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>]
-node src/cli.js bootstrap [--port <n>]
+npm run bootstrap
+npm run engentus
+npm run engentus:mcp
+```
+
+The raw CLI below is still available, but it is a loopback-only Node utility path rather than the supported public ingress:
+
+```bash
+node src/cli.js utility-serve <app-dir|app.wtoml> [--server <id>] [--port <n>]
+node src/cli.js utility-bootstrap [--port <n>]
 node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]
 ```
 
 Examples:
 
 ```bash
-node src/cli.js bootstrap
-node src/cli.js serve examples/demo-todo-app --runtime-profile minimal
-node src/cli.js serve examples/demo-todo-app --port 4000 --runtime-profile minimal
+node src/cli.js utility-bootstrap
+node src/cli.js utility-serve examples/demo-todo-app --runtime-profile minimal
+node src/cli.js utility-serve examples/demo-todo-app --port 4000 --runtime-profile minimal
 node src/cli.js desktop
 ```
 
 Notes:
 
 - directory startup is the preferred public interface; direct file startup is only for canonical `app.wtoml`
+- raw `serve`/`bootstrap` startup binds the Node runtime on `127.0.0.1` only and should be treated as a utility/development path
 - `--server` is optional only when the app resolves to exactly one `serverRunner`
 - `bootstrap` starts a blank-world authoring server and treats `/_bootstrap` as the primary seam
 - the maintained demo app now runs on `minimal` plus authored runtime-plugin installs on `demo_server`, including `plugin.demo` for demo handler-set behavior
@@ -208,9 +231,10 @@ Notes:
 - blank-world bootstrap/tutorial startup is still a separate runtime-composition path from the pluginized maintained demo
 - `desktop` starts the first shipped ownership shell: a narrow Electron adapter over the same runtime/profile/world model, with launcher-based `WORLD_HOME` open/create flows and explicit desktop-only powers
 - `bootstrap` now starts from a fresh temp runtime root by default, so prior todo/private-note projection files are not reused across runs
-- `npm run demo` is a convenience wrapper around the generic CLI
-- `npm run bootstrap` is a convenience wrapper around `node src/cli.js bootstrap`
+- `npm run utility:demo` is the explicit demo worker utility command
+- `npm run bootstrap` is a convenience wrapper around the checked-in Rust-supervised frontdoor config for blank-world startup
 - `npm run desktop` is a convenience wrapper around `node src/cli.js desktop`
+- `npm run engentus:mcp` is a convenience wrapper around the checked-in Rust-supervised frontdoor config for the Engentus HTTP MCP surface
 - if the selected runner exposes a reachable home route, `/` serves the app
 - if no served home route exists yet, `/` falls back to `/_bootstrap`
 - set `RUNTIME_ROOT` explicitly only when you intentionally want a warm/persistent bootstrap restart

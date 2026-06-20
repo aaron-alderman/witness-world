@@ -10,7 +10,7 @@ One platform instance, one witness world, **two hosts** routed by the `Host` hea
 Run it:
 
 ```bash
-npm run master            # node src/cli.js serve examples/master --runtime-profile full
+npm run utility:master    # checked-in worker utility wrapper on an explicit private default port
 ```
 
 `*.localhost` resolves to `127.0.0.1` on most systems; otherwise add hosts-file entries.

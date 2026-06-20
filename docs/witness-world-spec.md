@@ -119,12 +119,14 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
   - `serverRunner`
   - `routePage`
 - Runtime startup still bridges host capability resolution through the new capability model so older behavior continues to work.
-- Canonical startup path is the generic CLI:
-  - `node src/cli.js bootstrap [--port <n>]`
-  - `node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>]`
-  - `node src/cli.js mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>]`
-  - `npm run bootstrap` is a convenience wrapper around the dedicated blank-world bootstrap command
-  - `npm run demo` is a convenience wrapper around that CLI for the demo DSL
+- Canonical startup path is the generic CLI surface, but the raw loopback utility commands now use explicit `utility-*` names:
+  - `node src/cli.js utility-bootstrap [--port <n>]`
+  - `node src/cli.js utility-serve <app-dir|app.wtoml> [--server <id>] [--port <n>]`
+  - `node src/cli.js utility-mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>]`
+  - direct CLI startup remains available as a raw loopback-only Node utility path, and its default listener ports are explicit utility ports rather than the canonical public frontdoor port
+  - `npm run bootstrap` and `npm run authoring:server` are the checked-in convenience frontdoor paths for blank-world/bootstrap startup and authoring bootstrap startup
+  - worker-port example launches should prefer the explicit utility commands such as `npm run utility:demo` and `npm run utility:engentus-worker`
+  - `npm run engentus:mcp` is the checked-in convenience frontdoor path for the Engentus HTTP MCP surface and keeps the Node worker on a private loopback port behind the Rust-owned ingress
 - Runtime selection is driven by authored `serverRunner` + `serve` definitions.
 - Current public/runtime surface includes:
   - pages:

@@ -97,7 +97,7 @@ test("package scripts promote the rich tui host while keeping the raw shell expl
   assert.equal(packageJson.scripts.operator, "node src/cli.js operator");
 });
 
-test("operator workbench shell registers IPC handlers, loads a data URL page, and cleans up once", async () => {
+test("operator workbench shell registers IPC handlers, loads a generated html page, and cleans up once", async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-shell-"));
   const handled = new Map();
   const removed = [];
@@ -126,6 +126,10 @@ test("operator workbench shell registers IPC handlers, loads a data URL page, an
 
     async loadURL(url) {
       loadedUrls.push(url);
+    }
+
+    async loadFile(filePath) {
+      loadedUrls.push(`file:${filePath}`);
     }
   }
 
@@ -189,8 +193,10 @@ test("operator workbench shell registers IPC handlers, loads a data URL page, an
     assert.equal(windows.length, 1);
     assert.equal(windows[0].options.width, 1480);
     assert.equal(loadedUrls.length, 1);
-    assert.equal(loadedUrls[0].startsWith("data:text/html"), true);
-    assert.equal(loadedUrls[0].includes("operator%20shell"), true);
+    assert.equal(loadedUrls[0].startsWith("file:"), true);
+    const loadedFilePath = loadedUrls[0].slice("file:".length);
+    const loadedHtml = await fs.readFile(loadedFilePath, "utf8");
+    assert.equal(loadedHtml.includes("operator shell"), true);
     assert.deepEqual([...handled.keys()].sort(), Object.values(OPERATOR_WORKBENCH_IPC_CHANNELS).sort());
 
     const updated = await handled.get(OPERATOR_WORKBENCH_IPC_CHANNELS.updateDisplaySettings)(null, { fontSize: 17 });

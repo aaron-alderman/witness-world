@@ -11,7 +11,7 @@ slow_ms = 15000
 include = ["src/**", "plugins/**", "examples/engentus/**", "examples/_lib/**"]
 
 [supervise]
-command = "node src/cli.js utility-serve examples/engentus --server engentus_server --port {runtime_port} --runtime-profile full --startup-telemetry"
+command = "node src/cli.js utility-mcp examples/engentus --mcp engentus_mcp --server engentus_server --transport http --port {runtime_port} --runtime-profile full"
 working_dir = "."
 restart_on_exit = true
 health_url = "http://127.0.0.1:{runtime_port}/api/runtime/process-health"
@@ -23,6 +23,6 @@ degraded_grace_polls = 10
 unhealthy_grace_polls = 3
 
 [frontdoor]
-public_addr = "127.0.0.1:3000"
+public_addr = "127.0.0.1:8791"
 drain_timeout_ms = 15000
 startup_cutover_timeout_ms = 45000

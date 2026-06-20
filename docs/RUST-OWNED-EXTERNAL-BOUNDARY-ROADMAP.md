@@ -53,6 +53,10 @@ Node remains useful, but only as a worker:
 The goal is not "rewrite everything in Rust."
 The goal is "remove Node tendrils into the external world."
 
+This also does not mean "remove every `node:fs` import from the whole repository."
+It means removing direct `node:fs` ownership from authoritative long-running runtime paths.
+Tests, fixtures, short-lived utilities, and explicitly scoped non-canonical scratch paths may still use local filesystem access until their own removal or containment tranche lands.
+
 ## Why This Exists
 
 The platform is trying to support:
@@ -112,9 +116,6 @@ Today the boundary is mixed:
   - the main runtime HTTP server in [src/runtime-server.js](../src/runtime-server.js)
   - broad filesystem access in [src/app-snapshot-manager.js](../src/app-snapshot-manager.js)
   - local no-core dirty-path detection in [src/runtime-server.js](../src/runtime-server.js), now through explicit runtime-host polling rather than canonical `fsWatch.watch(...)`
-  - local JSON compatibility verification persistence in [src/runtime-verification-persistence.js](../src/runtime-verification-persistence.js) when `witness-core` is not configured
-  - local fallback SQLite ownership in [plugins/sqlite/provider-runtime.js](../plugins/sqlite/provider-runtime.js) and [plugins/sql/provider-runtime.js](../plugins/sql/provider-runtime.js) when `witness-core` is not configured
-  - runtime-level SQLite fallback remains transitional, but the affected datasource inspection paths now report whether SQLite is Rust-owned (`witness-core`) or Node-local fallback
   - direct runtime boot and app hosting in [src/cli.js](../src/cli.js)
 
 This is a transitional state, not the target.
@@ -148,9 +149,36 @@ Authoritative evidence today:
 ### Stage 1. Rust Public Ingress
 
 - [x] `witness-core` already supports an optional Rust front door.
-- [ ] Rust front door is the default and only supported public ingress.
-- [ ] Node worker ports are private implementation details in every supported run mode.
-- [ ] Tests and scripts no longer target worker ports directly as the supported product path.
+- [x] Raw direct CLI startup (`serve`, `bootstrap`, and HTTP `mcp`) no longer defaults to the same `3000` public-ingress port as the Rust frontdoor path.
+- [x] The checked-in supervised Engentus development path now defaults to the Rust frontdoor with private templated worker ports.
+- [x] Checked-in blank-world bootstrap convenience scripts (`bootstrap`, `authoring:server`) now route through dedicated Rust-supervised frontdoor configs instead of direct Node listener startup as the primary convenience path.
+- [x] The checked-in Engentus worker-only utility path no longer falls back to the default public runtime port; it defaults to an explicit private utility port and remains guarded as non-supported ingress.
+- [x] Checked-in example convenience scripts (`demo`, `eden`, `master`) no longer invoke direct default-port `node src/cli.js serve ...` launches; they route through explicit worker utility wrappers with private default ports.
+- [x] The checked-in Engentus HTTP MCP convenience path now routes through a dedicated Rust-supervised frontdoor config instead of a direct Node HTTP listener on the supported MCP ingress port.
+- [x] Node worker ports are private implementation details in every supported run mode.
+- [x] Tests and scripts no longer target worker ports directly as the supported product path.
+- [x] Audit and demote the remaining raw direct CLI ingress paths so they are explicit loopback utility commands rather than first-class supported product startup names.
+- [x] Rust front door is the default and only supported public ingress.
+- [x] Remove the remaining legacy raw CLI aliases (`serve`, `bootstrap`, and `mcp`) once downstream usage has moved to the explicit `utility-serve`, `utility-bootstrap`, and `utility-mcp` names or Rust-frontdoored startup paths.
+- [x] Remove the remaining legacy compatibility aliases for worker-only scripts (`demo`, `eden`, `master`, `engentus:worker`, and `app:engentus`) once downstream usage has moved to the explicit `utility:*` names or Rust-frontdoored startup paths.
+
+Authoritative evidence today:
+
+- [witness-core.toml](../witness-core.toml) now enables `[frontdoor]` by default for the checked-in supervised Engentus config, uses a templated private `{runtime_port}` worker command, and points health/reload control at that private loopback runtime instead of treating the worker port as the supported public surface.
+- [src/cli.js](../src/cli.js) now gives raw direct `serve`, `bootstrap`, and HTTP `mcp` startup explicit utility-port defaults (`4017`, `4015`, `4018`) instead of inheriting `3000`, so direct Node startup no longer defaults to the same listener port as the Rust public frontdoor path.
+- [src/runtime-server.js](../src/runtime-server.js) now remains guarded at the actual bind point: every Node runtime listener binds `127.0.0.1`, and [src/cli.js](../src/cli.js) now prints `Ingress: loopback-only Node utility listener` on direct startup so worker ports are surfaced explicitly as private loopback utility listeners rather than implied public ingress.
+- [src/cli.js](../src/cli.js) now exposes only `utility-serve`, `utility-bootstrap`, and `utility-mcp` as the raw loopback command names in its own usage text and command parser, so the legacy raw Node listener names are no longer part of the checked-in command contract.
+- [witness-core-bootstrap.toml](../witness-core-bootstrap.toml) and [witness-core-authoring.toml](../witness-core-authoring.toml) now provide dedicated Rust-supervised frontdoor configs for blank-world/bootstrap startup and authoring bootstrap startup, and [package.json](../package.json) now points `bootstrap` and `authoring:server` at those configs instead of direct Node listener startup.
+- [package.json](../package.json) now points `npm run engentus` and `npm run engentus:core` at `npm run platform:supervised`, while worker-port launches exist only behind explicit utility commands (`utility:engentus-worker`, `utility:demo`, `utility:eden`, `utility:master`) instead of also keeping first-class compatibility aliases.
+- [witness-core-engentus-mcp.toml](../witness-core-engentus-mcp.toml) now provides a dedicated Rust-supervised frontdoor config for the checked-in Engentus HTTP MCP surface, and [package.json](../package.json) now points `engentus:mcp` at that config instead of a direct `node src/cli.js mcp ... --transport http --port 8791` listener.
+- [scripts/run-app-engentus-with-core.mjs](../scripts/run-app-engentus-with-core.mjs) now injects `--port` from `WITNESS_WORKER_PORT` and defaults that worker-only utility path to `4011` instead of inheriting the public runtime default port, so the direct worker launch no longer silently masquerades as the supported public surface.
+- [scripts/run-example-app-worker.mjs](../scripts/run-example-app-worker.mjs) now provides the same explicit worker-utility wrapper shape for checked-in example app launches, and [package.json](../package.json) now points `demo`, `eden`, and `master` at that wrapper with explicit private default utility ports (`4012`, `4013`, `4014`) instead of direct default-port `node src/cli.js serve ...` invocations.
+- [README.md](../README.md), [HANDOFF.md](../HANDOFF.md), and [BASELINE.md](../BASELINE.md) now stop describing the raw CLI or worker-port example scripts as the canonical public/operator startup path and instead point supported public/browser-facing startup at the checked-in Rust frontdoor wrappers while demoting direct Node startup to a loopback utility CLI with explicit `utility-*` raw commands and `utility:*` worker commands only.
+- [substrate/README.md](../substrate/README.md) now describes the Rust frontdoor at `http://127.0.0.1:3000` as the supported supervised app surface, promotes `npm run bootstrap`, `npm run authoring:server`, and `npm run engentus:mcp` to Rust-supervised frontdoor flows, and keeps the worker launch only in a dedicated utility section instead of the canonical developer-flow list.
+- [docs/witness-world-spec.md](../docs/witness-world-spec.md) now clarifies that direct CLI startup is a raw loopback-only Node utility path with explicit `utility-*` command names and utility-port defaults, and that worker-port example launches should prefer `utility:*` commands instead of any compatibility alias names.
+- `test/rust-owned-external-boundary-roadmap.test.js` now guards the checked-in config shape, the raw CLI utility-port defaults, the `utility-*` raw command contract, the absence of the removed alias commands/scripts, the loopback-only runtime bind, the bootstrap/authoring/Engentus MCP frontdoor configs, the explicit `utility:*` worker scripts, and the public-ingress wording so the default supervised paths cannot silently drift back to direct public worker-port startup.
+- `cargo test --manifest-path substrate/Cargo.toml -p witness-core checked_in_frontdoor_configs_parse_and_keep_private_worker_health_targets` now proves the checked-in `witness-core.toml`, `witness-core-bootstrap.toml`, `witness-core-authoring.toml`, and `witness-core-engentus-mcp.toml` files parse as real witness-core configs and preserve the private `{runtime_port}` worker-health targeting expected by the frontdoor model.
+- `test/witness-core-live-continuity.test.js` still proves the real frontdoor path through the `frontdoor` scenario, including rolling cutover, draining, and preview continuity through the Rust public port.
 
 ### Stage 2. Rust-Owned Published Filesystem Path
 
@@ -160,14 +188,15 @@ Authoritative evidence today:
 - [x] Supervised runtimes can run with watchers disabled.
 - [x] Remove remaining non-supervised/local published-write fallback from canonical serving paths where Rust ownership is required.
 - [x] Make the published path fail closed everywhere the boundary is declared authoritative, not only on the supervised path.
+- [x] Make direct runtime `app.source.write` fail closed when `witness-core` is absent, instead of mutating canonical files locally.
 - [x] Prove watcher suppression/update logic prevents duplicate generation pipelines for every published commit path.
 
 Authoritative evidence today:
 
-- `src/runtime-server.js` now sets `requireGenerationBridgeForPublishedWrites: Boolean(appContext.witnessCoreUrl)` whenever a runtime is connected to `witness-core`, not only in supervised mode.
-- `src/app-snapshot-manager.js` now fails closed for published `stat` and `write` operations whenever `requireGenerationBridgeForPublishedWrites` is enabled, instead of silently falling back to local filesystem mutation.
-- `src/runtime-core-handlers.js` keeps the supervised published-authoring proxy for watcher-disabled runtimes, while the non-supervised `app.source.write` route still traverses the same fail-closed `AppSnapshotManager` path when Rust ownership is declared.
-- `test/runtime-core-handlers-authoring.test.js` now proves `POST /api/runtime/app-sources` semantics fail closed outside supervised mode when `WITNESS_CORE_URL` ownership is declared but unavailable.
+- `src/app-snapshot-manager.js` now requires `generationBridge.statSource(...)` and `generationBridge.writeSource(...)` for persisted published edits at all times; it no longer falls back to local `fs.mkdir(...)` / `fs.writeFile(...)` for canonical source writes.
+- `src/runtime-core-handlers.js` still keeps the supervised published-authoring transaction proxy for watcher-disabled runtimes, but the direct runtime `app.source.write` path now also fails closed when witness-core is absent instead of mutating disk locally.
+- `test/app-snapshot-manager.test.js` now proves persisted `applySourceEdits(...)` succeeds only through witness-core source stat/write capabilities, fails closed when the bridge is unavailable, and fails closed even without the legacy `requireGenerationBridgeForPublishedWrites` flag.
+- `test/runtime-core-handlers-authoring.test.js` now proves `POST /api/runtime/app-sources` semantics fail closed outside supervised mode both when `WITNESS_CORE_URL` ownership is declared but unavailable and when no witness-core bridge is configured at all.
 - `test/support/live-core-smoke-runner.mjs` and `test/witness-core-live-continuity.test.js` already prove the supervised published-authoring path journals through Rust, rejects stale hashes, preserves canonical files on compile/proof failure, and returns `WITNESS_CORE_UNAVAILABLE` when the core is down.
 - `substrate/witness-core/src/lib.rs` refreshes the watcher baseline immediately after `transaction.commit.applied` and before the generation is marked `green_local`.
 - `test/support/live-core-smoke-runner.mjs` now waits past the watcher poll interval after a successful published transaction and proves the registry still contains exactly one generation with one `generation.candidate` -> `proof.started` -> `generation.green_local` lifecycle, rather than a duplicate watcher-driven pipeline.
@@ -191,13 +220,14 @@ Authoritative evidence today:
 - [x] Remove canonical watcher ownership from `src/app-snapshot-manager.js`.
 - [x] Remove local dirty-path probing from `AppSnapshotManager`; no-core dev invalidation now arrives through explicit runtime-host `markDirtyPaths(...)` input.
 - [x] Core-connected runtimes consume `witness-core` `/events` SSE and translate non-preview generation events into immediate `markDirtyPaths(...)` invalidation.
-- [ ] Make Rust the only owner of canonical dirty-path detection.
+- [x] Make Rust the only owner of canonical dirty-path detection.
 - [x] Ensure workers receive explicit invalidation/input updates instead of discovering canonical file changes themselves.
 
 Authoritative evidence today:
 
 - `src/runtime-server.js` now defaults `runtimeSupervision.watchersEnabled` to `false` when `WITNESS_CORE_URL` is configured, so core-connected runtimes do not advertise local watcher ownership as their active canonical path.
 - `src/runtime-server.js` now owns both remaining explicit invalidation paths: local no-core dev refresh through a runtime-host poller that detects changed source rows and calls `appSnapshotManager.markDirtyPaths(..., { trigger: "watch" })`, and core-connected refresh through `witness-core` `/events` SSE subscription that translates non-preview `green_local`/`stable` generation events into `markDirtyPaths(..., { trigger: "core" })`.
+- `src/runtime-server.js` only enables the local poller when `activeDevMode === true` and `!appContext.witnessCoreUrl`, which scopes that path to explicit no-core development rather than canonical dirty-path ownership.
 - `src/runtime-server.js` still calls `appSnapshotManager.ensureFresh({ trigger: "request" })` in dev mode as a fallback hydration path, but the active snapshot manager no longer self-discovers dirty files there.
 - `src/runtime-server.js` now owns the local no-core dev refresh loop through a runtime-level poller that detects changed source rows and calls `appSnapshotManager.markDirtyPaths(..., { trigger: "watch" })`, so local dev hot refresh remains available without reintroducing self-discovery into the snapshot manager.
 - `src/app-snapshot-manager.js` now supports `dirtyDetectionOwner: "witness-core"`, refreshes `witnessCoreStatusStore` on demand, ignores preview generations for canonical refresh, maps Rust generation `sourcePaths` back onto active source rows, and rebuilds from explicit dirty paths instead of local `detectChangedPaths()` when `witness-core` is the dirty owner.
@@ -215,26 +245,35 @@ Authoritative evidence today:
 - [x] `witness-core` exposes a verification-persistence control-plane endpoint and journals verification-persistence operations.
 - [x] Replace `src/runtime-verification-persistence.js` direct `node:sqlite` ownership with a Rust-owned service or capability surface.
 - [x] Remove canonical `DatabaseSync` ownership from Node runtime code.
-- [x] Preserve durable local verification persistence without `node:sqlite` by using the JSON compatibility adapter when `witness-core` is absent.
+- [x] Remove the product-local JSON compatibility verification-persistence adapter; no-core runtime verification persistence now fails closed instead of taking local ownership.
 - [x] Preserve witness-core-mediated verification persistence rows and artifact content across persistence reopen/restart boundaries.
 - [x] SQL provider runtimes can use `witness-core` SQLite capability endpoints for `testConnection`, `migrate`, `query`, `command`, and `transaction` when `WITNESS_CORE_URL` is configured.
 - [x] `witness-core` exposes and journals SQLite capability operations used by SQL provider runtimes.
 - [x] When SQL provider runtimes are in Rust-owned SQLite mode, witness-core unavailability fails closed with structured runtime errors instead of falling back to local SQLite or throwing uncaught bridge errors.
 - [x] Remaining transitional SQLite runtime owners expose explicit boundary ownership metadata in runtime and host inspection (`witness-core` vs local fallback) so the exception set is visible during operation.
-- [ ] Remove local verification-persistence fallback ownership once Rust-managed mode becomes authoritative for canonical verification persistence.
-- [ ] Remove local provider-runtime SQLite ownership once Rust-managed mode becomes authoritative for SQL runtime execution.
+- [x] Verification persistence inspection now exposes only the Rust-owned boundary; when `witness-core` is unavailable the runtime reports `witness-core-required` and fails closed.
+- [x] Canonical supervised app-serving runtimes fail closed for verification persistence when witness-core ownership is required but unavailable, instead of silently taking local ownership.
+- [x] Canonical supervised app-serving SQLite runtimes fail closed when witness-core ownership is required but unavailable, instead of silently opening local `node:sqlite` handles.
+- [x] Runtime-owned verification-persistence initialization no longer offers any product-owned scratch fallback; the runtime is Rust-owned or unavailable.
+- [x] Runtime-owned SQLite provider runtimes no longer own local `node:sqlite` execution; plugin/provider SQLite access is Rust-owned or fails closed.
+- [x] Remove local verification-persistence fallback ownership once Rust-managed mode becomes authoritative for canonical verification persistence.
+- [x] Remove local provider-runtime SQLite ownership once Rust-managed mode becomes authoritative for SQL runtime execution.
+- [x] Remove the remaining explicit direct-constructor scratch fallbacks once test and utility callers no longer require them.
 - [x] Journal canonical DB effects through Rust-controlled provenance.
 - [x] Preserve existing verification persistence behavior and continuity across worker restarts.
-- [ ] Inventory and migrate remaining plugin/provider SQLite runtimes behind the same Rust-owned DB boundary or explicitly scope them as non-canonical scratch runtimes.
+- [x] Inventory and migrate remaining plugin/provider SQLite runtimes behind the same Rust-owned DB boundary or explicitly scope them as non-canonical scratch runtimes.
 
 Authoritative evidence today:
 
-- `src/runtime-verification-persistence.js` now routes witness-core-backed verification persistence operations through the Rust control-plane endpoint instead of loading `node:sqlite`, while preserving the JSON compatibility adapter only for the explicit no-core fallback mode.
-- `plugins/platform/verification-persistence.test.js` now proves three distinct shapes: local JSON compatibility durability, synthesized backend metadata on the compatibility path, and witness-core-mediated verification persistence without loading `node:sqlite`.
+- `src/runtime-verification-persistence.js` now routes witness-core-backed verification persistence operations through the Rust control-plane endpoint instead of loading `node:sqlite`, and it no longer imports `node:fs` or owns a local JSON compatibility ledger/artifact/cache path at all.
+- `plugins/platform/verification-persistence.test.js` now proves the two supported product shapes: fail-closed `witness-core-required` behavior when core authority is unavailable, and witness-core-mediated persistence with synthesized backend metadata when core authority is configured.
 - `plugins/platform/verification-persistence.test.js` now also proves that witness-core-backed verification persistence survives both a Node-side persistence reopen and a real `witness-core` restart while preserving policies, test runs, reports, reusable cache lookups, and artifact content without loading `node:sqlite`.
-- `plugins/sql/provider-runtime.js` and `plugins/sqlite/provider-runtime.js` now decorate sqlite datasources with explicit boundary metadata (`boundaryOwner`, `boundaryAuthority`, `boundaryTransport`, `boundaryFallbackAllowed`, `boundaryAvailability`) and route `testConnection`, `migrate`, `query`, `command`, and `transaction` through witness-core SQLite capabilities when `WITNESS_CORE_URL` is configured.
-- `plugins/sql/sql.test.js` and `plugins/sqlite/sqlite.test.js` now prove that witness-core-backed SQLite operations succeed without loading `node:sqlite`, and that witness-core unavailability fails closed with structured runtime errors instead of silently falling back local.
-- `test/db-sql-host.test.js` and `test/runtime-provider-runtimes.test.js` now surface the transitional local-fallback ownership metadata explicitly on sqlite datasources, so the remaining Node-owned fallback path is visible during operation instead of hidden.
+- `src/runtime-server.js` now passes `requireCanonicalBoundary: true` into `createRuntimeVerificationPersistence(...)` for supervised app-serving runtimes (`appRoot` present with watchers disabled), and the runtime verification-persistence factory no longer exposes any product-owned scratch fallback toggle.
+- `src/runtime-verification-persistence.js` now returns a Rust-owned-unavailable verification-persistence adapter whenever core authority is absent, surfacing `boundaryOwner: "witness-core"`, `boundaryScope: "canonical-runtime"`, `adapterStatus: "witness-core-required"`, and `boundaryAvailability: "unavailable"` while failing mutation calls closed with `WITNESS_CORE_REQUIRED` instead of silently taking local ownership.
+- `plugins/sql/provider-runtime.js` and `plugins/sqlite/provider-runtime.js` no longer import `node:sqlite`, open local SQLite handles, or expose non-canonical scratch ownership metadata; sqlite datasources now surface only the Rust-owned boundary (`boundaryOwner: "witness-core"`, `boundaryAuthority: "rust-owned"`, `boundaryTransport: "capability.db.sqlite"`, `boundaryScope: "canonical-runtime"`) and operations route through witness-core SQLite capabilities or fail closed with structured `503` results.
+- `plugins/sql/sql.test.js`, `plugins/sqlite/sqlite.test.js`, `test/runtime-provider-runtimes.test.js`, and `test/db-sql-host.test.js` now prove the stronger contract: runtime-owned and route-level SQLite paths require witness-core ownership for `testConnection`, `migrate`, `query`, `command`, and `transaction`, while witness-core-backed SQLite calls still succeed without loading `node:sqlite`.
+- `test/rust-owned-external-boundary-roadmap.test.js` now freezes the stronger invariant that no product runtime file under `plugins/sql` or `plugins/sqlite` owns `node:sqlite` or `DatabaseSync` at all, so any reintroduction of local SQLite execution into those runtime paths fails the guardrail immediately.
+- `plugins/platform/verification-persistence.test.js`, `plugins/sql/sql.test.js`, `plugins/sqlite/sqlite.test.js`, `test/runtime-server.test.js`, `test/runtime-provider-runtimes.test.js`, and `test/db-sql-host.test.js` now prove the tighter contract: supervised and runtime-owned paths require Rust ownership for verification persistence and SQLite, with no product-owned verification-persistence scratch fallback remaining.
 - `substrate/witness-core/src/lib.rs` now exposes `POST /capabilities/db/sqlite` and `POST /verification-persistence`, emits journal events for both surfaces, and keeps SQLite command/query/transaction semantics inside the Rust-owned capability path.
 - `cargo test --manifest-path substrate/Cargo.toml -p witness-core emits_journal_event`, `cargo test --manifest-path substrate/Cargo.toml -p witness-core verification_persistence_http_emits_journal_event_and_persists_rows`, and `cargo test --manifest-path substrate/Cargo.toml -p witness-core sqlite_capability_supports_command_query_and_transaction_rollback` now prove the Rust core journals SQLite and verification-persistence operations while preserving SQLite transaction rollback behavior.
 
@@ -275,19 +314,37 @@ Authoritative evidence today:
 
 ### Stage 7. Worker Runtime Contract
 
+- [x] Define an initial versioned worker result envelope (`witness-worker/v1`) and use it for build-worker stdout.
 - [ ] Define a stable worker protocol for build, evaluate, render, inspect, and bounded compute.
 - [ ] Stop treating ad hoc HTTP/control coupling as the long-term worker contract.
 - [ ] Distinguish canonical state access from scratch-worker state in the protocol itself.
 - [ ] Prove that a worker can be killed and replaced without losing platform continuity or external boundary ownership.
+
+Authoritative evidence today:
+
+- [docs/WITNESS-WORKER-PROTOCOL.md](../docs/WITNESS-WORKER-PROTOCOL.md) now defines a versioned outer worker envelope (`witness-worker/v1`) with explicit `request`, `result`, and `event` kinds plus the intended `build`, `evaluate`, `render`, `inspect`, and `bounded_compute` operation names.
+- [src/witness-worker-protocol.js](../src/witness-worker-protocol.js) now codifies that protocol version, operation inventory, and the build-result envelope helper in product code instead of leaving the worker contract as anonymous stdout JSON.
+- [src/witness-core-build-worker.js](../src/witness-core-build-worker.js) now emits the shared `witness-worker/v1` build `result` envelope, including explicit non-canonical scratch metadata (`canonicalStateAccess: "none"`, `scratchState: "worker-local"`), instead of writing loose top-level JSON fields directly to stdout.
+- [substrate/witness-core/src/lib.rs](../substrate/witness-core/src/lib.rs) now accepts the versioned worker envelope when parsing build-worker results, so Rust no longer depends on scraping ad hoc top-level fields on that path.
+- [test/witness-worker-protocol.test.js](../test/witness-worker-protocol.test.js), [test/witness-core-build-worker.test.js](../test/witness-core-build-worker.test.js), [test/rust-owned-external-boundary-roadmap.test.js](../test/rust-owned-external-boundary-roadmap.test.js), and the Rust unit `build_worker_result_parser_accepts_versioned_worker_protocol_envelope` now guard the shared envelope contract from the JS helper, the Node CLI worker, the roadmap guardrail, and the Rust parser side.
 
 ### Final Target Audit
 
 - [x] Node runtime code no longer imports canonical `node:sqlite`.
 - [ ] Node runtime code no longer binds the public host listener.
 - [x] Node runtime code no longer owns canonical file watchers.
-- [ ] Node runtime code no longer mutates canonical files except through Rust-owned capabilities.
-- [ ] Node runtime code no longer performs canonical outbound network side effects directly.
+- [x] Node runtime code no longer mutates canonical files except through Rust-owned capabilities.
+- [x] Node runtime code no longer performs canonical outbound network side effects directly.
 - [ ] Node operates as supervised compute only, with Rust as the sole owner of external boundaries.
+
+Authoritative evidence today:
+
+- `test/rust-owned-external-boundary-roadmap.test.js` freezes the direct Node outbound owner set at `src/cli.js` and `src/runtime-widget-page.js`, while separately freezing injected fetch points and the typed capability-family inventory.
+- [src/runtime-network-capability-inventory.js](../src/runtime-network-capability-inventory.js) classifies `src/cli.js` as the loopback MCP bridge and `src/runtime-widget-page.js` as browser/client fetch, both intentionally outside the canonical server-runtime side-effect claim.
+- Stage 6 proof now covers the canonical server-side remote-effect families (`http.outbound`, `auth.oauth`, and `notify.email`) through Rust-owned execution for authoritative HTTP and HTTPS targets.
+- `src/app-snapshot-manager.js` no longer falls back to local disk mutation for persisted published source edits; canonical source writes now require witness-core `statSource(...)` and `writeSource(...)` capability calls or fail closed with `WITNESS_CORE_REQUIRED`.
+- `test/app-snapshot-manager.test.js` and `test/runtime-core-handlers-authoring.test.js` now prove both the direct manager path and the direct runtime `POST /api/runtime/app-sources` path fail closed when witness-core source capabilities are absent or unavailable, instead of mutating canonical app sources locally.
+- `test/rust-owned-external-boundary-roadmap.test.js` now freezes canonical runtime write owners to the explicit scratch/cache exception set only: [src/runtime-stable-source-cache.js](../src/runtime-stable-source-cache.js) for `.witness-core/stable-app-snapshots` and [src/witness-core-build-worker.js](../src/witness-core-build-worker.js) for staged `.witness-core/compute-modules` artifacts. Those writes are non-canonical cache/worker outputs rather than canonical source mutation paths.
 
 ## Architectural Target
 

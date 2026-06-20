@@ -10,6 +10,7 @@ import {
   COMPUTE_MODULE_LANGUAGE_V1,
   loadAppProject
 } from "./app-project.js";
+import { createBuildWorkerResultEnvelope } from "./witness-worker-protocol.js";
 
 const MODULE_ARTIFACT_DIR = path.join(".witness-core", "compute-modules");
 
@@ -336,7 +337,7 @@ async function main() {
       runtimeProfile,
       workspaceRoot
     });
-    process.stdout.write(JSON.stringify(result));
+    process.stdout.write(JSON.stringify(createBuildWorkerResultEnvelope(result)));
   } catch (error) {
     const result = error instanceof BuildWorkerError && error.result
       ? error.result
@@ -344,7 +345,7 @@ async function main() {
           ok: false,
           error: error instanceof Error ? error.message : String(error)
         };
-    process.stdout.write(JSON.stringify(result));
+    process.stdout.write(JSON.stringify(createBuildWorkerResultEnvelope(result)));
     process.exit(1);
   }
 }

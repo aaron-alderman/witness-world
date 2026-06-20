@@ -88,7 +88,7 @@ test("createWitnessCoreStatusStore merges generation and health process state", 
             ok: true,
             service: "witness-core",
             process: {
-              command: "npm run app:engentus",
+              command: "node src/cli.js utility-serve examples/engentus --server engentus_server --port {runtime_port} --runtime-profile full --startup-telemetry",
               workingDir: ".",
               running: true,
               pid: 4242,

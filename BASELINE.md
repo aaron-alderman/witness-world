@@ -124,12 +124,19 @@ This is a supported baseline behavior, but broader live runtime migration remain
 
 ### CLI and Startup
 
-Canonical startup path:
+Supported public/browser-facing startup path:
 
-- `node src/cli.js bootstrap [--port <n>]`
-- `node src/cli.js serve <dslPath> [--server <id>] [--port <n>]`
-- `npm run bootstrap` is a convenience wrapper over the dedicated bootstrap command
-- `npm run demo` is a convenience wrapper over that generic CLI
+- `npm run bootstrap`
+- `npm run engentus`
+- `npm run engentus:mcp`
+- worker-port example launches belong under explicit utility commands such as `npm run utility:demo` and `npm run utility:engentus-worker`
+
+Raw loopback utility CLI:
+
+- `node src/cli.js utility-bootstrap [--port <n>]`
+- `node src/cli.js utility-serve <dslPath> [--server <id>] [--port <n>]`
+- `npm run bootstrap` is a convenience wrapper over the checked-in Rust frontdoor config
+- `npm run utility:demo` is the explicit demo worker utility command
 - `bootstrap` is a separate blank-world authoring path, not just a variant of the demo app
 - the maintained demo now starts on `--runtime-profile minimal` plus authored runtime-plugin installs on `demo_server`
 - the CLI resolves one authored `serverRunner` and then starts the generic host through `startServer(...)`

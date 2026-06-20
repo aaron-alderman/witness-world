@@ -27,15 +27,19 @@ const ANSI = Object.freeze({
   reset: "\x1b[0m"
 });
 
+const DEFAULT_DIRECT_SERVE_PORT = 4017;
+const DEFAULT_DIRECT_BOOTSTRAP_PORT = 4015;
+const DEFAULT_DIRECT_HTTP_MCP_PORT = 4018;
+
 const [command, ...rest] = process.argv.slice(2);
 
-if (command === "serve") {
+if (command === "utility-serve") {
   await runServe(rest);
-} else if (command === "bootstrap") {
+} else if (command === "utility-bootstrap") {
   await runBootstrap(rest);
 } else if (command === "desktop") {
   await runDesktop(rest);
-} else if (command === "mcp") {
+} else if (command === "utility-mcp") {
   await runMcp(rest);
 } else if (command === "operator") {
   await runOperator(rest);
@@ -477,7 +481,7 @@ async function runTui(args) {
 }
 
 function parseServeArgs(args) {
-  const result = { appPath: null, serverRunnerId: null, port: 3000, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], devMode: true, startupTelemetry: false };
+  const result = { appPath: null, serverRunnerId: null, port: DEFAULT_DIRECT_SERVE_PORT, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], devMode: true, startupTelemetry: false };
   const queue = [...args];
   if (queue.length && !queue[0].startsWith("--")) result.appPath = queue.shift();
   while (queue.length) {
@@ -487,7 +491,7 @@ function parseServeArgs(args) {
       continue;
     }
     if (token === "--port") {
-      result.port = Number(queue.shift() ?? 3000);
+      result.port = Number(queue.shift() ?? DEFAULT_DIRECT_SERVE_PORT);
       continue;
     }
     if (token === "--world-home") {
@@ -520,12 +524,12 @@ function parseServeArgs(args) {
 }
 
 function parseBootstrapArgs(args) {
-  const result = { port: 3000, worldHome: null, runtimeProfile: DEFAULT_BOOTSTRAP_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], startupTelemetry: false };
+  const result = { port: DEFAULT_DIRECT_BOOTSTRAP_PORT, worldHome: null, runtimeProfile: DEFAULT_BOOTSTRAP_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], startupTelemetry: false };
   const queue = [...args];
   while (queue.length) {
     const token = queue.shift();
     if (token === "--port") {
-      result.port = Number(queue.shift() ?? 3000);
+      result.port = Number(queue.shift() ?? DEFAULT_DIRECT_BOOTSTRAP_PORT);
       continue;
     }
     if (token === "--world-home") {
@@ -550,7 +554,7 @@ function parseBootstrapArgs(args) {
 }
 
 function parseMcpArgs(args) {
-  const result = { appPath: null, serverRunnerId: null, mcpServerId: null, port: 3000, transport: "stdio", actor: null, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], startupTelemetry: false };
+  const result = { appPath: null, serverRunnerId: null, mcpServerId: null, port: DEFAULT_DIRECT_HTTP_MCP_PORT, transport: "stdio", actor: null, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], startupTelemetry: false };
   const queue = [...args];
   if (queue.length && !queue[0].startsWith("--")) result.appPath = queue.shift();
   while (queue.length) {
@@ -564,7 +568,7 @@ function parseMcpArgs(args) {
       continue;
     }
     if (token === "--port") {
-      result.port = Number(queue.shift() ?? 3000);
+      result.port = Number(queue.shift() ?? DEFAULT_DIRECT_HTTP_MCP_PORT);
       continue;
     }
     if (token === "--transport") {
@@ -712,6 +716,15 @@ function attachStartupTelemetryUpdates(startupTelemetrySource, initialSnapshot) 
   });
 }
 
+function isLoopbackUtilityUrl(value) {
+  try {
+    const parsed = new URL(String(value || ""));
+    return parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost" || parsed.hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 function reportStartup({
   label,
   server,
@@ -730,6 +743,9 @@ function reportStartup({
   const activeBundles = runtimeComposition?.bundles ?? runtimeProfileInfo.bundles;
   const handlerMetadata = runtimeComposition?.handlerMetadata ?? {};
   console.log(`${label}: ${server.url}`);
+  if (isLoopbackUtilityUrl(server?.url)) {
+    console.log("Ingress: loopback-only Node utility listener");
+  }
   for (const line of extras) console.log(line);
   console.log(`Active profile: ${runtimeComposition?.profile ?? runtimeProfileInfo.id}`);
   console.log(`Active bundles: ${activeBundleIds.join(", ")}`);
@@ -842,11 +858,11 @@ function reportOperatorReplace({
 function usageText() {
   return [
     "Usage:",
-    "  node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--release] [--startup-telemetry]",
-    "  node src/cli.js bootstrap [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]",
+    "  node src/cli.js utility-serve <app-dir|app.wtoml> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--release] [--startup-telemetry]  (loopback utility listener)",
+    "  node src/cli.js utility-bootstrap [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]  (loopback utility listener)",
     "  node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
     "  node src/cli.js tui [<app-dir|app.wtoml>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--command <text>]  (legacy raw shell)",
-    "  node src/cli.js mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]",
+    "  node src/cli.js utility-mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]  (loopback utility listener)",
     "  node src/cli.js operator [<app-dir|app.wtoml>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]  (rich workbench)",
     "  node src/cli.js operator backup --world-home <path> [--label <text>] [--include-derived]",
     "  node src/cli.js operator export --world-home <path> [--label <text>]",

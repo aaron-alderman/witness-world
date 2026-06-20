@@ -39,6 +39,30 @@ The practical reading is:
 
 If Node still has another direct tendril into those boundaries on authoritative paths, the work is not done.
 
+## What This Means For `node:fs`
+
+No: the target is not "delete every `import fs from \"node:fs/promises\";` from the entire repository."
+
+Yes: the target is to remove direct `node:fs` ownership from every authoritative long-running platform path.
+
+That means:
+
+- canonical serving/runtime code should not directly own filesystem access
+- published authoring should not directly mutate canonical files from Node
+- preview/session flows should not directly read or patch canonical files from Node once their boundary tranche is complete
+- canonical watch policy and dirty detection should not live in Node
+
+Some `node:fs` usage may remain for a while, or even permanently, in explicitly non-canonical areas such as:
+
+- tests and fixtures
+- short-lived build utilities
+- desktop-only/operator-only tooling
+- clearly scoped local scratch compatibility fallbacks that are named, frozen, and attached to removal tranches
+
+The rule is ownership, not textual purity.
+If a Node file import still exists but it is not on an authoritative runtime path, it is not automatically a boundary failure.
+If a canonical runtime path still imports `node:fs`, it is still open work.
+
 ## Settled Decisions
 
 These decisions are already made.
@@ -217,6 +241,45 @@ Node still owns transitional seams:
 
 These are removal targets, not precedents.
 
+## Current Open Frontier
+
+If a new agent needs the shortest truthful answer to "what is still actually open?", it is this:
+
+1. Stage 1 ingress is effectively closed.
+Stage 1 ingress is now materially closed in the checked-in product path:
+Rust frontdoor is the checked-in supervised default and the only supported public ingress, while the remaining direct Node startup commands are explicitly loopback-only utility commands rather than supported product-facing entrypoints.
+2. Stage 5 is not fully closed yet.
+Rust owns the canonical verification-persistence and SQLite seams when core authority is configured, but explicit no-core fallbacks still remain and must either be removed from canonical operation or kept visibly scoped as non-canonical exceptions until their removal tranche lands.
+3. Stage 7 is barely started.
+   The worker contract is still largely HTTP/control-plane shaped. That is acceptable temporarily, but it should not be mistaken for the final worker boundary.
+4. The final audit is still open.
+   Node still has transitional serving and canonical file-mutation ownership points in some modes, so the platform is not yet at "Rust owns the external world, Node is compute only."
+
+That means the next useful work is not "invent a new architecture."
+The next useful work is to keep shrinking the remaining authoritative Node tendrils until the final audit becomes mechanically provable.
+
+## The One-Page Mental Model
+
+Use this model when context gets noisy:
+
+- Rust is the substrate.
+- Node is a worker.
+- External resources are not implementation details.
+- If a resource can outlive, race, leak through, or contradict a worker restart, Rust should own it.
+- The point is not to make Node perfect.
+- The point is to make Node non-authoritative.
+
+Applied concretely:
+
+- ports belong to Rust
+- canonical files belong to Rust
+- canonical SQLite belongs to Rust
+- canonical watch policy belongs to Rust
+- canonical outbound effects belong to Rust
+- Node parses, evaluates, renders, inspects, and returns results inside that envelope
+
+If a proposed tranche does not make that model more true in a real consumer path, it is probably drift.
+
 ## Repo Map For This Program
 
 If a new agent does not know where to look, start here:
@@ -282,6 +345,31 @@ Default command discipline:
 - do not update roadmap checkboxes before the proving tests pass
 
 The first session should end with a narrower problem statement than it started with.
+
+## Context Corruption Countermeasures
+
+This program is unusually vulnerable to drift because the codebase is large, the platform is live, and many improvements can feel relevant while not actually moving ownership.
+
+When a new agent starts to wander, the usual failure pattern is:
+
+1. mixing more than one boundary seam into one tranche
+2. improving observability of the old mixed boundary instead of moving the owner
+3. adding a convenience fallback so the new path never has to fail closed
+4. calling a path "Rust-owned" because Node talks to Rust before still doing the real effect locally
+5. treating browser behavior as proof when a fixture, journal, or control-plane test was available
+
+Use this anti-drift loop every time:
+
+1. Name the seam in five words or fewer.
+2. Name the real consumer that changes now.
+3. Name the direct Node bypass that must shrink.
+4. Name the authoritative mode that must fail closed.
+5. Name the exact tests that would catch a quiet bypass regression.
+6. If any answer is vague, stop and narrow the tranche before editing.
+
+Hard rule:
+
+If the change produces more prose than ownership transfer, it is probably the wrong slice.
 
 ## Cold-Start Tranche Template
 
@@ -372,6 +460,28 @@ What not to do here:
 - do not mix public ingress, SQLite, and outbound-network migration into one mega-change
 - do not jump to Wasm, AssemblyScript, or worker-language questions while direct external ownership still remains in Node
 - do not treat a new bridge API as progress unless a real consumer now uses it
+
+## Tranche Selection Heuristic
+
+If several possible next tasks are available, pick the one that scores best on these questions:
+
+1. Does it remove or fence a canonical Node owner instead of just documenting it?
+2. Does it have one real consumer path ready to switch now?
+3. Can it fail closed without inventing a new fallback story?
+4. Can it be proven with targeted fixture-first tests instead of a broad manual sweep?
+5. Will the guardrail or live roadmap become stricter after it lands?
+
+Preferred ordering:
+
+- first remove authority from a product-serving path
+- then remove a hidden fallback that makes the product-serving path ambiguous
+- then harden the worker contract once the authority picture is already materially cleaner
+
+Avoid:
+
+- broad framework work before a real consumer moves
+- protocol design before the remaining owner set is small enough to reason about
+- UI-led validation when a control-plane proof path exists
 
 ## The Questions A New Agent Should Not Reopen
 
@@ -499,6 +609,20 @@ Every completed tranche should leave behind the same evidence bundle:
 - guardrail updates when the allowed owner set changes
 - roadmap checkbox updates only for what was actually proven
 - a short note naming the next smallest tranche that should follow
+
+## Delivery Discipline
+
+Every contribution in this program should leave the repo in a more constrained state than it found it.
+
+That usually means at least one of these happened:
+
+- a Node owner set got smaller
+- an authoritative path now fails closed instead of falling back locally
+- a remaining exception became explicit and scoped instead of hidden
+- a guardrail became stricter
+- a fixture-first proof path replaced a weaker manual assumption
+
+If none of those happened, the tranche probably added activity without adding containment.
 
 ## Program Tranches
 

@@ -129,3 +129,55 @@ test("app.source.write fails closed outside supervised mode when witness-core ow
   assert.equal(snapshotManager.pendingDirtySources.size, 0);
   assert.equal(APP_SOURCE_WRITE_PATH, "/api/runtime/app-sources");
 });
+
+test("app.source.write fails closed outside supervised mode when witness-core is not configured at all", async () => {
+  const snapshotManager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    fsModule: {
+      async mkdir() {
+        throw new Error("local fs fallback should not run");
+      },
+      async writeFile() {
+        throw new Error("local fs fallback should not run");
+      }
+    }
+  });
+  snapshotManager.consumeDirtyAndRebuild = async () => ({
+    appRevision: 2
+  });
+
+  const { handlers, takeResponse } = createHandlerHarness();
+
+  await handlers["app.source.write"]({
+    req: {
+      body: {
+        edits: [{
+          path: "app/shell.rvm",
+          content: "(surface NeedsCore)"
+        }]
+      }
+    },
+    res: {},
+    appContext: {
+      runtimeProfile: "full",
+      serverRunnerId: "engentus_server",
+      witnessCoreBridge: null,
+      runtimeSupervision: {
+        watchersEnabled: true
+      },
+      appSnapshotManager: snapshotManager
+    },
+    requestActor: "tester",
+    requestSession: { id: "session-1" }
+  });
+
+  const response = takeResponse();
+  assert.equal(response.status, 503);
+  assert.equal(response.body?.ok, false);
+  assert.equal(response.body?.code, "WITNESS_CORE_REQUIRED");
+  assert.match(String(response.body?.error || ""), /witness core published source stat is required|witness core published source writes are required/i);
+  assert.equal(response.body?.endpoint, undefined);
+  assert.equal(snapshotManager.pendingDirtySources.size, 0);
+});

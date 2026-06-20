@@ -99,26 +99,28 @@ test("sqlite plugin registers DB SQL read-model projectors", () => withRegistere
   }]);
 }));
 
-test("sqlite plugin runtime reports sqlite unavailability without crashing when node:sqlite is missing", async () => {
+test("sqlite plugin runtime requires witness-core sqlite capability and fails closed when unavailable", async () => {
   const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sqlite-runtime-unavailable-"));
   const runtime = createDbSqlRuntime({
     runtimeConfig: {},
     runtimeRoot,
-    serverRunnerId: "runner.demo",
-    loadSqliteModule: async () => {
-      throw new Error("No such built-in module: node:sqlite");
-    }
+    serverRunnerId: "runner.demo"
   });
   try {
     const inspect = runtime.inspect();
     assert.equal(inspect.ok, true);
-    assert.equal(inspect.datasource?.boundaryOwner, "node");
-    assert.equal(inspect.datasource?.boundaryAuthority, "transitional-node-fallback");
-    assert.equal(inspect.datasource?.boundaryTransport, "node:sqlite");
+    assert.equal(inspect.datasource?.adapterStatus, "witness-core-required");
+    assert.equal(inspect.datasource?.boundaryOwner, "witness-core");
+    assert.equal(inspect.datasource?.boundaryAuthority, "rust-owned");
+    assert.equal(inspect.datasource?.boundaryTransport, "capability.db.sqlite");
+    assert.equal(inspect.datasource?.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.datasource?.canonicalBoundary, true);
+    assert.equal(inspect.datasource?.boundaryFallbackAllowed, false);
+    assert.equal(inspect.datasource?.boundaryAvailability, "unavailable");
     const result = await runtime.query({ sql: "select 1 as ok" });
     assert.equal(result.ok, false);
     assert.equal(result.status, 503);
-    assert.match(result.reason, /sqlite runtime unavailable/i);
+    assert.match(result.reason, /witness-core sqlite capability required/i);
   } finally {
     runtime.close();
     await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
@@ -127,7 +129,6 @@ test("sqlite plugin runtime reports sqlite unavailability without crashing when 
 
 test("sqlite plugin runtime uses witness-core sqlite capability when available", async () => {
   const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sqlite-runtime-witness-core-"));
-  let sqliteLoads = 0;
   const seen = [];
   const runtime = createDbSqlRuntime({
     runtimeConfig: {},
@@ -141,11 +142,7 @@ test("sqlite plugin runtime uses witness-core sqlite capability when available",
           return { ok: true, rows: [{ ok: 1 }], rowCount: 1 };
         }
       }
-    }),
-    loadSqliteModule: async () => {
-      sqliteLoads += 1;
-      throw new Error("node:sqlite should stay unloaded when witness-core handles sqlite");
-    }
+    })
   });
   try {
     const inspect = runtime.inspect();
@@ -154,12 +151,13 @@ test("sqlite plugin runtime uses witness-core sqlite capability when available",
     assert.equal(inspect.datasource?.boundaryOwner, "witness-core");
     assert.equal(inspect.datasource?.boundaryAuthority, "rust-owned");
     assert.equal(inspect.datasource?.boundaryTransport, "capability.db.sqlite");
+    assert.equal(inspect.datasource?.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.datasource?.canonicalBoundary, true);
     const result = await runtime.query({ sql: "select 1 as ok" });
     assert.equal(result.ok, true);
     assert.deepEqual(result.rows, [{ ok: 1 }]);
     assert.equal(seen.length, 1);
     assert.match(String(seen[0].input.path || ""), /db[\\/]main\.sqlite$/i);
-    assert.equal(sqliteLoads, 0);
   } finally {
     runtime.close();
     await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
@@ -191,6 +189,46 @@ test("sqlite plugin runtime fails closed with structured errors when witness-cor
     assert.equal(result.datasource?.adapterStatus, "witness-core-unavailable");
     assert.equal(result.datasource?.boundaryOwner, "witness-core");
     assert.equal(result.datasource?.boundaryAuthority, "rust-owned");
+    assert.equal(result.datasource?.boundaryScope, "canonical-runtime");
+    assert.equal(result.datasource?.canonicalBoundary, true);
+    assert.equal(result.datasource?.boundaryAvailability, "unavailable");
+  } finally {
+    runtime.close();
+    await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test("sqlite plugin runtime keeps the same rust-owned boundary in canonical app-serving mode", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sqlite-runtime-canonical-required-"));
+  const runtime = createDbSqlRuntime({
+    runtimeConfig: {},
+    runtimeRoot,
+    serverRunnerId: "runner.demo",
+    getAppContext: () => ({
+      appRoot: "C:/tmp/app",
+      runtimeSupervision: {
+        watchersEnabled: false
+      }
+    })
+  });
+  try {
+    const inspect = runtime.inspect();
+    assert.equal(inspect.ok, true);
+    assert.equal(inspect.datasource?.adapterStatus, "witness-core-required");
+    assert.equal(inspect.datasource?.boundaryOwner, "witness-core");
+    assert.equal(inspect.datasource?.boundaryAuthority, "rust-owned");
+    assert.equal(inspect.datasource?.boundaryTransport, "capability.db.sqlite");
+    assert.equal(inspect.datasource?.boundaryScope, "canonical-runtime");
+    assert.equal(inspect.datasource?.canonicalBoundary, true);
+    assert.equal(inspect.datasource?.boundaryFallbackAllowed, false);
+    assert.equal(inspect.datasource?.boundaryAvailability, "unavailable");
+
+    const result = await runtime.query({ sql: "select 1 as ok" });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 503);
+    assert.match(result.reason, /witness-core sqlite capability required/i);
+    assert.equal(result.datasource?.adapterStatus, "witness-core-required");
+    assert.equal(result.datasource?.boundaryOwner, "witness-core");
     assert.equal(result.datasource?.boundaryAvailability, "unavailable");
   } finally {
     runtime.close();

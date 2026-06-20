@@ -4124,11 +4124,49 @@ fn interpolate_transaction_template(template: &str, manifest_path: &str, workspa
 }
 
 fn parse_build_worker_result(text: &str) -> BuildWorkerResult {
-    let compute_modules = extract_json_object_array(text, "computeModules")
-        .into_iter()
-        .filter_map(|row| compute_module_build_record_from_json(&row))
-        .collect::<Vec<_>>();
-    let error = extract_json_string_decoded(text, "error").or_else(|| extract_json_string(text, "error"));
+    let parsed = serde_json::from_str::<JsonValue>(text).ok();
+    let source = parsed
+        .as_ref()
+        .and_then(|value| value.as_object())
+        .and_then(|object| {
+            let protocol = object.get("protocol").and_then(|value| value.as_str()).unwrap_or_default();
+            let kind = object.get("kind").and_then(|value| value.as_str()).unwrap_or_default();
+            if protocol == "witness-worker/v1" && kind == "result" {
+                object.get("payload")
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| parsed.as_ref().unwrap_or(&JsonValue::Null));
+    let compute_modules = source
+        .get("computeModules")
+        .and_then(|value| value.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| compute_module_build_record_from_json(&row.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| {
+            extract_json_object_array(text, "computeModules")
+                .into_iter()
+                .filter_map(|row| compute_module_build_record_from_json(&row))
+                .collect::<Vec<_>>()
+        });
+    let error = source
+        .get("error")
+        .and_then(|value| match value {
+            JsonValue::String(text) => Some(text.clone()),
+            JsonValue::Object(object) => object.get("message").and_then(|value| value.as_str()).map(|value| value.to_string()),
+            _ => None,
+        })
+        .or_else(|| extract_json_string_decoded(text, "error"))
+        .or_else(|| extract_json_string(text, "error"));
+    let compute_module_count = source
+        .get("computeModuleCount")
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .or_else(|| extract_json_u64(text, "computeModuleCount").map(|value| value as usize))
+        .unwrap_or(compute_modules.len());
     let raw_message = if !text.trim().is_empty() {
         text.trim().to_string()
     } else {
@@ -4136,9 +4174,7 @@ fn parse_build_worker_result(text: &str) -> BuildWorkerResult {
     };
     BuildWorkerResult {
         error,
-        compute_module_count: extract_json_u64(text, "computeModuleCount")
-            .map(|value| value as usize)
-            .unwrap_or(compute_modules.len()),
+        compute_module_count,
         compute_modules,
         raw_message,
     }
@@ -6787,6 +6823,14 @@ printf '207'
         }
     }
 
+    fn checked_in_repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|path| path.parent())
+            .unwrap()
+            .to_path_buf()
+    }
+
     #[test]
     fn config_parser_reads_minimum_shape() {
         let config = parse_config(r#"
@@ -6851,6 +6895,65 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         assert_eq!(config.compute_modules.engine, "wasmtime");
         assert_eq!(config.compute_modules.execution_mode, ComputeModuleExecutionMode::Shadow);
         assert_eq!(config.compute_modules.artifact_store_root, ".witness-core/artifacts/compute-modules");
+    }
+
+    #[test]
+    fn checked_in_frontdoor_configs_parse_and_keep_private_worker_health_targets() {
+        let repo_root = checked_in_repo_root();
+        let engentus = load_config(&repo_root.join("witness-core.toml")).unwrap();
+        let bootstrap = load_config(&repo_root.join("witness-core-bootstrap.toml")).unwrap();
+        let authoring = load_config(&repo_root.join("witness-core-authoring.toml")).unwrap();
+        let engentus_mcp = load_config(&repo_root.join("witness-core-engentus-mcp.toml")).unwrap();
+
+        assert_eq!(engentus.frontdoor.public_addr.as_deref(), Some("127.0.0.1:3000"));
+        assert_eq!(bootstrap.frontdoor.public_addr.as_deref(), Some("127.0.0.1:3000"));
+        assert_eq!(authoring.frontdoor.public_addr.as_deref(), Some("127.0.0.1:3000"));
+        assert_eq!(engentus_mcp.frontdoor.public_addr.as_deref(), Some("127.0.0.1:8791"));
+
+        assert_eq!(engentus.supervise.health_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/process-health"));
+        assert_eq!(bootstrap.supervise.health_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/process-health"));
+        assert_eq!(authoring.supervise.health_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/process-health"));
+        assert_eq!(engentus_mcp.supervise.health_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/process-health"));
+
+        assert_eq!(engentus.supervise.command.as_deref(), Some("node src/cli.js utility-serve examples/engentus --server engentus_server --port {runtime_port} --runtime-profile full --startup-telemetry"));
+        assert_eq!(bootstrap.supervise.command.as_deref(), Some("node src/cli.js utility-bootstrap --port {runtime_port}"));
+        assert_eq!(authoring.supervise.command.as_deref(), Some("node src/cli.js utility-bootstrap --port {runtime_port} --runtime-profile authoring --runtime-plugin plugin.mcp"));
+        assert_eq!(engentus_mcp.supervise.command.as_deref(), Some("node src/cli.js utility-mcp examples/engentus --mcp engentus_mcp --server engentus_server --transport http --port {runtime_port} --runtime-profile full"));
+    }
+
+    #[test]
+    fn build_worker_result_parser_accepts_versioned_worker_protocol_envelope() {
+        let parsed = parse_build_worker_result(r#"{
+            "protocol":"witness-worker/v1",
+            "kind":"result",
+            "operation":"build",
+            "ok":true,
+            "payload":{
+                "ok":true,
+                "computeModuleCount":1,
+                "computeModules":[{
+                    "id":"engentus.health.classify",
+                    "hostOperation":"engentus.health.classify",
+                    "source":"app/modules/health-classify/assembly/index.ts",
+                    "artifactPath":".witness-core/compute-modules/health.wasm",
+                    "artifactHash":"sha256:abc",
+                    "language":"assemblyscript",
+                    "abi":"world.hostOperation.v1",
+                    "export":"invoke",
+                    "success":true
+                }]
+            },
+            "metadata":{
+                "workerClass":"node-build-worker",
+                "canonicalStateAccess":"none",
+                "scratchState":"worker-local"
+            }
+        }"#);
+        assert_eq!(parsed.error, None);
+        assert_eq!(parsed.compute_module_count, 1);
+        assert_eq!(parsed.compute_modules.len(), 1);
+        assert_eq!(parsed.compute_modules[0].id, "engentus.health.classify");
+        assert_eq!(parsed.compute_modules[0].success, true);
     }
 
     #[test]

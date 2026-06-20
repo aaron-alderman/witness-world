@@ -9,7 +9,7 @@
 ```bash
 npm test
 npm run bootstrap
-npm run demo
+npm run engentus
 ```
 
 Open:
@@ -22,11 +22,15 @@ http://127.0.0.1:3000/process
 http://127.0.0.1:3000/canvas
 ```
 
-Generic CLI:
+Supported public/browser-facing startup should prefer the checked-in Rust frontdoor wrappers such as `npm run bootstrap`, `npm run engentus`, and `npm run engentus:mcp`.
+
+Worker-port utility flows are separate, for example `npm run utility:demo` or `npm run utility:engentus-worker`.
+
+Raw loopback utility CLI:
 
 ```bash
-node src/cli.js bootstrap [--port <n>]
-node src/cli.js serve <dslPath> [--server <id>] [--port <n>]
+node src/cli.js utility-bootstrap [--port <n>]
+node src/cli.js utility-serve <dslPath> [--server <id>] [--port <n>]
 ```
 
 ## Architecture summary
@@ -146,7 +150,7 @@ The first fully typed process is `widget.define`:
 ## Suggested next command for a new developer
 
 ```bash
-npm test && npm run demo
+npm test && npm run utility:demo
 ```
 
 Then open `/world` and inspect the graph/source browser while interacting with the Todo app.

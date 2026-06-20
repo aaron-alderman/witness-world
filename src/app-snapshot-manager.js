@@ -864,33 +864,20 @@ export class AppSnapshotManager {
     correlation = null,
     expectedHash = null
   } = {}) {
-    if (typeof this.generationBridge?.writeSource === "function") {
-      try {
-        await this.generationBridge.writeSource({
-          path: edit.sourceId,
-          content: edit.content,
-          expectedHash: normalizeExpectedSourceHash(expectedHash),
-          reason,
-          previewOnly: false,
-          correlation
-        });
-        return;
-      } catch (error) {
-        if (this.requireGenerationBridgeForPublishedWrites) throw error;
-        this.logger?.warn?.("witness core published source write failed; falling back to local fs", {
-          sourceId: edit.sourceId,
-          error: error instanceof Error ? error.message : String(error)
-        });
-      }
-    }
-    if (this.requireGenerationBridgeForPublishedWrites) {
+    if (typeof this.generationBridge?.writeSource !== "function") {
       throw createAppSnapshotError("witness core published source writes are required but unavailable", {
         status: 503,
-        code: "WITNESS_CORE_UNAVAILABLE"
+        code: "WITNESS_CORE_REQUIRED"
       });
     }
-    await this.fs.mkdir(path.dirname(edit.path), { recursive: true });
-    await this.fs.writeFile(edit.path, edit.content, "utf8");
+    await this.generationBridge.writeSource({
+      path: edit.sourceId,
+      content: edit.content,
+      expectedHash: normalizeExpectedSourceHash(expectedHash),
+      reason,
+      previewOnly: false,
+      correlation
+    });
   }
 
   async resolvePersistedSourceExpectedHash(edit, {
@@ -899,28 +886,16 @@ export class AppSnapshotManager {
     const explicitExpectedHash = normalizeExpectedSourceHash(edit?.expectedHash);
     if (explicitExpectedHash) return explicitExpectedHash;
     if (typeof this.generationBridge?.statSource !== "function") {
-      if (this.requireGenerationBridgeForPublishedWrites) {
-        throw createAppSnapshotError("witness core published source stat is required but unavailable", {
-          status: 503,
-          code: "WITNESS_CORE_UNAVAILABLE"
-        });
-      }
-      return null;
-    }
-    try {
-      const stat = await this.generationBridge.statSource({
-        path: edit.sourceId,
-        correlation
+      throw createAppSnapshotError("witness core published source stat is required but unavailable", {
+        status: 503,
+        code: "WITNESS_CORE_REQUIRED"
       });
-      return normalizeExpectedSourceHash(stat?.hash);
-    } catch (error) {
-      if (this.requireGenerationBridgeForPublishedWrites) throw error;
-      this.logger?.warn?.("witness core published source stat failed; continuing without expected hash", {
-        sourceId: edit.sourceId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      return null;
     }
+    const stat = await this.generationBridge.statSource({
+      path: edit.sourceId,
+      correlation
+    });
+    return normalizeExpectedSourceHash(stat?.hash);
   }
 
   async applySourceEdits(edits = [], {

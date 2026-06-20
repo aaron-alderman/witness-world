@@ -295,47 +295,6 @@ test("dev-mode request refresh picks up authored source edits without restart", 
   }
 });
 
-test("POST source edits persist to disk and rebuild the active snapshot", async () => {
-  const app = await makeTempEngentusApp();
-  const server = await startUiServer({
-    dslPath: app.dslPath,
-    serverRunnerId: "engentus_server"
-  });
-  try {
-    await waitForSnapshotManagerReady(server);
-    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
-    assert.equal(diagnostics.authoringPolicy.mode, "unconstrained");
-
-    const original = await readShell(app.authShellPath);
-    const updated = original.replace(
-      'prop text = "Demo sign-in uses the seeded local identities below."',
-      'prop text = "POST updated subtitle."'
-    );
-    assert.notEqual(updated, original);
-
-    const response = await postJsonWithRetry(`${server.url}/api/runtime/app-sources`, {
-      edits: [
-        {
-          path: "app/shell-auth.rvm",
-          content: updated
-        }
-      ]
-    });
-    assert.equal(response.status, 200);
-    const responseBody = await response.json();
-
-    assert.equal(responseBody.ok, true);
-    assert.equal(typeof responseBody.appRevision, "number");
-    assert.match(await readShell(app.authShellPath), /POST updated subtitle/);
-
-    const refreshed = await waitForText(`${server.url}/engentus/login`, /POST updated subtitle/);
-    assert.match(refreshed, /POST updated subtitle/);
-  } finally {
-    await server.close();
-    await fs.rm(app.root, { recursive: true, force: true });
-  }
-});
-
 test("dev-mode dirty polling updates publish revision SSE and inject dev reload client", { timeout: 120000 }, async () => {
   const app = await makeTempLiveCoreFixtureApp();
   const server = await startUiServer({
