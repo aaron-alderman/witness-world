@@ -210,11 +210,96 @@ class = "surface-list"
 id = "tilth_program_workbench_v9"
 rootWidget = "tilth_page_workbench_v9"
 
+# --- detail pages -----------------------------------------------------------
+[[page]]
+id = "tilth_session_detail_page"
+children = ["session_detail_back_link", "session_detail_status", "session_detail_list", "session_detail_repos_heading", "session_detail_repo_list", "session_detail_jobs_heading", "session_detail_jobs_list"]
+title = "Tilth session"
+
+[[link]]
+id = "session_detail_back_link"
+text = "Back to Tilth"
+href = "/"
+class = "surface-inline-link"
+
+[[text]]
+id = "session_detail_status"
+text = "Loading session..."
+class = "status"
+
+[[box]]
+id = "session_detail_list"
+class = "surface-list"
+
+[[heading]]
+id = "session_detail_repos_heading"
+text = "Repos"
+level = 2
+
+[[box]]
+id = "session_detail_repo_list"
+class = "surface-list"
+
+[[heading]]
+id = "session_detail_jobs_heading"
+text = "Recent work"
+level = 2
+
+[[box]]
+id = "session_detail_jobs_list"
+class = "surface-list"
+
+[[frontendProgram]]
+id = "tilth_program_session_detail"
+rootWidget = "tilth_session_detail_page"
+
+[[page]]
+id = "tilth_repo_detail_page"
+children = ["repo_detail_back_link", "repo_detail_status", "repo_detail_list", "repo_detail_sessions_heading", "repo_detail_session_list", "repo_detail_jobs_heading", "repo_detail_jobs_list"]
+title = "Tilth repo"
+
+[[link]]
+id = "repo_detail_back_link"
+text = "Back to Tilth"
+href = "/"
+class = "surface-inline-link"
+
+[[text]]
+id = "repo_detail_status"
+text = "Loading repo..."
+class = "status"
+
+[[box]]
+id = "repo_detail_list"
+class = "surface-list"
+
+[[heading]]
+id = "repo_detail_sessions_heading"
+text = "Sessions"
+level = 2
+
+[[box]]
+id = "repo_detail_session_list"
+class = "surface-list"
+
+[[heading]]
+id = "repo_detail_jobs_heading"
+text = "Recent work"
+level = 2
+
+[[box]]
+id = "repo_detail_jobs_list"
+class = "surface-list"
+
+[[frontendProgram]]
+id = "tilth_program_repo_detail"
+rootWidget = "tilth_repo_detail_page"
+
 # --- repo template ----------------------------------------------------------
 [[box]]
 id = "repo_item_template_clean"
 template = true
-children = ["repo_item_title_clean", "repo_item_meta_clean", "repo_item_recognition_clean", "repo_item_snapshot_clean", "repo_item_remote_clean", "repo_item_sessions_clean", "repo_item_paths_preview_clean", "repo_item_paths_details_clean"]
+children = ["repo_item_title_clean", "repo_item_open_link", "repo_item_meta_clean", "repo_item_recognition_clean", "repo_item_snapshot_clean", "repo_item_remote_clean", "repo_item_sessions_clean", "repo_item_paths_preview_clean", "repo_item_paths_details_clean"]
 class = "surface-card repo-card"
 
 [[heading]]
@@ -228,6 +313,13 @@ id = "repo_item_meta_clean"
 template = true
 text = "${item.displayRoot || item.root} · ${item.sessionCount} ${item.sessionCount === 1 ? 'session' : 'sessions'} · ${item.mentionText || (item.mentionCount + ' mentions')}"
 class = "surface-status"
+
+[[link]]
+id = "repo_item_open_link"
+template = true
+text = "Open repo"
+href = "${'/repo?id=' + encodeURIComponent(item.repoId || item.displayRoot || item.root || '')}"
+class = "surface-inline-link"
 
 [[text]]
 id = "repo_item_recognition_clean"
@@ -281,7 +373,7 @@ class = "surface-state-list surface-note surface-mono repo-paths-list"
 [[box]]
 id = "session_card_v4_template"
 template = true
-children = ["session_card_v2_title", "session_card_v2_meta", "session_card_v4_latest", "session_card_v2_preview", "session_card_v2_desire_button", "session_card_v2_transcript_button", "session_card_v2_ai_summary_button", "session_card_v2_repo_button", "session_card_v2_status_line", "session_card_v2_repo_chips", "session_card_v2_ai_summary_details", "session_card_v2_repo_details", "session_card_v2_transcript_details"]
+children = ["session_card_v2_title", "session_card_open_link", "session_card_v2_meta", "session_card_v4_latest", "session_card_v2_preview", "session_card_v2_desire_button", "session_card_v2_transcript_button", "session_card_v2_ai_summary_button", "session_card_v2_repo_button", "session_card_v2_status_line", "session_card_v2_repo_chips", "session_card_v2_ai_summary_details", "session_card_v2_repo_details", "session_card_v2_transcript_details"]
 class = "${item.desire ? 'surface-card session-card desire' : 'surface-card session-card'}"
 
 [[heading]]
@@ -290,6 +382,13 @@ template = true
 text = "${item.title || item.id}"
 level = 3
 class = "session-title"
+
+[[link]]
+id = "session_card_open_link"
+template = true
+text = "Open session"
+href = "${'/session?id=' + encodeURIComponent(item.id || '')}"
+class = "surface-inline-link"
 
 [[text]]
 id = "session_card_v2_meta"
@@ -521,6 +620,364 @@ id = "job_item_raw_detail_workbench"
 template = true
 text = "${item.rawDetailText || item.errorDetailText || item.requestId || ''}"
 class = "surface-state-list surface-note surface-mono repo-paths-list"
+
+# --- detail templates -------------------------------------------------------
+[[box]]
+id = "session_detail_template"
+template = true
+children = ["session_detail_title", "session_detail_meta", "session_detail_latest", "session_detail_preview", "session_detail_actions", "session_detail_status_line", "session_detail_summary_details", "session_detail_repo_details", "session_detail_transcript_details"]
+class = "${item.desire ? 'surface-card session-card desire' : 'surface-card session-card'}"
+
+[[heading]]
+id = "session_detail_title"
+template = true
+text = "${item.title || item.id}"
+level = 1
+class = "session-title"
+
+[[text]]
+id = "session_detail_meta"
+template = true
+text = "${item.project} · ${item.msgCount} msgs · origin ${item.origin || '—'}${item.lastMessageRelativeText ? ' · updated ' + item.lastMessageRelativeText : ''}${item.lastMessageExactText ? ' · ' + item.lastMessageExactText : ''}${item.desire ? ' · DESIRE' : ''}"
+class = "surface-status"
+
+[[text]]
+id = "session_detail_latest"
+template = true
+text = "${item.lastMessageLine || ''}"
+class = "surface-status"
+
+[[text]]
+id = "session_detail_preview"
+template = true
+text = "${item.previewBrief || item.preview || ''}"
+class = "surface-lede session-preview"
+
+[[box]]
+id = "session_detail_actions"
+template = true
+children = ["session_detail_transcript_button", "session_detail_summary_button", "session_detail_repo_button"]
+class = "surface-actions"
+
+[[button]]
+id = "session_detail_transcript_button"
+template = true
+text = "${item.transcriptPreview && item.transcriptPreview.actionText ? item.transcriptPreview.actionText : 'Preview text'}"
+type = "button"
+action = "previewTranscript"
+data-id = "${item.id}"
+
+[[button]]
+id = "session_detail_summary_button"
+template = true
+text = "${item.aiSummary && item.aiSummary.actionText ? item.aiSummary.actionText : 'Summarize'}"
+type = "button"
+action = "summarizeSession"
+data-id = "${item.id}"
+
+[[button]]
+id = "session_detail_repo_button"
+template = true
+text = "${item.repoIndex && item.repoIndex.actionText ? item.repoIndex.actionText : 'Index repos'}"
+type = "button"
+action = "indexRepos"
+data-id = "${item.id}"
+
+[[text]]
+id = "session_detail_status_line"
+template = true
+text = "${(item.repoStatusText || 'Repos not indexed') + ' · ' + (item.transcriptStatusText || 'Text not loaded') + ' · ' + (item.aiStatusText || 'Summary not run')}"
+class = "surface-status"
+
+[[details]]
+id = "session_detail_summary_details"
+template = true
+children = ["session_detail_summary_heading", "session_detail_summary_version", "session_detail_summary_error", "session_detail_summary_text", "session_detail_summary_bullets"]
+class = "session-transcript-panel"
+
+[[summary]]
+id = "session_detail_summary_heading"
+template = true
+text = "AI summary"
+class = "surface-card-title"
+
+[[text]]
+id = "session_detail_summary_version"
+template = true
+text = "${item.aiSummary && item.aiSummary.versionText ? item.aiSummary.versionText : ''}"
+class = "surface-status"
+
+[[text]]
+id = "session_detail_summary_error"
+template = true
+text = "${item.aiSummary && item.aiSummary.errorText ? item.aiSummary.errorText : ''}"
+class = "surface-state-list surface-note surface-mono session-transcript-preview"
+
+[[text]]
+id = "session_detail_summary_text"
+template = true
+text = "${item.aiSummary && item.aiSummary.text ? item.aiSummary.text : ''}"
+class = "surface-note"
+
+[[text]]
+id = "session_detail_summary_bullets"
+template = true
+text = "${item.aiSummary && item.aiSummary.bulletText ? item.aiSummary.bulletText : ''}"
+class = "surface-state-list surface-note session-transcript-preview"
+
+[[details]]
+id = "session_detail_repo_details"
+template = true
+children = ["session_detail_repo_heading", "session_detail_repo_version", "session_detail_repo_error", "session_detail_repo_result"]
+class = "session-transcript-panel"
+
+[[summary]]
+id = "session_detail_repo_heading"
+template = true
+text = "Repo index"
+class = "surface-card-title"
+
+[[text]]
+id = "session_detail_repo_version"
+template = true
+text = "${item.repoIndex && item.repoIndex.versionText ? item.repoIndex.versionText : ''}"
+class = "surface-status"
+
+[[text]]
+id = "session_detail_repo_error"
+template = true
+text = "${item.repoIndex && item.repoIndex.errorText ? item.repoIndex.errorText : ''}"
+class = "surface-state-list surface-note surface-mono session-transcript-preview"
+
+[[text]]
+id = "session_detail_repo_result"
+template = true
+text = "${item.repoIndex && item.repoIndex.detailText ? item.repoIndex.detailText : ''}"
+class = "surface-note"
+
+[[details]]
+id = "session_detail_transcript_details"
+template = true
+children = ["session_detail_transcript_heading", "session_detail_transcript_version", "session_detail_transcript_error", "session_detail_transcript_text"]
+class = "session-transcript-panel"
+
+[[summary]]
+id = "session_detail_transcript_heading"
+template = true
+text = "Transcript"
+class = "surface-card-title"
+
+[[text]]
+id = "session_detail_transcript_version"
+template = true
+text = "${item.transcriptPreview && item.transcriptPreview.versionText ? item.transcriptPreview.versionText : ''}"
+class = "surface-status"
+
+[[text]]
+id = "session_detail_transcript_error"
+template = true
+text = "${item.transcriptPreview && item.transcriptPreview.errorText ? item.transcriptPreview.errorText : ''}"
+class = "surface-state-list surface-note surface-mono session-transcript-preview"
+
+[[text]]
+id = "session_detail_transcript_text"
+template = true
+text = "${item.transcriptPreview && item.transcriptPreview.text ? item.transcriptPreview.text : ''}"
+class = "surface-state-list surface-note surface-mono session-transcript-preview"
+
+[[box]]
+id = "session_detail_repo_link_template"
+template = true
+children = ["session_detail_repo_link_title", "session_detail_repo_link_meta", "session_detail_repo_link_paths"]
+class = "surface-card repo-card"
+
+[[link]]
+id = "session_detail_repo_link_title"
+template = true
+text = "${item.name || item.displayRoot || item.repoId}"
+href = "${'/repo?id=' + encodeURIComponent(item.repoId || item.displayRoot || item.root || '')}"
+class = "surface-card-title"
+
+[[text]]
+id = "session_detail_repo_link_meta"
+template = true
+text = "${(item.displayRoot || item.root || '') + ' · ' + (item.mentionText || '')}"
+class = "surface-status"
+
+[[text]]
+id = "session_detail_repo_link_paths"
+template = true
+text = "${item.pathPreviewText || ''}"
+class = "surface-status"
+
+[[box]]
+id = "repo_detail_template"
+template = true
+children = ["repo_detail_title", "repo_detail_meta", "repo_detail_recognition", "repo_detail_snapshot", "repo_detail_remote", "repo_detail_paths_details"]
+class = "surface-card repo-card"
+
+[[heading]]
+id = "repo_detail_title"
+template = true
+text = "${item.name || item.displayRoot || item.repoId}"
+level = 1
+class = "session-title"
+
+[[text]]
+id = "repo_detail_meta"
+template = true
+text = "${(item.displayRoot || item.root || '') + ' · ' + item.sessionCount + ' ' + (item.sessionCount === 1 ? 'session' : 'sessions') + ' · ' + (item.mentionText || '')}"
+class = "surface-status"
+
+[[text]]
+id = "repo_detail_recognition"
+template = true
+text = "${item.recognitionText || 'Recognition source unknown'}"
+class = "surface-status"
+
+[[text]]
+id = "repo_detail_snapshot"
+template = true
+text = "${item.snapshotText || 'Snapshot not prepared'}"
+class = "surface-status"
+
+[[text]]
+id = "repo_detail_remote"
+template = true
+text = "${item.remoteText ? 'Remote: ' + item.remoteText : 'Remote: none'}"
+class = "surface-status"
+
+[[details]]
+id = "repo_detail_paths_details"
+template = true
+children = ["repo_detail_paths_summary", "repo_detail_paths_text"]
+class = "repo-paths-panel"
+
+[[summary]]
+id = "repo_detail_paths_summary"
+template = true
+text = "Mentioned paths"
+class = "surface-card-title"
+
+[[text]]
+id = "repo_detail_paths_text"
+template = true
+text = "${item.pathDetailText || 'No displayable mentioned paths'}"
+class = "surface-state-list surface-note surface-mono repo-paths-list"
+
+[[box]]
+id = "repo_detail_session_link_template"
+template = true
+children = ["repo_detail_session_link_title", "repo_detail_session_link_meta", "repo_detail_session_link_paths"]
+class = "surface-card session-card"
+
+[[link]]
+id = "repo_detail_session_link_title"
+template = true
+text = "${item.title || item.id}"
+href = "${'/session?id=' + encodeURIComponent(item.id || '')}"
+class = "surface-card-title"
+
+[[text]]
+id = "repo_detail_session_link_meta"
+template = true
+text = "${(item.project || '') + ' · ' + (item.mentionText || '')}"
+class = "surface-status"
+
+[[text]]
+id = "repo_detail_session_link_paths"
+template = true
+text = "${item.pathText || ''}"
+class = "surface-status"
+
+# --- detail page loads ------------------------------------------------------
+[[step]]
+program = "tilth_program_session_detail"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "${'/api/sessions/detail?id=' + encodeURIComponent(new URLSearchParams(window.location.search).get('id') || '')}"
+into = "sessionDetailResponse"
+allowFailure = true
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "session_detail_list"
+from = "sessionDetailResponse.sessions"
+template = "session_detail_template"
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 2
+op = "renderCollection"
+on = "load"
+widget = "session_detail_repo_list"
+from = "sessionDetailResponse.repos"
+template = "session_detail_repo_link_template"
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 3
+op = "renderCollection"
+on = "load"
+widget = "session_detail_jobs_list"
+from = "sessionDetailResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 4
+op = "setText"
+on = "load"
+widget = "session_detail_status"
+text = "${state.sessionDetailResponse && state.sessionDetailResponse.session ? 'Session detail · ' + state.sessionDetailResponse.repos.length + ' repos · ' + state.sessionDetailResponse.jobs.length + ' jobs' : 'Session not found'}"
+
+[[step]]
+program = "tilth_program_repo_detail"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "${'/api/repo-index/repo?id=' + encodeURIComponent(new URLSearchParams(window.location.search).get('id') || '')}"
+into = "repoDetailResponse"
+allowFailure = true
+
+[[step]]
+program = "tilth_program_repo_detail"
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "repo_detail_list"
+from = "repoDetailResponse.repos"
+template = "repo_detail_template"
+
+[[step]]
+program = "tilth_program_repo_detail"
+order = 2
+op = "renderCollection"
+on = "load"
+widget = "repo_detail_session_list"
+from = "repoDetailResponse.sessions"
+template = "repo_detail_session_link_template"
+
+[[step]]
+program = "tilth_program_repo_detail"
+order = 3
+op = "renderCollection"
+on = "load"
+widget = "repo_detail_jobs_list"
+from = "repoDetailResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+program = "tilth_program_repo_detail"
+order = 4
+op = "setText"
+on = "load"
+widget = "repo_detail_status"
+text = "${state.repoDetailResponse && state.repoDetailResponse.repo ? 'Repo detail · ' + state.repoDetailResponse.sessions.length + ' sessions · ' + state.repoDetailResponse.jobs.length + ' jobs' : 'Repo not found'}"
 
 # --- load -------------------------------------------------------------------
 [[step]]
@@ -1699,4 +2156,83 @@ order = 2
 op = "setText"
 on = "click:summarizeSession"
 widget = "tilth_status_repo_filters"
+text = "AI summary requested. Refresh in a few seconds."
+
+# --- session detail actions -------------------------------------------------
+[[step]]
+program = "tilth_program_session_detail"
+order = 0
+op = "setText"
+on = "click:indexRepos"
+widget = "session_detail_status"
+text = "Requesting repo index..."
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 1
+op = "postJson"
+on = "click:indexRepos"
+url = "/api/sessions/${event.id}/repo-index/request"
+method = "POST"
+body = {}
+into = "repoIndexRequest"
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 2
+op = "setText"
+on = "click:indexRepos"
+widget = "session_detail_status"
+text = "Repo index requested. Refresh in a few seconds."
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 0
+op = "setText"
+on = "click:previewTranscript"
+widget = "session_detail_status"
+text = "Requesting transcript preview..."
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 1
+op = "postJson"
+on = "click:previewTranscript"
+url = "/api/sessions/${event.id}/transcript-preview/request"
+method = "POST"
+body = {}
+into = "transcriptPreviewRequest"
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 2
+op = "setText"
+on = "click:previewTranscript"
+widget = "session_detail_status"
+text = "Transcript preview requested. Refresh in a few seconds."
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 0
+op = "setText"
+on = "click:summarizeSession"
+widget = "session_detail_status"
+text = "Requesting AI summary..."
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 1
+op = "postJson"
+on = "click:summarizeSession"
+url = "/api/sessions/${event.id}/ai-summary/request"
+method = "POST"
+body = {}
+into = "aiSummaryRequest"
+
+[[step]]
+program = "tilth_program_session_detail"
+order = 2
+op = "setText"
+on = "click:summarizeSession"
+widget = "session_detail_status"
 text = "AI summary requested. Refresh in a few seconds."

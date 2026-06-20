@@ -92,6 +92,22 @@ export function projectFilteredSessions(witnesses, filter = "", query = "") {
   return sessions;
 }
 
+export function projectSessionDetail(witnesses, id) {
+  const sid = stringOrNull(id);
+  if (!sid) return null;
+  const session = projectSessions(witnesses).find(row => row.id === sid);
+  if (!session) return null;
+  const repos = normalizeRepos(session.repoIndex?.repos).map(repo => repoMentionPublicShape(repo));
+  const jobs = projectJobs(witnesses, { limit: 10000 }).filter(job => job.targetId === sid);
+  const publicSession = sessionDetailPublicShape(session);
+  return {
+    session: publicSession,
+    sessions: [publicSession],
+    repos,
+    jobs
+  };
+}
+
 export function projectRepoIndexRequests(witnesses) {
   const requests = new Map();
   for (const witness of witnesses) {
@@ -504,6 +520,22 @@ export function projectRepoIndexRepos(witnesses, options = {}) {
     })
     .filter(repo => !query || includesQuery(repo.searchText, query))
     .sort((a, b) => b.sessionCount - a.sessionCount || b.mentionCount - a.mentionCount || a.root.localeCompare(b.root));
+}
+
+export function projectRepoDetail(witnesses, id) {
+  const rid = stringOrNull(id);
+  if (!rid) return null;
+  const repo = projectRepoIndexRepos(witnesses).find(row => row.repoId === rid || row.displayRoot === rid || row.root === rid);
+  if (!repo) return null;
+  const publicRepo = repoIndexPublicShape(repo);
+  const jobs = projectJobs(witnesses, { limit: 10000 })
+    .filter(job => job.targetId === repo.repoId || job.targetId === repo.displayRoot || job.targetId === repo.root || job.label === repo.repoId);
+  return {
+    repo: publicRepo,
+    repos: [publicRepo],
+    sessions: publicRepo.sessions,
+    jobs
+  };
 }
 
 function latestRepoSnapshotsByRoot(witnesses) {
@@ -1796,6 +1828,12 @@ export function createTilthHandlers({ world, backendHost, sendJson, readJson }) 
       sendJson(res, 200, { sessions: projectFilteredSessions(world.allWitnesses(), requestFilter(req), requestQuery(req)) });
     },
 
+    "session.detail.read": async ({ req, res }) => {
+      const detail = projectSessionDetail(world.allWitnesses(), requestParam(req, "id"));
+      if (!detail) { sendJson(res, 404, { error: "session not found" }); return; }
+      sendJson(res, 200, detail);
+    },
+
     "jobs.read": async ({ req, res }) => {
       const options = { status: requestParam(req, "status"), kind: requestParam(req, "kind"), limit: requestParam(req, "limit") };
       sendJson(res, 200, { jobs: projectJobs(world.allWitnesses(), options), summary: projectOpsSummary(world.allWitnesses()) });
@@ -1906,6 +1944,12 @@ export function createTilthHandlers({ world, backendHost, sendJson, readJson }) 
       const repos = projectRepoIndexRepos(world.allWitnesses(), { filter: requestFilter(req), query: requestQuery(req) })
         .map(repoIndexPublicShape);
       sendJson(res, 200, { repos });
+    },
+
+    "repoIndex.repo.read": async ({ req, res }) => {
+      const detail = projectRepoDetail(world.allWitnesses(), requestParam(req, "id"));
+      if (!detail) { sendJson(res, 404, { error: "repo not found" }); return; }
+      sendJson(res, 200, detail);
     },
 
     "repoIndex.request.result": async ({ req, res, requestActor, params }) => {
@@ -2023,9 +2067,44 @@ function repoIndexPublicShape(repo) {
     sessions: Array.isArray(rawSessions)
       ? rawSessions.map(session => {
         const { paths: _paths, pathText: _sessionPathText, ...sessionRest } = session;
-        return sessionRest;
+        const displayPaths = Array.isArray(session.displayPaths) ? session.displayPaths : [];
+        return {
+          ...sessionRest,
+          pathPreviewText: displayPaths.slice(0, 5).join(", ") + (displayPaths.length > 5 ? `, +${displayPaths.length - 5} more` : ""),
+          pathDetailText: displayPaths.join("\n"),
+          pathText: displayPaths.join(", ")
+        };
       })
       : []
+  };
+}
+
+function sessionDetailPublicShape(session) {
+  const repos = normalizeRepos(session.repoIndex?.repos).map(repo => repoMentionPublicShape(repo));
+  return {
+    ...session,
+    repos,
+    repoLinksText: repos.map(repo => repo.name || repo.displayRoot).join(" · ")
+  };
+}
+
+function repoMentionPublicShape(repo) {
+  const displayRoot = displayRepoRoot(repo.root);
+  const pathItems = displayPathItems(repo.root, Array.isArray(repo.mentions) ? repo.mentions.map(mention => mention.path) : []);
+  return {
+    repoId: displayRoot,
+    root: displayRoot,
+    displayRoot,
+    name: repo.name || displayRoot,
+    remotes: Array.isArray(repo.remotes)
+      ? repo.remotes.map(remote => ({ name: remote.name, url: displayRemoteUrl(remote.url) }))
+      : [],
+    remoteText: remoteText(repo.remotes),
+    mentionCount: Array.isArray(repo.mentions) ? repo.mentions.length : 0,
+    mentionText: countText(Array.isArray(repo.mentions) ? repo.mentions.length : 0, "mention"),
+    pathItems,
+    pathPreviewText: pathItems.slice(0, 5).join(", ") + (pathItems.length > 5 ? `, +${pathItems.length - 5} more` : ""),
+    pathDetailText: pathItems.join("\n")
   };
 }
 

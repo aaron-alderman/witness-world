@@ -29,6 +29,32 @@ params = { rootWidget = "tilth_page_workbench_v9", frontendProgram = "tilth_prog
 serverRunner = "tilth_server"
 route = "tilth_home_route"
 
+# Focused session detail page.
+[[route]]
+id = "tilth_session_detail_page_route"
+method = "GET"
+path = "/session"
+serves = "tilthSessionDetailView"
+handler = "page.home"
+params = { rootWidget = "tilth_session_detail_page", frontendProgram = "tilth_program_session_detail", page = "session" }
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_session_detail_page_route"
+
+# Focused repo detail page.
+[[route]]
+id = "tilth_repo_detail_page_route"
+method = "GET"
+path = "/repo"
+serves = "tilthRepoDetailView"
+handler = "page.home"
+params = { rootWidget = "tilth_repo_detail_page", frontendProgram = "tilth_program_repo_detail", page = "repo" }
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_detail_page_route"
+
 # Sessions projection (JSON the surface fetches)
 [[route]]
 id = "tilth_sessions_read_route"
@@ -40,6 +66,18 @@ handler = "sessions.read"
 [[serve]]
 serverRunner = "tilth_server"
 route = "tilth_sessions_read_route"
+
+# Focused session detail projection.
+[[route]]
+id = "tilth_session_detail_read_route"
+method = "GET"
+path = "/api/sessions/detail"
+serves = "tilthSessionDetail"
+handler = "session.detail.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_session_detail_read_route"
 
 # Local job projection across all Tilth request/result queues.
 [[route]]
@@ -249,6 +287,18 @@ handler = "repoIndex.repos.read"
 [[serve]]
 serverRunner = "tilth_server"
 route = "tilth_repo_index_repos_read_route"
+
+# Focused repo detail projection.
+[[route]]
+id = "tilth_repo_index_repo_read_route"
+method = "GET"
+path = "/api/repo-index/repo"
+serves = "tilthRepoIndexRepo"
+handler = "repoIndex.repo.read"
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repo_index_repo_read_route"
 
 # Repo-index result reporting from the daemon worker.
 [[route]]

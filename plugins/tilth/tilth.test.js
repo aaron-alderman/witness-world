@@ -17,6 +17,8 @@ import {
   projectRepoIndexRepos,
   projectRepoRecognitionRequests,
   projectRepoSnapshotRequests,
+  projectRepoDetail,
+  projectSessionDetail,
   projectSessions,
   projectTranscriptPreviewRequests,
   requestRepoRecognition,
@@ -81,6 +83,22 @@ test("tilth jobs view keeps ops controls flat and raw detail collapsed", () => {
   assert.match(source, /url = "\/api\/jobs\?status=failed"/);
   assert.match(source, /url = "\/api\/jobs\?status=pending"/);
   assert.match(source, /url = "\/api\/jobs\?status=completed"/);
+});
+
+test("tilth frontend exposes session and repo detail pages", () => {
+  const frontend = readFileSync(new URL("../../examples/tilth/frontend.wtoml", import.meta.url), "utf8");
+  const backend = readFileSync(new URL("../../examples/tilth/backend.wtoml", import.meta.url), "utf8");
+  assert.match(backend, /path = "\/session"/);
+  assert.match(backend, /handler = "session\.detail\.read"/);
+  assert.match(backend, /path = "\/repo"/);
+  assert.match(backend, /handler = "repoIndex\.repo\.read"/);
+  assert.match(frontend, /href = "\$\{'\/session\?id=' \+ encodeURIComponent\(item\.id \|\| ''\)\}"/);
+  assert.match(frontend, /href = "\$\{'\/repo\?id=' \+ encodeURIComponent\(item\.repoId \|\| item\.displayRoot \|\| item\.root \|\| ''\)\}"/);
+  assert.match(frontend, /program = "tilth_program_session_detail"[\s\S]*?allowFailure = true/);
+  assert.match(frontend, /program = "tilth_program_repo_detail"[\s\S]*?allowFailure = true/);
+  assert.match(frontend, /program = "tilth_program_session_detail"[\s\S]*?on = "click:indexRepos"/);
+  assert.match(frontend, /program = "tilth_program_session_detail"[\s\S]*?on = "click:previewTranscript"/);
+  assert.match(frontend, /program = "tilth_program_session_detail"[\s\S]*?on = "click:summarizeSession"/);
 });
 
 test("tilth repo-index requests require a known session", () => {
@@ -943,6 +961,67 @@ test("tilth repo-index repos invert completed session results by repository", ()
   assert.equal(repos[0].mentionCount, 2);
   assert.equal(repos[0].mentionText, "2 mentions");
   assert.match(repos[0].sessionText, /From: Work on repo · 1 mention/);
+});
+
+test("tilth session detail projects one session with related repos and jobs", () => {
+  const world = createWorld();
+  importSession(world, "session-1");
+  const requested = requestSessionRepoIndex(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+
+  completeSessionRepoIndex(world, {
+    actor: "daemon",
+    backendHost: "backendHost",
+    body: {
+      requestId: requested.requestId,
+      status: "completed",
+      repos: [{
+        root: "/home/callan/projects/swell/repos/ai/repos/meta/tilth-net",
+        name: "tilth-net",
+        remotes: [{ name: "origin", url: "git@example.com:callan/tilth-net.git" }],
+        mentions: [{ path: "/home/callan/projects/swell/repos/ai/repos/meta/tilth-net/load-me.mjs", raw: "load-me.mjs", role: "assistant", timestamp: "now" }]
+      }]
+    }
+  });
+
+  const detail = projectSessionDetail(world.allWitnesses(), "session-1");
+  assert.equal(detail.session.id, "session-1");
+  assert.equal(detail.sessions.length, 1);
+  assert.equal(detail.repos.length, 1);
+  assert.equal(detail.repos[0].displayRoot, "meta/tilth-net");
+  assert.equal(detail.repos[0].pathPreviewText, "load-me.mjs");
+  assert.equal(detail.repos[0].remoteText, "origin: git@example.com:callan/tilth-net.git");
+  assert.equal(detail.jobs.some(job => job.kind === "repo-index" && job.targetId === "session-1"), true);
+  assert.equal(projectSessionDetail(world.allWitnesses(), "missing"), null);
+});
+
+test("tilth repo detail projects one repo with related sessions and jobs", () => {
+  const world = createWorld();
+  importSession(world, "session-1");
+  const requested = requestSessionRepoIndex(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
+
+  completeSessionRepoIndex(world, {
+    actor: "daemon",
+    backendHost: "backendHost",
+    body: {
+      requestId: requested.requestId,
+      status: "completed",
+      repos: [{
+        root: "/home/callan/projects/swell/repos/ai/repos/meta/tilth-net",
+        name: "tilth-net",
+        mentions: [{ path: "/home/callan/projects/swell/repos/ai/repos/meta/tilth-net/scripts-private/me.sh", raw: "scripts-private/me.sh", role: "assistant", timestamp: "now" }]
+      }]
+    }
+  });
+  requestRepoSnapshot(world, { actor: "callan", backendHost: "backendHost", repoId: "meta/tilth-net" });
+
+  const detail = projectRepoDetail(world.allWitnesses(), "meta/tilth-net");
+  assert.equal(detail.repo.repoId, "meta/tilth-net");
+  assert.equal(detail.repos.length, 1);
+  assert.equal(detail.sessions.length, 1);
+  assert.equal(detail.sessions[0].id, "session-1");
+  assert.equal(detail.sessions[0].pathPreviewText, "scripts-private/me.sh");
+  assert.equal(detail.jobs.some(job => job.kind === "repo-snapshot" && job.targetId === "meta/tilth-net"), true);
+  assert.equal(projectRepoDetail(world.allWitnesses(), "missing"), null);
 });
 
 test("tilth session filters project DESIRE and indexed subsets", () => {
