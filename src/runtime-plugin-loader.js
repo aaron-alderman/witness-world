@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   cloneRuntimeOwnerChain,
@@ -6,6 +7,116 @@ import {
   describeRuntimeRouteOwnership,
   describeSurfaceOwnership
 } from "./runtime-ownership.js";
+
+let runtimePluginMaterializationSequence = 0;
+
+function normalizeSlashes(value) {
+  return String(value || "").replaceAll("\\", "/");
+}
+
+function isWithinRoot(filePath, rootPath) {
+  const relative = path.relative(rootPath, filePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function capabilitySourceIdForWorkspacePath(targetPath, cwd) {
+  const resolvedCwd = path.resolve(String(cwd || process.cwd()));
+  const resolvedTarget = path.resolve(String(targetPath || ""));
+  if (!isWithinRoot(resolvedTarget, resolvedCwd)) return null;
+  const relative = normalizeSlashes(path.relative(resolvedCwd, resolvedTarget));
+  if (!relative || relative === ".") return null;
+  if (relative === ".witness-core" || relative.startsWith(".witness-core/")) return null;
+  return relative;
+}
+
+function sanitizeSegment(value, fallback = "plugin") {
+  const normalized = String(value || "").trim().replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || fallback;
+}
+
+async function materializePluginDirectoryFromWitnessCore(
+  pluginPackage,
+  resolvedEntryPath,
+  {
+    generationBridge = null,
+    cwd = process.cwd(),
+    fsModule = fs,
+    scratchRoot = null,
+    requireGenerationBridgeForCanonicalImports = false
+  } = {}
+) {
+  if (
+    typeof generationBridge?.listSourceDirectory !== "function"
+    || typeof generationBridge?.readSource !== "function"
+    || typeof generationBridge?.statSource !== "function"
+  ) {
+    if (requireGenerationBridgeForCanonicalImports) {
+      const error = new Error(`plugin runtime path must be available through witness-core capability: ${path.resolve(String(resolvedEntryPath || ""))}`);
+      error.code = "WITNESS_CORE_REQUIRED";
+      error.status = 503;
+      throw error;
+    }
+    return {
+      entryPath: resolvedEntryPath,
+      materialized: false
+    };
+  }
+  const canonicalEntryPath = path.resolve(String(resolvedEntryPath || ""));
+  const canonicalPluginRoot = path.dirname(canonicalEntryPath);
+  const pluginRootSourceId = capabilitySourceIdForWorkspacePath(canonicalPluginRoot, cwd);
+  if (!pluginRootSourceId && requireGenerationBridgeForCanonicalImports) {
+    const error = new Error(`plugin runtime path must be available through witness-core capability: ${canonicalPluginRoot}`);
+    error.code = "WITNESS_CORE_REQUIRED";
+    error.status = 503;
+    throw error;
+  }
+  if (!pluginRootSourceId) {
+    return {
+      entryPath: canonicalEntryPath,
+      materialized: false
+    };
+  }
+
+  const materializationId = `${Date.now()}-${runtimePluginMaterializationSequence++}`;
+  const baseScratchRoot = path.resolve(
+    String(scratchRoot || path.join(cwd, ".witness-core", "runtime-plugin-modules"))
+  );
+  const scratchDir = path.join(
+    baseScratchRoot,
+    `${sanitizeSegment(pluginPackage?.id, "plugin")}-${materializationId}`
+  );
+  const scratchPluginRoot = path.join(scratchDir, "plugin");
+  const queue = [{ sourceId: pluginRootSourceId, relativePath: "" }];
+
+  while (queue.length) {
+    const current = queue.shift();
+    const destinationDir = current.relativePath
+      ? path.join(scratchPluginRoot, current.relativePath)
+      : scratchPluginRoot;
+    await fsModule.mkdir(destinationDir, { recursive: true });
+    const listing = await generationBridge.listSourceDirectory({ path: current.sourceId });
+    for (const entry of listing?.entries ?? []) {
+      const name = String(entry?.name || "");
+      if (!name) continue;
+      const childSourceId = current.sourceId ? `${current.sourceId}/${name}` : name;
+      const childRelativePath = current.relativePath ? path.join(current.relativePath, name) : name;
+      if (entry?.isDirectory === true) {
+        queue.push({ sourceId: childSourceId, relativePath: childRelativePath });
+        continue;
+      }
+      const source = await generationBridge.readSource({ path: childSourceId });
+      const targetPath = path.join(scratchPluginRoot, childRelativePath);
+      await fsModule.mkdir(path.dirname(targetPath), { recursive: true });
+      await fsModule.writeFile(targetPath, String(source?.content ?? ""), "utf8");
+    }
+  }
+
+  return {
+    entryPath: path.join(scratchPluginRoot, path.relative(canonicalPluginRoot, canonicalEntryPath)),
+    materialized: true,
+    scratchRoot: scratchDir
+  };
+}
 
 function cloneHandlerMetadataEntry(entry = {}) {
   return {
@@ -276,7 +387,12 @@ function validatePluginRuntimeModule(pluginPackage, loaded) {
 
 export async function loadRuntimePluginModules({
   pluginCatalog,
-  importModule = specifier => import(specifier)
+  importModule = specifier => import(specifier),
+  generationBridge = null,
+  cwd = process.cwd(),
+  fsModule = fs,
+  scratchRoot = null,
+  requireGenerationBridgeForCanonicalImports = false
 } = {}) {
   const bundleOverrides = Object.create(null);
   const pluginStates = Object.create(null);
@@ -305,8 +421,16 @@ export async function loadRuntimePluginModules({
       continue;
     }
     try {
-      const stat = await fs.stat(baseState.resolvedPath);
-      const specifier = `${pathToFileURL(baseState.resolvedPath).href}?mtime=${encodeURIComponent(String(stat.mtimeMs))}`;
+      const materialized = await materializePluginDirectoryFromWitnessCore(pluginPackage, baseState.resolvedPath, {
+        generationBridge,
+        cwd,
+        fsModule,
+        scratchRoot,
+        requireGenerationBridgeForCanonicalImports
+      });
+      const effectiveEntryPath = materialized.entryPath;
+      const stat = await fsModule.stat(effectiveEntryPath);
+      const specifier = `${pathToFileURL(effectiveEntryPath).href}?mtime=${encodeURIComponent(String(stat.mtimeMs))}`;
       const imported = await importModule(specifier);
       const loaded = imported?.default && typeof imported.default === "object"
         ? { ...imported.default, ...imported }
@@ -441,6 +565,7 @@ export async function loadRuntimePluginModules({
       }
       pluginStates[pluginPackage.id] = {
         ...baseState,
+        resolvedPath: effectiveEntryPath,
         loadStatus: "loaded",
         bundleIds,
         bundleId: bundleIds.length === 1 ? bundleIds[0] : null,

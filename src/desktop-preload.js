@@ -1,5 +1,5 @@
 import { createWitnessDesktopApi } from "./desktop-bridge.js";
-import { createWitnessOperatorWorkbenchApi } from "./operator-workbench-bridge.js";
+import { createWitnessOperatorWorkbenchApi } from "./operator-workbench/bridge.js";
 
 const { contextBridge, ipcRenderer } = await import("electron");
 

@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use rusqlite::types::{Value as SqlValue, ValueRef};
 use rusqlite::{Connection, ToSql};
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
@@ -22,11 +24,14 @@ const CAP_FS_READ: &str = "capability.fs.read";
 const CAP_FS_WRITE: &str = "capability.fs.write";
 const CAP_FS_PATCH: &str = "capability.fs.patch";
 const CAP_FS_STAT: &str = "capability.fs.stat";
+const CAP_FS_LIST: &str = "capability.fs.list";
 const CAP_NETWORK_HTTP_OUTBOUND: &str = "capability.network.http.outbound";
 const CAP_DB_SQLITE: &str = "capability.db.sqlite";
 const CAP_PROCESS_SOAK: &str = "process.soak";
 const CAP_COMPUTE_EXECUTE: &str = "compute.execute";
 const CAP_VERIFICATION_PERSISTENCE: &str = "verification.persistence";
+const WORKER_CONTROL_PROTOCOL_V1: &str = "witness-worker-control/v1";
+const WORKER_CONTROL_KIND_DESCRIPTOR: &str = "descriptor";
 const AUTHORING_WRITE_CONFLICT: &str = "authoring.write.conflict";
 const AUTHORING_WRITE_REJECTED: &str = "authoring.write.rejected";
 const COMPUTE_MODULE_RUNTIME_TARGET_HOST_OPERATION: &str = "engentus.pipeline.health.classify";
@@ -249,6 +254,7 @@ pub struct PackageConfig {
 pub struct SuperviseConfig {
     pub command: Option<String>,
     pub working_dir: Option<String>,
+    pub control_url: Option<String>,
     pub reload_url: Option<String>,
     pub restart_on_exit: bool,
     pub restart_on_unhealthy: bool,
@@ -320,6 +326,7 @@ impl Default for CoreConfig {
             supervise: SuperviseConfig {
                 command: None,
                 working_dir: None,
+                control_url: None,
                 reload_url: None,
                 restart_on_exit: true,
                 restart_on_unhealthy: true,
@@ -387,6 +394,7 @@ pub struct SupervisedProcessState {
     pub status: Option<String>,
     pub reason_codes: Vec<String>,
     pub last_health_sample_at: Option<String>,
+    pub control_url: Option<String>,
     pub health_url: Option<String>,
     pub reload_url: Option<String>,
     pub degraded_streak: u64,
@@ -510,6 +518,7 @@ impl Default for SupervisedProcessState {
             status: None,
             reason_codes: Vec::new(),
             last_health_sample_at: None,
+            control_url: None,
             health_url: None,
             reload_url: None,
             degraded_streak: 0,
@@ -1243,6 +1252,7 @@ pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
         working_dir: config.supervise.working_dir.clone(),
         restart_on_exit: config.supervise.restart_on_exit,
         restart_on_unhealthy: config.supervise.restart_on_unhealthy,
+        control_url: config.supervise.control_url.clone(),
         health_url: config.supervise.health_url.clone(),
         reload_url: config.supervise.reload_url.clone(),
         public_addr: config.frontdoor.public_addr.clone(),
@@ -1310,6 +1320,7 @@ pub fn parse_config(text: &str) -> CoreConfig {
             ("package", "include") => config.package.include = parse_string_array(value),
             ("supervise", "command") => config.supervise.command = Some(parse_string(value)),
             ("supervise", "working_dir") => config.supervise.working_dir = Some(parse_string(value)),
+            ("supervise", "control_url") => config.supervise.control_url = Some(parse_string(value)),
             ("supervise", "reload_url") => config.supervise.reload_url = Some(parse_string(value)),
             ("supervise", "restart_on_exit") => {
                 config.supervise.restart_on_exit = matches!(value.trim(), "true" | "1" | "\"true\"");
@@ -1694,7 +1705,11 @@ fn handle_client(
             let params = parse_form_body(query);
             let correlation = capability_correlation_from_params(&params);
             let source_path = params.get("path").map(String::as_str).unwrap_or("");
-            match capability_fs_read(cwd, config, source_path) {
+            let encoding = match params.get("encoding").map(String::as_str).unwrap_or("utf8") {
+                "base64" => SourceContentEncoding::Base64,
+                _ => SourceContentEncoding::Utf8,
+            };
+            match capability_fs_read(cwd, config, source_path, encoding) {
                 Ok(response) => {
                     registry.lock().expect("registry lock").emit(CoreEvent {
                         kind: CAP_FS_READ.to_string(),
@@ -1726,6 +1741,26 @@ fn handle_client(
                         emitted_at: now_iso(),
                     });
                     write_json(&mut stream, 200, &source_stat_to_json(&response))
+                }
+                Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, if source_path.trim().is_empty() { None } else { Some(source_path) })),
+            }
+        }
+        ("GET", "/capabilities/fs/list") => {
+            let params = parse_form_body(query);
+            let correlation = capability_correlation_from_params(&params);
+            let source_path = params.get("path").map(String::as_str).unwrap_or("");
+            match capability_fs_list(cwd, config, source_path) {
+                Ok(response) => {
+                    registry.lock().expect("registry lock").emit(CoreEvent {
+                        kind: CAP_FS_LIST.to_string(),
+                        capability: CAP_FS_LIST.to_string(),
+                        generation_id: None,
+                        message: Some(capability_event_message(&response.source_path, None, false, &correlation)),
+                        generation: None,
+                        serving: None,
+                        emitted_at: now_iso(),
+                    });
+                    write_json(&mut stream, 200, &source_directory_list_to_json(&response))
                 }
                 Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, if source_path.trim().is_empty() { None } else { Some(source_path) })),
             }
@@ -2073,6 +2108,12 @@ fn apply_process_health_probe(
     state.status = Some(probe.status.clone());
     state.reason_codes = probe.reason_codes.clone();
     state.last_health_sample_at = Some(sampled_at);
+    if let Some(health_url) = probe.health_url.clone().filter(|value| !value.trim().is_empty()) {
+        state.health_url = Some(health_url);
+    }
+    if let Some(reload_url) = probe.reload_url.clone().filter(|value| !value.trim().is_empty()) {
+        state.reload_url = Some(reload_url);
+    }
     match probe.status.as_str() {
         "healthy" => {
             state.degraded_streak = 0;
@@ -2202,7 +2243,8 @@ fn start_supervised_process(
             .filter(|value| !value.trim().is_empty())
             .map(|value| cwd.join(value))
             .unwrap_or_else(|| cwd.clone());
-        let watchers_enabled = if config.reload_url.as_deref().is_some_and(|value| !value.trim().is_empty()) {
+        let watchers_enabled = if config.reload_url.as_deref().is_some_and(|value| !value.trim().is_empty())
+            || config.control_url.as_deref().is_some_and(|value| !value.trim().is_empty()) {
             "false"
         } else {
             "true"
@@ -2227,6 +2269,7 @@ fn start_supervised_process(
                 state.status = None;
                 state.reason_codes.clear();
                 state.last_health_sample_at = None;
+                state.control_url = None;
                 state.degraded_streak = 0;
                 state.unhealthy_streak = 0;
             }
@@ -2289,9 +2332,11 @@ fn start_supervised_process(
                 state.last_started_at = Some(now_iso());
                 state.last_error = None;
                 state.ready = false;
+                state.control_url = config.control_url.clone();
                 state.health_url = config.health_url.clone();
                 state.reload_url = config.reload_url.clone();
-                state.watchers_enabled = config.reload_url.as_deref().is_none_or(|value| value.trim().is_empty());
+                state.watchers_enabled = config.reload_url.as_deref().is_none_or(|value| value.trim().is_empty())
+                    && config.control_url.as_deref().is_none_or(|value| value.trim().is_empty());
                 state.instance_id = Some(instance_id.clone());
                 state.role = Some("active".to_string());
             }
@@ -2305,14 +2350,19 @@ fn start_supervised_process(
                 emitted_at: now_iso(),
             });
 
-            if let Some(health_url) = config.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
+            let probe_url = config
+                .control_url
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| config.health_url.as_deref().filter(|value| !value.trim().is_empty()));
+            if let Some(health_url) = probe_url {
                 let readiness = wait_for_process_readiness(
                     health_url,
                     config.health_interval_ms,
                     config.health_timeout_ms,
                 );
                 match readiness {
-                    ProcessReadiness::Ready(status) => {
+                    ProcessReadiness::Ready(probe) => {
                         let ready_at = now_iso();
                         {
                             let mut state = process_state.lock().expect("process state lock");
@@ -2320,13 +2370,19 @@ fn start_supervised_process(
                             state.last_ready_at = Some(ready_at);
                             state.last_health_status = Some("healthy".to_string());
                             state.status = Some("healthy".to_string());
+                            if let Some(discovered_health_url) = probe.health_url.clone().filter(|value| !value.trim().is_empty()) {
+                                state.health_url = Some(discovered_health_url);
+                            }
+                            if let Some(reload_url) = probe.reload_url.clone().filter(|value| !value.trim().is_empty()) {
+                                state.reload_url = Some(reload_url);
+                            }
                             state.last_error = None;
                         }
                         registry.lock().expect("registry lock").emit(CoreEvent {
                             kind: "process.ready".to_string(),
                             capability: CAP_NOTIFY_SURFACE.to_string(),
                             generation_id: None,
-                            message: Some(format!("health_url={} status={}", health_url, status)),
+                            message: Some(format!("health_url={} status={}", health_url, process_health_probe_message(&probe))),
                             generation: None,
                             serving: None,
                             emitted_at: now_iso(),
@@ -2357,7 +2413,12 @@ fn start_supervised_process(
             let health_interval = Duration::from_millis(config.health_interval_ms.max(25));
             let mut next_health_poll_at = Instant::now() + health_interval;
             let exit_status = loop {
-                if let Some(health_url) = config.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
+                let probe_url = config
+                    .control_url
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .or_else(|| config.health_url.as_deref().filter(|value| !value.trim().is_empty()));
+                if let Some(health_url) = probe_url {
                     if Instant::now() >= next_health_poll_at {
                         let previous_status = {
                             process_state.lock().expect("process state lock").status.clone()
@@ -2370,6 +2431,10 @@ fn start_supervised_process(
                                 status: "unhealthy".to_string(),
                                 reason_codes: vec!["health_probe_failed".to_string()],
                                 sampled_at: Some(now_iso()),
+                                health_url: None,
+                                activation_url: None,
+                                quiesce_url: None,
+                                reload_url: None,
                             },
                         };
                         let updated_state = apply_process_health_probe(&process_state, &probe);
@@ -2529,19 +2594,26 @@ fn spawn_frontdoor_instance(
         .filter(|value| !value.trim().is_empty())
         .map(|value| cwd.join(value))
         .unwrap_or_else(|| cwd.to_path_buf());
+    let control_url = config
+        .supervise
+        .control_url
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| interpolate_runtime_template(&value, port, &instance_id, &core_url));
     let health_url = config
         .supervise
         .health_url
         .clone()
         .filter(|value| !value.trim().is_empty())
         .map(|value| interpolate_runtime_template(&value, port, &instance_id, &core_url));
+    let probe_url = control_url.clone().or_else(|| health_url.clone());
     let reload_url = config
         .supervise
         .reload_url
         .clone()
         .filter(|value| !value.trim().is_empty())
         .map(|value| interpolate_runtime_template(&value, port, &instance_id, &core_url));
-    let watchers_enabled = if reload_url.is_some() { "false" } else if role == "active" { "true" } else { "false" };
+    let watchers_enabled = if reload_url.is_some() || control_url.is_some() { "false" } else if role == "active" { "true" } else { "false" };
     let spawn_direct = || {
         if let Some(mut direct) = supervised_command(&command) {
             direct
@@ -2589,16 +2661,16 @@ fn spawn_frontdoor_instance(
         &snapshot,
         Some(format!("instance={} port={} role={} command={}", snapshot.id, port, role, command)),
     );
-    let activation_url = health_url
+    let activation_url = probe_url
         .as_deref()
         .and_then(|value| replace_http_url_path(value, "/api/runtime/supervision/activate"));
-    let quiesce_url = health_url
+    let quiesce_url = probe_url
         .as_deref()
         .and_then(|value| replace_http_url_path(value, "/api/runtime/supervision/quiesce"));
     Ok(ManagedProcessInstance {
         snapshot,
         child,
-        health_url,
+        health_url: probe_url,
         activation_url,
         quiesce_url,
         reload_url,
@@ -2617,14 +2689,26 @@ fn wait_for_frontdoor_instance_ready(
             config.supervise.health_interval_ms,
             config.frontdoor.startup_cutover_timeout_ms.max(config.supervise.health_timeout_ms),
         ) {
-            ProcessReadiness::Ready(status) => {
+            ProcessReadiness::Ready(probe) => {
                 instance.snapshot.ready = true;
                 instance.snapshot.last_health_status = Some("healthy".to_string());
+                if let Some(activation_url) = probe.activation_url.clone().filter(|value| !value.trim().is_empty()) {
+                    instance.activation_url = Some(activation_url);
+                }
+                if let Some(quiesce_url) = probe.quiesce_url.clone().filter(|value| !value.trim().is_empty()) {
+                    instance.quiesce_url = Some(quiesce_url);
+                }
+                if let Some(reload_url) = probe.reload_url.clone().filter(|value| !value.trim().is_empty()) {
+                    instance.reload_url = Some(reload_url);
+                }
+                if let Some(discovered_health_url) = probe.health_url.clone().filter(|value| !value.trim().is_empty()) {
+                    instance.health_url = Some(discovered_health_url);
+                }
                 emit_instance_event(
                     registry,
                     "process.instance.ready",
                     &instance.snapshot,
-                    Some(format!("instance={} status={}", instance.snapshot.id, status)),
+                    Some(format!("instance={} status={}", instance.snapshot.id, process_health_probe_message(&probe))),
                 );
                 Ok(())
             }
@@ -2732,8 +2816,24 @@ fn start_supervised_process_frontdoor(
                             status: "unhealthy".to_string(),
                             reason_codes: vec!["health_probe_failed".to_string()],
                             sampled_at: Some(now_iso()),
+                            health_url: None,
+                            activation_url: None,
+                            quiesce_url: None,
+                            reload_url: None,
                         },
                     };
+                    if let Some(activation_url) = probe.activation_url.clone().filter(|value| !value.trim().is_empty()) {
+                        active_instance.activation_url = Some(activation_url);
+                    }
+                    if let Some(quiesce_url) = probe.quiesce_url.clone().filter(|value| !value.trim().is_empty()) {
+                        active_instance.quiesce_url = Some(quiesce_url);
+                    }
+                    if let Some(reload_url) = probe.reload_url.clone().filter(|value| !value.trim().is_empty()) {
+                        active_instance.reload_url = Some(reload_url);
+                    }
+                    if let Some(discovered_health_url) = probe.health_url.clone().filter(|value| !value.trim().is_empty()) {
+                        active_instance.health_url = Some(discovered_health_url);
+                    }
                     let updated_state = apply_process_health_probe(&process_state, &probe);
                     if probe.ready && probe.status != "unhealthy" {
                         active_instance.snapshot.ready = true;
@@ -2848,7 +2948,7 @@ fn start_supervised_process_frontdoor(
 }
 
 enum ProcessReadiness {
-    Ready(String),
+    Ready(ProcessHealthProbe),
     Unhealthy(String),
 }
 
@@ -2859,6 +2959,22 @@ struct ProcessHealthProbe {
     status: String,
     reason_codes: Vec<String>,
     sampled_at: Option<String>,
+    health_url: Option<String>,
+    activation_url: Option<String>,
+    quiesce_url: Option<String>,
+    reload_url: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct WorkerControlDescriptor {
+    ready: bool,
+    status: String,
+    reason_codes: Vec<String>,
+    sampled_at: Option<String>,
+    health_url: Option<String>,
+    activation_url: Option<String>,
+    quiesce_url: Option<String>,
+    reload_url: Option<String>,
 }
 
 fn wait_for_process_readiness(health_url: &str, interval_ms: u64, timeout_ms: u64) -> ProcessReadiness {
@@ -2868,7 +2984,7 @@ fn wait_for_process_readiness(health_url: &str, interval_ms: u64, timeout_ms: u6
     while Instant::now() <= deadline {
         match probe_process_health(health_url) {
             Ok(probe) if (200..400).contains(&probe.http_status) && probe.ready && probe.status != "unhealthy" => {
-                return ProcessReadiness::Ready(format!("{} {}", probe.http_status, probe.status));
+                return ProcessReadiness::Ready(probe);
             }
             Ok(probe) => {
                 last_status = format!("{} {} ready={}", probe.http_status, probe.status, probe.ready);
@@ -2883,52 +2999,20 @@ fn wait_for_process_readiness(health_url: &str, interval_ms: u64, timeout_ms: u6
 }
 
 fn probe_process_health(health_url: &str) -> Result<ProcessHealthProbe, String> {
-    let Some(target) = parse_http_url(health_url) else {
-        return Err("unsupported health_url".to_string());
-    };
-    let address = target
-        .address
-        .to_socket_addrs()
-        .map_err(|error| format!("invalid health address: {}", error))?
-        .next()
-        .ok_or_else(|| "invalid health address".to_string())?;
-    let stream = TcpStream::connect_timeout(&address, Duration::from_millis(1_000));
-    let mut stream = stream.map_err(|error| format!("connect failed: {}", error))?;
-    stream
-        .set_read_timeout(Some(Duration::from_millis(500)))
-        .map_err(|error| format!("set read timeout failed: {}", error))?;
-    stream
-        .set_write_timeout(Some(Duration::from_millis(500)))
-        .map_err(|error| format!("set write timeout failed: {}", error))?;
-    write!(
-        stream,
-        "GET {} HTTP/1.1\r\nhost: {}\r\nconnection: close\r\n\r\n",
-        target.path, target.host_header
-    )
-    .map_err(|error| format!("health write failed: {}", error))?;
-    let mut reader = BufReader::new(stream);
-    let mut status_line = String::new();
-    reader
-        .read_line(&mut status_line)
-        .map_err(|error| format!("health read failed: {}", error))?;
-    let http_status = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|code| code.parse::<u16>().ok())
-        .ok_or_else(|| "missing health status".to_string())?;
-    loop {
-        let mut line = String::new();
-        reader
-            .read_line(&mut line)
-            .map_err(|error| format!("health header read failed: {}", error))?;
-        if line == "\r\n" || line.is_empty() {
-            break;
-        }
+    let (http_status, body) = issue_http_get(health_url)?;
+    if let Some(descriptor) = parse_worker_control_descriptor(&body) {
+        return Ok(ProcessHealthProbe {
+            http_status,
+            ready: descriptor.ready,
+            status: descriptor.status,
+            reason_codes: descriptor.reason_codes,
+            sampled_at: descriptor.sampled_at,
+            health_url: descriptor.health_url,
+            activation_url: descriptor.activation_url,
+            quiesce_url: descriptor.quiesce_url,
+            reload_url: descriptor.reload_url,
+        });
     }
-    let mut body = String::new();
-    reader
-        .read_to_string(&mut body)
-        .map_err(|error| format!("health body read failed: {}", error))?;
     let ready = extract_json_bool(&body, "ready");
     let status = extract_json_string(&body, "status").unwrap_or_else(|| {
         if (200..400).contains(&http_status) {
@@ -2947,6 +3031,45 @@ fn probe_process_health(health_url: &str) -> Result<ProcessHealthProbe, String> 
         status,
         reason_codes: extract_json_string_array(&body, "reasonCodes"),
         sampled_at: extract_json_string(&body, "sampledAt"),
+        health_url: extract_json_string_decoded(&body, "healthUrl").or_else(|| extract_json_string(&body, "healthUrl")),
+        activation_url: extract_json_string_decoded(&body, "activationUrl").or_else(|| extract_json_string(&body, "activationUrl")),
+        quiesce_url: extract_json_string_decoded(&body, "quiesceUrl").or_else(|| extract_json_string(&body, "quiesceUrl")),
+        reload_url: extract_json_string_decoded(&body, "reloadUrl").or_else(|| extract_json_string(&body, "reloadUrl")),
+    })
+}
+
+fn parse_worker_control_descriptor(body: &str) -> Option<WorkerControlDescriptor> {
+    let payload = serde_json::from_str::<JsonValue>(body).ok()?;
+    let protocol = payload.get("protocol")?.as_str()?;
+    let kind = payload.get("kind")?.as_str()?;
+    if protocol != WORKER_CONTROL_PROTOCOL_V1 || kind != WORKER_CONTROL_KIND_DESCRIPTOR {
+        return None;
+    }
+    let ready = payload.get("ready").and_then(JsonValue::as_bool).unwrap_or(false);
+    let status = payload
+        .get("status")
+        .and_then(JsonValue::as_str)
+        .unwrap_or(if ready { "healthy" } else { "unknown" })
+        .to_string();
+    let reason_codes = payload
+        .get("reasonCodes")
+        .and_then(JsonValue::as_array)
+        .map(|rows| {
+            rows.iter()
+                .filter_map(JsonValue::as_str)
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Some(WorkerControlDescriptor {
+        ready,
+        status,
+        reason_codes,
+        sampled_at: payload.get("sampledAt").and_then(JsonValue::as_str).map(|value| value.to_string()),
+        health_url: payload.get("healthUrl").and_then(JsonValue::as_str).map(|value| value.to_string()),
+        activation_url: payload.get("activationUrl").and_then(JsonValue::as_str).map(|value| value.to_string()),
+        quiesce_url: payload.get("quiesceUrl").and_then(JsonValue::as_str).map(|value| value.to_string()),
+        reload_url: payload.get("reloadUrl").and_then(JsonValue::as_str).map(|value| value.to_string()),
     })
 }
 
@@ -3059,6 +3182,53 @@ fn replace_http_url_path(url: &str, new_path: &str) -> Option<String> {
     let rest = url.strip_prefix("http://")?;
     let authority = rest.split_once('/').map(|(value, _)| value).unwrap_or(rest);
     Some(format!("http://{}{}", authority, new_path))
+}
+
+fn issue_http_get(url: &str) -> Result<(u16, String), String> {
+    let Some(target) = parse_http_url(url) else {
+        return Err("unsupported control url".to_string());
+    };
+    let address = target
+        .address
+        .to_socket_addrs()
+        .map_err(|error| format!("invalid control address: {}", error))?
+        .next()
+        .ok_or_else(|| "invalid control address".to_string())?;
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(1_000))
+        .map_err(|error| format!("connect failed: {}", error))?;
+    stream
+        .set_read_timeout(Some(Duration::from_millis(2_000)))
+        .map_err(|error| format!("set read timeout failed: {}", error))?;
+    write!(
+        stream,
+        "GET {} HTTP/1.1\r\nhost: {}\r\nconnection: close\r\n\r\n",
+        target.path, target.host_header
+    )
+    .map_err(|error| format!("control write failed: {}", error))?;
+    let mut reader = BufReader::new(stream);
+    let mut status_line = String::new();
+    reader
+        .read_line(&mut status_line)
+        .map_err(|error| format!("control read failed: {}", error))?;
+    let http_status = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse::<u16>().ok())
+        .ok_or_else(|| "missing control status".to_string())?;
+    loop {
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .map_err(|error| format!("control header read failed: {}", error))?;
+        if line == "\r\n" || line.is_empty() {
+            break;
+        }
+    }
+    let mut response_body = String::new();
+    reader
+        .read_to_string(&mut response_body)
+        .map_err(|error| format!("control body read failed: {}", error))?;
+    Ok((http_status, response_body))
 }
 
 fn issue_http_post_with_body(url: &str, body: &str) -> Result<String, String> {
@@ -3372,17 +3542,40 @@ struct CapabilityError {
 struct SourceContentResponse {
     source_path: String,
     content: String,
+    encoding: String,
     hash: String,
     size: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SourceContentEncoding {
+    Utf8,
+    Base64,
 }
 
 #[derive(Clone, Debug)]
 struct SourceStatResponse {
     source_path: String,
     exists: bool,
+    is_file: bool,
+    is_directory: bool,
     hash: Option<String>,
     size: Option<u64>,
     modified_at: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct SourceDirectoryEntry {
+    name: String,
+    is_file: bool,
+    is_directory: bool,
+}
+
+#[derive(Clone, Debug)]
+struct SourceDirectoryListResponse {
+    source_path: String,
+    exists: bool,
+    entries: Vec<SourceDirectoryEntry>,
 }
 
 #[derive(Clone, Debug)]
@@ -3434,13 +3627,26 @@ fn file_snapshot(full_path: &Path) -> (bool, Option<String>, Option<u64>, Option
     )
 }
 
-fn capability_fs_read(cwd: &Path, config: &CoreConfig, source_path: &str) -> Result<SourceContentResponse, CapabilityError> {
+fn capability_fs_read(
+    cwd: &Path,
+    config: &CoreConfig,
+    source_path: &str,
+    encoding: SourceContentEncoding,
+) -> Result<SourceContentResponse, CapabilityError> {
     let resolved = resolve_capability_path(cwd, config, source_path)?;
     let bytes = fs::read(&resolved.full_path).map_err(|error| capability_error(404, format!("source read failed: {}", error)))?;
-    let content = String::from_utf8(bytes.clone()).map_err(|error| capability_error(400, format!("source is not utf8: {}", error)))?;
+    let content = match encoding {
+        SourceContentEncoding::Utf8 => String::from_utf8(bytes.clone())
+            .map_err(|error| capability_error(400, format!("source is not utf8: {}", error)))?,
+        SourceContentEncoding::Base64 => BASE64_STANDARD.encode(bytes.clone()),
+    };
     Ok(SourceContentResponse {
         source_path: resolved.source_path,
         content,
+        encoding: match encoding {
+            SourceContentEncoding::Utf8 => "utf8".to_string(),
+            SourceContentEncoding::Base64 => "base64".to_string(),
+        },
         hash: format!("sha256:{}", sha256_hex(bytes.clone())),
         size: bytes.len() as u64,
     })
@@ -3449,12 +3655,42 @@ fn capability_fs_read(cwd: &Path, config: &CoreConfig, source_path: &str) -> Res
 fn capability_fs_stat(cwd: &Path, config: &CoreConfig, source_path: &str) -> Result<SourceStatResponse, CapabilityError> {
     let resolved = resolve_capability_path(cwd, config, source_path)?;
     let (exists, hash, size, modified_at) = file_snapshot(&resolved.full_path);
+    let metadata = fs::metadata(&resolved.full_path).ok();
     Ok(SourceStatResponse {
         source_path: resolved.source_path,
         exists,
+        is_file: metadata.as_ref().map(|value| value.is_file()).unwrap_or(false),
+        is_directory: metadata.as_ref().map(|value| value.is_dir()).unwrap_or(false),
         hash,
         size,
         modified_at,
+    })
+}
+
+fn capability_fs_list(cwd: &Path, config: &CoreConfig, source_path: &str) -> Result<SourceDirectoryListResponse, CapabilityError> {
+    let resolved = resolve_capability_path(cwd, config, source_path)?;
+    let metadata = fs::metadata(&resolved.full_path)
+        .map_err(|error| capability_error(404, format!("source directory stat failed: {}", error)))?;
+    if !metadata.is_dir() {
+        return Err(capability_error(400, "source path is not a directory"));
+    }
+    let mut entries = fs::read_dir(&resolved.full_path)
+        .map_err(|error| capability_error(500, format!("source directory read failed: {}", error)))?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| {
+            let file_type = entry.file_type().ok();
+            SourceDirectoryEntry {
+                name: entry.file_name().to_string_lossy().to_string(),
+                is_file: file_type.as_ref().map(|value| value.is_file()).unwrap_or(false),
+                is_directory: file_type.as_ref().map(|value| value.is_dir()).unwrap_or(false),
+            }
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(SourceDirectoryListResponse {
+        source_path: resolved.source_path,
+        exists: true,
+        entries,
     })
 }
 
@@ -3494,6 +3730,7 @@ fn capability_fs_write(
     Ok(SourceContentResponse {
         source_path: resolved.source_path,
         content: content.to_string(),
+        encoding: "utf8".to_string(),
         hash: format!("sha256:{}", sha256_hex(bytes.clone())),
         size: bytes.len() as u64,
     })
@@ -5172,9 +5409,10 @@ fn package_includes_path(config: &CoreConfig, relative: &str) -> bool {
 
 fn source_content_to_json(response: &SourceContentResponse) -> String {
     format!(
-        "{{{},{},{},{}}}",
+        "{{{},{},{},{},{}}}",
         json_pair("path", &response.source_path),
         json_pair("content", &response.content),
+        json_pair("encoding", &response.encoding),
         json_pair("hash", &response.hash),
         json_number_optional_pair("size", Some(response.size))
     )
@@ -5182,12 +5420,34 @@ fn source_content_to_json(response: &SourceContentResponse) -> String {
 
 fn source_stat_to_json(response: &SourceStatResponse) -> String {
     format!(
-        "{{{},{},{},{},{}}}",
+        "{{{},{},{},{},{},{},{}}}",
         json_pair("path", &response.source_path),
         json_bool_pair("exists", response.exists),
+        json_bool_pair("isFile", response.is_file),
+        json_bool_pair("isDirectory", response.is_directory),
         json_optional_pair("hash", response.hash.as_deref()),
         json_number_optional_pair("size", response.size),
         json_optional_pair("modifiedAt", response.modified_at.as_deref())
+    )
+}
+
+fn source_directory_list_to_json(response: &SourceDirectoryListResponse) -> String {
+    let entries = response.entries.iter()
+        .map(|entry| {
+            format!(
+                "{{{},{},{}}}",
+                json_pair("name", &entry.name),
+                json_bool_pair("isFile", entry.is_file),
+                json_bool_pair("isDirectory", entry.is_directory)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{{},{},\"entries\":[{}]}}",
+        json_pair("path", &response.source_path),
+        json_bool_pair("exists", response.exists),
+        entries
     )
 }
 
@@ -6080,6 +6340,7 @@ fn supervised_process_state_to_json(state: &SupervisedProcessState) -> String {
         json_optional_pair("status", state.status.as_deref()),
         json_string_array_pair("reasonCodes", &state.reason_codes),
         json_optional_pair("lastHealthSampleAt", state.last_health_sample_at.as_deref()),
+        json_optional_pair("controlUrl", state.control_url.as_deref()),
         json_optional_pair("healthUrl", state.health_url.as_deref()),
         json_optional_pair("reloadUrl", state.reload_url.as_deref()),
         json_number_optional_pair("degradedStreak", Some(state.degraded_streak)),
@@ -6850,6 +7111,7 @@ command = "npm run app:engentus"
 working_dir = "."
 restart_on_exit = false
 restart_on_unhealthy = false
+control_url = "http://127.0.0.1:3000/api/runtime/worker-control"
 health_url = "http://127.0.0.1:3000/api/runtime/process-health"
 reload_url = "http://127.0.0.1:3000/api/runtime/app-snapshot/reload"
 health_interval_ms = 50
@@ -6879,6 +7141,7 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         assert_eq!(config.supervise.working_dir.as_deref(), Some("."));
         assert_eq!(config.supervise.restart_on_exit, false);
         assert_eq!(config.supervise.restart_on_unhealthy, false);
+        assert_eq!(config.supervise.control_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/worker-control"));
         assert_eq!(config.supervise.health_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/process-health"));
         assert_eq!(config.supervise.reload_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/app-snapshot/reload"));
         assert_eq!(config.supervise.health_interval_ms, 50);
@@ -6910,10 +7173,10 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         assert_eq!(authoring.frontdoor.public_addr.as_deref(), Some("127.0.0.1:3000"));
         assert_eq!(engentus_mcp.frontdoor.public_addr.as_deref(), Some("127.0.0.1:8791"));
 
-        assert_eq!(engentus.supervise.health_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/process-health"));
-        assert_eq!(bootstrap.supervise.health_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/process-health"));
-        assert_eq!(authoring.supervise.health_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/process-health"));
-        assert_eq!(engentus_mcp.supervise.health_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/process-health"));
+        assert_eq!(engentus.supervise.control_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/worker-control"));
+        assert_eq!(bootstrap.supervise.control_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/worker-control"));
+        assert_eq!(authoring.supervise.control_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/worker-control"));
+        assert_eq!(engentus_mcp.supervise.control_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/worker-control"));
 
         assert_eq!(engentus.supervise.command.as_deref(), Some("node src/cli.js utility-serve examples/engentus --server engentus_server --port {runtime_port} --runtime-profile full --startup-telemetry"));
         assert_eq!(bootstrap.supervise.command.as_deref(), Some("node src/cli.js utility-bootstrap --port {runtime_port}"));
@@ -7006,13 +7269,20 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         fs::write(app_dir.join("content.wtoml"), "before").unwrap();
         let config = fixture_config();
 
-        let read = capability_fs_read(&root, &config, "content.wtoml").unwrap();
+        let read = capability_fs_read(&root, &config, "content.wtoml", SourceContentEncoding::Utf8).unwrap();
         assert_eq!(read.source_path, "content.wtoml");
         assert_eq!(read.content, "before");
+        assert_eq!(read.encoding, "utf8");
         assert!(read.hash.starts_with("sha256:"));
+
+        let read_base64 = capability_fs_read(&root, &config, "content.wtoml", SourceContentEncoding::Base64).unwrap();
+        assert_eq!(read_base64.encoding, "base64");
+        assert_eq!(read_base64.content, BASE64_STANDARD.encode("before"));
 
         let stat = capability_fs_stat(&root, &config, "content.wtoml").unwrap();
         assert_eq!(stat.exists, true);
+        assert_eq!(stat.is_file, true);
+        assert_eq!(stat.is_directory, false);
         assert_eq!(stat.size, Some(6));
 
         let patched = capability_fs_write(&root, &config, "content.wtoml", "after", false, None).unwrap();
@@ -7022,6 +7292,31 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         let preview = capability_fs_write(&root, &config, "content.wtoml", "preview only", true, None).unwrap();
         assert_eq!(preview.content, "preview only");
         assert_eq!(fs::read_to_string(app_dir.join("content.wtoml")).unwrap(), "after");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn capability_list_reports_scoped_directory_entries() {
+        let root = test_root();
+        let plugins_dir = root.join("plugins");
+        fs::create_dir_all(plugins_dir.join("inspect")).unwrap();
+        fs::write(plugins_dir.join("inspect").join("plugin.json"), "{}").unwrap();
+        fs::create_dir_all(plugins_dir.join("notes")).unwrap();
+        let config = CoreConfig {
+            watch: WatchConfig {
+                roots: vec!["plugins".to_string()],
+                ignore: vec![],
+            },
+            package: PackageConfig {
+                include: vec!["plugins/**".to_string()],
+            },
+            ..CoreConfig::default()
+        };
+
+        let listed = capability_fs_list(&root, &config, "plugins").unwrap();
+        assert_eq!(listed.exists, true);
+        assert_eq!(listed.entries.iter().any(|entry| entry.name == "inspect" && entry.is_directory), true);
+        assert_eq!(listed.entries.iter().any(|entry| entry.name == "notes" && entry.is_directory), true);
         let _ = fs::remove_dir_all(root);
     }
 
@@ -7617,6 +7912,7 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
             status: Some("healthy".to_string()),
             reason_codes: vec!["rss_over_budget".to_string()],
             last_health_sample_at: Some("sampled".to_string()),
+            control_url: Some("http://127.0.0.1:3000/api/runtime/worker-control".to_string()),
             health_url: Some("http://127.0.0.1:3000/api/runtime/process-health".to_string()),
             last_restart_reason: Some("policy unhealthy: sse_clients_over_budget".to_string()),
             ..SupervisedProcessState::default()
@@ -7628,6 +7924,7 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         assert!(json.contains("\"status\":\"healthy\""));
         assert!(json.contains("\"reasonCodes\":[\"rss_over_budget\"]"));
         assert!(json.contains("\"lastHealthSampleAt\":\"sampled\""));
+        assert!(json.contains("\"controlUrl\":\"http://127.0.0.1:3000/api/runtime/worker-control\""));
         assert!(json.contains("\"healthUrl\":\"http://127.0.0.1:3000/api/runtime/process-health\""));
         assert!(json.contains("\"lastRestartReason\":\"policy unhealthy: sse_clients_over_budget\""));
     }
@@ -7645,10 +7942,36 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
             let _ = stream.write_all(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n");
         });
         match wait_for_process_readiness(&url, 25, 15_000) {
-            ProcessReadiness::Ready(status) => assert_eq!(status, "204 healthy"),
+            ProcessReadiness::Ready(probe) => {
+                assert_eq!(probe.http_status, 204);
+                assert_eq!(probe.status, "healthy");
+            }
             ProcessReadiness::Unhealthy(status) => panic!("expected ready, got {status}"),
         }
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn worker_control_descriptor_probe_is_accepted_as_process_readiness_input() {
+        let body = r#"{
+            "protocol":"witness-worker-control/v1",
+            "kind":"descriptor",
+            "ready":true,
+            "status":"healthy",
+            "reasonCodes":[],
+            "sampledAt":"now",
+            "healthUrl":"http://127.0.0.1:3000/api/runtime/process-health",
+            "activationUrl":"http://127.0.0.1:3000/api/runtime/supervision/activate",
+            "quiesceUrl":"http://127.0.0.1:3000/api/runtime/supervision/quiesce",
+            "reloadUrl":"http://127.0.0.1:3000/api/runtime/app-snapshot/reload"
+        }"#;
+        let parsed = parse_worker_control_descriptor(body).expect("descriptor should parse");
+        assert_eq!(parsed.ready, true);
+        assert_eq!(parsed.status, "healthy");
+        assert_eq!(parsed.health_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/process-health"));
+        assert_eq!(parsed.activation_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/supervision/activate"));
+        assert_eq!(parsed.quiesce_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/supervision/quiesce"));
+        assert_eq!(parsed.reload_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/app-snapshot/reload"));
     }
 
     #[cfg_attr(windows, ignore = "flaky on windows localhost readiness timing")]
@@ -7682,6 +8005,7 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
             SuperviseConfig {
                 command: Some(command),
                 working_dir: None,
+                control_url: None,
                 restart_on_exit: false,
                 restart_on_unhealthy: true,
                 health_url: Some(health_url),
@@ -7769,6 +8093,7 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
             SuperviseConfig {
                 command: Some("exit 0".to_string()),
                 working_dir: None,
+                control_url: None,
                 restart_on_exit: false,
                 restart_on_unhealthy: true,
                 health_url: None,

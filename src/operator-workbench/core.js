@@ -7,11 +7,11 @@ import {
   createOperatorTuiEngine,
   loadOperatorTuiRuntimeContext,
   parseTuiArgs
-} from "./operator-tui.js";
+} from "../operator-tui.js";
 import {
   DEFAULT_OPERATOR_WORKBENCH_DISPLAY_SETTINGS,
   normalizeOperatorWorkbenchDisplaySettings
-} from "./operator-workbench-settings.js";
+} from "./settings.js";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));

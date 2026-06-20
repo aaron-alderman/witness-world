@@ -109,19 +109,21 @@ For supervised children behind the front door, use command and health templates 
 ```toml
 [supervise]
 command = "node src/cli.js utility-serve <app-root> --server app --port {runtime_port} --runtime-profile authoring"
-health_url = "http://127.0.0.1:{runtime_port}/api/runtime/process-health"
+control_url = "http://127.0.0.1:{runtime_port}/api/runtime/worker-control"
 restart_on_exit = true
 restart_on_unhealthy = true
 ```
 
-When `witness-core` supervises a Node runtime, point `[supervise].health_url` at the structured runtime health endpoint:
+When `witness-core` supervises a Node runtime, prefer `[supervise].control_url` so the worker advertises its full control surface through one versioned descriptor:
 
 ```toml
 [supervise]
-health_url = "http://127.0.0.1:3000/api/runtime/process-health"
+control_url = "http://127.0.0.1:3000/api/runtime/worker-control"
 health_interval_ms = 1000
 health_timeout_ms = 5000
 restart_on_unhealthy = true
 degraded_grace_polls = 10
 unhealthy_grace_polls = 3
 ```
+
+Legacy `health_url` and `reload_url` config fields still exist as compatibility fallback for older supervised setups, but the maintained checked-in configs now use `control_url`.

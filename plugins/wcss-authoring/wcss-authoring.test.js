@@ -258,3 +258,126 @@ test("wcss authoring plugin reads schema and manages snapshot-scoped structured 
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test("wcss authoring plugin loads adapter modules through witness-core without local canonical fs reads", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wcss-authoring-bridge-"));
+  const appRoot = path.join(tempRoot, "sample");
+  try {
+    await writeAdapter(appRoot, "app/authoring-adapter.js", `
+      import { tokenValue } from "./lib/helper.js";
+      export async function loadAuthoringAdapter() {
+        return {
+          document: {
+            kind: "wcss-document",
+            theme: "sample",
+            tokens: [{ name: "color.chrome.bg", value: tokenValue() }]
+          },
+          schema: {
+            supportedOperations: ["token.set"],
+            tokens: [{ name: "color.chrome.bg", domain: "color", currentValue: tokenValue(), canonicalValue: tokenValue(), previewable: true }],
+            styles: [],
+            slices: [],
+            views: []
+          },
+          tokenCatalog: {
+            tokens: [{ name: "color.chrome.bg", value: tokenValue(), domain: "color" }]
+          },
+          applyPatch({ ops }) {
+            const next = {
+              kind: "wcss-document",
+              theme: "sample",
+              tokens: [{ name: "color.chrome.bg", value: tokenValue() }]
+            };
+            for (const op of ops) {
+              if (op.kind === "token.set") next.tokens[0].value = op.value;
+            }
+            return next;
+          },
+          async buildStylesheets({ document }) {
+            return {
+              files: {
+                shell: ":root{--dk:" + document.tokens[0].value + ";}"
+              }
+            };
+          }
+        };
+      }
+    `);
+    await writeAdapter(appRoot, "app/lib/helper.js", `
+      export function tokenValue() {
+        return "#112233";
+      }
+    `);
+    const sourceById = new Map([
+      ["app/authoring-adapter.js", await fs.readFile(path.join(appRoot, "app/authoring-adapter.js"), "utf8")],
+      ["app/lib/helper.js", await fs.readFile(path.join(appRoot, "app/lib/helper.js"), "utf8")]
+    ]);
+    const bridgeCalls = [];
+    const handlers = createHandlers({
+      sendJson(res, status, body, headers = {}) {
+        res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers });
+        res.end(JSON.stringify(body));
+      },
+      readJson(req) {
+        return Promise.resolve(req.body ?? {});
+      },
+      fsModule: {
+        ...fs,
+        async readFile(target, encoding) {
+          const resolved = path.resolve(String(target || ""));
+          if (resolved.startsWith(appRoot)) {
+            throw new Error(`canonical authoring adapter read escaped witness-core bridge: ${resolved}`);
+          }
+          return await fs.readFile(target, encoding);
+        },
+        async stat(target) {
+          const resolved = path.resolve(String(target || ""));
+          if (resolved.startsWith(appRoot)) {
+            throw new Error(`canonical authoring adapter stat escaped witness-core bridge: ${resolved}`);
+          }
+          return await fs.stat(target);
+        }
+      }
+    });
+    const res = createResponse();
+    await handlers["wcss.document.read"]({
+      res,
+      route: {
+        params: {
+          adapterModule: "./app/authoring-adapter.js",
+          adapterExport: "loadAuthoringAdapter"
+        }
+      },
+      appContext: {
+        appRoot,
+        witnessCoreUrl: "http://127.0.0.1:8788",
+        witnessCoreBridge: {
+          async readSource({ path: sourceId }) {
+            bridgeCalls.push({ kind: "read", path: sourceId });
+            return { path: sourceId, content: sourceById.get(sourceId) ?? "" };
+          },
+          async statSource({ path: sourceId }) {
+            bridgeCalls.push({ kind: "stat", path: sourceId });
+            const content = sourceById.get(sourceId);
+            return {
+              path: sourceId,
+              exists: typeof content === "string",
+              isFile: typeof content === "string",
+              isDirectory: false,
+              size: Buffer.byteLength(String(content ?? ""), "utf8"),
+              modifiedAt: "1700000000000"
+            };
+          }
+        },
+        requestSnapshot: { appRevision: 4 }
+      }
+    });
+    assert.equal(res.statusCode, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.document.tokens[0].value, "#112233");
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "app/authoring-adapter.js"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "app/lib/helper.js"), true);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});

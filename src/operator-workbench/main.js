@@ -1,13 +1,13 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createOperatorWorkbenchCore } from "./operator-workbench-core.js";
-import { OPERATOR_WORKBENCH_IPC_CHANNELS } from "./operator-workbench-bridge.js";
+import { createOperatorWorkbenchCore } from "./core.js";
+import { OPERATOR_WORKBENCH_IPC_CHANNELS } from "./bridge.js";
 import {
   createOperatorWorkbenchSettingsStore,
   createOperatorWorkbenchWorkspaceKey
-} from "./operator-workbench-settings.js";
-import { renderOperatorWorkbenchPage } from "./operator-workbench-page.js";
+} from "./settings.js";
+import { renderOperatorWorkbenchPage } from "./page.js";
 
 async function writeWorkbenchPageFile({
   html,
@@ -25,6 +25,42 @@ function directModuleExecution() {
   return process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 }
 
+function decorateWorkbenchSnapshot(window, snapshot) {
+  return {
+    ...(snapshot && typeof snapshot === "object" ? snapshot : {}),
+    hostWindow: {
+      platform: process.platform,
+      maximized: Boolean(window?.isMaximized?.()),
+      minimizable: window?.isMinimizable?.() ?? true,
+      maximizable: window?.isMaximizable?.() ?? true,
+      closable: window?.isClosable?.() ?? true
+    }
+  };
+}
+
+function wireWorkbenchWindowShortcuts(window) {
+  const webContents = window?.webContents;
+  webContents?.on?.("before-input-event", (event, input) => {
+    const key = String(input?.key || "");
+    const lowerKey = key.toLowerCase();
+    const controlLike = Boolean(input?.control || input?.meta);
+    const shift = Boolean(input?.shift);
+    if (key === "F12" || (controlLike && shift && lowerKey === "i")) {
+      event?.preventDefault?.();
+      if (webContents.isDevToolsOpened?.()) {
+        webContents.closeDevTools?.();
+      } else {
+        webContents.openDevTools?.({ mode: "detach", activate: true });
+      }
+      return;
+    }
+    if (controlLike && lowerKey === "w") {
+      event?.preventDefault?.();
+      window.close?.();
+    }
+  });
+}
+
 export async function createOperatorWorkbenchShell({
   electron,
   args = process.argv.slice(2),
@@ -33,7 +69,7 @@ export async function createOperatorWorkbenchShell({
   fsModule = fs,
   createCoreImpl = createOperatorWorkbenchCore,
   renderPageImpl = renderOperatorWorkbenchPage,
-  preloadPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "desktop-preload.cjs")
+  preloadPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "desktop-preload.cjs")
 } = {}) {
   const { app, BrowserWindow, ipcMain } = electron;
   const userDataRoot = typeof app?.getPath === "function"
@@ -67,12 +103,6 @@ export async function createOperatorWorkbenchShell({
     ipcMain.handle(channel, handler);
   };
 
-  register(OPERATOR_WORKBENCH_IPC_CHANNELS.getSnapshot, () => core.snapshot());
-  register(OPERATOR_WORKBENCH_IPC_CHANNELS.runCommand, payload => core.executeCommand(payload?.command ?? ""));
-  register(OPERATOR_WORKBENCH_IPC_CHANNELS.dispatchIntent, payload => core.dispatchIntent(payload));
-  register(OPERATOR_WORKBENCH_IPC_CHANNELS.updateDisplaySettings, payload => core.updateDisplaySettings(payload));
-  register(OPERATOR_WORKBENCH_IPC_CHANNELS.getAutocomplete, payload => core.autocomplete(payload?.line ?? ""));
-
   let cleanedUp = false;
   async function cleanup() {
     if (cleanedUp) return;
@@ -95,12 +125,57 @@ export async function createOperatorWorkbenchShell({
     minWidth: 1100,
     minHeight: 760,
     show: false,
-    title: "Witness Operator Workbench",
+    title: "Operator TUI",
+    backgroundColor: "#0b0f0d",
+    frame: false,
+    autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
       preload: preloadPath
     }
   });
+  wireWorkbenchWindowShortcuts(window);
+  register(OPERATOR_WORKBENCH_IPC_CHANNELS.getSnapshot, async () =>
+    decorateWorkbenchSnapshot(window, await core.snapshot()));
+  register(OPERATOR_WORKBENCH_IPC_CHANNELS.runCommand, async payload => {
+    const result = await core.executeCommand(payload?.command ?? "");
+    return {
+      ...result,
+      snapshot: decorateWorkbenchSnapshot(window, result?.snapshot)
+    };
+  });
+  register(OPERATOR_WORKBENCH_IPC_CHANNELS.dispatchIntent, async payload => {
+    const result = await core.dispatchIntent(payload);
+    return {
+      ...result,
+      snapshot: decorateWorkbenchSnapshot(window, result?.snapshot)
+    };
+  });
+  register(OPERATOR_WORKBENCH_IPC_CHANNELS.updateDisplaySettings, async payload => {
+    const result = await core.updateDisplaySettings(payload);
+    return {
+      ...result,
+      snapshot: decorateWorkbenchSnapshot(window, result?.snapshot)
+    };
+  });
+  register(OPERATOR_WORKBENCH_IPC_CHANNELS.getAutocomplete, payload => core.autocomplete(payload?.line ?? ""));
+  register(OPERATOR_WORKBENCH_IPC_CHANNELS.windowControl, payload => {
+    const action = String(payload?.action || "");
+    if (action === "minimize") {
+      window.minimize?.();
+    } else if (action === "toggle-maximize") {
+      if (window.isMaximized?.()) {
+        window.unmaximize?.();
+      } else {
+        window.maximize?.();
+      }
+    } else if (action === "close") {
+      window.close?.();
+    }
+    return decorateWorkbenchSnapshot(window, null);
+  });
+  window.removeMenu?.();
+  window.setMenuBarVisibility?.(false);
   window.once?.("ready-to-show", () => window.show?.());
   window.on?.("closed", cleanup);
   const pagePath = await writeWorkbenchPageFile({

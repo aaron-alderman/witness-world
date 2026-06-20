@@ -254,6 +254,8 @@ async function loadAuthoringAdapter({
     requestSnapshot,
     importModule,
     fsModule,
+    generationBridge: appContext?.witnessCoreBridge ?? null,
+    requireGenerationBridgeForCanonicalImports: Boolean(appContext?.witnessCoreUrl),
     handlerName: "wcss.document.read"
   });
   const adapterResult = await loaded.exported({
@@ -389,6 +391,15 @@ function replayPreviewOpsIntoSchema(schema, ops = []) {
   return patchedSchema;
 }
 
+function wcssErrorPayload(errorLabel, error) {
+  const payload = {
+    error: errorLabel,
+    message: error instanceof Error ? error.message : String(error)
+  };
+  if (typeof error?.code === "string" && error.code) payload.code = error.code;
+  return payload;
+}
+
 export function createHandlers(deps = {}) {
   const {
     sendJson,
@@ -433,10 +444,7 @@ export function createHandlers(deps = {}) {
             : null
         });
       } catch (error) {
-        sendJson(res, 500, {
-          error: "wcss document read failed",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        sendJson(res, 500, wcssErrorPayload("wcss document read failed", error));
       }
     },
 
@@ -465,10 +473,7 @@ export function createHandlers(deps = {}) {
             : null
         });
       } catch (error) {
-        sendJson(res, 500, {
-          error: "wcss schema read failed",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        sendJson(res, 500, wcssErrorPayload("wcss schema read failed", error));
       }
     },
 
@@ -482,10 +487,7 @@ export function createHandlers(deps = {}) {
         });
         sendJson(res, 200, created);
       } catch (error) {
-        sendJson(res, 500, {
-          error: "wcss preview session create failed",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        sendJson(res, 500, wcssErrorPayload("wcss preview session create failed", error));
       }
     },
 
@@ -510,10 +512,7 @@ export function createHandlers(deps = {}) {
           ops: patched.ops
         });
       } catch (error) {
-        sendJson(res, 500, {
-          error: "wcss preview document patch failed",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        sendJson(res, 500, wcssErrorPayload("wcss preview document patch failed", error));
       }
     },
 
@@ -538,10 +537,7 @@ export function createHandlers(deps = {}) {
           ops: patched.ops
         });
       } catch (error) {
-        sendJson(res, 500, {
-          error: "wcss preview token patch failed",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        sendJson(res, 500, wcssErrorPayload("wcss preview token patch failed", error));
       }
     },
 
@@ -559,10 +555,7 @@ export function createHandlers(deps = {}) {
         });
         sendJson(res, 200, cleared);
       } catch (error) {
-        sendJson(res, 500, {
-          error: "wcss preview session clear failed",
-          message: error instanceof Error ? error.message : String(error)
-        });
+        sendJson(res, 500, wcssErrorPayload("wcss preview session clear failed", error));
       }
     }
   };

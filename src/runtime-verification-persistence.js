@@ -379,18 +379,19 @@ function createUnavailableVerificationPersistence({
 }
 
 async function witnessCoreVerificationPersistenceRequest({
-  coreUrl,
-  fetchImpl,
+  witnessCoreBridge,
   body
 }) {
-  let response;
-  try {
-    response = await fetchImpl(`${coreUrl}/verification-persistence`, {
-      method: "POST",
-      headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify(body)
+  if (typeof witnessCoreBridge?.verificationPersistenceRequest !== "function") {
+    throw createWitnessCoreVerificationPersistenceError("witness core verification persistence unavailable", {
+      status: 503,
+      code: "WITNESS_CORE_UNAVAILABLE"
     });
+  }
+  try {
+    return await witnessCoreBridge.verificationPersistenceRequest(body);
   } catch (error) {
+    if (error instanceof Error && typeof error.status === "number") throw error;
     throw createWitnessCoreVerificationPersistenceError("witness core unavailable", {
       status: 503,
       code: "WITNESS_CORE_UNAVAILABLE",
@@ -399,23 +400,6 @@ async function witnessCoreVerificationPersistenceRequest({
       }
     });
   }
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-  if (!response?.ok) {
-    throw createWitnessCoreVerificationPersistenceError(
-      `witness core verification persistence request failed (${response?.status || "unknown"})`,
-      {
-        status: response?.status || 500,
-        code: typeof payload?.code === "string" ? payload.code : null,
-        details: payload && typeof payload === "object" ? payload : null
-      }
-    );
-  }
-  return payload;
 }
 
 function createRemotePersistenceBundle(bundle = {}, resolved) {
@@ -498,11 +482,9 @@ function createRemotePersistenceBundle(bundle = {}, resolved) {
 
 async function createWitnessCoreVerificationPersistence({
   resolved,
-  witnessCoreBridge,
-  fetchImpl = globalThis.fetch
+  witnessCoreBridge
 } = {}) {
-  const coreUrl = optionalText(witnessCoreBridge?.coreUrl);
-  if (!coreUrl || typeof fetchImpl !== "function") {
+  if (!optionalText(witnessCoreBridge?.coreUrl) || typeof witnessCoreBridge?.verificationPersistenceRequest !== "function") {
     throw createWitnessCoreVerificationPersistenceError("witness core verification persistence unavailable", {
       status: 503,
       code: "WITNESS_CORE_UNAVAILABLE"
@@ -511,8 +493,7 @@ async function createWitnessCoreVerificationPersistence({
   const inspectResolved = buildRemoteVerificationPersistenceInspect(resolved);
   const state = createEmptyLedgerState();
   const initialRows = await witnessCoreVerificationPersistenceRequest({
-    coreUrl,
-    fetchImpl,
+    witnessCoreBridge,
     body: {
       operation: "readModelRows",
       verificationRoot: resolved.verificationRoot,
@@ -548,8 +529,7 @@ async function createWitnessCoreVerificationPersistence({
     },
     async recordPolicyRows(rows = []) {
       await witnessCoreVerificationPersistenceRequest({
-        coreUrl,
-        fetchImpl,
+        witnessCoreBridge,
         body: {
           operation: "recordPolicyRows",
           verificationRoot: resolved.verificationRoot,
@@ -562,8 +542,7 @@ async function createWitnessCoreVerificationPersistence({
     },
     async recordFreshnessRows(rows = []) {
       await witnessCoreVerificationPersistenceRequest({
-        coreUrl,
-        fetchImpl,
+        witnessCoreBridge,
         body: {
           operation: "recordFreshnessRows",
           verificationRoot: resolved.verificationRoot,
@@ -576,8 +555,7 @@ async function createWitnessCoreVerificationPersistence({
     },
     async recordInvalidationRows(rows = []) {
       await witnessCoreVerificationPersistenceRequest({
-        coreUrl,
-        fetchImpl,
+        witnessCoreBridge,
         body: {
           operation: "recordInvalidationRows",
           verificationRoot: resolved.verificationRoot,
@@ -590,8 +568,7 @@ async function createWitnessCoreVerificationPersistence({
     },
     async recordQueueRow(row = null) {
       await witnessCoreVerificationPersistenceRequest({
-        coreUrl,
-        fetchImpl,
+        witnessCoreBridge,
         body: {
           operation: "recordQueueRow",
           verificationRoot: resolved.verificationRoot,
@@ -604,8 +581,7 @@ async function createWitnessCoreVerificationPersistence({
     },
     async recordExecutionRow(row = null) {
       await witnessCoreVerificationPersistenceRequest({
-        coreUrl,
-        fetchImpl,
+        witnessCoreBridge,
         body: {
           operation: "recordExecutionRow",
           verificationRoot: resolved.verificationRoot,
@@ -619,8 +595,7 @@ async function createWitnessCoreVerificationPersistence({
     async persistTestRunBundle(bundle = {}) {
       const durableBundle = createRemotePersistenceBundle(bundle, resolved);
       await witnessCoreVerificationPersistenceRequest({
-        coreUrl,
-        fetchImpl,
+        witnessCoreBridge,
         body: {
           operation: "persistTestRunBundle",
           verificationRoot: resolved.verificationRoot,
@@ -642,8 +617,7 @@ async function createWitnessCoreVerificationPersistence({
     },
     async findReusablePassedResult(cacheKey) {
       const payload = await witnessCoreVerificationPersistenceRequest({
-        coreUrl,
-        fetchImpl,
+        witnessCoreBridge,
         body: {
           operation: "findReusablePassedResult",
           verificationRoot: resolved.verificationRoot,
@@ -656,8 +630,7 @@ async function createWitnessCoreVerificationPersistence({
     },
     async readArtifactContent(artifactId, { compatibility = "canonical" } = {}) {
       return await witnessCoreVerificationPersistenceRequest({
-        coreUrl,
-        fetchImpl,
+        witnessCoreBridge,
         body: {
           operation: "readArtifactContent",
           verificationRoot: resolved.verificationRoot,
@@ -710,7 +683,6 @@ export async function createRuntimeVerificationPersistence({
   runtimeOperatorContract = null,
   runtimeProfile = null,
   witnessCoreBridge = null,
-  fetchImpl = globalThis.fetch,
   requireCanonicalBoundary = false
 } = {}) {
   const resolved = resolveRuntimeVerificationPersistence({
@@ -724,8 +696,7 @@ export async function createRuntimeVerificationPersistence({
   if (witnessCoreBridge?.coreUrl) {
     return await createWitnessCoreVerificationPersistence({
       resolved,
-      witnessCoreBridge,
-      fetchImpl
+      witnessCoreBridge
     });
   }
 

@@ -17,6 +17,7 @@ import { createLogger } from "./logger.js";
 import { loadAppProjectWithStableFallback, resolveMcpTarget, resolveServeTarget } from "./app-project.js";
 import { startAppRuntime } from "./app-runtime.js";
 import { createStartupTelemetry } from "./startup-telemetry.js";
+import { createWitnessCoreBridge } from "./witness-core-bridge.js";
 
 const ANSI = Object.freeze({
   red: "\x1b[31m",
@@ -50,6 +51,15 @@ if (command === "utility-serve") {
   process.exit(1);
 }
 
+function startupGenerationBridge(env = process.env) {
+  const coreUrl = typeof env?.WITNESS_CORE_URL === "string" ? env.WITNESS_CORE_URL.trim() : "";
+  if (!coreUrl) return null;
+  return createWitnessCoreBridge({
+    coreUrl,
+    logger: createLogger()
+  });
+}
+
 async function runServe(args) {
   const parsed = parseServeArgs(args);
   if (!parsed.appPath) {
@@ -59,11 +69,14 @@ async function runServe(args) {
   let appProject = null;
   let selection = null;
   const startupTelemetry = createStartupTelemetry({ mode: "serve" });
+  const generationBridge = startupGenerationBridge(process.env);
   try {
     const loaded = await startupTelemetry.runPhase("app.project.load", () => loadAppProjectWithStableFallback(parsed.appPath, {
       runtimeProfile: parsed.runtimeProfile,
       runtimePluginIds: parsed.runtimePluginIds,
-      env: process.env
+      env: process.env,
+      generationBridge,
+      requireGenerationBridgeForCanonicalReads: Boolean(generationBridge)
     }), {
       label: "Load app project"
     });
@@ -196,11 +209,14 @@ async function runMcp(args) {
   let appProject = null;
   let selection = null;
   const startupTelemetry = createStartupTelemetry({ mode: "mcp" });
+  const generationBridge = startupGenerationBridge(process.env);
   try {
     const loaded = await startupTelemetry.runPhase("app.project.load", () => loadAppProjectWithStableFallback(parsed.appPath, {
       runtimeProfile: parsed.runtimeProfile,
       runtimePluginIds: parsed.runtimePluginIds,
-      env: process.env
+      env: process.env,
+      generationBridge,
+      requireGenerationBridgeForCanonicalReads: Boolean(generationBridge)
     }), {
       label: "Load app project"
     });
@@ -356,7 +372,7 @@ async function runOperator(args) {
         args,
         cwd: process.cwd(),
         env: process.env,
-        entryScript: path.resolve(process.cwd(), "src", "operator-workbench-main.js")
+        entryScript: path.resolve(process.cwd(), "src", "operator-workbench", "main.js")
       });
       process.exit(exitCode ?? 0);
     } catch (error) {

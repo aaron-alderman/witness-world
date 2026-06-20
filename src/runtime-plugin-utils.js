@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -75,6 +74,120 @@ const KNOWN_TRUST_STATES = new Set(["local", "authored-here", "imported", "unsig
 const KNOWN_SIGNATURE_STATUSES = new Set(["none", "unsigned", "signed", "verified"]);
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+
+function normalizeSlashes(value) {
+  return String(value || "").replaceAll("\\", "/");
+}
+
+function isWithinRoot(filePath, rootPath) {
+  const relative = path.relative(rootPath, filePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function capabilitySourceIdForWorkspacePath(targetPath, cwd) {
+  const resolvedCwd = path.resolve(String(cwd || process.cwd()));
+  const resolvedTarget = path.resolve(String(targetPath || ""));
+  if (!isWithinRoot(resolvedTarget, resolvedCwd)) return null;
+  const relative = normalizeSlashes(path.relative(resolvedCwd, resolvedTarget));
+  if (!relative || relative === ".") return null;
+  if (relative === ".witness-core" || relative.startsWith(".witness-core/")) return null;
+  return relative;
+}
+
+function parseCapabilityModifiedAt(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Date.now();
+}
+
+function createCapabilityMissingError(targetPath) {
+  const error = new Error(`source path not available through witness-core capability: ${targetPath}`);
+  error.code = "ENOENT";
+  return error;
+}
+
+function createCapabilityRequiredError(targetPath) {
+  const error = new Error(`source path must be available through witness-core capability: ${targetPath}`);
+  error.code = "WITNESS_CORE_REQUIRED";
+  error.status = 503;
+  return error;
+}
+
+function createRuntimePluginDiscoveryFsModule({
+  cwd = process.cwd(),
+  fsModule = fs,
+  generationBridge = null,
+  requireGenerationBridgeForCanonicalReads = false
+} = {}) {
+  if (
+    typeof generationBridge?.readSource !== "function"
+    || typeof generationBridge?.statSource !== "function"
+    || typeof generationBridge?.listSourceDirectory !== "function"
+  ) {
+    if (requireGenerationBridgeForCanonicalReads) {
+      return {
+        async readFile(target) {
+          throw createCapabilityRequiredError(path.resolve(String(target || "")));
+        },
+        async stat(target) {
+          throw createCapabilityRequiredError(path.resolve(String(target || "")));
+        },
+        async readdir(target) {
+          throw createCapabilityRequiredError(path.resolve(String(target || "")));
+        }
+      };
+    }
+    return fsModule;
+  }
+  const resolvedCwd = path.resolve(String(cwd || process.cwd()));
+  return {
+    async readFile(target, encoding = null) {
+      const resolved = path.resolve(String(target || ""));
+      const sourceId = capabilitySourceIdForWorkspacePath(resolved, resolvedCwd);
+      if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createCapabilityRequiredError(resolved);
+      if (!sourceId) return await fsModule.readFile(resolved, encoding ?? undefined);
+      const payload = await generationBridge.readSource({ path: sourceId });
+      const content = String(payload?.content ?? "");
+      if (!encoding) return Buffer.from(content, "utf8");
+      if (encoding === "utf8" || encoding === "utf-8") return content;
+      return await fsModule.readFile(resolved, encoding);
+    },
+    async stat(target) {
+      const resolved = path.resolve(String(target || ""));
+      const sourceId = capabilitySourceIdForWorkspacePath(resolved, resolvedCwd);
+      if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createCapabilityRequiredError(resolved);
+      if (!sourceId) return await fsModule.stat(resolved);
+      const payload = await generationBridge.statSource({ path: sourceId });
+      if (payload?.exists !== true) throw createCapabilityMissingError(resolved);
+      return {
+        size: Number(payload?.size || 0),
+        mtimeMs: parseCapabilityModifiedAt(payload?.modifiedAt),
+        isFile: () => payload?.isFile !== false,
+        isDirectory: () => payload?.isDirectory === true
+      };
+    },
+    async readdir(target, options = {}) {
+      const resolved = path.resolve(String(target || ""));
+      const sourceId = capabilitySourceIdForWorkspacePath(resolved, resolvedCwd);
+      if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createCapabilityRequiredError(resolved);
+      if (!sourceId) return await fsModule.readdir(resolved, options);
+      const payload = await generationBridge.listSourceDirectory({ path: sourceId });
+      if (options?.withFileTypes === true) {
+        return (payload?.entries ?? []).map(entry => ({
+          name: String(entry?.name || ""),
+          isFile: () => entry?.isFile === true,
+          isDirectory: () => entry?.isDirectory === true
+        }));
+      }
+      return (payload?.entries ?? []).map(entry => String(entry?.name || ""));
+    }
+  };
+}
 
 /**
  * @typedef {Object} PluginManifest
@@ -824,14 +937,15 @@ function compositionDelta(beforeSnapshot, afterSnapshot) {
   };
 }
 
-function buildPluginPackageRow({
+async function buildPluginPackageRow({
   directoryName,
   discoveryPath,
   manifest,
   validationErrors,
   activeProfile,
   availableProfileIds,
-  validPluginIds
+  validPluginIds,
+  fsModule = fs
 }) {
   const errors = [...validationErrors];
   const availableBundleIds = availableRuntimeBundleIds();
@@ -852,8 +966,15 @@ function buildPluginPackageRow({
       }
     }
   }
-  if (runtimeEntry && !existsSync(runtimeEntry.resolvedPath)) {
-    errors.push(`runtime.entry not found: ${manifest?.runtime?.entry ?? runtimeEntry.entry}`);
+  if (runtimeEntry) {
+    try {
+      const stat = await fsModule.stat(runtimeEntry.resolvedPath);
+      if (!stat?.isFile?.()) {
+        errors.push(`runtime.entry not found: ${manifest?.runtime?.entry ?? runtimeEntry.entry}`);
+      }
+    } catch {
+      errors.push(`runtime.entry not found: ${manifest?.runtime?.entry ?? runtimeEntry.entry}`);
+    }
   }
   const validation = { ok: errors.length === 0, errors };
   const compatible = Boolean(
@@ -1155,12 +1276,21 @@ export async function discoverRuntimePluginPackages({
   pluginRoot,
   runtimeProfile = DEFAULT_RUNTIME_PROFILE,
   availableProfileIds = availableRuntimeProfiles(),
-  fsModule = fs
+  fsModule = fs,
+  generationBridge = null,
+  cwd = process.cwd(),
+  requireGenerationBridgeForCanonicalReads = false
 } = {}) {
+  const discoveryFsModule = createRuntimePluginDiscoveryFsModule({
+    cwd,
+    fsModule,
+    generationBridge,
+    requireGenerationBridgeForCanonicalReads
+  });
   const rootPath = path.resolve(String(pluginRoot || resolveRuntimePluginRoot()));
   let entries = [];
   try {
-    entries = await fsModule.readdir(rootPath, { withFileTypes: true });
+    entries = await discoveryFsModule.readdir(rootPath, { withFileTypes: true });
   } catch (error) {
     if (error && typeof error === "object" && error.code === "ENOENT") {
       return {
@@ -1197,7 +1327,7 @@ export async function discoverRuntimePluginPackages({
     const manifestPath = path.join(discoveryPath, "plugin.json");
     let text = null;
     try {
-      text = await fsModule.readFile(manifestPath, "utf8");
+      text = await discoveryFsModule.readFile(manifestPath, "utf8");
     } catch (error) {
       if (error && typeof error === "object" && error.code === "ENOENT") {
         ignoredEntries.push({ path: discoveryPath, reason: "plugin.json not found" });
@@ -1236,7 +1366,7 @@ export async function discoverRuntimePluginPackages({
       .filter(row => row.manifest?.id && row.validationErrors.length === 0 && (manifestCounts.get(row.manifest.id) ?? 0) === 1)
       .map(row => row.manifest.id)
   );
-  const packages = rawPackages
+  const packages = (await Promise.all(rawPackages
     .map(row => buildPluginPackageRow({
       ...row,
       validationErrors: [
@@ -1247,8 +1377,9 @@ export async function discoverRuntimePluginPackages({
       ],
       activeProfile: runtimeProfile,
       availableProfileIds,
-      validPluginIds
-    }))
+      validPluginIds,
+      fsModule: discoveryFsModule
+    }))))
     .sort((left, right) =>
       String(left.id).localeCompare(String(right.id))
       || String(left.discoveryPath).localeCompare(String(right.discoveryPath))
@@ -1285,13 +1416,19 @@ export async function readRuntimePluginCatalog({
   startupPluginIds = [],
   authoredPluginIds = [],
   availableProfileIds = availableRuntimeProfiles(),
-  fsModule = fs
+  fsModule = fs,
+  generationBridge = null,
+  cwd = process.cwd(),
+  requireGenerationBridgeForCanonicalReads = false
 } = {}) {
   const discovered = await discoverRuntimePluginPackages({
     pluginRoot,
     runtimeProfile,
     availableProfileIds,
-    fsModule
+    fsModule,
+    generationBridge,
+    cwd,
+    requireGenerationBridgeForCanonicalReads
   });
   const selection = resolveRuntimePluginSelection({
     profileName: runtimeProfile,

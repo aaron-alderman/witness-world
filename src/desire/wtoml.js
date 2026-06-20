@@ -61,10 +61,25 @@ export function compileWtomlToDesirePlus(source, { file = null } = {}) {
   return compileWtomlDocsToDesirePlus(docs, { file });
 }
 
-export async function compileWtomlFileToDesirePlus(file) {
+export async function compileWtomlFileToDesirePlus(file, options = {}) {
   const resolved = path.resolve(file);
-  const source = await fs.readFile(resolved, "utf8");
+  const readFile = typeof options?.readFile === "function"
+    ? options.readFile
+    : options?.requireReadCapability === true
+      ? null
+      : (target, encoding) => fs.readFile(target, encoding);
+  if (typeof readFile !== "function") {
+    throw createReadCapabilityRequiredError(resolved);
+  }
+  const source = await readFile(resolved, "utf8");
   return compileWtomlToDesirePlus(source, { file: resolved });
+}
+
+function createReadCapabilityRequiredError(file) {
+  const error = new Error(`WTOML file compilation requires an injected read capability for ${file}`);
+  error.code = "WITNESS_CORE_REQUIRED";
+  error.status = 503;
+  return error;
 }
 
 function semanticWtomlShape(doc) {

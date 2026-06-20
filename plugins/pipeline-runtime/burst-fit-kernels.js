@@ -20,9 +20,9 @@
 
 import path from "node:path";
 import { createComputeHostOpHandler } from "../../src/desire/host-op-migration.js";
-import { compileRvmFileToDesirePlus, normalizeDesirePlusToDesire } from "../../src/desire/index.js";
 import { evaluateModel } from "../chart-runtime/plan/evaluate-model.js";
-export { createBurstFitInIrHandler, burstFitFunctions };
+import { createRvmModelBodyLoader } from "./rvm-model-loader.js";
+export { burstFitModelBody, createBurstFitInIrHandler, burstFitFunctions };
 
 const TWO_PI = 2 * Math.PI;
 const rpmToOmega = rpm => TWO_PI * rpm / 60; // rev/min → rad/s
@@ -127,24 +127,31 @@ const burstFitFunctions = {
     }).rpm
 };
 
-let _modelBody = null;
-async function burstFitModelBody() {
-  if (_modelBody) return _modelBody;
-  const file = path.join(process.cwd(), "examples_rvm", "engentus", "app", "models", "burst-fit.rvm");
-  const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(file));
-  const node = desire.nodes.find(n => n.kind === "dataflow" && n.name === "BurstFit");
-  if (!node) throw new Error("BurstFit dataflow model not found in burst-fit.rvm");
-  _modelBody = node.body;
-  return _modelBody;
+const loadBurstFitModelBody = createRvmModelBodyLoader({
+  resolveFile: () => path.join(process.cwd(), "examples", "engentus", "app", "models", "burst-fit.rvm"),
+  nodeName: "BurstFit"
+});
+
+async function burstFitModelBody(options = {}) {
+  return loadBurstFitModelBody(options);
 }
 
 // The in-IR host-op handler for engentus.pipeline.fit.burst, conforming to the
 // declared BurstFitResultPayload { burst_start, rpm, n_valid_pkgs }. Runs THROUGH
 // the model via evaluateModel: the burst samples become model params; the lowered
 // grid-search leaf yields the rpm. `sampleSource(burst_start)` is the data seam.
-function createBurstFitInIrHandler({ sampleSource, fitOptions = {} } = {}) {
+function createBurstFitInIrHandler({
+  sampleSource,
+  fitOptions = {},
+  readFile = null,
+  requireReadCapability = true,
+  loadModelBody = null
+} = {}) {
   if (typeof sampleSource !== "function") throw new Error("createBurstFitInIrHandler: `sampleSource` (burst_start → { g, dt, n_valid_pkgs? }) is required");
   const [rpmLo, rpmHi] = fitOptions.rpmRange ?? [6.0, 18.0];
+  const resolveModelBody = typeof loadModelBody === "function"
+    ? loadModelBody
+    : () => burstFitModelBody({ readFile, requireReadCapability });
   return createComputeHostOpHandler({
     resolveInputs: request => {
       const data = sampleSource(request.burst_start);
@@ -152,7 +159,7 @@ function createBurstFitInIrHandler({ sampleSource, fitOptions = {} } = {}) {
       return data;
     },
     compute: async data => {
-      const body = await burstFitModelBody();
+      const body = await resolveModelBody();
       const ev = evaluateModel(body, {
         functions: burstFitFunctions,
         params: { g: data.g, dt: data.dt ?? 0, times: data.times ?? 0, rpm_lo: rpmLo, rpm_hi: rpmHi }

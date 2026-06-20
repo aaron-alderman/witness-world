@@ -10,8 +10,8 @@
 
 import path from "node:path";
 import { createComputeHostOpHandler } from "../../src/desire/host-op-migration.js";
-import { compileRvmFileToDesirePlus, normalizeDesirePlusToDesire } from "../../src/desire/index.js";
 import { evaluateModel } from "../chart-runtime/plan/evaluate-model.js";
+import { createRvmModelBodyLoader } from "./rvm-model-loader.js";
 
 const T = {
   MIN_ROBUST_SPAN: 1e-6,
@@ -130,24 +130,30 @@ export const healthFunctions = {
   health_n_bolts: rows => new Set(rows.map(r => String(r.bolt_number))).size
 };
 
-let _modelBody = null;
-export async function healthModelBody() {
-  if (_modelBody) return _modelBody;
-  const file = path.join(process.cwd(), "examples_rvm", "engentus", "app", "models", "health.rvm");
-  const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(file));
-  const node = desire.nodes.find(n => n.kind === "dataflow" && n.name === "HealthClassify");
-  if (!node) throw new Error("HealthClassify dataflow model not found in health.rvm");
-  _modelBody = node.body;
-  return _modelBody;
+const loadHealthModelBody = createRvmModelBodyLoader({
+  resolveFile: () => path.join(process.cwd(), "examples", "engentus", "app", "models", "health.rvm"),
+  nodeName: "HealthClassify"
+});
+
+export async function healthModelBody(options = {}) {
+  return loadHealthModelBody(options);
 }
 
 // ── in-IR host-op handler for engentus.pipeline.health.classify ────────────
 // Conforms to HealthResultPayload { hour_start, n_valid_channels,
 // n_bolts_evaluated }. Runs THROUGH the model via evaluateModel: the hour's
 // feature rows become a model param; the lowered kernels yield the counts.
-export function createHealthClassifyInIrHandler({ sampleSource } = {}) {
+export function createHealthClassifyInIrHandler({
+  sampleSource,
+  readFile = null,
+  requireReadCapability = true,
+  loadModelBody = null
+} = {}) {
   if (typeof sampleSource !== "function")
     throw new Error("createHealthClassifyInIrHandler: `sampleSource` (hour_start → feature rows) is required");
+  const resolveModelBody = typeof loadModelBody === "function"
+    ? loadModelBody
+    : () => healthModelBody({ readFile, requireReadCapability });
   return createComputeHostOpHandler({
     resolveInputs: request => {
       const rows = sampleSource(request.hour_start);
@@ -155,7 +161,7 @@ export function createHealthClassifyInIrHandler({ sampleSource } = {}) {
       return rows;
     },
     compute: async rows => {
-      const body = await healthModelBody();
+      const body = await resolveModelBody();
       return evaluateModel(body, { functions: healthFunctions, params: { rows } });
     },
     mapResponse: (ev, request) => ({

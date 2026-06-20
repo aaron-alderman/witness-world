@@ -40,6 +40,10 @@ function normalizePositiveInteger(value) {
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
+function normalizeSlashes(value) {
+  return String(value || "").replaceAll("\\", "/");
+}
+
 function isWithinRoot(filePath, rootPath) {
   const relative = path.relative(rootPath, filePath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -48,9 +52,102 @@ function isWithinRoot(filePath, rootPath) {
 async function statOrNull(targetPath, fsModule) {
   try {
     return await fsModule.stat(targetPath);
-  } catch {
+  } catch (error) {
+    if (error?.code === "WITNESS_CORE_REQUIRED" || Number(error?.status || 0) === 503) throw error;
     return null;
   }
+}
+
+function capabilitySourceIdForWorkspacePath(targetPath, cwd) {
+  const resolvedCwd = path.resolve(String(cwd || process.cwd()));
+  const resolvedTarget = path.resolve(String(targetPath || ""));
+  if (!isWithinRoot(resolvedTarget, resolvedCwd)) return null;
+  const relative = normalizeSlashes(path.relative(resolvedCwd, resolvedTarget));
+  if (!relative || relative === "." || relative === APP_MANIFEST_BASENAME) return relative || APP_MANIFEST_BASENAME;
+  if (relative === ".witness-core" || relative.startsWith(".witness-core/")) return null;
+  return relative;
+}
+
+function parseCapabilityModifiedAt(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Date.now();
+}
+
+function createCapabilityMissingError(targetPath) {
+  const error = new Error(`source path not available through witness-core capability: ${targetPath}`);
+  error.code = "ENOENT";
+  return error;
+}
+
+function createCapabilityRequiredError(targetPath) {
+  const error = new Error(`source path must be available through witness-core capability: ${targetPath}`);
+  error.code = "WITNESS_CORE_REQUIRED";
+  error.status = 503;
+  return error;
+}
+
+function createAppProjectSourceFsModule({
+  cwd = process.cwd(),
+  fsModule = fs,
+  generationBridge = null,
+  requireGenerationBridgeForCanonicalReads = false
+} = {}) {
+  if (typeof generationBridge?.readSource !== "function" || typeof generationBridge?.statSource !== "function") {
+    if (requireGenerationBridgeForCanonicalReads) {
+      return {
+        async readFile(target) {
+          throw createCapabilityRequiredError(path.resolve(String(target || "")));
+        },
+        async stat(target) {
+          throw createCapabilityRequiredError(path.resolve(String(target || "")));
+        }
+      };
+    }
+    return fsModule;
+  }
+  const resolvedCwd = path.resolve(String(cwd || process.cwd()));
+  return {
+    async readFile(target, encoding = null) {
+      const resolved = path.resolve(String(target || ""));
+      const sourceId = capabilitySourceIdForWorkspacePath(resolved, resolvedCwd);
+      if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createCapabilityRequiredError(resolved);
+      if (!sourceId) return await fsModule.readFile(resolved, encoding ?? undefined);
+      const payload = await generationBridge.readSource({ path: sourceId });
+      const content = String(payload?.content ?? "");
+      if (!encoding) return Buffer.from(content, "utf8");
+      if (encoding === "utf8" || encoding === "utf-8") return content;
+      return await fsModule.readFile(resolved, encoding);
+    },
+    async stat(target) {
+      const resolved = path.resolve(String(target || ""));
+      const sourceId = capabilitySourceIdForWorkspacePath(resolved, resolvedCwd);
+      if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createCapabilityRequiredError(resolved);
+      if (!sourceId) return await fsModule.stat(resolved);
+      const payload = await generationBridge.statSource({ path: sourceId });
+      if (payload?.exists !== true) throw createCapabilityMissingError(resolved);
+      return {
+        size: Number(payload?.size || 0),
+        mtimeMs: parseCapabilityModifiedAt(payload?.modifiedAt),
+        isFile: () => payload?.isFile !== false,
+        isDirectory: () => payload?.isDirectory === true
+      };
+    }
+  };
+}
+
+function appProjectSourceFsModule(options = {}) {
+  return createAppProjectSourceFsModule({
+    cwd: options?.cwd ?? process.cwd(),
+    fsModule: options?.fsModule ?? fs,
+    generationBridge: options?.generationBridge ?? null,
+    requireGenerationBridgeForCanonicalReads: options?.requireGenerationBridgeForCanonicalReads === true
+  });
 }
 
 function sharedLibRootFor(appRoot) {
@@ -238,20 +335,28 @@ function selectTarget(kind, rows, overrideId = null) {
 
 export async function resolveAppProjectEntry(entryPath, {
   cwd = process.cwd(),
-  fsModule = fs
+  fsModule = fs,
+  generationBridge = null,
+  requireGenerationBridgeForCanonicalReads = false
 } = {}) {
+  const sourceFsModule = createAppProjectSourceFsModule({
+    cwd,
+    fsModule,
+    generationBridge,
+    requireGenerationBridgeForCanonicalReads
+  });
   const raw = typeof entryPath === "string" ? entryPath.trim() : "";
   if (!raw) {
     throw createAppProjectError("APP_ENTRY_REQUIRED", "app startup path is required");
   }
   const resolved = path.resolve(cwd, raw);
-  const stat = await statOrNull(resolved, fsModule);
+  const stat = await statOrNull(resolved, sourceFsModule);
   if (!stat) {
     throw createAppProjectError("APP_ENTRY_MISSING", `app startup path not found: ${resolved}`, { entryPath: resolved });
   }
   if (stat.isDirectory()) {
     const manifestPath = path.join(resolved, APP_MANIFEST_BASENAME);
-    const manifestStat = await statOrNull(manifestPath, fsModule);
+    const manifestStat = await statOrNull(manifestPath, sourceFsModule);
     if (!manifestStat?.isFile()) {
       throw createAppProjectError("APP_MANIFEST_MISSING", `app manifest not found: ${manifestPath}`, {
         appRoot: resolved,
@@ -283,6 +388,7 @@ export async function resolveAppProjectEntry(entryPath, {
 
 export async function loadAppProject(entryPath, options = {}) {
   const { appRoot, manifestPath } = await resolveAppProjectEntry(entryPath, options);
+  const sourceFsModule = appProjectSourceFsModule(options);
   const sharedLibRoot = sharedLibRootFor(appRoot);
   const ensureSourceWithinBoundary = async sourcePath => {
     const classification = classifySource(sourcePath, { appRoot, sharedLibRoot });
@@ -298,21 +404,27 @@ export async function loadAppProject(entryPath, options = {}) {
       }
     );
   };
+  const readFile = options?.readFile ?? ((target, encoding) => sourceFsModule.readFile(target, encoding));
   const initialLoaded = await loadWitnessAppFile(manifestPath, {
     beforeLoad: ensureSourceWithinBoundary,
-    readFile: options?.readFile ?? null
+    readFile,
+    requireReadCapability: options?.requireGenerationBridgeForCanonicalReads === true
   });
   const pluginRuntime = await loadRuntimePluginRegistriesForDocs(initialLoaded.witnessDocs, {
     runtimeProfile: options?.runtimeProfile,
     runtimePluginIds: options?.runtimePluginIds ?? null,
     pluginRoot: options?.pluginRoot ?? null,
-    env: options?.env ?? process.env
+    env: options?.env ?? process.env,
+    generationBridge: options?.generationBridge ?? null,
+    cwd: options?.cwd ?? process.cwd(),
+    requireGenerationBridgeForCanonicalReads: options?.requireGenerationBridgeForCanonicalReads === true
   });
   const loaded = pluginRuntime.registries?.rvmFormRegistry
     ? await loadWitnessAppFile(manifestPath, {
       beforeLoad: ensureSourceWithinBoundary,
-      readFile: options?.readFile ?? null,
-      rvmFormRegistry: pluginRuntime.registries.rvmFormRegistry
+      readFile,
+      rvmFormRegistry: pluginRuntime.registries.rvmFormRegistry,
+      requireReadCapability: options?.requireGenerationBridgeForCanonicalReads === true
     })
     : initialLoaded;
   const sourceFiles = uniqueByFile(loaded.sourceFiles);
@@ -421,6 +533,7 @@ export async function loadAppProject(entryPath, options = {}) {
 }
 
 export async function loadAppProjectWithStableFallback(entryPath, options = {}) {
+  const sourceFsModule = appProjectSourceFsModule(options);
   try {
     return {
       appProject: await loadAppProject(entryPath, options),
@@ -439,7 +552,7 @@ export async function loadAppProjectWithStableFallback(entryPath, options = {}) 
     if (!cache) throw liveError;
     const readFile = createStableAppOverlayReadFile(cache, {
       fsModule: options?.fsModule ?? fs,
-      parentReadFile: options?.readFile ?? null
+      parentReadFile: options?.readFile ?? ((target, encoding) => sourceFsModule.readFile(target, encoding))
     });
     const appProject = await loadAppProject(entryPath, {
       ...options,

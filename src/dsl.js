@@ -72,11 +72,20 @@ export function parseWitnessToml(source) {
   return docs;
 }
 
-export async function loadWitnessTomlFile(file, { seen = new Set(), beforeLoad = null, rvmFormRegistry = null } = {}) {
+export async function loadWitnessTomlFile(
+  file,
+  {
+    seen = new Set(),
+    beforeLoad = null,
+    rvmFormRegistry = null,
+    requireReadCapability = false
+  } = {}
+) {
   const loaded = await loadWitnessAppFile(file, {
     seen,
     beforeLoad,
-    rvmFormRegistry
+    rvmFormRegistry,
+    requireReadCapability
   });
   return loaded.witnessDocs;
 }
@@ -87,13 +96,19 @@ export async function loadWitnessAppFile(
     seen = new Set(),
     beforeLoad = null,
     rvmFormRegistry = null,
-    readFile = null
+    readFile = null,
+    requireReadCapability = false
   } = {}
 ) {
   const resolved = path.resolve(file);
   const readSource = typeof readFile === "function"
     ? readFile
-    : (target, encoding) => fs.readFile(target, encoding);
+    : requireReadCapability === true
+      ? null
+      : (target, encoding) => fs.readFile(target, encoding);
+  if (typeof readSource !== "function") {
+    throw createReadCapabilityRequiredError(resolved);
+  }
   if (typeof beforeLoad === "function") {
     await beforeLoad(resolved);
   }
@@ -113,7 +128,11 @@ export async function loadWitnessAppFile(
       witnessDocs: [],
       authoredDesireDocs: [
         normalizeDesirePlusToDesire(
-          await compileRvmFileToDesirePlus(resolved, { rvmFormRegistry, readFile: readSource }),
+          await compileRvmFileToDesirePlus(resolved, {
+            rvmFormRegistry,
+            readFile: readSource,
+            requireReadCapability
+          }),
           { rvmFormRegistry }
         )
       ],
@@ -146,7 +165,8 @@ export async function loadWitnessAppFile(
       seen,
       beforeLoad,
       rvmFormRegistry,
-      readFile: readSource
+      readFile: readSource,
+      requireReadCapability
     });
     witnessDocs.push(...loaded.witnessDocs);
     allDocs.push(...loaded.allDocs);
@@ -156,6 +176,13 @@ export async function loadWitnessAppFile(
   }
 
   return { witnessDocs, authoredDesireDocs, allDocs, sourceFiles, importEntries };
+}
+
+function createReadCapabilityRequiredError(file) {
+  const error = new Error(`witness app loading requires an injected read capability for ${file}`);
+  error.code = "WITNESS_CORE_REQUIRED";
+  error.status = 503;
+  return error;
 }
 
 export function applyWitnessToml(world, source, options = {}) {
@@ -190,19 +217,27 @@ export async function loadRuntimePluginRegistriesForDocs(docs, options = {}) {
     pluginRoot,
     runtimeProfile: options.runtimeProfile ?? DEFAULT_RUNTIME_PROFILE,
     configuredPluginIds,
-    authoredPluginIds
+    authoredPluginIds,
+    generationBridge: options.generationBridge ?? null,
+    cwd: options.cwd ?? process.cwd(),
+    requireGenerationBridgeForCanonicalReads: options.requireGenerationBridgeForCanonicalReads === true
   });
   if (pluginCatalog.selection?.hasBlockingErrors) {
     throw createRuntimePluginLoadError("runtime plugins unresolved", pluginCatalog);
   }
 
-  const loadResult = await (options.loadRuntimePluginModules ?? loadRuntimePluginModules)({ pluginCatalog });
-  if (loadResult.hasBlockingErrors) {
+  const effectiveLoadResult = await (options.loadRuntimePluginModules ?? loadRuntimePluginModules)({
+    pluginCatalog,
+    generationBridge: options.generationBridge ?? null,
+    cwd: options.cwd ?? process.cwd(),
+    requireGenerationBridgeForCanonicalImports: options.requireGenerationBridgeForCanonicalReads === true
+  });
+  if (effectiveLoadResult.hasBlockingErrors) {
     throw createRuntimePluginLoadError("runtime plugin modules unresolved", {
       ...pluginCatalog,
       rejectedPlugins: [
         ...(pluginCatalog.rejectedPlugins ?? []),
-        ...(loadResult.failures ?? [])
+        ...(effectiveLoadResult.failures ?? [])
       ]
     });
   }
@@ -211,8 +246,8 @@ export async function loadRuntimePluginRegistriesForDocs(docs, options = {}) {
     authoredPluginIds,
     configuredPluginIds,
     pluginCatalog,
-    loadResult,
-    registries: createDesireRegistriesFromPluginExtensions(loadResult)
+    loadResult: effectiveLoadResult,
+    registries: createDesireRegistriesFromPluginExtensions(effectiveLoadResult)
   };
 }
 

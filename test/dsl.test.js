@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createWorld, createThing, projectors } from "../src/kernel.js";
-import { parseWitnessToml, applyWitnessToml, applyWitnessDocs, applyWitnessDocsLegacy, applyWitnessDocsWithRuntimePlugins, loadWitnessTomlFile } from "../src/dsl.js";
+import { parseWitnessToml, applyWitnessToml, applyWitnessDocs, applyWitnessDocsLegacy, applyWitnessDocsWithRuntimePlugins, loadWitnessTomlFile, loadWitnessAppFile } from "../src/dsl.js";
 import { moduleProjectors } from "../src/modules.js";
 import { frontendProgramsProjection, widgetTree } from "../src/widgets.js";
 import { mcpServers, mcpToolInstalls } from "../plugins/mcp/projections.js";
@@ -626,6 +626,22 @@ test("maintained demo entrypoints inherit authored runtime plugin installs witho
     assert.deepEqual(plugins, expected);
     assert.equal(runner?.handlerSet ?? null, "demo");
   }
+});
+
+test("witness app loaders fail closed when injected read capability is required but unavailable", async () => {
+  await assert.rejects(
+    loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app", "app.wtoml"), {
+      requireReadCapability: true
+    }),
+    error => error?.code === "WITNESS_CORE_REQUIRED" && error?.status === 503
+  );
+
+  await assert.rejects(
+    loadWitnessAppFile(path.join(process.cwd(), "examples_rvm", "engentus", "app", "models", "burst-fit.rvm"), {
+      requireReadCapability: true
+    }),
+    error => error?.code === "WITNESS_CORE_REQUIRED" && error?.status === 503
+  );
 });
 
 test("context composition DSL sections project bindings and lower contextual refs to canonical ids across covered surfaces", () => {

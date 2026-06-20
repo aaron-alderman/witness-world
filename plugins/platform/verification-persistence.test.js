@@ -4,6 +4,7 @@ import path from "node:path";
 import { mkdir, rm } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
 import { createRuntimeVerificationPersistence } from "../../src/runtime-verification-persistence.js";
+import { createWitnessCoreBridge } from "../../src/witness-core-bridge.js";
 import { createHandlers } from "./runtime.js";
 import { buildPlatformModel, filterPlatformModel } from "./platform-model.js";
 import { readPlatformTestRun } from "./test-runs.js";
@@ -27,8 +28,7 @@ async function createRemotePersistence(runtimeRoot, {
     serverRunner: { id: "runner.main", values: {} },
     runtimeRoot,
     runtimeProfile: "full",
-    witnessCoreBridge: { coreUrl },
-    fetchImpl
+    witnessCoreBridge: createWitnessCoreBridge({ coreUrl, fetchImpl })
   });
 }
 
@@ -409,8 +409,10 @@ test("verification persistence can be mediated through witness-core without load
       serverRunner: { id: "runner.main", values: {} },
       runtimeRoot,
       runtimeProfile: "full",
-      witnessCoreBridge: { coreUrl: "http://127.0.0.1:8788" },
-      fetchImpl
+      witnessCoreBridge: createWitnessCoreBridge({
+        coreUrl: "http://127.0.0.1:8788",
+        fetchImpl
+      })
     });
     const inspect = persistence.inspect();
     assert.equal(inspect.ledgerBackend.runtimeProvider, "witness-core");
@@ -441,8 +443,10 @@ test("verification persistence can be mediated through witness-core without load
       serverRunner: { id: "runner.main", values: {} },
       runtimeRoot,
       runtimeProfile: "full",
-      witnessCoreBridge: { coreUrl: "http://127.0.0.1:8788" },
-      fetchImpl
+      witnessCoreBridge: createWitnessCoreBridge({
+        coreUrl: "http://127.0.0.1:8788",
+        fetchImpl
+      })
     });
     const rows = reopened.readModelRows();
     assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:remote"), true);
@@ -478,7 +482,7 @@ test("verification persistence survives worker reopen and witness-core restart w
       serverRunner: { id: "runner.main", values: {} },
       runtimeRoot: workspace.appRoot,
       runtimeProfile: "full",
-      witnessCoreBridge: { coreUrl: core.url }
+      witnessCoreBridge: createWitnessCoreBridge({ coreUrl: core.url })
     });
 
     persistence = await createRemotePersistence();

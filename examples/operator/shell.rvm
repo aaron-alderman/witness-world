@@ -1,0 +1,43 @@
+operator_screen operator_trace {
+  title "Operator Trace"
+  subtitle "Browser-first operator example"
+  pane right
+  shape list-detail
+  shortcut F5
+  left_screen operator_left
+  default_section operator_links
+  section operator_summary
+  section operator_links
+}
+
+operator_screen operator_left {
+  title "Operator Navigation"
+  pane left
+  shape tree
+}
+
+operator_screen_section operator_summary {
+  screen operator_trace
+  title "Summary"
+  kind detail
+  data_source inspect
+  collapsible false
+  priority 1
+}
+
+operator_screen_section operator_links {
+  screen operator_trace
+  title "Links"
+  kind table
+  data_source references
+  collapsed false
+  priority 2
+}
+
+operator_setup operator_shell {
+  screen operator_trace
+  screen references
+  shortcut F5 operator_trace
+  default_screen operator_trace
+  default_left_screen operator_left
+}

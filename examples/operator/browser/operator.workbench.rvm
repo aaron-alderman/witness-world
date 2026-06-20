@@ -1,0 +1,55 @@
+theme ansi16 {
+  mode ansi16
+  palette terminal-dark
+}
+
+surface top_status {
+  kind status_bar
+  title "Status"
+}
+
+surface nav_tree {
+  kind tree
+  title "Tree"
+  max_primary_chars 12
+}
+
+surface session_reader {
+  kind text_reader
+  title "Session"
+  scroll x y
+}
+
+surface command_bar {
+  kind command_bar
+  title "Command"
+}
+
+surface help_overlay {
+  kind doc_view
+  title "Help"
+  resizable true
+  width 56
+  height 10
+}
+
+surface context_menu {
+  kind menu
+  title "Context"
+  width 24
+  height 8
+}
+
+viewport default {
+  theme ansi16
+  size 80 30
+  top 3 top_status
+  bottom 4 command_bar
+  center split horizontal 28 72 nav_tree session_reader
+  overlay help_overlay
+  overlay context_menu
+  binding F1 overlay help_overlay
+  binding MouseSecondary overlay context_menu
+  binding Alt-R action rename
+  binding F2 action rename
+}

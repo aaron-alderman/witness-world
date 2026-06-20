@@ -28,9 +28,12 @@ export function renderOperatorWorkbenchRuntimeFactory() {
     const rightPaneCanvasModel = ${rightPaneCanvasModel.toString()};
     const topPaneCanvasModel = ${topPaneCanvasModel.toString()};
     const bottomPaneCanvasModel = ${bottomPaneCanvasModel.toString()};
+    const windowControlCanvasModel = ${windowControlCanvasModel.toString()};
+    const syncWindowChromeOverlays = ${syncWindowChromeOverlays.toString()};
     const paintBox = ${paintBox.toString()};
     const paintText = ${paintText.toString()};
     const paintGlyph = ${paintGlyph.toString()};
+    const paintWorkbenchFrame = ${paintWorkbenchFrame.toString()};
     const drawOperatorWorkbenchCanvas = ${drawOperatorWorkbenchCanvas.toString()};
     const helpCopyForSnapshot = ${helpCopyForSnapshot.toString()};
     const renderSectionDetailHtml = ${renderSectionDetailHtml.toString()};
@@ -39,6 +42,7 @@ export function renderOperatorWorkbenchRuntimeFactory() {
     const renderInteractiveScreenSectionHtml = ${renderInteractiveScreenSectionHtml.toString()};
     const setBridgeUnavailableState = ${setBridgeUnavailableState.toString()};
     const renderOperatorWorkbenchState = ${renderOperatorWorkbenchState.toString()};
+    const paintRuntimeFailureCanvas = ${paintRuntimeFailureCanvas.toString()};
     const startOperatorWorkbenchRuntime = ${startOperatorWorkbenchRuntime.toString()};
   `;
 }
@@ -266,17 +270,20 @@ function fitCanvasLine(value, width) {
 
 function normalizeCanvasSelection(selection = null) {
   if (!selection?.anchor || !selection?.focus) return null;
+  const mode = selection?.mode === "rectangular" ? "rectangular" : "linear";
   const anchorRow = Math.max(0, Number(selection.anchor.row) || 0);
   const anchorColumn = Math.max(0, Number(selection.anchor.column) || 0);
   const focusRow = Math.max(0, Number(selection.focus.row) || 0);
   const focusColumn = Math.max(0, Number(selection.focus.column) || 0);
   if (anchorRow < focusRow || (anchorRow === focusRow && anchorColumn <= focusColumn)) {
     return {
+      mode,
       start: { row: anchorRow, column: anchorColumn },
       end: { row: focusRow, column: focusColumn }
     };
   }
   return {
+    mode,
     start: { row: focusRow, column: focusColumn },
     end: { row: anchorRow, column: anchorColumn }
   };
@@ -286,6 +293,9 @@ function canvasSelectionContains(selection = null, row = 0, column = 0) {
   const normalized = normalizeCanvasSelection(selection);
   if (!normalized) return false;
   if (row < normalized.start.row || row > normalized.end.row) return false;
+  if (normalized.mode === "rectangular") {
+    return column >= normalized.start.column && column <= normalized.end.column;
+  }
   if (normalized.start.row === normalized.end.row) {
     return row === normalized.start.row && column >= normalized.start.column && column <= normalized.end.column;
   }
@@ -294,27 +304,75 @@ function canvasSelectionContains(selection = null, row = 0, column = 0) {
   return true;
 }
 
+function classifyCanvasTokenChar(ch = " ") {
+  if (!ch || /\s/u.test(ch)) return "space";
+  if (/[\u2500-\u257f]/u.test(ch)) return "box";
+  if (/[A-Za-z0-9_./:%<>\-[\]()]/u.test(ch)) return "word";
+  return "symbol";
+}
+
+function expandCanvasWordSelection(buffer = [], cell = null) {
+  const row = Math.max(0, Number(cell?.row) || 0);
+  const column = Math.max(0, Number(cell?.column) || 0);
+  const rowCells = buffer[row] || [];
+  const rowChars = rowCells.map(canvasCell => canvasCell?.ch ?? " ");
+  const currentChar = rowChars[column] ?? " ";
+  const group = classifyCanvasTokenChar(currentChar);
+  let startColumn = column;
+  let endColumn = column;
+  while (startColumn > 0 && classifyCanvasTokenChar(rowChars[startColumn - 1] ?? " ") === group) {
+    startColumn -= 1;
+  }
+  while (endColumn < rowChars.length - 1 && classifyCanvasTokenChar(rowChars[endColumn + 1] ?? " ") === group) {
+    endColumn += 1;
+  }
+  return {
+    mode: "linear",
+    anchor: { row, column: startColumn },
+    focus: { row, column: endColumn }
+  };
+}
+
+function expandCanvasLineSelection(buffer = [], cell = null) {
+  const row = Math.max(0, Number(cell?.row) || 0);
+  const rowCells = buffer[row] || [];
+  const rowChars = rowCells.map(canvasCell => canvasCell?.ch ?? " ");
+  let startColumn = rowChars.findIndex(ch => !/\s/u.test(ch));
+  if (startColumn < 0) startColumn = 0;
+  let endColumn = rowChars.length - 1;
+  while (endColumn > startColumn && /\s/u.test(rowChars[endColumn] ?? " ")) {
+    endColumn -= 1;
+  }
+  return {
+    mode: "linear",
+    anchor: { row, column: startColumn },
+    focus: { row, column: endColumn }
+  };
+}
+
 function extractCanvasSelectionText(buffer = [], selection = null) {
   const normalized = normalizeCanvasSelection(selection);
   if (!normalized) return "";
   const lines = [];
   for (let row = normalized.start.row; row <= normalized.end.row; row += 1) {
     const bufferRow = buffer[row] || [];
-    const startColumn = row === normalized.start.row ? normalized.start.column : 0;
-    const endColumn = row === normalized.end.row
+    const startColumn = normalized.mode === "rectangular"
+      ? normalized.start.column
+      : (row === normalized.start.row ? normalized.start.column : 0);
+    const endColumn = normalized.mode === "rectangular"
       ? normalized.end.column
-      : Math.max(0, bufferRow.length - 1);
+      : (row === normalized.end.row ? normalized.end.column : Math.max(0, bufferRow.length - 1));
     const text = bufferRow
       .slice(startColumn, endColumn + 1)
       .map(cell => cell?.ch ?? " ")
-      .join("")
-      .replace(/\s+$/u, "");
+      .join("");
     lines.push(text);
   }
-  return lines.join("\n").replace(/\n+$/u, "");
+  return lines.join("\n");
 }
 
-function topPaneCanvasModel(snapshot = {}, cols = 80) {
+function topPaneCanvasModel(snapshot = {}, cols = 80, reservedRight = 0) {
+  const contentWidth = Math.max(1, cols - Math.max(0, Number(reservedRight) || 0));
   const navLabels = (snapshot?.topPane?.navigation?.chips || []).map((chip, index) => {
     const selected = index === (snapshot?.topPane?.navigation?.selectedIndex ?? 0) && snapshot?.ui?.focusedPane === "top";
     return selected ? `<${chip.label || "chip"}>` : `[${chip.label || "chip"}]`;
@@ -324,7 +382,11 @@ function topPaneCanvasModel(snapshot = {}, cols = 80) {
   const line3 = snapshot?.focus?.active
     ? `FOCUS ${snapshot.focus.kind}:${snapshot.focus.id}`
     : `MODE ${(snapshot?.preview?.available ? "preview-read" : "repo-self")}`;
-  return [fitCanvasLine(line1, cols), fitCanvasLine(line2, cols), fitCanvasLine(line3, cols)];
+  return [
+    fitCanvasLine(line1, contentWidth),
+    fitCanvasLine(line2, contentWidth),
+    fitCanvasLine(line3, contentWidth)
+  ];
 }
 
 function leftPaneCanvasModel(snapshot = {}, width = 60) {
@@ -452,6 +514,58 @@ function bottomPaneCanvasModel(snapshot = {}, commandDraft = "", autocomplete = 
   ];
 }
 
+function windowControlCanvasModel(snapshot = {}) {
+  const maximized = Boolean(snapshot?.hostWindow?.maximized);
+  return [
+    { id: "minimize", label: "[_]" },
+    { id: "toggle-maximize", label: maximized ? "[❐]" : "[□]" },
+    { id: "close", label: "[×]" }
+  ];
+}
+
+function syncWindowChromeOverlays(documentTarget = null, snapshot = null) {
+  const byId = id => documentTarget?.getElementById?.(id) || null;
+  const hitState = documentTarget?.__operatorCanvasHitRegions || null;
+  const canvas = byId("operator-canvas");
+  if (!hitState || !canvas || typeof canvas.getBoundingClientRect !== "function") return;
+  const drag = byId("operator-window-drag");
+  const controls = byId("operator-window-controls");
+  const minimize = byId("operator-window-minimize");
+  const maximize = byId("operator-window-maximize");
+  const close = byId("operator-window-close");
+  const rect = canvas.getBoundingClientRect();
+  const chrome = hitState.windowChrome || null;
+  if (!chrome) return;
+
+  if (drag) {
+    drag.style.left = `${rect.left + (chrome.drag.x * hitState.cellWidth)}px`;
+    drag.style.top = `${rect.top + (chrome.drag.y * hitState.cellHeight)}px`;
+    drag.style.width = `${chrome.drag.width * hitState.cellWidth}px`;
+    drag.style.height = `${chrome.drag.height * hitState.cellHeight}px`;
+  }
+
+  if (controls) {
+    controls.style.left = `${rect.left + (chrome.controls.x * hitState.cellWidth)}px`;
+    controls.style.top = `${rect.top + (chrome.controls.y * hitState.cellHeight)}px`;
+    controls.style.width = `${chrome.controls.width * hitState.cellWidth}px`;
+    controls.style.height = `${chrome.controls.height * hitState.cellHeight}px`;
+  }
+
+  const controlButtons = [minimize, maximize, close];
+  chrome.buttons.forEach((button, index) => {
+    const target = controlButtons[index];
+    if (!target) return;
+    target.style.width = `${button.width * hitState.cellWidth}px`;
+    target.style.height = `${button.height * hitState.cellHeight}px`;
+    target.style.minWidth = `${button.width * hitState.cellWidth}px`;
+    target.style.minHeight = `${button.height * hitState.cellHeight}px`;
+  });
+
+  if (maximize) {
+    maximize.setAttribute("aria-label", snapshot?.hostWindow?.maximized ? "Restore" : "Maximize");
+  }
+}
+
 function paintBox(buffer, x, y, width, height, color = "#d7e2d2", variant = "single") {
   const chars = getBoxChars(variant);
   if (width < 2 || height < 2) return;
@@ -481,6 +595,78 @@ function paintText(buffer, x, y, text, fg = "#d7e2d2", bg = null) {
 function paintGlyph(buffer, x, y, ch, fg = "#d7e2d2", bg = null) {
   if (!buffer[y] || !buffer[y][x]) return;
   buffer[y][x] = { ch, fg, bg };
+}
+
+function paintWorkbenchFrame(buffer, {
+  cols = 0,
+  rows = 0,
+  topHeight = 5,
+  bottomHeight = 6,
+  leftWidth = 24,
+  focusedPane = "left",
+  mutedColor = "#51665d",
+  accentColor = "#6ee7a8"
+} = {}) {
+  const chars = getBoxChars("single");
+  const topSeparatorY = Math.max(1, topHeight - 1);
+  const bottomSeparatorY = Math.max(topSeparatorY + 1, rows - bottomHeight);
+  const verticalSeparatorX = Math.max(1, leftWidth - 1);
+  const colorFor = pane => (focusedPane === pane ? accentColor : mutedColor);
+  const topColor = colorFor("top");
+  const leftColor = colorFor("left");
+  const rightColor = colorFor("right");
+  const bottomColor = colorFor("bottom");
+  const topLeftSeparatorColor = (focusedPane === "top" || focusedPane === "left") ? accentColor : mutedColor;
+  const topRightSeparatorColor = (focusedPane === "top" || focusedPane === "right") ? accentColor : mutedColor;
+  const bottomLeftSeparatorColor = (focusedPane === "bottom" || focusedPane === "left") ? accentColor : mutedColor;
+  const bottomRightSeparatorColor = (focusedPane === "bottom" || focusedPane === "right") ? accentColor : mutedColor;
+  const verticalSeparatorColor = (focusedPane === "left" || focusedPane === "right") ? accentColor : mutedColor;
+  const topCenterColor = (focusedPane === "top" || focusedPane === "left" || focusedPane === "right")
+    ? accentColor
+    : mutedColor;
+  const bottomCenterColor = (focusedPane === "bottom" || focusedPane === "left" || focusedPane === "right")
+    ? accentColor
+    : mutedColor;
+
+  for (let x = 1; x < cols - 1; x += 1) {
+    paintGlyph(buffer, x, 0, chars.h, topColor);
+    paintGlyph(buffer, x, rows - 1, chars.h, bottomColor);
+  }
+  for (let x = 1; x < verticalSeparatorX; x += 1) {
+    paintGlyph(buffer, x, topSeparatorY, chars.h, topLeftSeparatorColor);
+    paintGlyph(buffer, x, bottomSeparatorY, chars.h, bottomLeftSeparatorColor);
+  }
+  for (let x = verticalSeparatorX + 1; x < cols - 1; x += 1) {
+    paintGlyph(buffer, x, topSeparatorY, chars.h, topRightSeparatorColor);
+    paintGlyph(buffer, x, bottomSeparatorY, chars.h, bottomRightSeparatorColor);
+  }
+
+  for (let y = 1; y < topSeparatorY; y += 1) {
+    paintGlyph(buffer, 0, y, chars.v, topColor);
+    paintGlyph(buffer, cols - 1, y, chars.v, topColor);
+  }
+  for (let y = topSeparatorY + 1; y < bottomSeparatorY; y += 1) {
+    paintGlyph(buffer, 0, y, chars.v, leftColor);
+    paintGlyph(buffer, cols - 1, y, chars.v, rightColor);
+    paintGlyph(buffer, verticalSeparatorX, y, chars.v, verticalSeparatorColor);
+  }
+  for (let y = bottomSeparatorY + 1; y < rows - 1; y += 1) {
+    paintGlyph(buffer, 0, y, chars.v, bottomColor);
+    paintGlyph(buffer, cols - 1, y, chars.v, bottomColor);
+  }
+
+  paintGlyph(buffer, 0, 0, chars.tl, topColor);
+  paintGlyph(buffer, cols - 1, 0, chars.tr, topColor);
+  paintGlyph(buffer, 0, rows - 1, chars.bl, bottomColor);
+  paintGlyph(buffer, cols - 1, rows - 1, chars.br, bottomColor);
+
+  paintGlyph(buffer, 0, topSeparatorY, chars.jl, topLeftSeparatorColor);
+  paintGlyph(buffer, cols - 1, topSeparatorY, chars.jr, topRightSeparatorColor);
+  paintGlyph(buffer, verticalSeparatorX, topSeparatorY, chars.jt, topCenterColor);
+
+  paintGlyph(buffer, 0, bottomSeparatorY, chars.jl, bottomLeftSeparatorColor);
+  paintGlyph(buffer, cols - 1, bottomSeparatorY, chars.jr, bottomRightSeparatorColor);
+  paintGlyph(buffer, verticalSeparatorX, bottomSeparatorY, chars.jb, bottomCenterColor);
 }
 
 function drawOperatorWorkbenchCanvas({
@@ -523,24 +709,37 @@ function drawOperatorWorkbenchCanvas({
   const rightContentWidth = Math.max(1, rightWidth - 2);
   const selection = normalizeCanvasSelection(documentTarget?.__operatorCanvasSelection || null);
 
-  const topColor = snapshot?.ui?.focusedPane === "top" ? "#6ee7a8" : "#51665d";
-  const leftColor = snapshot?.ui?.focusedPane === "left" ? "#6ee7a8" : "#51665d";
-  const rightColor = snapshot?.ui?.focusedPane === "right" ? "#6ee7a8" : "#51665d";
-  const bottomColor = snapshot?.ui?.focusedPane === "bottom" ? "#6ee7a8" : "#51665d";
-  const frameChars = getBoxChars("single");
-  paintBox(buffer, 0, 0, cols, topHeight, topColor, "single");
-  paintBox(buffer, 0, topHeight - 1, leftWidth, mainHeight + 1, leftColor, "single");
-  paintBox(buffer, leftWidth - 1, topHeight - 1, rightWidth + 1, mainHeight + 1, rightColor, "single");
-  paintBox(buffer, 0, rows - bottomHeight, cols, bottomHeight, bottomColor, "single");
-  paintGlyph(buffer, 0, topHeight - 1, frameChars.jl, topColor);
-  paintGlyph(buffer, leftWidth - 1, topHeight - 1, frameChars.jt, topColor);
-  paintGlyph(buffer, cols - 1, topHeight - 1, frameChars.jr, topColor);
-  paintGlyph(buffer, 0, rows - bottomHeight, frameChars.jl, bottomColor);
-  paintGlyph(buffer, leftWidth - 1, rows - bottomHeight, frameChars.jb, bottomColor);
-  paintGlyph(buffer, cols - 1, rows - bottomHeight, frameChars.jr, bottomColor);
+  paintWorkbenchFrame(buffer, {
+    cols,
+    rows,
+    topHeight,
+    bottomHeight,
+    leftWidth,
+    focusedPane: snapshot?.ui?.focusedPane || "left",
+    mutedColor: "#51665d",
+    accentColor: "#6ee7a8"
+  });
 
-  const topLines = topPaneCanvasModel(snapshot, cols - 2);
+  const controlButtons = windowControlCanvasModel(snapshot);
+  const controlCluster = controlButtons.map(button => button.label).join("");
+  const controlGap = 1;
+  const reservedTopRight = controlCluster.length + controlGap;
+  const topLines = topPaneCanvasModel(snapshot, cols - 2, reservedTopRight);
   topLines.forEach((line, index) => paintText(buffer, 1, 1 + index, line, index === 0 ? "#b6ffd7" : "#d7e2d2"));
+  const controlsX = Math.max(1, cols - 1 - controlCluster.length);
+  paintText(buffer, controlsX, 1, controlCluster, "#b6ffd7");
+  let buttonX = controlsX;
+  const chromeButtons = [];
+  controlButtons.forEach(button => {
+    chromeButtons.push({
+      id: button.id,
+      x: buttonX,
+      y: 1,
+      width: button.label.length,
+      height: 1
+    });
+    buttonX += button.label.length;
+  });
 
   const leftLinesModel = leftPaneCanvasModel(snapshot, leftContentWidth);
   const leftVisible = Math.max(1, mainHeight - 2);
@@ -553,7 +752,17 @@ function drawOperatorWorkbenchCanvas({
   leftLinesModel.lines.slice(leftOffset, leftOffset + leftVisible - 1).forEach((line, index) => {
     const absoluteLine = leftOffset + index;
     const isActive = absoluteLine === leftLinesModel.activeLineIndex;
-    paintText(buffer, 1, topHeight + 1 + index, fitCanvasLine(line, leftContentWidth), isActive ? "#b6ffd7" : "#d7e2d2");
+    const row = snapshot?.leftPane?.rows?.[absoluteLine] ?? null;
+    const baseColor = row?.type === "container"
+      ? "#8fd8c5"
+      : (row?.type === "alias" ? "#d8c78f" : "#d7e2d2");
+    paintText(
+      buffer,
+      1,
+      topHeight + 1 + index,
+      fitCanvasLine(line, leftContentWidth),
+      isActive ? "#b6ffd7" : baseColor
+    );
   });
   leftLinesModel.rowLineIndexes.forEach((lineIndex, rowIndex) => {
     const visibleLine = lineIndex - leftOffset;
@@ -663,6 +872,21 @@ function drawOperatorWorkbenchCanvas({
       left: { x: 0, y: topHeight - 1, width: leftWidth, height: mainHeight + 1 },
       right: { x: leftWidth - 1, y: topHeight - 1, width: rightWidth + 1, height: mainHeight + 1 },
       bottom: { x: 0, y: rows - bottomHeight, width: cols, height: bottomHeight }
+    },
+    windowChrome: {
+      drag: {
+        x: 0,
+        y: 0,
+        width: Math.max(1, controlsX - controlGap),
+        height: 2
+      },
+      controls: {
+        x: controlsX,
+        y: 1,
+        width: controlCluster.length,
+        height: 1
+      },
+      buttons: chromeButtons
     }
   };
   documentTarget.__operatorCanvasState = {
@@ -930,8 +1154,19 @@ function renderInteractiveScreenSectionHtml(section = {}, {
 
 function setBridgeUnavailableState(documentTarget = null, message = "") {
   const byId = id => documentTarget?.getElementById?.(id) || null;
+  const bootstrapStatusMessage = message || "Operator bridge unavailable.";
+  documentTarget?.defaultView?.__operatorWorkbenchSetBootstrapStatus?.(
+    "Operator workbench unavailable.",
+    bootstrapStatusMessage
+  );
+  const bootstrapStatus = byId("operator-bootstrap-status");
+  if (bootstrapStatus) {
+    bootstrapStatus.hidden = false;
+    bootstrapStatus.dataset.state = "error";
+    bootstrapStatus.innerHTML = `<strong>Operator workbench unavailable.</strong><div>${escapeHtml(bootstrapStatusMessage)}</div>`;
+  }
   const output = byId("operator-last-output");
-  if (output) output.textContent = message || "Operator bridge unavailable.";
+  if (output) output.textContent = bootstrapStatusMessage;
   const status = byId("operator-last-status");
   if (status) {
     status.dataset.status = "error";
@@ -1112,6 +1347,65 @@ export function renderOperatorWorkbenchState({
     commandDraft,
     autocomplete
   });
+  syncWindowChromeOverlays(documentTarget, snapshot);
+}
+
+function paintRuntimeFailureCanvas(documentTarget = null, message = "", detail = "") {
+  const canvas = documentTarget?.getElementById?.("operator-canvas");
+  if (!canvas || typeof canvas.getContext !== "function") return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const width = canvas.clientWidth || documentTarget?.defaultView?.innerWidth || 1280;
+  const height = canvas.clientHeight || documentTarget?.defaultView?.innerHeight || 900;
+  canvas.width = width;
+  canvas.height = height;
+  const wrapText = (text, maxWidth) => {
+    const words = String(text || "").split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = "";
+    for (const word of words) {
+      const next = current ? `${current} ${word}` : word;
+      if (context.measureText(next).width <= maxWidth || !current) {
+        current = next;
+      } else {
+        lines.push(current);
+        current = word;
+      }
+    }
+    if (current) lines.push(current);
+    return lines.length ? lines : [""];
+  };
+  context.fillStyle = "#0b0f0d";
+  context.fillRect(0, 0, width, height);
+  context.font = "16px Consolas, 'Cascadia Mono', 'Courier New', monospace";
+  const boxWidth = Math.min(width - 48, 920);
+  const messageLines = wrapText(String(message || "Operator workbench failed."), boxWidth - 32);
+  const detailLines = detail ? wrapText(String(detail), boxWidth - 32) : [];
+  const footerLine = "Press F12 for devtools or Ctrl+W to close.";
+  const boxHeight = 110 + (messageLines.length * 24) + (detailLines.length * 24) + 36;
+  const boxX = Math.max(24, Math.floor((width - boxWidth) / 2));
+  const boxY = Math.max(48, Math.floor((height - boxHeight) / 2));
+  context.strokeStyle = "#ffb86c";
+  context.strokeRect(boxX, boxY, boxWidth, boxHeight);
+  context.strokeRect(boxX, boxY, boxWidth, 36);
+  context.fillStyle = "#ffe4c2";
+  context.fillText("Operator TUI", boxX + 16, boxY + 22);
+  let textY = boxY + 76;
+  context.fillStyle = "#ffe4c2";
+  messageLines.forEach(line => {
+    context.fillText(line, boxX + 16, textY);
+    textY += 24;
+  });
+  context.fillStyle = "#8d9b8c";
+  if (detailLines.length) {
+    context.fillStyle = "#d7e2d2";
+    detailLines.forEach(line => {
+      context.fillText(line, boxX + 16, textY);
+      textY += 24;
+    });
+  }
+  context.fillStyle = "#8d9b8c";
+  context.fillText(footerLine, boxX + 16, boxY + boxHeight - 22);
 }
 
 export function startOperatorWorkbenchRuntime({
@@ -1144,6 +1438,7 @@ export function startOperatorWorkbenchRuntime({
       commandDraft,
       autocomplete
     });
+    windowTarget?.__operatorWorkbenchBooted?.();
     return snapshot;
   }
 
@@ -1174,8 +1469,18 @@ export function startOperatorWorkbenchRuntime({
     await refresh(result.snapshot);
   }
 
+  async function runWindowControl(action) {
+    if (typeof api.windowControl !== "function") return;
+    const nextSnapshot = await api.windowControl(action);
+    await refresh(nextSnapshot);
+  }
+
   const commandInput = byId("operator-command-input");
   const canvas = byId("operator-canvas");
+  const windowDrag = byId("operator-window-drag");
+  const windowMinimize = byId("operator-window-minimize");
+  const windowMaximize = byId("operator-window-maximize");
+  const windowClose = byId("operator-window-close");
   commandInput?.addEventListener?.("focus", () => {
     void dispatch({ type: "set-focused-pane", pane: "bottom" });
   });
@@ -1204,6 +1509,22 @@ export function startOperatorWorkbenchRuntime({
       autocomplete = { preview: "", matches: [] };
       await dispatch({ type: "escape" });
     }
+  });
+  windowDrag?.addEventListener?.("dblclick", async event => {
+    event.preventDefault?.();
+    await runWindowControl("toggle-maximize");
+  });
+  windowMinimize?.addEventListener?.("click", async event => {
+    event.preventDefault?.();
+    await runWindowControl("minimize");
+  });
+  windowMaximize?.addEventListener?.("click", async event => {
+    event.preventDefault?.();
+    await runWindowControl("toggle-maximize");
+  });
+  windowClose?.addEventListener?.("click", async event => {
+    event.preventDefault?.();
+    await runWindowControl("close");
   });
 
   function regionForCanvasEvent(event) {
@@ -1239,6 +1560,15 @@ export function startOperatorWorkbenchRuntime({
       column: Math.max(0, Math.floor((clientX - rect.left) / state.cellWidth)),
       row: Math.max(0, Math.floor((clientY - rect.top) / state.cellHeight))
     };
+  }
+
+  function setCanvasSelection(selection = null) {
+    if (!selection) {
+      delete documentTarget.__operatorCanvasSelection;
+    } else {
+      documentTarget.__operatorCanvasSelection = selection;
+    }
+    repaint();
   }
 
   async function dispatchCanvasRegion(region, { double = false } = {}) {
@@ -1293,6 +1623,27 @@ export function startOperatorWorkbenchRuntime({
   }
 
   canvas?.addEventListener?.("click", async event => {
+    const cell = cellForCanvasEvent(event);
+    if (cell && Number(event?.detail || 0) >= 3) {
+      const lineSelection = expandCanvasLineSelection(
+        documentTarget?.__operatorCanvasState?.buffer || [],
+        cell
+      );
+      setCanvasSelection(lineSelection);
+      suppressCanvasClick = true;
+      event.preventDefault?.();
+      return;
+    }
+    if (cell && Number(event?.detail || 0) === 2) {
+      const wordSelection = expandCanvasWordSelection(
+        documentTarget?.__operatorCanvasState?.buffer || [],
+        cell
+      );
+      setCanvasSelection(wordSelection);
+      suppressCanvasClick = true;
+      event.preventDefault?.();
+      return;
+    }
     if (suppressCanvasClick) {
       suppressCanvasClick = false;
       event.preventDefault?.();
@@ -1304,11 +1655,8 @@ export function startOperatorWorkbenchRuntime({
     }
   });
 
-  canvas?.addEventListener?.("dblclick", async event => {
-    const region = regionForCanvasEvent(event);
-    if (await dispatchCanvasRegion(region, { double: true })) {
-      event.preventDefault?.();
-    }
+  canvas?.addEventListener?.("dblclick", event => {
+    event.preventDefault?.();
   });
 
   canvas?.addEventListener?.("wheel", async event => {
@@ -1339,9 +1687,11 @@ export function startOperatorWorkbenchRuntime({
     canvasSelectionDrag = {
       anchor: cell,
       focus: cell,
-      moved: false
+      moved: false,
+      mode: event?.altKey ? "rectangular" : "linear"
     };
     documentTarget.__operatorCanvasSelection = {
+      mode: canvasSelectionDrag.mode,
       anchor: cell,
       focus: cell
     };
@@ -1356,6 +1706,7 @@ export function startOperatorWorkbenchRuntime({
       canvasSelectionDrag.focus = cell;
       canvasSelectionDrag.moved = true;
       documentTarget.__operatorCanvasSelection = {
+        mode: canvasSelectionDrag.mode,
         anchor: canvasSelectionDrag.anchor,
         focus: canvasSelectionDrag.focus
       };
@@ -1672,12 +2023,14 @@ export function startOperatorWorkbenchRuntime({
     if (colorMode) colorMode.value = settings.colorMode ?? "auto";
     return current;
   }).catch(error => {
-    setBridgeUnavailableState(documentTarget, error instanceof Error ? error.message : String(error));
+    const detail = error instanceof Error ? error.message : String(error);
+    setBridgeUnavailableState(documentTarget, detail);
+    paintRuntimeFailureCanvas(documentTarget, "Operator workbench failed during startup.", detail);
     return null;
   });
 
   windowTarget?.addEventListener?.("resize", () => {
-    void refresh(snapshot);
+    void refresh();
   });
 
   return {

@@ -407,3 +407,140 @@ test("app project loader can fall back to the persisted stable source cache", as
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test("app project startup loading can resolve and read canonical sources through witness-core capabilities", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(process.cwd(), ".tmp-witness-app-project-"));
+  const appRoot = path.join(tempRoot, "examples", "sample");
+  const manifestPath = path.join(appRoot, "app.wtoml");
+  const contentPath = path.join(appRoot, "content.wtoml");
+  await writeFile(manifestPath, `[app]\nid = "bridge_loader"\nimports = ["./content.wtoml"]\n`);
+  await writeFile(contentPath, `[[heading]]\nactor = "system"\nid = "hero"\ntext = "Bridge Loader"\nlevel = 1\n`);
+
+  const relativeEntryPath = path.relative(process.cwd(), appRoot);
+  const bridgeCalls = [];
+  const sourceById = new Map([
+    [normalize(path.relative(process.cwd(), manifestPath)), `[app]\nid = "bridge_loader"\nimports = ["./content.wtoml"]\n`],
+    [normalize(path.relative(process.cwd(), contentPath)), `[[heading]]\nactor = "system"\nid = "hero"\ntext = "Bridge Loader"\nlevel = 1\n`]
+  ]);
+  const bridge = {
+    async readSource({ path: sourceId }) {
+      bridgeCalls.push({ kind: "read", path: sourceId });
+      return {
+        path: sourceId,
+        content: sourceById.get(sourceId) ?? ""
+      };
+    },
+    async statSource({ path: sourceId }) {
+      bridgeCalls.push({ kind: "stat", path: sourceId });
+      const content = sourceById.get(sourceId);
+      return {
+        path: sourceId,
+        exists: sourceId === normalize(path.relative(process.cwd(), appRoot))
+          || typeof content === "string",
+        isFile: typeof content === "string",
+        isDirectory: sourceId === normalize(path.relative(process.cwd(), appRoot)),
+        size: typeof content === "string" ? Buffer.byteLength(content, "utf8") : 0,
+        modifiedAt: "1700000000000"
+      };
+    }
+  };
+  const guardedFs = {
+    ...fs,
+    async readFile(target, encoding) {
+      const resolved = path.resolve(String(target || ""));
+      if (resolved.startsWith(appRoot)) {
+        throw new Error(`startup canonical read escaped witness-core bridge: ${resolved}`);
+      }
+      return await fs.readFile(target, encoding);
+    },
+    async stat(target) {
+      const resolved = path.resolve(String(target || ""));
+      if (resolved.startsWith(appRoot)) {
+        throw new Error(`startup canonical stat escaped witness-core bridge: ${resolved}`);
+      }
+      return await fs.stat(target);
+    }
+  };
+
+  try {
+    const loaded = await loadAppProjectWithStableFallback(relativeEntryPath, {
+      cwd: process.cwd(),
+      generationBridge: bridge,
+      fsModule: guardedFs
+    });
+    assert.equal(loaded.fallbackUsed, false);
+    assert.equal(loaded.appProject.appId, "bridge_loader");
+    assert.equal(bridgeCalls.some(call => call.kind === "stat" && call.path === normalize(path.relative(process.cwd(), appRoot))), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "stat" && call.path === normalize(path.relative(process.cwd(), manifestPath))), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === normalize(path.relative(process.cwd(), manifestPath))), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === normalize(path.relative(process.cwd(), contentPath))), true);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project startup fails closed when a core-connected canonical path is outside witness-core scope", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-app-project-outside-"));
+  const appRoot = path.join(tempRoot, "sample");
+  const manifestPath = path.join(appRoot, "app.wtoml");
+  await writeFile(manifestPath, `[app]\nid = "outside_scope"\n`);
+
+  const guardedFs = {
+    ...fs,
+    async readFile(target, encoding) {
+      throw new Error(`startup canonical read escaped witness-core boundary: ${target} ${encoding ?? ""}`);
+    },
+    async stat(target) {
+      throw new Error(`startup canonical stat escaped witness-core boundary: ${target}`);
+    }
+  };
+
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        cwd: process.cwd(),
+        generationBridge: {
+          async readSource() {
+            throw new Error("bridge should not be called for out-of-scope startup path");
+          },
+          async statSource() {
+            throw new Error("bridge should not be called for out-of-scope startup path");
+          }
+        },
+        fsModule: guardedFs,
+        requireGenerationBridgeForCanonicalReads: true
+      }),
+      error => error?.code === "WITNESS_CORE_REQUIRED" && error?.status === 503
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project startup fails closed when witness-core authority is required but the bridge is unavailable", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-app-project-core-required-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `[app]\nid = "missing_bridge"\n`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        fsModule: {
+          async readFile(target, encoding) {
+            throw new Error(`canonical startup read escaped missing witness-core bridge: ${target} ${encoding ?? ""}`);
+          },
+          async stat(target) {
+            throw new Error(`canonical startup stat escaped missing witness-core bridge: ${target}`);
+          }
+        },
+        requireGenerationBridgeForCanonicalReads: true
+      }),
+      error => error?.code === "WITNESS_CORE_REQUIRED" && error?.status === 503
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+function normalize(value) {
+  return String(value || "").replaceAll("\\", "/");
+}

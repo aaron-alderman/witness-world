@@ -6,12 +6,12 @@ import path from "node:path";
 import {
   OPERATOR_WORKBENCH_IPC_CHANNELS,
   createWitnessOperatorWorkbenchApi
-} from "../src/operator-workbench-bridge.js";
+} from "../src/operator-workbench/bridge.js";
 import {
   createOperatorWorkbenchSettingsStore,
   createOperatorWorkbenchWorkspaceKey
-} from "../src/operator-workbench-settings.js";
-import { createOperatorWorkbenchShell } from "../src/operator-workbench-main.js";
+} from "../src/operator-workbench/settings.js";
+import { createOperatorWorkbenchShell } from "../src/operator-workbench/main.js";
 
 test("operator workbench preload bridge exposes only explicit workbench methods", async () => {
   const calls = [];
@@ -27,7 +27,8 @@ test("operator workbench preload bridge exposes only explicit workbench methods"
     "getAutocomplete",
     "getSnapshot",
     "runCommand",
-    "updateDisplaySettings"
+    "updateDisplaySettings",
+    "windowControl"
   ]);
 
   await api.getSnapshot();
@@ -35,6 +36,7 @@ test("operator workbench preload bridge exposes only explicit workbench methods"
   await api.dispatchIntent({ type: "activate-primary" });
   await api.updateDisplaySettings({ fontSize: 18 });
   await api.getAutocomplete("ins");
+  await api.windowControl("toggle-maximize");
 
   assert.deepEqual(calls, [
     {
@@ -56,6 +58,10 @@ test("operator workbench preload bridge exposes only explicit workbench methods"
     {
       channel: OPERATOR_WORKBENCH_IPC_CHANNELS.getAutocomplete,
       payload: { line: "ins" }
+    },
+    {
+      channel: OPERATOR_WORKBENCH_IPC_CHANNELS.windowControl,
+      payload: { action: "toggle-maximize" }
     }
   ]);
 });
@@ -111,6 +117,20 @@ test("operator workbench shell registers IPC handlers, loads a generated html pa
     constructor(options) {
       this.options = options;
       this.events = new Map();
+      this.webContentsEvents = new Map();
+      this.webContents = {
+        on: (event, handler) => {
+          this.webContentsEvents.set(event, handler);
+        },
+        isDevToolsOpened: () => Boolean(this.devToolsOpened),
+        openDevTools: options => {
+          this.devToolsOpened = true;
+          this.devToolsOptions = options;
+        },
+        closeDevTools: () => {
+          this.devToolsOpened = false;
+        }
+      };
       windows.push(this);
     }
 
@@ -123,6 +143,46 @@ test("operator workbench shell registers IPC handlers, loads a generated html pa
     }
 
     show() {}
+
+    isMaximized() {
+      return Boolean(this.maximized);
+    }
+
+    isMinimizable() {
+      return true;
+    }
+
+    isMaximizable() {
+      return true;
+    }
+
+    isClosable() {
+      return true;
+    }
+
+    minimize() {
+      this.minimized = true;
+    }
+
+    maximize() {
+      this.maximized = true;
+    }
+
+    unmaximize() {
+      this.maximized = false;
+    }
+
+    close() {
+      this.closed = true;
+    }
+
+    removeMenu() {
+      this.menuRemoved = true;
+    }
+
+    setMenuBarVisibility(value) {
+      this.menuBarVisible = value;
+    }
 
     async loadURL(url) {
       loadedUrls.push(url);
@@ -192,6 +252,12 @@ test("operator workbench shell registers IPC handlers, loads a generated html pa
     assert.equal(Boolean(createCoreOptions), true);
     assert.equal(windows.length, 1);
     assert.equal(windows[0].options.width, 1480);
+    assert.equal(windows[0].options.title, "Operator TUI");
+    assert.equal(windows[0].options.frame, false);
+    assert.equal(windows[0].options.autoHideMenuBar, true);
+    assert.equal(windows[0].menuRemoved, true);
+    assert.equal(windows[0].menuBarVisible, false);
+    assert.equal(windows[0].webContentsEvents.has("before-input-event"), true);
     assert.equal(loadedUrls.length, 1);
     assert.equal(loadedUrls[0].startsWith("file:"), true);
     const loadedFilePath = loadedUrls[0].slice("file:".length);
@@ -201,6 +267,18 @@ test("operator workbench shell registers IPC handlers, loads a generated html pa
 
     const updated = await handled.get(OPERATOR_WORKBENCH_IPC_CHANNELS.updateDisplaySettings)(null, { fontSize: 17 });
     assert.equal(updated.snapshot.ui.displaySettings.fontSize, 17);
+    assert.equal(updated.snapshot.hostWindow.maximized, false);
+
+    const maximized = await handled.get(OPERATOR_WORKBENCH_IPC_CHANNELS.windowControl)(null, { action: "toggle-maximize" });
+    assert.equal(maximized.hostWindow.maximized, true);
+
+    const beforeInput = windows[0].webContentsEvents.get("before-input-event");
+    const keyboardEvent = { prevented: false, preventDefault() { this.prevented = true; } };
+    beforeInput?.(keyboardEvent, { key: "F12", control: false, meta: false, shift: false });
+    assert.equal(keyboardEvent.prevented, true);
+    assert.equal(windows[0].devToolsOpened, true);
+    beforeInput?.({ preventDefault() {} }, { key: "W", control: true, meta: false, shift: false });
+    assert.equal(windows[0].closed, true);
 
     const settingsStore = createOperatorWorkbenchSettingsStore({ userDataRoot: tempRoot });
     const savedSettings = await settingsStore.load(createOperatorWorkbenchWorkspaceKey({

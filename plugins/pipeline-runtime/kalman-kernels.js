@@ -27,8 +27,8 @@
 
 import path from "node:path";
 import { createComputeHostOpHandler } from "../../src/desire/host-op-migration.js";
-import { compileRvmFileToDesirePlus, normalizeDesirePlusToDesire } from "../../src/desire/index.js";
 import { evaluateModel } from "../chart-runtime/plan/evaluate-model.js";
+import { createRvmModelBodyLoader } from "./rvm-model-loader.js";
 
 const PI = Math.PI;
 const D2R = PI / 180.0;
@@ -316,15 +316,13 @@ export const kalmanFunctions = {
 };
 
 // ── the DESIRE model (loaded once) ─────────────────────────────────────────
-let _modelBody = null;
-export async function kalmanModelBody() {
-  if (_modelBody) return _modelBody;
-  const file = path.join(process.cwd(), "examples_rvm", "engentus", "app", "models", "kalman.rvm");
-  const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(file));
-  const node = desire.nodes.find(n => n.kind === "dataflow" && n.name === "Kalman");
-  if (!node) throw new Error("Kalman dataflow model not found in kalman.rvm");
-  _modelBody = node.body;
-  return _modelBody;
+const loadKalmanModelBody = createRvmModelBodyLoader({
+  resolveFile: () => path.join(process.cwd(), "examples", "engentus", "app", "models", "kalman.rvm"),
+  nodeName: "Kalman"
+});
+
+export async function kalmanModelBody(options = {}) {
+  return loadKalmanModelBody(options);
 }
 
 // ── in-IR host-op handler for engentus.pipeline.kalman ─────────────────────
@@ -332,9 +330,17 @@ export async function kalmanModelBody() {
 // bias_combined_dps, omega_disagree_flag }. The stage runs THROUGH the model:
 // the aligned IMU streams become model params; `evaluateModel` drives the
 // lowered kernels and yields the payload scalars.
-export function createKalmanInIrHandler({ sampleSource } = {}) {
+export function createKalmanInIrHandler({
+  sampleSource,
+  readFile = null,
+  requireReadCapability = true,
+  loadModelBody = null
+} = {}) {
   if (typeof sampleSource !== "function")
     throw new Error("createKalmanInIrHandler: `sampleSource` (burst_start → aligned IMU streams) is required");
+  const resolveModelBody = typeof loadModelBody === "function"
+    ? loadModelBody
+    : () => kalmanModelBody({ readFile, requireReadCapability });
   return createComputeHostOpHandler({
     resolveInputs: request => {
       const data = sampleSource(request.burst_start);
@@ -342,7 +348,7 @@ export function createKalmanInIrHandler({ sampleSource } = {}) {
       return data;
     },
     compute: async data => {
-      const body = await kalmanModelBody();
+      const body = await resolveModelBody();
       return evaluateModel(body, {
         functions: kalmanFunctions,
         params: {

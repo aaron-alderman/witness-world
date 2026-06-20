@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createOperatorTuiEngine } from "../src/operator-tui.js";
-import { createOperatorWorkbenchController } from "../src/operator-workbench-core.js";
-import { renderOperatorWorkbenchPage } from "../src/operator-workbench-page.js";
+import { createOperatorWorkbenchController } from "../src/operator-workbench/core.js";
+import { renderOperatorWorkbenchPage } from "../src/operator-workbench/page.js";
 import { buildOperatorWorkbenchDefinition } from "../src/operator-screen-specs.js";
 import {
   renderOperatorWorkbenchState,
   startOperatorWorkbenchRuntime
-} from "../src/operator-workbench-runtime.js";
+} from "../src/operator-workbench/runtime.js";
 
 function makeState() {
   const worldRecords = [
@@ -247,6 +247,7 @@ function makeElement() {
     disabled: false,
     value: "",
     dataset: {},
+    attributes: new Map(),
     style: {
       values: new Map(),
       setProperty(name, value) {
@@ -256,6 +257,9 @@ function makeElement() {
     listeners: new Map(),
     addEventListener(type, handler) {
       this.listeners.set(type, handler);
+    },
+    setAttribute(name, value) {
+      this.attributes.set(name, value);
     },
     focus() {
       this.focused = true;
@@ -267,6 +271,12 @@ function makeFakeDocument() {
   const elements = new Map();
   const ids = [
     "operator-canvas",
+    "operator-window-drag",
+    "operator-window-controls",
+    "operator-window-minimize",
+    "operator-window-maximize",
+    "operator-window-close",
+    "operator-bootstrap-status",
     "operator-title",
     "operator-subtitle",
     "operator-nav-strip",
@@ -1694,6 +1704,109 @@ test("renderOperatorWorkbenchState preserves right-pane box padding in the canva
   assert.match(headerRow, /Session \[-\]\s+\S/);
 });
 
+test("renderOperatorWorkbenchState gives left-pane containers a distinct canvas color", () => {
+  const { documentTarget } = makeFakeDocument();
+  renderOperatorWorkbenchState({
+    snapshot: {
+      path: "root",
+      focus: { active: false, kind: null, id: null },
+      preview: { available: true, status: "active" },
+      topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+      leftPane: {
+        mode: "tree",
+        title: "Tree",
+        header: "root",
+        columns: [],
+        cursor: 1,
+        rows: [
+          { index: 1, type: "container", label: "World", summary: "Live modeled world graph", actionable: true },
+          { index: 2, type: "record", label: "Alpha", summary: "backend/runtime", actionable: true }
+        ]
+      },
+      rightPane: {
+        title: "Inspect",
+        activeScreenId: "inspect",
+        screen: { title: "Inspect", activeSectionIndex: 0, sections: [] },
+        tabs: { inspect: true, references: true, source: true, provenance: true },
+        target: { kind: "record", id: "thing.alpha", mode: "record" }
+      },
+      ui: {
+        focusedPane: "left",
+        inspectorTab: "inspect",
+        rightScreenMode: "custom-screen",
+        helpOpen: false,
+        numberBuffer: "",
+        lastOutput: "Ready.",
+        lastStatus: "info",
+        displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto", pageSize: 25 }
+      }
+    },
+    documentTarget,
+    commandDraft: "",
+    autocomplete: { preview: "", matches: [] }
+  });
+
+  const state = documentTarget.__operatorCanvasState;
+  const rows = state.buffer.map(row => row.map(cell => cell.ch).join(""));
+  const worldRowIndex = rows.findIndex(line => line.includes("World"));
+  const alphaRowIndex = rows.findIndex(line => line.includes("Alpha"));
+  const worldColumnIndex = rows[worldRowIndex].indexOf("World");
+  const alphaColumnIndex = rows[alphaRowIndex].indexOf("Alpha");
+
+  assert.equal(state.buffer[worldRowIndex][worldColumnIndex].fg, "#8fd8c5");
+  assert.equal(state.buffer[alphaRowIndex][alphaColumnIndex].fg, "#b6ffd7");
+});
+
+test("renderOperatorWorkbenchState composes deterministic shared frame junctions", () => {
+  const { documentTarget } = makeFakeDocument();
+  renderOperatorWorkbenchState({
+    snapshot: {
+      path: "root",
+      focus: { active: false, kind: null, id: null },
+      preview: { available: true, status: "active" },
+      topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+      leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+      rightPane: {
+        title: "Trace",
+        activeScreenId: "references",
+        screen: {
+          title: "Trace",
+          activeSectionIndex: 0,
+          sections: []
+        },
+        tabs: { inspect: true, references: true, source: true, provenance: true },
+        target: { kind: "record", id: "thing.alpha", mode: "record" }
+      },
+      ui: {
+        focusedPane: "right",
+        inspectorTab: "references",
+        rightScreenMode: "custom-screen",
+        helpOpen: false,
+        numberBuffer: "",
+        lastOutput: "Ready.",
+        lastStatus: "info",
+        displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto", pageSize: 25 }
+      }
+    },
+    documentTarget,
+    commandDraft: "",
+    autocomplete: { preview: "", matches: [] }
+  });
+
+  const state = documentTarget.__operatorCanvasState;
+  const separatorX = Math.floor(state.cols * 0.42) - 1;
+  const topSeparatorY = 4;
+  const bottomSeparatorY = state.rows - 6;
+  assert.equal(state.buffer[topSeparatorY][0].ch, "\u251c");
+  assert.equal(state.buffer[topSeparatorY][separatorX].ch, "\u252c");
+  assert.equal(state.buffer[topSeparatorY][state.cols - 1].ch, "\u2524");
+  assert.equal(state.buffer[topSeparatorY + 1][separatorX].ch, "\u2502");
+  assert.equal(state.buffer[bottomSeparatorY][separatorX].ch, "\u2534");
+  assert.equal(state.buffer[topSeparatorY][20].fg, "#51665d");
+  assert.equal(state.buffer[topSeparatorY][separatorX + 20].fg, "#6ee7a8");
+  assert.equal(state.buffer[topSeparatorY + 2][separatorX].fg, "#6ee7a8");
+});
+
 test("renderOperatorWorkbenchState surfaces active section context in help copy", () => {
   const { documentTarget, elements } = makeFakeDocument();
   renderOperatorWorkbenchState({
@@ -1760,6 +1873,7 @@ test("startOperatorWorkbenchRuntime reports bridge unavailability clearly", asyn
   assert.equal(elements.get("operator-command-input").disabled, true);
   assert.equal(elements.get("operator-last-status").textContent, "error");
   assert.equal(elements.get("operator-last-output").textContent.includes("Operator bridge unavailable"), true);
+  assert.equal(elements.get("operator-bootstrap-status").innerHTML.includes("unavailable"), true);
 });
 
 test("startOperatorWorkbenchRuntime routes top-pane navigation keys through the bridge", async () => {
@@ -2167,6 +2281,71 @@ test("startOperatorWorkbenchRuntime maps right-pane section keys onto section in
   ]);
 });
 
+test("startOperatorWorkbenchRuntime routes custom window chrome controls through the bridge", async () => {
+  const { documentTarget, elements } = makeFakeDocument();
+  const windowCalls = [];
+  const snapshot = {
+    path: "root",
+    focus: { active: false, kind: null, id: null },
+    preview: { available: true, status: "active" },
+    hostWindow: { maximized: false, minimizable: true, maximizable: true, closable: true },
+    topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+    leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+    rightPane: {
+      title: "Trace",
+      activeScreenId: "inspect",
+      screen: { title: "Trace", activeSectionIndex: 0, sections: [], rows: [], activeRowIndex: 0, detailLines: [] },
+      tabs: { inspect: true, references: true, source: true, provenance: true },
+      target: { kind: "record", id: "thing.alpha", mode: "record" }
+    },
+    ui: {
+      focusedPane: "left",
+      inspectorTab: "inspect",
+      rightScreenMode: "custom-screen",
+      helpOpen: false,
+      numberBuffer: "",
+      lastOutput: "Ready.",
+      lastStatus: "info",
+      displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto", pageSize: 25 }
+    }
+  };
+  const windowTarget = {
+    listeners: new Map(),
+    witnessOperatorWorkbench: {
+      async getSnapshot() { return snapshot; },
+      async getAutocomplete() { return { preview: "", matches: [] }; },
+      async runCommand() { return { snapshot }; },
+      async dispatchIntent() { return { snapshot }; },
+      async updateDisplaySettings() { return { snapshot }; },
+      async windowControl(action) {
+        windowCalls.push(action);
+        if (action === "toggle-maximize") {
+          snapshot.hostWindow.maximized = !snapshot.hostWindow.maximized;
+        }
+        return snapshot;
+      }
+    },
+    addEventListener(type, handler) {
+      this.listeners.set(type, handler);
+    }
+  };
+
+  const runtime = startOperatorWorkbenchRuntime({ windowTarget, documentTarget });
+  await runtime.started;
+
+  await elements.get("operator-window-minimize").listeners.get("click")({ preventDefault() {} });
+  await elements.get("operator-window-maximize").listeners.get("click")({ preventDefault() {} });
+  await elements.get("operator-window-drag").listeners.get("dblclick")({ preventDefault() {} });
+  await elements.get("operator-window-close").listeners.get("click")({ preventDefault() {} });
+
+  assert.deepEqual(windowCalls, [
+    "minimize",
+    "toggle-maximize",
+    "toggle-maximize",
+    "close"
+  ]);
+});
+
 test("startOperatorWorkbenchRuntime routes section header clicks and toggles through the bridge", async () => {
   const { documentTarget } = makeFakeDocument();
   const calls = [];
@@ -2341,8 +2520,277 @@ test("startOperatorWorkbenchRuntime copies selected canvas text", async () => {
   assert.deepEqual(clipboardWrites, ["Session"]);
 });
 
+test("startOperatorWorkbenchRuntime selects a canvas word on double click", async () => {
+  const { documentTarget, elements } = makeFakeDocument();
+  const snapshot = {
+    path: "root",
+    focus: { active: false, kind: null, id: null },
+    preview: { available: true, status: "active" },
+    topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+    leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+    rightPane: {
+      title: "Trace",
+      activeScreenId: "references",
+      screen: {
+        title: "Trace",
+        activeSectionIndex: 0,
+        sections: [
+          {
+            id: "session",
+            title: "Session",
+            kind: "detail",
+            rows: [],
+            detailLines: [],
+            collapsible: true,
+            collapsed: false,
+            actionable: false
+          }
+        ]
+      },
+      tabs: { inspect: true, references: true, source: true, provenance: true },
+      target: { kind: "record", id: "thing.alpha", mode: "record" }
+    },
+    ui: {
+      focusedPane: "right",
+      inspectorTab: "references",
+      rightScreenMode: "custom-screen",
+      helpOpen: false,
+      numberBuffer: "",
+      lastOutput: "Ready.",
+      lastStatus: "info",
+      displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto", pageSize: 25 }
+    }
+  };
+  const windowTarget = {
+    listeners: new Map(),
+    witnessOperatorWorkbench: {
+      async getSnapshot() { return snapshot; },
+      async getAutocomplete() { return { preview: "", matches: [] }; },
+      async runCommand() { return { snapshot }; },
+      async dispatchIntent() { return { snapshot }; },
+      async updateDisplaySettings() { return { snapshot }; }
+    },
+    addEventListener(type, handler) {
+      this.listeners.set(type, handler);
+    }
+  };
+
+  const runtime = startOperatorWorkbenchRuntime({ windowTarget, documentTarget });
+  await runtime.started;
+
+  const rows = documentTarget.__operatorCanvasState.buffer.map(row => row.map(cell => cell.ch).join(""));
+  const rowIndex = rows.findIndex(line => line.includes("Session"));
+  const line = rows[rowIndex];
+  const startColumn = line.indexOf("Session");
+  const canvas = elements.get("operator-canvas");
+  const click = canvas.listeners.get("click");
+  const state = documentTarget.__operatorCanvasState;
+
+  await click({
+    detail: 2,
+    clientX: startColumn * state.cellWidth + 1,
+    clientY: rowIndex * state.cellHeight + 1,
+    preventDefault() {}
+  });
+
+  assert.deepEqual(documentTarget.__operatorCanvasSelection, {
+    mode: "linear",
+    anchor: { row: rowIndex, column: startColumn },
+    focus: { row: rowIndex, column: startColumn + "Session".length - 1 }
+  });
+});
+
+test("startOperatorWorkbenchRuntime selects the visible canvas line on triple click", async () => {
+  const { documentTarget, elements } = makeFakeDocument();
+  const snapshot = {
+    path: "root",
+    focus: { active: false, kind: null, id: null },
+    preview: { available: true, status: "active" },
+    topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+    leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+    rightPane: {
+      title: "Trace",
+      activeScreenId: "references",
+      screen: {
+        title: "Trace",
+        activeSectionIndex: 0,
+        sections: [
+          {
+            id: "session",
+            title: "Session",
+            kind: "detail",
+            rows: [],
+            detailLines: [],
+            collapsible: true,
+            collapsed: false,
+            actionable: false
+          }
+        ]
+      },
+      tabs: { inspect: true, references: true, source: true, provenance: true },
+      target: { kind: "record", id: "thing.alpha", mode: "record" }
+    },
+    ui: {
+      focusedPane: "right",
+      inspectorTab: "references",
+      rightScreenMode: "custom-screen",
+      helpOpen: false,
+      numberBuffer: "",
+      lastOutput: "Ready.",
+      lastStatus: "info",
+      displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto", pageSize: 25 }
+    }
+  };
+  const windowTarget = {
+    listeners: new Map(),
+    witnessOperatorWorkbench: {
+      async getSnapshot() { return snapshot; },
+      async getAutocomplete() { return { preview: "", matches: [] }; },
+      async runCommand() { return { snapshot }; },
+      async dispatchIntent() { return { snapshot }; },
+      async updateDisplaySettings() { return { snapshot }; }
+    },
+    addEventListener(type, handler) {
+      this.listeners.set(type, handler);
+    }
+  };
+
+  const runtime = startOperatorWorkbenchRuntime({ windowTarget, documentTarget });
+  await runtime.started;
+
+  const rows = documentTarget.__operatorCanvasState.buffer.map(row => row.map(cell => cell.ch).join(""));
+  const rowIndex = rows.findIndex(line => line.includes("Session"));
+  const line = rows[rowIndex];
+  const startColumn = line.search(/\S/u);
+  const endColumn = line.length - 1 - line.split("").reverse().join("").search(/\S/u);
+  const sessionColumn = line.indexOf("Session");
+  const canvas = elements.get("operator-canvas");
+  const click = canvas.listeners.get("click");
+  const state = documentTarget.__operatorCanvasState;
+
+  await click({
+    detail: 3,
+    clientX: sessionColumn * state.cellWidth + 1,
+    clientY: rowIndex * state.cellHeight + 1,
+    preventDefault() {}
+  });
+
+  assert.deepEqual(documentTarget.__operatorCanvasSelection, {
+    mode: "linear",
+    anchor: { row: rowIndex, column: startColumn },
+    focus: { row: rowIndex, column: endColumn }
+  });
+});
+
+test("startOperatorWorkbenchRuntime copies rectangular canvas selections with exact box drawing", async () => {
+  const { documentTarget, elements } = makeFakeDocument();
+  const clipboardWrites = [];
+  const snapshot = {
+    path: "root",
+    focus: { active: false, kind: null, id: null },
+    preview: { available: true, status: "active" },
+    topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+    leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+    rightPane: {
+      title: "Trace",
+      activeScreenId: "references",
+      screen: {
+        title: "Trace",
+        activeSectionIndex: 0,
+        sections: [
+          {
+            id: "session",
+            title: "Session",
+            kind: "detail",
+            rows: [],
+            detailLines: [],
+            collapsible: true,
+            collapsed: false,
+            actionable: false
+          }
+        ]
+      },
+      tabs: { inspect: true, references: true, source: true, provenance: true },
+      target: { kind: "record", id: "thing.alpha", mode: "record" }
+    },
+    ui: {
+      focusedPane: "right",
+      inspectorTab: "references",
+      rightScreenMode: "custom-screen",
+      helpOpen: false,
+      numberBuffer: "",
+      lastOutput: "Ready.",
+      lastStatus: "info",
+      displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto", pageSize: 25 }
+    }
+  };
+  const windowTarget = {
+    listeners: new Map(),
+    navigator: {
+      clipboard: {
+        async writeText(text) {
+          clipboardWrites.push(text);
+        }
+      }
+    },
+    witnessOperatorWorkbench: {
+      async getSnapshot() { return snapshot; },
+      async getAutocomplete() { return { preview: "", matches: [] }; },
+      async runCommand() { return { snapshot }; },
+      async dispatchIntent() { return { snapshot }; },
+      async updateDisplaySettings() { return { snapshot }; }
+    },
+    addEventListener(type, handler) {
+      this.listeners.set(type, handler);
+    }
+  };
+
+  const runtime = startOperatorWorkbenchRuntime({ windowTarget, documentTarget });
+  await runtime.started;
+
+  const rows = documentTarget.__operatorCanvasState.buffer.map(row => row.map(cell => cell.ch).join(""));
+  const labelRowIndex = rows.findIndex(line => line.includes("Session"));
+  const borderRowIndex = labelRowIndex - 1;
+  const borderLine = rows[borderRowIndex];
+  const labelLine = rows[labelRowIndex];
+  const startColumn = borderLine.search(/\S/u);
+  const endColumn = labelLine.indexOf("Session") + "Session".length + 4;
+  const canvas = elements.get("operator-canvas");
+  const mousedown = canvas.listeners.get("mousedown");
+  const mousemove = canvas.listeners.get("mousemove");
+  const keydown = windowTarget.listeners.get("keydown");
+  const state = documentTarget.__operatorCanvasState;
+  const expected = [borderLine, labelLine]
+    .map(text => text.slice(startColumn, endColumn + 1))
+    .join("\n");
+
+  mousedown({
+    button: 0,
+    altKey: true,
+    clientX: startColumn * state.cellWidth + 1,
+    clientY: borderRowIndex * state.cellHeight + 1
+  });
+  mousemove({
+    clientX: endColumn * state.cellWidth + 1,
+    clientY: labelRowIndex * state.cellHeight + 1
+  });
+  windowTarget.listeners.get("mouseup")({ button: 0 });
+  await keydown({ ctrlKey: true, metaKey: false, key: "c", preventDefault() {}, target: null });
+
+  assert.equal(documentTarget.__operatorCanvasSelection.mode, "rectangular");
+  assert.deepEqual(clipboardWrites, [expected]);
+});
+
 test("operator workbench page renders the multi-pane shell", () => {
   const html = renderOperatorWorkbenchPage();
+  assert.match(html, /operator-window-drag/);
+  assert.match(html, /operator-window-minimize/);
+  assert.match(html, /operator-window-maximize/);
+  assert.match(html, /operator-window-close/);
+  assert.match(html, /operator-bootstrap-status/);
+  assert.match(html, /Booting operator workbench/);
+  assert.match(html, /__operatorWorkbenchBooted/);
+  assert.match(html, /\[_\]/);
   assert.match(html, /operator-left-rows/);
   assert.equal(html.includes("operator-inspector-body"), false);
   assert.match(html, /operator-nav-strip/);
@@ -2353,6 +2801,8 @@ test("operator workbench page renders the multi-pane shell", () => {
   assert.match(html, /operator-command-input/);
   assert.match(html, /witnessOperatorWorkbench/);
   assert.match(html, /operator-canvas/);
+  assert.equal(html.includes("operator-titlebar"), false);
+  assert.equal(html.includes("detached workbench"), false);
   return;
   assert.equal(html.includes("â"), false);
 });

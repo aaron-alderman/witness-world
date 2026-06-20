@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import fs from "node:fs/promises";
 import { createWorld } from "../src/kernel.js";
 import {
   applyDesire, compileRvmFileToDesirePlus, normalizeDesirePlusToDesire,
@@ -57,7 +58,7 @@ async function appliedPipeline() {
 
 test("the in-IR health handler reproduces the golden valid-channel / bolt counts", async () => {
   assert.ok(hourRows.length > 0, "expected rows for the chosen hour");
-  const handler = createHealthClassifyInIrHandler({ sampleSource });
+  const handler = createHealthClassifyInIrHandler({ sampleSource, readFile: fs.readFile });
   const res = await handler(healthRequest(), { host_operation: HOST_OP });
   const oracle = await healthOracle()(healthRequest());
   assert.equal(res.status, "success");
@@ -68,7 +69,7 @@ test("migrateHostOperation verifies health == golden, then flips the runtime", a
   const { runtime } = await appliedPipeline();
   const result = await migrateHostOperation(runtime, {
     hostOperation: HOST_OP,
-    candidate: createHealthClassifyInIrHandler({ sampleSource }),
+    candidate: createHealthClassifyInIrHandler({ sampleSource, readFile: fs.readFile }),
     oracle: healthOracle(),
     fixtures: [{ request: healthRequest() }],
     tolerance: 1e-6
@@ -87,7 +88,7 @@ test("migrateHostOperation refuses the flip when the health counts disagree", as
   });
   await assert.rejects(
     () => migrateHostOperation(runtime, {
-      hostOperation: HOST_OP, candidate: createHealthClassifyInIrHandler({ sampleSource }),
+      hostOperation: HOST_OP, candidate: createHealthClassifyInIrHandler({ sampleSource, readFile: fs.readFile }),
       oracle: wrongOracle, fixtures: [{ request: healthRequest() }], tolerance: 1e-6
     }),
     err => err instanceof HostOperationError && /disagrees with the oracle/.test(err.message)
@@ -98,7 +99,7 @@ test("after migration the engine runs health-classify in-IR with the declared tr
   const { world, runtime } = await appliedPipeline();
   await migrateHostOperation(runtime, {
     hostOperation: HOST_OP,
-    candidate: createHealthClassifyInIrHandler({ sampleSource }),
+    candidate: createHealthClassifyInIrHandler({ sampleSource, readFile: fs.readFile }),
     oracle: healthOracle(),
     fixtures: [{ request: healthRequest() }]
   });

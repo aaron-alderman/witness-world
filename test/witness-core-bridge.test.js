@@ -242,8 +242,22 @@ test("createWitnessCoreBridge source capability helpers serialize requests", asy
       ok: true,
       status: 200,
       async json() {
+        if (String(url).includes("/list")) {
+          return {
+            path: "plugins",
+            exists: true,
+            entries: [{ name: "inspect", isFile: false, isDirectory: true }]
+          };
+        }
         if (String(url).includes("/stat")) {
-          return { path: "app/content.wtoml", exists: true, hash: "sha256:abc", size: 12 };
+          return {
+            path: "app/content.wtoml",
+            exists: true,
+            isFile: true,
+            isDirectory: false,
+            hash: "sha256:abc",
+            size: 12
+          };
         }
         return { path: "app/content.wtoml", content: "hello", hash: "sha256:abc", size: 5 };
       }
@@ -254,8 +268,13 @@ test("createWitnessCoreBridge source capability helpers serialize requests", asy
     fetchImpl
   });
 
+  const listing = await bridge.listSourceDirectory({ path: "plugins" });
+  const stat = await bridge.statSource({ path: "app/content.wtoml" });
   assert.equal((await bridge.readSource({ path: "app/content.wtoml" })).content, "hello");
-  assert.equal((await bridge.statSource({ path: "app/content.wtoml" })).exists, true);
+  assert.equal((await bridge.readSource({ path: "app/content.wtoml", encoding: "base64" })).content, "hello");
+  assert.equal(listing.entries[0].name, "inspect");
+  assert.equal(stat.exists, true);
+  assert.equal(stat.isFile, true);
   await bridge.patchSource({
     path: "app/content.wtoml",
     content: "preview",
@@ -269,12 +288,14 @@ test("createWitnessCoreBridge source capability helpers serialize requests", asy
     }
   });
 
-  assert.equal(requests[0].url, "http://127.0.0.1:8788/capabilities/fs/read?path=app%2Fcontent.wtoml");
+  assert.equal(requests[0].url, "http://127.0.0.1:8788/capabilities/fs/list?path=plugins");
   assert.equal(requests[0].options.method, "GET");
   assert.equal(requests[1].url, "http://127.0.0.1:8788/capabilities/fs/stat?path=app%2Fcontent.wtoml");
-  assert.equal(requests[2].url, "http://127.0.0.1:8788/capabilities/fs/patch");
-  assert.equal(requests[2].options.method, "POST");
-  assert.deepEqual(JSON.parse(requests[2].options.body), {
+  assert.equal(requests[2].url, "http://127.0.0.1:8788/capabilities/fs/read?path=app%2Fcontent.wtoml");
+  assert.equal(requests[3].url, "http://127.0.0.1:8788/capabilities/fs/read?path=app%2Fcontent.wtoml&encoding=base64");
+  assert.equal(requests[4].url, "http://127.0.0.1:8788/capabilities/fs/patch");
+  assert.equal(requests[4].options.method, "POST");
+  assert.deepEqual(JSON.parse(requests[4].options.body), {
     path: "app/content.wtoml",
     content: "preview",
     expectedHash: "sha256:baseline",
@@ -350,6 +371,42 @@ test("createWitnessCoreBridge sqlite capability helpers serialize requests", asy
     operation: "transaction",
     path: "app/db/main.sqlite",
     steps: [{ kind: "command", sql: "insert into items(title) values (?)", params: ["first"], name: "insert" }]
+  });
+});
+
+test("createWitnessCoreBridge verification persistence helper serializes requests", async () => {
+  const requests = [];
+  const fetchImpl = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return { verificationPolicies: [], testRuns: [] };
+      }
+    };
+  };
+  const bridge = createWitnessCoreBridge({
+    coreUrl: "http://127.0.0.1:8788/",
+    fetchImpl
+  });
+
+  const payload = await bridge.verificationPersistenceRequest({
+    operation: "readModelRows",
+    verificationRoot: "C:/runtime/verification",
+    artifactRoot: "C:/runtime/verification/artifacts",
+    cacheRoot: "C:/runtime/verification/cache"
+  });
+
+  assert.deepEqual(payload, { verificationPolicies: [], testRuns: [] });
+  assert.deepEqual(requests.map(entry => [entry.url, entry.options.method ?? "GET"]), [
+    ["http://127.0.0.1:8788/verification-persistence", "POST"]
+  ]);
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    operation: "readModelRows",
+    verificationRoot: "C:/runtime/verification",
+    artifactRoot: "C:/runtime/verification/artifacts",
+    cacheRoot: "C:/runtime/verification/cache"
   });
 });
 

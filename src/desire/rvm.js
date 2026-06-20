@@ -26,9 +26,21 @@ export async function compileRvmFileToDesirePlus(file, options = {}) {
   const resolved = path.resolve(file);
   const readFile = typeof options?.readFile === "function"
     ? options.readFile
-    : (target, encoding) => fs.readFile(target, encoding);
+    : options?.requireReadCapability === true
+      ? null
+      : (target, encoding) => fs.readFile(target, encoding);
+  if (typeof readFile !== "function") {
+    throw createReadCapabilityRequiredError(resolved);
+  }
   const source = await readFile(resolved, "utf8");
   return compileRvmToDesirePlus(source, { ...options, file: resolved });
+}
+
+function createReadCapabilityRequiredError(file) {
+  const error = new Error(`RVM file compilation requires an injected read capability for ${file}`);
+  error.code = "WITNESS_CORE_REQUIRED";
+  error.status = 503;
+  return error;
 }
 
 export function compileRvmToDesirePlus(source, { file = null, rvmFormRegistry = null } = {}) {

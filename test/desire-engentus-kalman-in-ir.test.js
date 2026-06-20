@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import fs from "node:fs/promises";
 import { createWorld } from "../src/kernel.js";
 import {
   applyDesire, compileRvmFileToDesirePlus, normalizeDesirePlusToDesire,
@@ -59,7 +60,7 @@ async function appliedPipeline() {
 }
 
 test("the in-IR Kalman handler reproduces the R-reference payload (the oracle)", async () => {
-  const handler = createKalmanInIrHandler({ sampleSource });
+  const handler = createKalmanInIrHandler({ sampleSource, readFile: fs.readFile });
   const res = await handler(kalmanRequest(), { host_operation: HOST_OP });
   const oracle = await rReferenceOracle()(kalmanRequest());
   assert.equal(res.status, "success");
@@ -74,7 +75,7 @@ test("migrateHostOperation verifies the kernel == R oracle, then flips the runti
   const before = await runtime.invoke({ host_operation: HOST_OP, request: kalmanRequest() });
   const result = await migrateHostOperation(runtime, {
     hostOperation: HOST_OP,
-    candidate: createKalmanInIrHandler({ sampleSource }),
+    candidate: createKalmanInIrHandler({ sampleSource, readFile: fs.readFile }),
     oracle: rReferenceOracle(),
     fixtures: [{ request: kalmanRequest() }],
     tolerance: 1e-6
@@ -101,7 +102,7 @@ test("migrateHostOperation refuses the flip when the kernel disagrees with the o
   });
   await assert.rejects(
     () => migrateHostOperation(runtime, {
-      hostOperation: HOST_OP, candidate: createKalmanInIrHandler({ sampleSource }),
+      hostOperation: HOST_OP, candidate: createKalmanInIrHandler({ sampleSource, readFile: fs.readFile }),
       oracle: wrongOracle, fixtures: [{ request: kalmanRequest() }], tolerance: 1e-6
     }),
     err => err instanceof HostOperationError && /disagrees with the oracle/.test(err.message)
@@ -112,7 +113,7 @@ test("after migration the engine runs Kalman in-IR with the declared transitions
   const { world, runtime } = await appliedPipeline();
   await migrateHostOperation(runtime, {
     hostOperation: HOST_OP,
-    candidate: createKalmanInIrHandler({ sampleSource }),
+    candidate: createKalmanInIrHandler({ sampleSource, readFile: fs.readFile }),
     oracle: rReferenceOracle(),
     fixtures: [{ request: kalmanRequest() }]
   });

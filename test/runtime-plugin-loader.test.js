@@ -10,6 +10,10 @@ async function tempPluginRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-plugin-loader-"));
 }
 
+async function tempRepoPluginRoot() {
+  return fs.mkdtemp(path.join(process.cwd(), ".tmp-witness-plugin-loader-"));
+}
+
 async function writePlugin(root, directoryName, manifest, runtimeSource = null) {
   const pluginDir = path.join(root, directoryName);
   await fs.mkdir(pluginDir, { recursive: true });
@@ -17,7 +21,294 @@ async function writePlugin(root, directoryName, manifest, runtimeSource = null) 
   if (runtimeSource != null) {
     await fs.writeFile(path.join(pluginDir, "runtime.js"), runtimeSource, "utf8");
   }
+  return pluginDir;
 }
+
+function normalize(value) {
+  return String(value || "").replaceAll("\\", "/");
+}
+
+test("plugin runtime loader can import from a witness-core materialized scratch mirror with relative imports", async () => {
+  const root = await tempRepoPluginRoot();
+  try {
+    const pluginDir = await writePlugin(root, "demo", {
+      id: "plugin.demo",
+      version: "0.1.0",
+      displayName: "Demo",
+      description: "Demo plugin runtime",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-demo-local"],
+      contributes: {}
+    }, `
+      import { createBundle } from "./helper.js";
+      export default { bundles: { "bundle-demo-local": createBundle() } };
+    `);
+    await fs.writeFile(path.join(pluginDir, "helper.js"), `
+      export function createBundle() {
+        return {
+          handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["demo.read"], handlerMetadata: {} },
+          routes: [{ kind: "exact", method: "GET", path: "/demo", handler: "demo.read", params: {} }],
+          surfaces: [],
+          createHandlers() { return { "demo.read": async () => {} }; }
+        };
+      }
+    `, "utf8");
+
+    const relativeRoot = normalize(path.relative(process.cwd(), root));
+    const relativeManifest = normalize(path.relative(process.cwd(), path.join(pluginDir, "plugin.json")));
+    const relativeRuntime = normalize(path.relative(process.cwd(), path.join(pluginDir, "runtime.js")));
+    const relativeHelper = normalize(path.relative(process.cwd(), path.join(pluginDir, "helper.js")));
+    const bridgeCalls = [];
+    const bridge = {
+      async listSourceDirectory({ path: sourceId }) {
+        bridgeCalls.push({ kind: "list", path: sourceId });
+        if (sourceId === relativeRoot) {
+          return {
+            path: sourceId,
+            exists: true,
+            entries: [{ name: "demo", isFile: false, isDirectory: true }]
+          };
+        }
+        if (sourceId === `${relativeRoot}/demo`) {
+          return {
+            path: sourceId,
+            exists: true,
+            entries: [
+              { name: "plugin.json", isFile: true, isDirectory: false },
+              { name: "runtime.js", isFile: true, isDirectory: false },
+              { name: "helper.js", isFile: true, isDirectory: false }
+            ]
+          };
+        }
+        return { path: sourceId, exists: false, entries: [] };
+      },
+      async readSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "read", path: sourceId });
+        if (sourceId === relativeManifest) {
+          return {
+            path: sourceId,
+            content: JSON.stringify({
+              id: "plugin.demo",
+              version: "0.1.0",
+              displayName: "Demo",
+              description: "Demo plugin runtime",
+              kind: "plugin",
+              runtime: { entry: "./runtime.js" },
+              activatesBundles: ["bundle-demo-local"],
+              contributes: {}
+            }, null, 2)
+          };
+        }
+        if (sourceId === relativeRuntime) {
+          return {
+            path: sourceId,
+            content: `
+              import { createBundle } from "./helper.js";
+              export default { bundles: { "bundle-demo-local": createBundle() } };
+            `
+          };
+        }
+        if (sourceId === relativeHelper) {
+          return {
+            path: sourceId,
+            content: `
+              export function createBundle() {
+                return {
+                  handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["demo.read"], handlerMetadata: {} },
+                  routes: [{ kind: "exact", method: "GET", path: "/demo", handler: "demo.read", params: {} }],
+                  surfaces: [],
+                  createHandlers() { return { "demo.read": async () => {} }; }
+                };
+              }
+            `
+          };
+        }
+        throw new Error(`unexpected read ${sourceId}`);
+      },
+      async statSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "stat", path: sourceId });
+        if ([relativeRuntime, relativeHelper].includes(sourceId)) {
+          return {
+            path: sourceId,
+            exists: true,
+            isFile: true,
+            isDirectory: false,
+            size: 128,
+            modifiedAt: "1700000000000"
+          };
+        }
+        throw new Error(`unexpected stat ${sourceId}`);
+      }
+    };
+    const guardedFs = {
+      ...fs,
+      async readFile(target, encoding) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(root)) {
+          throw new Error(`plugin runtime load read escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readFile(target, encoding);
+      },
+      async readdir(target, options) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(root)) {
+          throw new Error(`plugin runtime load readdir escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readdir(target, options);
+      },
+      async stat(target) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(root)) {
+          throw new Error(`plugin runtime load stat escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.stat(target);
+      }
+    };
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot: root,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.demo"],
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      cwd: process.cwd()
+    });
+    const loadResult = await loadRuntimePluginModules({
+      pluginCatalog,
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      cwd: process.cwd()
+    });
+    const loadedCatalog = applyRuntimePluginLoadState(pluginCatalog, loadResult);
+    const demo = loadedCatalog.packages.find(row => row.id === "plugin.demo");
+
+    assert.equal(loadResult.hasBlockingErrors, false);
+    assert.ok(loadResult.bundleOverrides["bundle-demo-local"]);
+    assert.equal(demo.runtimeModule.loadStatus, "loaded");
+    assert.match(normalize(demo.runtimeModule.resolvedPath), /\.witness-core\/runtime-plugin-modules\/plugin\.demo-/);
+    assert.equal(path.resolve(demo.runtimeModule.resolvedPath).startsWith(root), false);
+    assert.equal(bridgeCalls.some(call => call.kind === "list" && call.path === `${relativeRoot}/demo`), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === relativeRuntime), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === relativeHelper), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "stat" && call.path === relativeRuntime), true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin runtime loader fails closed when a core-connected runtime path is outside witness-core scope", async () => {
+  const root = await tempPluginRoot();
+  try {
+    await writePlugin(root, "outside", {
+      id: "plugin.outside",
+      version: "0.1.0",
+      displayName: "Outside",
+      description: "Out of scope plugin runtime",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-outside"],
+      contributes: {}
+    }, `export default { bundles: { "bundle-outside": { handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} }, routes: [], surfaces: [], createHandlers() { return {}; } } } };`);
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot: root,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.outside"]
+    });
+    const guardedFs = {
+      ...fs,
+      async stat(target) {
+        throw new Error(`plugin runtime load stat escaped witness-core boundary: ${target}`);
+      },
+      async readFile(target, encoding) {
+        throw new Error(`plugin runtime load read escaped witness-core boundary: ${target} ${encoding ?? ""}`);
+      },
+      async readdir(target, options) {
+        throw new Error(`plugin runtime load readdir escaped witness-core boundary: ${target} ${JSON.stringify(options ?? {})}`);
+      }
+    };
+    const loadResult = await loadRuntimePluginModules({
+      pluginCatalog,
+      generationBridge: {
+        async listSourceDirectory() {
+          throw new Error("bridge should not be called for out-of-scope runtime path");
+        },
+        async readSource() {
+          throw new Error("bridge should not be called for out-of-scope runtime path");
+        },
+        async statSource() {
+          throw new Error("bridge should not be called for out-of-scope runtime path");
+        }
+      },
+      fsModule: guardedFs,
+      cwd: process.cwd(),
+      requireGenerationBridgeForCanonicalImports: true
+    });
+
+    assert.equal(loadResult.hasBlockingErrors, true);
+    assert.equal(loadResult.pluginStates["plugin.outside"].loadStatus, "failed");
+    assert.equal(loadResult.failures.some(entry =>
+      entry.id === "plugin.outside"
+      && entry.reasons.some(reason => reason.includes("WITNESS_CORE_REQUIRED") || reason.includes("witness-core capability"))
+    ), true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin runtime loader fails closed when witness-core authority is required but the bridge is unavailable", async () => {
+  const root = await tempPluginRoot();
+  try {
+    await writePlugin(root, "missing-bridge", {
+      id: "plugin.missing-bridge",
+      version: "0.1.0",
+      displayName: "Missing Bridge",
+      description: "Plugin runtime without witness-core bridge",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-missing-bridge"],
+      contributes: {}
+    }, `export default { bundles: { "bundle-missing-bridge": { handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} }, routes: [], surfaces: [], createHandlers() { return {}; } } } };`);
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot: root,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.missing-bridge"]
+    });
+    const loadResult = await loadRuntimePluginModules({
+      pluginCatalog,
+      fsModule: {
+        async stat(target) {
+          throw new Error(`plugin runtime load stat escaped missing witness-core bridge: ${target}`);
+        },
+        async readFile(target, encoding) {
+          throw new Error(`plugin runtime load read escaped missing witness-core bridge: ${target} ${encoding ?? ""}`);
+        },
+        async readdir(target, options) {
+          throw new Error(`plugin runtime load readdir escaped missing witness-core bridge: ${target} ${JSON.stringify(options ?? {})}`);
+        },
+        async mkdir() {
+          throw new Error("plugin runtime load scratch mkdir should not run without witness-core bridge");
+        },
+        async writeFile() {
+          throw new Error("plugin runtime load scratch write should not run without witness-core bridge");
+        }
+      },
+      cwd: process.cwd(),
+      requireGenerationBridgeForCanonicalImports: true
+    });
+
+    assert.equal(loadResult.hasBlockingErrors, true);
+    assert.equal(loadResult.pluginStates["plugin.missing-bridge"].loadStatus, "failed");
+    assert.equal(loadResult.failures.some(entry =>
+      entry.id === "plugin.missing-bridge"
+      && entry.reasons.some(reason => reason.includes("WITNESS_CORE_REQUIRED") || reason.includes("witness-core capability"))
+    ), true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 test("plugin runtime loader supports multi-bundle plugin-owned modules", async () => {
   const root = await tempPluginRoot();

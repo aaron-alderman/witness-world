@@ -20,7 +20,7 @@ const child = spawn(
   process.execPath,
   [
     "src/cli.js",
-    "serve",
+    "utility-serve",
     "examples/engentus",
     ...(hasExplicitPort ? [] : ["--port", defaultWorkerPort]),
     "--runtime-profile",

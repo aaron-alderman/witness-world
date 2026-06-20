@@ -165,6 +165,7 @@ export function createWitnessCoreBridge({
 
   const sourceCapabilityRequest = async (method, endpoint, {
     path = "",
+    encoding = null,
     content = null,
     expectedHash = null,
     reason = null,
@@ -177,6 +178,9 @@ export function createWitnessCoreBridge({
     const options = { method };
     if (method === "GET") {
       url.searchParams.set("path", sourcePath);
+      if (typeof encoding === "string" && encoding.trim()) {
+        url.searchParams.set("encoding", encoding.trim());
+      }
       if (correlation?.sessionId) url.searchParams.set("sessionId", String(correlation.sessionId));
       if (correlation?.surfaceId) url.searchParams.set("surfaceId", String(correlation.surfaceId));
       if (correlation?.actor) url.searchParams.set("actor", String(correlation.actor));
@@ -248,11 +252,19 @@ export function createWitnessCoreBridge({
     async statSource(input = {}) {
       return await sourceCapabilityRequest("GET", "/capabilities/fs/stat", input);
     },
+    async listSourceDirectory(input = {}) {
+      return await sourceCapabilityRequest("GET", "/capabilities/fs/list", input);
+    },
     async writeSource(input = {}) {
       return await sourceCapabilityRequest("PUT", "/capabilities/fs/write", input);
     },
     async patchSource(input = {}) {
       return await sourceCapabilityRequest("POST", "/capabilities/fs/patch", input);
+    },
+    async verificationPersistenceRequest(body = {}) {
+      return await postJson("/verification-persistence", {
+        body: body && typeof body === "object" ? body : {}
+      });
     },
     async executeHttpOutbound({
       url,

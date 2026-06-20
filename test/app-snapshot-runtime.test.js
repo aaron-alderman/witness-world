@@ -295,15 +295,80 @@ test("dev-mode request refresh picks up authored source edits without restart", 
   }
 });
 
-test("dev-mode dirty polling updates publish revision SSE and inject dev reload client", { timeout: 120000 }, async () => {
+test("dev-mode keeps local dirty polling disabled by default and requires explicit reload", { timeout: 120000 }, async () => {
   const app = await makeTempLiveCoreFixtureApp();
   const server = await startUiServer({
     dslPath: app.dslPath,
-    serverRunnerId: "fixture_server"
+    serverRunnerId: "fixture_server",
+    runtimeProfile: "minimal"
   });
   let events = null;
   try {
     await waitForSnapshotManagerReady(server);
+    const health = await fetch(`${server.url}/api/runtime/process-health`).then(response => response.json());
+    assert.equal(health.watchersEnabled, false);
+    const initialRevision = Number(
+      server.server.runtimeContext.appSnapshotManager?.getLastRevisionEvent?.().appRevision || 0
+    );
+    events = await openRevisionEvents(`${server.url}/api/runtime/app-revisions/events`);
+
+    await replaceShellText(
+      app.contentPath,
+      'text = "Live Core Baseline"',
+      'text = "Live Core Manual Reload"'
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 700));
+    const unchanged = await fetch(`${server.url}${app.routePath}`).then(response => response.text());
+    assert.match(unchanged, /Live Core Baseline/);
+    assert.doesNotMatch(unchanged, /Live Core Manual Reload/);
+
+    const nextReloadEvent = waitForSnapshotEvent(server, {
+      predicate: payload => Number(payload.appRevision || 0) > initialRevision && payload.trigger === "reload"
+    });
+    const nextReloadSseEvent = events.nextEvent({
+      predicate: payload => Number(payload.appRevision || 0) > initialRevision && payload.trigger === "reload"
+    });
+
+    const reloadResponse = await fetch(`${server.url}/api/runtime/app-snapshot/reload`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ paths: ["app/content.wtoml"] })
+    });
+    assert.equal(reloadResponse.status, 200);
+    const reloadBody = await reloadResponse.json();
+    assert.equal(reloadBody.ok, true);
+    assert.equal(reloadBody.watchersEnabled, false);
+
+    const [reloadEvent, reloadSseEvent] = await Promise.all([nextReloadEvent, nextReloadSseEvent]);
+    assert.match((reloadEvent.changedSources ?? []).join("\n"), /app\/content\.wtoml/);
+    assert.match((reloadSseEvent.changedSources ?? []).join("\n"), /app\/content\.wtoml/);
+
+    const refreshed = await waitForText(`${server.url}${app.routePath}`, /Live Core Manual Reload/);
+    assert.match(refreshed, /Live Core Manual Reload/);
+  } finally {
+    await events?.close?.();
+    await server.close();
+    await fs.rm(app.root, { recursive: true, force: true });
+  }
+});
+
+test("dev-mode dirty polling updates publish revision SSE and inject dev reload client only when explicitly enabled", { timeout: 120000 }, async () => {
+  const app = await makeTempLiveCoreFixtureApp();
+  const server = await startUiServer({
+    dslPath: app.dslPath,
+    serverRunnerId: "fixture_server",
+    runtimeProfile: "minimal",
+    env: {
+      ...process.env,
+      WITNESS_RUNTIME_WATCHERS_ENABLED: "true"
+    }
+  });
+  let events = null;
+  try {
+    await waitForSnapshotManagerReady(server);
+    const health = await fetch(`${server.url}/api/runtime/process-health`).then(response => response.json());
+    assert.equal(health.watchersEnabled, true);
     const initialRevision = Number(
       server.server.runtimeContext.appSnapshotManager?.getLastRevisionEvent?.().appRevision || 0
     );

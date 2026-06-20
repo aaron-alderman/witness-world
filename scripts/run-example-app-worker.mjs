@@ -27,7 +27,7 @@ const child = spawn(
   process.execPath,
   [
     "src/cli.js",
-    "serve",
+    "utility-serve",
     appPath,
     ...(defaultPort && !hasExplicitPort ? ["--port", String(defaultPort)] : []),
     ...forwardedArgs

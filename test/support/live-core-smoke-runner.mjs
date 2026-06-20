@@ -605,7 +605,7 @@ async function runPublishedAuthoringScenario() {
       command: [
         shellPath(process.execPath),
         shellPath(path.join(REPO_ROOT, "src", "cli.js")),
-        "serve",
+        "utility-serve",
         shellPath(manifestPath),
         "--server",
         "fixture_server",
@@ -616,8 +616,7 @@ async function runPublishedAuthoringScenario() {
       ].join(" "),
       workingDir: shellPath(REPO_ROOT),
       restartOnExit: true,
-      healthUrl: `${appUrl}/api/runtime/process-health`,
-      reloadUrl: `${appUrl}/api/runtime/app-snapshot/reload`,
+      controlUrl: `${appUrl}/api/runtime/worker-control`,
       healthIntervalMs: 100,
       healthTimeoutMs: 45000
     }),
@@ -958,7 +957,7 @@ async function runSupervisedScenario() {
       command: [
         shellPath(process.execPath),
         shellPath(path.join(REPO_ROOT, "src", "cli.js")),
-        "serve",
+        "utility-serve",
         shellPath(manifestPath),
         "--server",
         "fixture_server",
@@ -969,7 +968,7 @@ async function runSupervisedScenario() {
       ].join(" "),
       workingDir: shellPath(REPO_ROOT),
       restartOnExit: true,
-      healthUrl: `${appUrl}/api/runtime/process-health`,
+      controlUrl: `${appUrl}/api/runtime/worker-control`,
       healthIntervalMs: 100,
       healthTimeoutMs: 45000
     })
@@ -1131,7 +1130,7 @@ async function runSupervisedHealthScenario() {
       command: [
         shellPath(process.execPath),
         shellPath(path.join(REPO_ROOT, "src", "cli.js")),
-        "serve",
+        "utility-serve",
         shellPath(manifestPath),
         "--server",
         "fixture_server",
@@ -1143,7 +1142,7 @@ async function runSupervisedHealthScenario() {
       workingDir: shellPath(REPO_ROOT),
       restartOnExit: true,
       restartOnUnhealthy: true,
-      healthUrl: `${appUrl}/api/runtime/process-health`,
+      controlUrl: `${appUrl}/api/runtime/worker-control`,
       healthIntervalMs: 100,
       healthTimeoutMs: 45000,
       degradedGracePolls: 4,
@@ -1236,7 +1235,7 @@ async function runSoakScenario() {
       command: [
         shellPath(process.execPath),
         shellPath(path.join(REPO_ROOT, "src", "cli.js")),
-        "serve",
+        "utility-serve",
         shellPath(manifestPath),
         "--server",
         "fixture_server",
@@ -1247,7 +1246,7 @@ async function runSoakScenario() {
       ].join(" "),
       workingDir: shellPath(REPO_ROOT),
       restartOnExit: true,
-      healthUrl: `${appUrl}/api/runtime/process-health`,
+      controlUrl: `${appUrl}/api/runtime/worker-control`,
       healthIntervalMs: 100,
       healthTimeoutMs: 45000
     })
@@ -1499,7 +1498,7 @@ async function runFrontdoorScenario() {
       command: [
         shellPath(process.execPath),
         shellPath(path.join(REPO_ROOT, "src", "cli.js")),
-        "serve",
+        "utility-serve",
         shellPath(manifestPath),
         "--server",
         "fixture_server",
@@ -1510,7 +1509,7 @@ async function runFrontdoorScenario() {
       ].join(" "),
       workingDir: shellPath(REPO_ROOT),
       restartOnExit: true,
-      healthUrl: "http://127.0.0.1:{runtime_port}/api/runtime/process-health",
+      controlUrl: "http://127.0.0.1:{runtime_port}/api/runtime/worker-control",
       healthIntervalMs: 100,
       healthTimeoutMs: 45000
     }),

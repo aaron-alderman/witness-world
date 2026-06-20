@@ -180,6 +180,147 @@ test("AppSnapshotManager.ensureFresh ignores preview witness-core generations fo
   assert.equal(manager.lastAppliedWitnessCoreGenerationId, null);
 });
 
+test("AppSnapshotManager rebuilds canonical app sources through witness-core source capabilities when available", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-app-snapshot-bridge-"));
+  const appRoot = path.join(tempRoot, "app");
+  const manifestPath = path.join(appRoot, "app.wtoml");
+  const contentPath = path.join(appRoot, "content.wtoml");
+  await writeFile(manifestPath, `[app]\nid = "bridge_app"\nimports = ["./content.wtoml"]\n`);
+  await writeFile(contentPath, `[[heading]]\nactor = "system"\nid = "hero"\ntext = "Baseline"\nlevel = 1\n`);
+
+  const localAppProject = await loadAppProject(appRoot);
+  const bridgeCalls = [];
+  const sourceById = new Map([
+    ["app.wtoml", `[app]\nid = "bridge_app"\nimports = ["./content.wtoml"]\n`],
+    ["content.wtoml", `[[heading]]\nactor = "system"\nid = "hero"\ntext = "Bridge"\nlevel = 1\n`]
+  ]);
+  const bridge = {
+    async readSource({ path: sourceId }) {
+      bridgeCalls.push({ kind: "read", path: sourceId });
+      return {
+        path: sourceId,
+        content: sourceById.get(sourceId) ?? ""
+      };
+    },
+    async statSource({ path: sourceId }) {
+      bridgeCalls.push({ kind: "stat", path: sourceId });
+      const content = sourceById.get(sourceId);
+      return {
+        path: sourceId,
+        exists: typeof content === "string",
+        isFile: true,
+        isDirectory: false,
+        size: Buffer.byteLength(String(content ?? ""), "utf8"),
+        modifiedAt: "1700000000000"
+      };
+    }
+  };
+  const guardedFs = {
+    ...fs,
+    async readFile(target, encoding) {
+      const resolved = path.resolve(String(target || ""));
+      if (resolved.startsWith(appRoot)) {
+        throw new Error(`canonical read escaped witness-core bridge: ${resolved}`);
+      }
+      return await fs.readFile(target, encoding);
+    },
+    async stat(target) {
+      const resolved = path.resolve(String(target || ""));
+      if (resolved.startsWith(appRoot)) {
+        throw new Error(`canonical stat escaped witness-core bridge: ${resolved}`);
+      }
+      return await fs.stat(target);
+    }
+  };
+
+  try {
+    const manager = await AppSnapshotManager.create({
+      appProject: localAppProject,
+      runtimeProfile: "full",
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      watchEnabled: false
+    });
+
+    assert.equal(manager.getActiveSnapshot()?.appProject?.appId, "bridge_app");
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "app.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "content.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "stat" && call.path === "content.wtoml"), true);
+
+    bridgeCalls.length = 0;
+    sourceById.set("content.wtoml", `[[heading]]\nactor = "system"\nid = "hero"\ntext = "Bridge Updated"\nlevel = 1\n`);
+    const rebuilt = await manager.markDirtyPaths([contentPath], { trigger: "manual" });
+    assert.equal(rebuilt.appRevision, 2);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "app.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "content.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "stat" && call.path === "content.wtoml"), true);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("AppSnapshotManager fails closed when a core-connected canonical read targets a path outside app/shared-lib scope", async () => {
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp/app",
+    runtimeProfile: "full",
+    generationBridge: {
+      async readSource() {
+        throw new Error("witness-core bridge should not be called for out-of-scope paths");
+      },
+      async statSource() {
+        throw new Error("witness-core bridge should not be called for out-of-scope paths");
+      }
+    },
+    fsModule: {
+      async readFile() {
+        throw new Error("local canonical read should not be used for out-of-scope strict bridge paths");
+      },
+      async stat() {
+        throw new Error("local canonical stat should not be used for out-of-scope strict bridge paths");
+      }
+    },
+    requireGenerationBridgeForCanonicalReads: true
+  });
+
+  await assert.rejects(
+    manager.sourceFs.readFile("C:/elsewhere/content.wtoml", "utf8"),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_REQUIRED"
+  );
+
+  await assert.rejects(
+    manager.sourceFs.stat("C:/elsewhere/content.wtoml"),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_REQUIRED"
+  );
+});
+
+test("AppSnapshotManager fails closed when witness-core canonical reads are required but the bridge is unavailable", async () => {
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp/app",
+    runtimeProfile: "full",
+    fsModule: {
+      async readFile() {
+        throw new Error("local canonical read should not be used without witness-core bridge");
+      },
+      async stat() {
+        throw new Error("local canonical stat should not be used without witness-core bridge");
+      }
+    },
+    requireGenerationBridgeForCanonicalReads: true
+  });
+
+  await assert.rejects(
+    manager.sourceFs.readFile("C:/tmp/app/content.wtoml", "utf8"),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_REQUIRED"
+  );
+
+  await assert.rejects(
+    manager.sourceFs.stat("C:/tmp/app/content.wtoml"),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_REQUIRED"
+  );
+});
+
 test("AppSnapshotManager applySourceEdits uses witness-core bridge for persisted published writes when available", async () => {
   const mkdirCalls = [];
   const writeFileCalls = [];

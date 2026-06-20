@@ -126,6 +126,18 @@ function absolutePathForSourceId(appRoot, sourceId) {
   return path.resolve(appRoot, sourceId);
 }
 
+function capabilitySourceIdForPath(appRoot, filePath) {
+  const resolved = path.resolve(filePath);
+  if (isWithinRoot(resolved, appRoot)) {
+    return normalizeSlashes(path.relative(appRoot, resolved));
+  }
+  const sharedLibRoot = sharedLibRootFor(appRoot);
+  if (isWithinRoot(resolved, sharedLibRoot)) {
+    return normalizeSlashes(path.relative(sharedLibRoot, resolved));
+  }
+  return null;
+}
+
 function uniquePaths(values = []) {
   return [...new Set(values.map(value => path.resolve(String(value || ""))).filter(Boolean))];
 }
@@ -161,6 +173,80 @@ async function readSourceText(filePath, fsModule = fs, sourceOverlayByPath = nul
   const overlay = sourceOverlayContentFor(resolved, sourceOverlayByPath);
   if (typeof overlay === "string") return overlay;
   return await fsModule.readFile(resolved, "utf8");
+}
+
+function createSourceCapabilityMissingError(filePath) {
+  const error = new Error(`source path not available through witness-core capability: ${filePath}`);
+  error.code = "ENOENT";
+  return error;
+}
+
+function createSourceCapabilityRequiredError(filePath) {
+  const error = new Error(`source path must be available through witness-core capability: ${filePath}`);
+  error.code = "WITNESS_CORE_REQUIRED";
+  error.status = 503;
+  return error;
+}
+
+function parseCapabilityModifiedAt(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Date.now();
+}
+
+function createCanonicalSourceFsModule({
+  appRoot,
+  generationBridge = null,
+  fsModule = fs,
+  requireGenerationBridgeForCanonicalReads = false
+} = {}) {
+  if (typeof generationBridge?.readSource !== "function" || typeof generationBridge?.statSource !== "function") {
+    if (requireGenerationBridgeForCanonicalReads) {
+      return {
+        async readFile(target) {
+          throw createSourceCapabilityRequiredError(path.resolve(String(target || "")));
+        },
+        async stat(target) {
+          throw createSourceCapabilityRequiredError(path.resolve(String(target || "")));
+        }
+      };
+    }
+    return fsModule;
+  }
+  return {
+    async readFile(target, encoding = null) {
+      const resolved = path.resolve(String(target || ""));
+      const sourceId = capabilitySourceIdForPath(appRoot, resolved);
+      if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createSourceCapabilityRequiredError(resolved);
+      if (!sourceId) return await fsModule.readFile(resolved, encoding ?? undefined);
+      const payload = await generationBridge.readSource({ path: sourceId });
+      const content = String(payload?.content ?? "");
+      if (!encoding) return Buffer.from(content, "utf8");
+      if (encoding === "utf8" || encoding === "utf-8") return content;
+      return await fsModule.readFile(resolved, encoding);
+    },
+    async stat(target) {
+      const resolved = path.resolve(String(target || ""));
+      const sourceId = capabilitySourceIdForPath(appRoot, resolved);
+      if (!sourceId && requireGenerationBridgeForCanonicalReads) throw createSourceCapabilityRequiredError(resolved);
+      if (!sourceId) return await fsModule.stat(resolved);
+      const payload = await generationBridge.statSource({ path: sourceId });
+      if (payload?.exists !== true) throw createSourceCapabilityMissingError(resolved);
+      const isFile = payload?.isFile !== false;
+      const isDirectory = payload?.isDirectory === true;
+      return {
+        size: Number(payload?.size || 0),
+        mtimeMs: parseCapabilityModifiedAt(payload?.modifiedAt),
+        isFile: () => isFile,
+        isDirectory: () => isDirectory
+      };
+    }
+  };
 }
 
 function syntheticOverlayStat(content) {
@@ -522,7 +608,8 @@ export class AppSnapshotManager {
     watchEnabled = devMode,
     dirtyInputMode = null,
     dirtyDetectionOwner = null,
-    requireGenerationBridgeForPublishedWrites = false
+    requireGenerationBridgeForPublishedWrites = false,
+    requireGenerationBridgeForCanonicalReads = false
   }) {
     this.manifestPath = path.resolve(manifestPath);
     this.appRoot = path.resolve(appRoot);
@@ -535,7 +622,14 @@ export class AppSnapshotManager {
     this.generationBridge = generationBridge ?? null;
     this.witnessCoreStatusStore = witnessCoreStatusStore ?? null;
     this.requireGenerationBridgeForPublishedWrites = requireGenerationBridgeForPublishedWrites === true;
+    this.requireGenerationBridgeForCanonicalReads = requireGenerationBridgeForCanonicalReads === true;
     this.fs = fsModule;
+    this.sourceFs = createCanonicalSourceFsModule({
+      appRoot: this.appRoot,
+      generationBridge: this.generationBridge,
+      fsModule: this.fs,
+      requireGenerationBridgeForCanonicalReads: this.requireGenerationBridgeForCanonicalReads
+    });
     this.watchEnabled = watchEnabled === true;
     this.dirtyInputMode = normalizeDirtyInputMode(dirtyInputMode, {
       watchEnabled: this.watchEnabled
@@ -576,7 +670,8 @@ export class AppSnapshotManager {
     watchEnabled = devMode,
     dirtyInputMode = null,
     dirtyDetectionOwner = null,
-    requireGenerationBridgeForPublishedWrites = false
+    requireGenerationBridgeForPublishedWrites = false,
+    requireGenerationBridgeForCanonicalReads = false
   }) {
     const manager = new AppSnapshotManager({
       manifestPath: appProject.manifestPath,
@@ -593,7 +688,8 @@ export class AppSnapshotManager {
       watchEnabled,
       dirtyInputMode,
       dirtyDetectionOwner,
-      requireGenerationBridgeForPublishedWrites
+      requireGenerationBridgeForPublishedWrites,
+      requireGenerationBridgeForCanonicalReads
     });
     await manager.loadStableSnapshotFromCache();
     await manager.rebuildFromProject({
@@ -819,7 +915,7 @@ export class AppSnapshotManager {
         runtimeProfile: this.runtimeProfile,
         runtimePluginIds: this.runtimePluginIds,
         env: this.env,
-        fsModule: this.fs,
+        fsModule: this.sourceFs,
         previousUnits: null,
         dirtyPaths: stableAppProject.sourceFiles.map(row => row.file),
         sourceOverlayByPath: new Map(cache.sources.map(row => [row.file, row.content]))
@@ -975,7 +1071,8 @@ export class AppSnapshotManager {
         appProject: await loadAppProject(this.manifestPath, {
           runtimeProfile: this.runtimeProfile,
           runtimePluginIds: this.runtimePluginIds,
-          env: this.env
+          env: this.env,
+          fsModule: this.sourceFs
         }),
         dirtyPaths,
         trigger,
@@ -997,7 +1094,7 @@ export class AppSnapshotManager {
       runtimeProfile: this.runtimeProfile,
       runtimePluginIds: this.runtimePluginIds,
       env: this.env,
-      fsModule: this.fs,
+      fsModule: this.sourceFs,
       previousUnits: this.activeSnapshot?.compiledUnits ?? new Map(),
       dirtyPaths
     });

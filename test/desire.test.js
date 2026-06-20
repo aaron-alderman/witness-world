@@ -22,6 +22,7 @@ import {
   elaborateDesirePlus,
   auditRvmDesirePlus,
   compileWtomlDocsToDesirePlus,
+  compileWtomlFileToDesirePlus,
   compileRvmToDesirePlus,
   compileRvmFileToDesirePlus,
   normalizeDesirePlusToDesire,
@@ -58,6 +59,44 @@ id = "notes.sidebar"
   assert.equal(desirePlus.nodes[0].payload.sectionStyle, "table");
   assert.equal(desirePlus.nodes[0].meta.desireBoundary, "desire-kernel");
   assert.equal(desirePlus.nodes[1].meta.desireBoundary, "desire-kernel");
+});
+
+test("WTOML file compiler can use an injected read capability instead of local fs ownership", async () => {
+  const file = path.join(process.cwd(), "examples", "engentus", "app.wtoml");
+  const expectedFile = path.resolve(file);
+  const desiredSource = `
+[context.frontend]
+actor = "browser"
+`;
+  const calls = [];
+  const desirePlus = await compileWtomlFileToDesirePlus(file, {
+    async readFile(target, encoding) {
+      calls.push({ target, encoding });
+      assert.equal(target, expectedFile);
+      assert.equal(encoding, "utf8");
+      return desiredSource;
+    }
+  });
+  assert.deepEqual(calls, [{ target: expectedFile, encoding: "utf8" }]);
+  assert.equal(desirePlus.kind, "desire+");
+  assert.equal(desirePlus.nodes[0].trace.file, expectedFile);
+  assert.equal(desirePlus.nodes[0].semantic.kind, "context");
+});
+
+test("WTOML file compiler fails closed when injected read capability is required but unavailable", async () => {
+  const file = path.join(process.cwd(), "examples", "engentus", "app.wtoml");
+  await assert.rejects(
+    compileWtomlFileToDesirePlus(file, { requireReadCapability: true }),
+    error => error?.code === "WITNESS_CORE_REQUIRED" && error?.status === 503
+  );
+});
+
+test("RVM file compiler fails closed when injected read capability is required but unavailable", async () => {
+  const file = path.join(process.cwd(), "examples_rvm", "engentus", "app", "models", "burst-fit.rvm");
+  await assert.rejects(
+    compileRvmFileToDesirePlus(file, { requireReadCapability: true }),
+    error => error?.code === "WITNESS_CORE_REQUIRED" && error?.status === 503
+  );
 });
 
 test("DESIRE IR validators accept compiled documents and traces", () => {

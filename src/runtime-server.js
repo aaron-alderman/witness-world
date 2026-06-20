@@ -70,6 +70,10 @@ import { resolveRunnerPromotionPolicy } from "./runtime-promotion-policy.js";
 import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.js";
 import { createStartupTelemetry } from "./startup-telemetry.js";
 import { createRuntimeProcessHealthMonitor } from "./runtime-process-health.js";
+import {
+  createRuntimeWorkerControlDocument,
+  RUNTIME_WORKER_CONTROL_PATH
+} from "./runtime-worker-control-contract.js";
 import { createWitnessCoreBridge, createWitnessCoreStatusStore } from "./witness-core-bridge.js";
 import { retiredLegacyFrontendRouteState } from "./legacy-frontend-bridge.js";
 
@@ -84,6 +88,25 @@ function surfaceRowsFromWitnesses(witnesses = []) {
 
 function uniqueStrings(values = []) {
   return [...new Set((values ?? []).map(String).filter(Boolean))];
+}
+
+function normalizeSlashes(value) {
+  return String(value || "").replaceAll("\\", "/");
+}
+
+function isWithinRoot(filePath, rootPath) {
+  const relative = path.relative(rootPath, filePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function capabilitySourceIdForWorkspacePath(targetPath, cwd = process.cwd()) {
+  const resolvedCwd = path.resolve(String(cwd || process.cwd()));
+  const resolvedTarget = path.resolve(String(targetPath || ""));
+  if (!isWithinRoot(resolvedTarget, resolvedCwd)) return null;
+  const relative = normalizeSlashes(path.relative(resolvedCwd, resolvedTarget));
+  if (!relative || relative === ".") return null;
+  if (relative === ".witness-core" || relative.startsWith(".witness-core/")) return null;
+  return relative;
 }
 
 async function detectLocallyChangedSnapshotPaths(snapshotManager, fsModule = fs) {
@@ -102,6 +125,63 @@ async function detectLocallyChangedSnapshotPaths(snapshotManager, fsModule = fs)
     }
   }));
   return checks.filter(Boolean);
+}
+
+async function readRuntimeSourceBytes(targetPath, {
+  witnessCoreBridge = null,
+  fsModule = fs,
+  cwd = process.cwd(),
+  requireWitnessCoreAuthority = false
+} = {}) {
+  const resolved = path.resolve(String(targetPath || ""));
+  const sourceId = capabilitySourceIdForWorkspacePath(resolved, cwd);
+  if (requireWitnessCoreAuthority && typeof witnessCoreBridge?.readSource !== "function") {
+    const error = new Error(`witness core source authority required for: ${resolved}`);
+    error.status = 503;
+    error.code = "WITNESS_CORE_REQUIRED";
+    throw error;
+  }
+  if (!sourceId && typeof witnessCoreBridge?.readSource === "function") {
+    const error = new Error(`source path is outside witness-core scope: ${resolved}`);
+    error.status = 503;
+    error.code = "WITNESS_CORE_REQUIRED";
+    throw error;
+  }
+  if (!sourceId || typeof witnessCoreBridge?.readSource !== "function") {
+    return await fsModule.readFile(resolved);
+  }
+  const payload = await witnessCoreBridge.readSource({ path: sourceId, encoding: "base64" });
+  if (String(payload?.encoding || "") === "base64") {
+    return Buffer.from(String(payload?.content ?? ""), "base64");
+  }
+  return Buffer.from(String(payload?.content ?? ""), "utf8");
+}
+
+async function readRuntimeSourceText(targetPath, {
+  witnessCoreBridge = null,
+  fsModule = fs,
+  cwd = process.cwd(),
+  requireWitnessCoreAuthority = false
+} = {}) {
+  const resolved = path.resolve(String(targetPath || ""));
+  const sourceId = capabilitySourceIdForWorkspacePath(resolved, cwd);
+  if (requireWitnessCoreAuthority && typeof witnessCoreBridge?.readSource !== "function") {
+    const error = new Error(`witness core source authority required for: ${resolved}`);
+    error.status = 503;
+    error.code = "WITNESS_CORE_REQUIRED";
+    throw error;
+  }
+  if (!sourceId && typeof witnessCoreBridge?.readSource === "function") {
+    const error = new Error(`source path is outside witness-core scope: ${resolved}`);
+    error.status = 503;
+    error.code = "WITNESS_CORE_REQUIRED";
+    throw error;
+  }
+  if (!sourceId || typeof witnessCoreBridge?.readSource !== "function") {
+    return await fsModule.readFile(resolved, "utf8");
+  }
+  const payload = await witnessCoreBridge.readSource({ path: sourceId });
+  return String(payload?.content ?? "");
 }
 
 function coreEventCanDriveSnapshotInvalidation(event = null) {
@@ -224,6 +304,8 @@ export async function startRuntimeServer(world, {
     applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState,
     collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions,
     createRuntimeVerificationPersistence: createRuntimeVerificationPersistenceImpl = createRuntimeVerificationPersistence,
+    createWitnessCoreBridge: createWitnessCoreBridgeImpl = createWitnessCoreBridge,
+    createWitnessCoreStatusStore: createWitnessCoreStatusStoreImpl = createWitnessCoreStatusStore,
     AppSnapshotManagerClass = AppSnapshotManager
   } = deps;
   startupTelemetry ??= createStartupTelemetry({ mode: runtimeStartupMode });
@@ -382,6 +464,15 @@ export async function startRuntimeServer(world, {
 
   const runtimePluginRoot = resolveRuntimePluginRootImpl({ env });
   const configuredRuntimePluginIds = resolveConfiguredRuntimePluginIdsImpl({ env, runtimePluginIds });
+  const startupWitnessCoreUrl = typeof env.WITNESS_CORE_URL === "string" && env.WITNESS_CORE_URL.trim()
+    ? env.WITNESS_CORE_URL.trim()
+    : "";
+  const startupWitnessCoreBridge = startupWitnessCoreUrl
+    ? createWitnessCoreBridgeImpl({
+        coreUrl: startupWitnessCoreUrl,
+        logger
+      })
+    : null;
   const startupDefaultRuntimePluginIds = Array.isArray(startupRuntimePluginIds)
     ? [...new Set(startupRuntimePluginIds.map(String).filter(Boolean))]
     : [];
@@ -445,7 +536,10 @@ export async function startRuntimeServer(world, {
       runtimeProfile: profileState.effectiveRuntimeProfile,
       configuredPluginIds: configuredRuntimePluginIds,
       startupPluginIds: startupPluginIdsForRunner,
-      authoredPluginIds: authoredRuntimePluginIds
+      authoredPluginIds: authoredRuntimePluginIds,
+      generationBridge: startupWitnessCoreBridge,
+      cwd: process.cwd(),
+      requireGenerationBridgeForCanonicalReads: Boolean(startupWitnessCoreUrl)
     });
     const seed = {
       runner,
@@ -494,7 +588,10 @@ export async function startRuntimeServer(world, {
     runnerCatalogSeeds.map(seed => seed.runtimePluginCatalog)
   );
   const runtimePluginLoadResult = await startupTelemetry.runPhase("runtime.plugins.load", () => loadRuntimePluginModulesImpl({
-    pluginCatalog: mergedRuntimePluginCatalog
+    pluginCatalog: mergedRuntimePluginCatalog,
+    generationBridge: startupWitnessCoreBridge,
+    cwd: process.cwd(),
+    requireGenerationBridgeForCanonicalImports: Boolean(startupWitnessCoreUrl)
   }), {
     label: "Load runtime plugin modules"
   });
@@ -738,11 +835,11 @@ export async function startRuntimeServer(world, {
     appContext.witnessCoreUrl = typeof env.WITNESS_CORE_URL === "string" && env.WITNESS_CORE_URL.trim()
       ? env.WITNESS_CORE_URL.trim()
       : null;
-    appContext.witnessCoreBridge = createWitnessCoreBridge({
+    appContext.witnessCoreBridge = createWitnessCoreBridgeImpl({
       coreUrl: appContext.witnessCoreUrl,
       logger
     });
-    appContext.witnessCoreStatusStore = createWitnessCoreStatusStore({
+    appContext.witnessCoreStatusStore = createWitnessCoreStatusStoreImpl({
       coreUrl: appContext.witnessCoreUrl,
       logger
     });
@@ -809,9 +906,9 @@ export async function startRuntimeServer(world, {
         ? env.WITNESS_RUNTIME_ROLE.trim()
         : "active",
       mutationsEnabled: env.WITNESS_RUNTIME_MUTATIONS_ENABLED === "false" ? false : true,
-      watchersEnabled: env.WITNESS_RUNTIME_WATCHERS_ENABLED === "false"
-        ? false
-        : (activeDevMode === true && !appContext.witnessCoreUrl),
+      watchersEnabled: env.WITNESS_RUNTIME_WATCHERS_ENABLED === "true"
+        ? (activeDevMode === true && !appContext.witnessCoreUrl)
+        : false,
       lastStateAt: new Date().toISOString()
     };
     appContext.appSnapshotManager = null;
@@ -1254,7 +1351,10 @@ export async function startRuntimeServer(world, {
 
   const server = httpModule.createServer(async (req, res) => {
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
-    const countTowardRequestPressure = !(req.method === "GET" && requestUrl.pathname === "/api/runtime/process-health");
+    const countTowardRequestPressure = !(
+      req.method === "GET"
+      && (requestUrl.pathname === "/api/runtime/process-health" || requestUrl.pathname === RUNTIME_WORKER_CONTROL_PATH)
+    );
     if (countTowardRequestPressure) {
       activeRequestCount += 1;
       lastRequestActivityAt = Date.now();
@@ -1276,6 +1376,17 @@ export async function startRuntimeServer(world, {
         mutationsEnabled: runtime.context?.runtimeSupervision?.mutationsEnabled !== false,
         watchersEnabled: runtime.context?.runtimeSupervision?.watchersEnabled === true
       });
+      return;
+    }
+    if (req.method === "GET" && requestUrl.pathname === RUNTIME_WORKER_CONTROL_PATH) {
+      const host = typeof req.headers?.host === "string" && req.headers.host.trim()
+        ? req.headers.host.trim()
+        : `127.0.0.1:${server.address()?.port ?? 0}`;
+      sendJson(res, 200, createRuntimeWorkerControlDocument({
+        origin: `http://${host}`,
+        health: runtimeProcessHealthMonitor.snapshot(),
+        supervision: runtime.context?.runtimeSupervision ?? appContext.runtimeSupervision ?? null
+      }));
       return;
     }
     if (req.method === "POST" && requestUrl.pathname === "/api/runtime/supervision/activate") {
@@ -1325,10 +1436,19 @@ export async function startRuntimeServer(world, {
           return;
         }
         try {
-          const bytes = await fsModule.readFile(resolvedPath);
+          const bytes = await readRuntimeSourceBytes(resolvedPath, {
+            witnessCoreBridge: appContext.witnessCoreBridge,
+            fsModule,
+            cwd: process.cwd(),
+            requireWitnessCoreAuthority: Boolean(appContext.witnessCoreUrl)
+          });
           res.writeHead(200, { "content-type": mimeTypeForAppStatic(resolvedPath), "cache-control": "no-cache" });
           res.end(bytes);
-        } catch {
+        } catch (error) {
+          if (Number(error?.status || 0) === 503 || String(error?.code || "") === "WITNESS_CORE_UNAVAILABLE") {
+            sendJson(res, 503, { error: "witness core unavailable" });
+            return;
+          }
           sendJson(res, 404, { error: "not found" });
         }
         return;
@@ -1342,7 +1462,21 @@ export async function startRuntimeServer(world, {
           sendJson(res, 404, { error: "unknown canvas-lib module", name });
           return;
         }
-        const text = await fsModule.readFile(resolvedFile, "utf8");
+        let text;
+        try {
+          text = await readRuntimeSourceText(resolvedFile, {
+            witnessCoreBridge: appContext.witnessCoreBridge,
+            fsModule,
+            cwd: process.cwd(),
+            requireWitnessCoreAuthority: Boolean(appContext.witnessCoreUrl)
+          });
+        } catch (error) {
+          if (Number(error?.status || 0) === 503 || String(error?.code || "") === "WITNESS_CORE_UNAVAILABLE" || String(error?.code || "") === "WITNESS_CORE_REQUIRED") {
+            sendJson(res, 503, { error: "witness core unavailable" });
+            return;
+          }
+          throw error;
+        }
         world.observe({ process: "backend.readCanvasLib", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolvedFile}`)], body: { file: resolvedFile, bytes: text.length } });
         res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" });
         res.end(text);
@@ -1737,7 +1871,8 @@ export async function startRuntimeServer(world, {
           fsModule,
           watchEnabled: appContext.runtimeSupervision?.watchersEnabled !== false,
           dirtyDetectionOwner: appContext.witnessCoreUrl ? "witness-core" : null,
-          requireGenerationBridgeForPublishedWrites: Boolean(appContext.witnessCoreUrl)
+          requireGenerationBridgeForPublishedWrites: Boolean(appContext.witnessCoreUrl),
+          requireGenerationBridgeForCanonicalReads: Boolean(appContext.witnessCoreUrl)
         });
         if (serverClosing) {
           appSnapshotManager.close();

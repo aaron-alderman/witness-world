@@ -1,20 +1,19 @@
 export const RUNTIME_NETWORK_CAPABILITY_INVENTORY = {
   loopbackMcpBridge: {
     capabilityId: "capability.network.loopback.mcp_stdio_bridge",
-    scope: "server-runtime",
+    scope: "utility-loopback",
     ownerFiles: [
       "src/cli.js"
     ],
-    note: "Stdio MCP traffic is bridged into the local runtime HTTP endpoint."
+    note: "Temporary utility-only exception: stdio MCP traffic is bridged into a private local runtime HTTP endpoint. This remains outside the canonical server-runtime boundary claim and is expected to disappear behind the worker transport/frontdoor tranches."
   },
   witnessCoreControlPlane: {
     capabilityId: "capability.network.control_plane.witness_core",
     scope: "server-runtime",
     ownerFiles: [
-      "src/runtime-verification-persistence.js",
       "src/witness-core-bridge.js"
     ],
-    note: "Rust-owned control-plane fetches for witness-core status, generations, serving, preview, and verification persistence."
+    note: "Rust-owned control-plane fetches for witness-core status, generations, serving, preview, and verification persistence via the shared bridge."
   },
   injectedServerFetch: {
     capabilityId: "capability.network.server.fetch_injection",

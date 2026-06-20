@@ -14,3 +14,4 @@ path = "src/main.rs"
 wasmtime = "30"
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde_json = "1"
+base64 = "0.22"

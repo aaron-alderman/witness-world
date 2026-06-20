@@ -46,6 +46,15 @@ function memoizedBundle(cache, key, adapterKey, loadBundle) {
   return pending;
 }
 
+function wcssErrorPayload(errorLabel, error) {
+  const payload = {
+    error: errorLabel,
+    message: error instanceof Error ? error.message : String(error)
+  };
+  if (typeof error?.code === "string" && error.code) payload.code = error.code;
+  return payload;
+}
+
 export function createHandlers(deps = {}) {
   const {
     send,
@@ -96,6 +105,8 @@ export function createHandlers(deps = {}) {
         requestSnapshot,
         importModule,
         fsModule,
+        generationBridge: appContext?.witnessCoreBridge ?? null,
+        requireGenerationBridgeForCanonicalImports: Boolean(appContext?.witnessCoreUrl),
         handlerName: "wcss.stylesheet.read"
       });
       const adapterResult = await loaded.exported({
@@ -154,13 +165,12 @@ export function createHandlers(deps = {}) {
         res.writeHead(200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-cache" });
         res.end(body);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
         if (typeof sendJson === "function") {
-          sendJson(res, 500, { error: "wcss stylesheet delivery failed", message });
+          sendJson(res, 500, wcssErrorPayload("wcss stylesheet delivery failed", error));
           return;
         }
         res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: "wcss stylesheet delivery failed", message }));
+        res.end(JSON.stringify(wcssErrorPayload("wcss stylesheet delivery failed", error)));
       }
     }
   };

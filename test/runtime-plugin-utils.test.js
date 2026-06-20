@@ -16,6 +16,10 @@ async function tempPluginRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-plugins-"));
 }
 
+async function tempRepoPluginRoot() {
+  return fs.mkdtemp(path.join(process.cwd(), ".tmp-witness-plugins-"));
+}
+
 async function writePlugin(root, directoryName, manifest) {
   const pluginDir = path.join(root, directoryName);
   await fs.mkdir(pluginDir, { recursive: true });
@@ -25,6 +29,10 @@ async function writePlugin(root, directoryName, manifest) {
 
 async function writePluginRuntime(pluginDir, source = "export default {};\n") {
   await fs.writeFile(path.join(pluginDir, "runtime.js"), source);
+}
+
+function normalize(value) {
+  return String(value || "").replaceAll("\\", "/");
 }
 
 test("runtime plugin root resolves from cwd by default and honors env override", () => {
@@ -47,6 +55,184 @@ test("configured runtime plugin ids come from env by default and CLI when provid
     }),
     ["plugin.inspect", "plugin.canvas"]
   );
+});
+
+test("plugin discovery can list manifests and runtime entry metadata through witness-core capabilities", async () => {
+  const root = await tempRepoPluginRoot();
+  try {
+    const pluginDir = await writePlugin(root, "inspect", {
+      id: "plugin.inspect",
+      version: "0.1.0",
+      displayName: "Inspect Bridge",
+      description: "Inspect bundle bridge",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-local-inspect"],
+      contributes: {}
+    });
+    await writePluginRuntime(pluginDir, "export default {};\n");
+
+    const relativeRoot = normalize(path.relative(process.cwd(), root));
+    const relativeManifest = normalize(path.relative(process.cwd(), path.join(pluginDir, "plugin.json")));
+    const relativeRuntime = normalize(path.relative(process.cwd(), path.join(pluginDir, "runtime.js")));
+    const bridgeCalls = [];
+    const bridge = {
+      async listSourceDirectory({ path: sourceId }) {
+        bridgeCalls.push({ kind: "list", path: sourceId });
+        if (sourceId === relativeRoot) {
+          return {
+            path: sourceId,
+            exists: true,
+            entries: [{ name: "inspect", isFile: false, isDirectory: true }]
+          };
+        }
+        return { path: sourceId, exists: false, entries: [] };
+      },
+      async readSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "read", path: sourceId });
+        if (sourceId === relativeManifest) {
+          return {
+            path: sourceId,
+            content: JSON.stringify({
+              id: "plugin.inspect",
+              version: "0.1.0",
+              displayName: "Inspect Bridge",
+              description: "Inspect bundle bridge",
+              kind: "plugin",
+              runtime: { entry: "./runtime.js" },
+              activatesBundles: ["bundle-local-inspect"],
+              contributes: {}
+            }, null, 2)
+          };
+        }
+        throw new Error(`unexpected read ${sourceId}`);
+      },
+      async statSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "stat", path: sourceId });
+        if (sourceId === relativeRuntime) {
+          return {
+            path: sourceId,
+            exists: true,
+            isFile: true,
+            isDirectory: false,
+            size: 18,
+            modifiedAt: "1700000000000"
+          };
+        }
+        throw new Error(`unexpected stat ${sourceId}`);
+      }
+    };
+    const guardedFs = {
+      ...fs,
+      async readdir(target, options) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(root)) {
+          throw new Error(`plugin discovery readdir escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readdir(target, options);
+      },
+      async readFile(target, encoding) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(root)) {
+          throw new Error(`plugin discovery read escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.readFile(target, encoding);
+      },
+      async stat(target) {
+        const resolved = path.resolve(String(target || ""));
+        if (resolved.startsWith(root)) {
+          throw new Error(`plugin discovery stat escaped witness-core bridge: ${resolved}`);
+        }
+        return await fs.stat(target);
+      }
+    };
+
+    const discovered = await discoverRuntimePluginPackages({
+      pluginRoot: root,
+      runtimeProfile: "minimal",
+      generationBridge: bridge,
+      fsModule: guardedFs,
+      cwd: process.cwd()
+    });
+
+    assert.equal(discovered.summary.validCount, 1);
+    assert.equal(discovered.packages[0].id, "plugin.inspect");
+    assert.equal(bridgeCalls.some(call => call.kind === "list" && call.path === relativeRoot), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === relativeManifest), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "stat" && call.path === relativeRuntime), true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin discovery fails closed when a core-connected plugin root is outside witness-core scope", async () => {
+  const root = await tempPluginRoot();
+  try {
+    const guardedFs = {
+      ...fs,
+      async readdir(target, options) {
+        throw new Error(`plugin discovery readdir escaped witness-core boundary: ${target} ${JSON.stringify(options ?? {})}`);
+      },
+      async readFile(target, encoding) {
+        throw new Error(`plugin discovery read escaped witness-core boundary: ${target} ${encoding ?? ""}`);
+      },
+      async stat(target) {
+        throw new Error(`plugin discovery stat escaped witness-core boundary: ${target}`);
+      }
+    };
+
+    await assert.rejects(
+      discoverRuntimePluginPackages({
+        pluginRoot: root,
+        runtimeProfile: "minimal",
+        generationBridge: {
+          async readSource() {
+            throw new Error("bridge should not be called for out-of-scope plugin root");
+          },
+          async statSource() {
+            throw new Error("bridge should not be called for out-of-scope plugin root");
+          },
+          async listSourceDirectory() {
+            throw new Error("bridge should not be called for out-of-scope plugin root");
+          }
+        },
+        fsModule: guardedFs,
+        cwd: process.cwd(),
+        requireGenerationBridgeForCanonicalReads: true
+      }),
+      error => error?.code === "WITNESS_CORE_REQUIRED" && error?.status === 503
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin discovery fails closed when witness-core authority is required but the bridge is unavailable", async () => {
+  const root = await tempPluginRoot();
+  try {
+    await assert.rejects(
+      discoverRuntimePluginPackages({
+        pluginRoot: root,
+        runtimeProfile: "minimal",
+        fsModule: {
+          async readdir(target, options) {
+            throw new Error(`plugin discovery readdir escaped missing witness-core bridge: ${target} ${JSON.stringify(options ?? {})}`);
+          },
+          async readFile(target, encoding) {
+            throw new Error(`plugin discovery read escaped missing witness-core bridge: ${target} ${encoding ?? ""}`);
+          },
+          async stat(target) {
+            throw new Error(`plugin discovery stat escaped missing witness-core bridge: ${target}`);
+          }
+        },
+        cwd: process.cwd(),
+        requireGenerationBridgeForCanonicalReads: true
+      }),
+      error => error?.code === "WITNESS_CORE_REQUIRED" && error?.status === 503
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 test("plugin discovery finds valid executable local plugin packages through bundle bindings", async () => {

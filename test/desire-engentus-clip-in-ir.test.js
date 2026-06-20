@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import fs from "node:fs/promises";
 import { createWorld } from "../src/kernel.js";
 import {
   applyDesire, compileRvmFileToDesirePlus, normalizeDesirePlusToDesire,
@@ -48,7 +49,7 @@ async function appliedPipeline() {
 }
 
 test("the in-IR clip handler reproduces the R clip counts (4 evaluated, 3 clipped)", async () => {
-  const handler = createClipDetectInIrHandler({ sampleSource });
+  const handler = createClipDetectInIrHandler({ sampleSource, readFile: fs.readFile });
   const res = await handler(clipRequest(), { host_operation: HOST_OP });
   const oracle = await clipOracle()(clipRequest());
   assert.equal(res.status, "success");
@@ -61,7 +62,7 @@ test("migrateHostOperation verifies clip == R oracle, then flips the runtime", a
   const { runtime } = await appliedPipeline();
   const result = await migrateHostOperation(runtime, {
     hostOperation: HOST_OP,
-    candidate: createClipDetectInIrHandler({ sampleSource }),
+    candidate: createClipDetectInIrHandler({ sampleSource, readFile: fs.readFile }),
     oracle: clipOracle(),
     fixtures: [{ request: clipRequest() }],
     tolerance: 1e-6
@@ -81,7 +82,7 @@ test("migrateHostOperation refuses the flip when clip counts disagree", async ()
   });
   await assert.rejects(
     () => migrateHostOperation(runtime, {
-      hostOperation: HOST_OP, candidate: createClipDetectInIrHandler({ sampleSource }),
+      hostOperation: HOST_OP, candidate: createClipDetectInIrHandler({ sampleSource, readFile: fs.readFile }),
       oracle: wrongOracle, fixtures: [{ request: clipRequest() }], tolerance: 1e-6
     }),
     err => err instanceof HostOperationError && /disagrees with the oracle/.test(err.message)
@@ -92,7 +93,7 @@ test("after migration the engine runs clip-detection in-IR with the declared tra
   const { world, runtime } = await appliedPipeline();
   await migrateHostOperation(runtime, {
     hostOperation: HOST_OP,
-    candidate: createClipDetectInIrHandler({ sampleSource }),
+    candidate: createClipDetectInIrHandler({ sampleSource, readFile: fs.readFile }),
     oracle: clipOracle(),
     fixtures: [{ request: clipRequest() }]
   });

@@ -114,6 +114,162 @@ test("wcss runtime plugin serves a requested stylesheet asset from an app adapte
   }
 });
 
+test("wcss runtime plugin loads adapter modules through witness-core without local canonical fs reads", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wcss-runtime-bridge-"));
+  const appRoot = path.join(tempRoot, "engentus");
+  try {
+    await writeAdapter(appRoot, "app/adapter.js", `
+      import { shellCss, chartCss } from "./lib/helper.js";
+      export async function buildStylesheets({ requestSnapshot }) {
+        return {
+          files: {
+            shell: shellCss(requestSnapshot?.appRevision || 0),
+            chart: chartCss(requestSnapshot?.appRevision || 0)
+          }
+        };
+      }
+    `);
+    await writeAdapter(appRoot, "app/lib/helper.js", `
+      export function shellCss(revision) {
+        return "/* bridged shell rev " + revision + " */";
+      }
+      export function chartCss(revision) {
+        return "/* bridged chart rev " + revision + " */";
+      }
+    `);
+    const sourceById = new Map([
+      ["app/adapter.js", await fs.readFile(path.join(appRoot, "app/adapter.js"), "utf8")],
+      ["app/lib/helper.js", await fs.readFile(path.join(appRoot, "app/lib/helper.js"), "utf8")]
+    ]);
+    const bridgeCalls = [];
+    const handlers = createHandlers({
+      send(res, status, contentType, body, headers = {}) {
+        res.writeHead(status, { "content-type": contentType, ...headers });
+        res.end(body);
+      },
+      fsModule: {
+        ...fs,
+        async readFile(target, encoding) {
+          const resolved = path.resolve(String(target || ""));
+          if (resolved.startsWith(appRoot)) {
+            throw new Error(`canonical adapter read escaped witness-core bridge: ${resolved}`);
+          }
+          return await fs.readFile(target, encoding);
+        },
+        async stat(target) {
+          const resolved = path.resolve(String(target || ""));
+          if (resolved.startsWith(appRoot)) {
+            throw new Error(`canonical adapter stat escaped witness-core bridge: ${resolved}`);
+          }
+          return await fs.stat(target);
+        }
+      }
+    });
+
+    const shellRes = createResponse();
+    await handlers["wcss.stylesheet.read"]({
+      res: shellRes,
+      route: {
+        params: {
+          asset: "shell",
+          adapterModule: "./app/adapter.js",
+          adapterExport: "buildStylesheets"
+        }
+      },
+      appContext: {
+        appRoot,
+        witnessCoreUrl: "http://127.0.0.1:8788",
+        witnessCoreBridge: {
+          async readSource({ path: sourceId }) {
+            bridgeCalls.push({ kind: "read", path: sourceId });
+            return { path: sourceId, content: sourceById.get(sourceId) ?? "" };
+          },
+          async statSource({ path: sourceId }) {
+            bridgeCalls.push({ kind: "stat", path: sourceId });
+            const content = sourceById.get(sourceId);
+            return {
+              path: sourceId,
+              exists: typeof content === "string",
+              isFile: typeof content === "string",
+              isDirectory: false,
+              size: Buffer.byteLength(String(content ?? ""), "utf8"),
+              modifiedAt: "1700000000000"
+            };
+          }
+        },
+        requestSnapshot: { appRevision: 9 },
+        appSnapshotManager: {
+          getActiveSnapshot() {
+            return { appRevision: 9 };
+          }
+        }
+      }
+    });
+    assert.equal(shellRes.statusCode, 200);
+    assert.equal(shellRes.body, "/* bridged shell rev 9 */");
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "app/adapter.js"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "app/lib/helper.js"), true);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("wcss runtime plugin fails closed when witness-core authority is declared but unavailable", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wcss-runtime-bridge-required-"));
+  const appRoot = path.join(tempRoot, "engentus");
+  try {
+    await writeAdapter(appRoot, "app/adapter.js", `
+      export async function buildStylesheets() {
+        return { files: { shell: "/* local */" } };
+      }
+    `);
+    const handlers = createHandlers({
+      send(res, status, contentType, body, headers = {}) {
+        res.writeHead(status, { "content-type": contentType, ...headers });
+        res.end(body);
+      },
+      fsModule: {
+        ...fs,
+        async readFile(target, encoding) {
+          const resolved = path.resolve(String(target || ""));
+          if (resolved.startsWith(appRoot)) {
+            throw new Error(`canonical adapter read escaped witness-core bridge: ${resolved}`);
+          }
+          return await fs.readFile(target, encoding);
+        },
+        async stat(target) {
+          const resolved = path.resolve(String(target || ""));
+          if (resolved.startsWith(appRoot)) {
+            throw new Error(`canonical adapter stat escaped witness-core bridge: ${resolved}`);
+          }
+          return await fs.stat(target);
+        }
+      }
+    });
+
+    const res = createResponse();
+    await handlers["wcss.stylesheet.read"]({
+      res,
+      route: {
+        params: {
+          asset: "shell",
+          adapterModule: "./app/adapter.js",
+          adapterExport: "buildStylesheets"
+        }
+      },
+      appContext: {
+        appRoot,
+        witnessCoreUrl: "http://127.0.0.1:8788",
+        requestSnapshot: { appRevision: 2 }
+      }
+    });
+    assert.equal(res.statusCode, 500);
+    assert.equal(JSON.parse(res.body).code, "WITNESS_CORE_REQUIRED");
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("wcss runtime plugin rejects adapter modules outside the app root and shared _lib boundary", async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wcss-runtime-boundary-"));
   const appRoot = path.join(tempRoot, "apps", "sample");
