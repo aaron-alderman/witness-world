@@ -254,6 +254,95 @@ export function createWitnessCoreBridge({
     async patchSource(input = {}) {
       return await sourceCapabilityRequest("POST", "/capabilities/fs/patch", input);
     },
+    async executeHttpOutbound({
+      url,
+      method = "GET",
+      headers = {},
+      bodyText = null,
+      timeoutMs = null,
+      correlation = null
+    } = {}) {
+      const normalizedUrl = String(url || "").trim();
+      if (!normalizedUrl) throw new Error("url is required");
+      return await postJson("/capabilities/network/http-outbound", {
+        body: {
+          url: normalizedUrl,
+          method: String(method || "GET").trim() || "GET",
+          headers: headers && typeof headers === "object" ? headers : {},
+          bodyText: bodyText == null ? null : String(bodyText),
+          timeoutMs: Number.isFinite(timeoutMs) ? Number(timeoutMs) : null,
+          sessionId: correlation?.sessionId ? String(correlation.sessionId) : null,
+          surfaceId: correlation?.surfaceId ? String(correlation.surfaceId) : null,
+          actor: correlation?.actor ? String(correlation.actor) : null
+        }
+      });
+    },
+    async sqliteTestConnection({
+      path,
+      migrationTable = null
+    } = {}) {
+      return await postJson("/capabilities/db/sqlite", {
+        body: {
+          operation: "testConnection",
+          path: String(path || ""),
+          migrationTable: migrationTable ? String(migrationTable) : null
+        }
+      });
+    },
+    async sqliteMigrate({
+      path,
+      migrationTable,
+      migrations = []
+    } = {}) {
+      return await postJson("/capabilities/db/sqlite", {
+        body: {
+          operation: "migrate",
+          path: String(path || ""),
+          migrationTable: migrationTable ? String(migrationTable) : null,
+          migrations: Array.isArray(migrations) ? migrations : []
+        }
+      });
+    },
+    async sqliteQuery({
+      path,
+      sql,
+      params = null
+    } = {}) {
+      return await postJson("/capabilities/db/sqlite", {
+        body: {
+          operation: "query",
+          path: String(path || ""),
+          sql: String(sql || ""),
+          params
+        }
+      });
+    },
+    async sqliteCommand({
+      path,
+      sql,
+      params = null
+    } = {}) {
+      return await postJson("/capabilities/db/sqlite", {
+        body: {
+          operation: "command",
+          path: String(path || ""),
+          sql: String(sql || ""),
+          params
+        }
+      });
+    },
+    async sqliteTransaction({
+      path,
+      steps = []
+    } = {}) {
+      return await postJson("/capabilities/db/sqlite", {
+        body: {
+          operation: "transaction",
+          path: String(path || ""),
+          steps: Array.isArray(steps) ? steps : []
+        }
+      });
+    },
     async publishedAuthoringTransaction({
       manifestPath,
       runtimeProfile = "authoring",
@@ -426,6 +515,46 @@ export function createWitnessCoreStatusStore({
   if (!normalizedCoreUrl || typeof fetchImpl !== "function") return null;
   let currentStatus = null;
   let timer = null;
+  let listeners = new Set();
+  let pollPromise = null;
+  let closed = false;
+  let eventsAbortController = null;
+
+  const emit = event => {
+    const payload = event && typeof event === "object" ? structuredClone(event) : null;
+    for (const listener of listeners) {
+      try {
+        listener(payload);
+      } catch (error) {
+        logger?.warn?.("witnessCore.status.listener failed", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+  };
+
+  const mergeGeneration = generation => {
+    if (!generation || typeof generation !== "object" || !String(generation.id || "").trim()) return;
+    const existing = Array.isArray(currentStatus?.generations) ? [...currentStatus.generations] : [];
+    const generationId = String(generation.id);
+    const nextGeneration = structuredClone(generation);
+    const index = existing.findIndex(candidate => String(candidate?.id || "") === generationId);
+    if (index >= 0) existing[index] = nextGeneration;
+    else existing.push(nextGeneration);
+    const aliases = { ...(currentStatus?.aliases ?? {}) };
+    if (nextGeneration.state === "green_local") aliases.current_green_local = generationId;
+    if (nextGeneration.state === "stable") {
+      aliases.current_stable = generationId;
+      aliases.last_good = generationId;
+    }
+    currentStatus = {
+      ...(currentStatus ?? {}),
+      service: currentStatus?.service ?? "witness-core",
+      ok: currentStatus?.ok !== false,
+      generations: existing,
+      aliases
+    };
+  };
 
   const poll = async () => {
     try {
@@ -453,9 +582,95 @@ export function createWitnessCoreStatusStore({
     }
   };
 
-  void poll();
+  const refreshNow = async () => {
+    if (pollPromise) {
+      await pollPromise;
+      return;
+    }
+    pollPromise = poll().finally(() => {
+      pollPromise = null;
+    });
+    await pollPromise;
+  };
+
+  const handleCoreEvent = async (eventType, payload) => {
+    const kind = String(eventType || payload?.kind || "message");
+    if (payload?.generation) mergeGeneration(payload.generation);
+    if (kind === "core.connected") {
+      currentStatus = {
+        ...(currentStatus ?? {}),
+        service: currentStatus?.service ?? "witness-core",
+        ok: true
+      };
+    }
+    emit({
+      kind,
+      payload
+    });
+    if (
+      kind.startsWith("generation.")
+      || kind.startsWith("proof.")
+      || kind.startsWith("serving.")
+      || kind.startsWith("process.")
+    ) {
+      await refreshNow();
+    }
+  };
+
+  const connectEvents = async () => {
+    const abortController = typeof AbortController === "function" ? new AbortController() : null;
+    eventsAbortController = abortController;
+    try {
+      const response = await fetchImpl(`${normalizedCoreUrl}/events`, {
+        cache: "no-store",
+        headers: { accept: "text/event-stream" },
+        signal: abortController?.signal
+      });
+      if (!response?.ok || !response.body?.getReader) return;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (!closed) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        buffer = buffer.replaceAll("\r\n", "\n");
+        while (true) {
+          const boundary = buffer.indexOf("\n\n");
+          if (boundary < 0) break;
+          const frame = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const lines = frame.split("\n");
+          let eventType = "message";
+          const dataLines = [];
+          for (const line of lines) {
+            if (line.startsWith("event:")) eventType = line.slice(6).trim() || "message";
+            if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+          }
+          const data = dataLines.join("\n").trim();
+          if (!data) continue;
+          try {
+            await handleCoreEvent(eventType, JSON.parse(data));
+          } catch (error) {
+            logger?.warn?.("witnessCore.status.event failed", {
+              eventType,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+      }
+    } catch (error) {
+      if (!closed) {
+        logger?.warn?.("witnessCore.status.events failed", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+  };
+  void refreshNow();
+  void connectEvents();
   timer = setInterval(() => {
-    void poll();
+    void refreshNow();
   }, Math.max(250, Number(pollMs || 2500)));
   timer?.unref?.();
 
@@ -471,12 +686,23 @@ export function createWitnessCoreStatusStore({
       return currentStatus?.process ? structuredClone(currentStatus.process) : null;
     },
     async refresh() {
-      await poll();
+      await refreshNow();
       return this.getStatus();
     },
+    subscribe(listener) {
+      if (typeof listener !== "function") return () => {};
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     close() {
+      closed = true;
       if (timer != null) clearInterval(timer);
       timer = null;
+      listeners.clear();
+      try {
+        eventsAbortController?.abort?.();
+      } catch {}
+      eventsAbortController = null;
     }
   };
 }

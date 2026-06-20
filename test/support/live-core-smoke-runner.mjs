@@ -9,6 +9,7 @@ import {
   fetchText,
   REPO_ROOT,
   replaceFileText,
+  readWitnessCoreStatus,
   reservePort,
   startWitnessCoreProcess,
   waitForJournalPattern,
@@ -101,6 +102,15 @@ async function readJson(url, options = {}) {
   return { response, body };
 }
 
+async function readJournalEvents(journalPath) {
+  const text = await fs.readFile(journalPath, "utf8");
+  return String(text)
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => JSON.parse(line));
+}
+
 async function postSoak(coreUrl, path, payload = {}) {
   const response = await fetch(`${coreUrl}${path}`, {
     method: "POST",
@@ -188,6 +198,68 @@ async function closeSseClients(clients = []) {
       await client?.response?.body?.cancel?.();
     } catch {}
   }));
+}
+
+async function openJsonEventStream(url, label = "event") {
+  const controller = new AbortController();
+  const response = await fetch(url, {
+    headers: { accept: "text/event-stream" },
+    signal: controller.signal
+  });
+  assert.equal(response.status, 200);
+  const reader = response.body?.getReader?.();
+  assert.ok(reader, `${label} stream reader unavailable`);
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const consumeFrame = predicate => {
+    buffer = buffer.replaceAll("\r\n", "\n");
+    while (true) {
+      const boundary = buffer.indexOf("\n\n");
+      if (boundary < 0) return null;
+      const frame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const lines = frame.split("\n");
+      let event = "message";
+      const dataLines = [];
+      for (const line of lines) {
+        if (line.startsWith("event:")) event = line.slice(6).trim() || "message";
+        if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+      }
+      const data = dataLines.join("\n");
+      if (!data) continue;
+      const payload = JSON.parse(data);
+      if (!predicate({ event, payload })) continue;
+      return { event, payload };
+    }
+  };
+
+  return {
+    async nextEvent({
+      timeoutMs = 15000,
+      predicate = () => true
+    } = {}) {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const frame = consumeFrame(predicate);
+        if (frame) return frame;
+        const remaining = Math.max(1, deadline - Date.now());
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), remaining))
+        ]);
+        if (chunk.done) throw new Error(`${label} stream closed`);
+        buffer += decoder.decode(chunk.value, { stream: true });
+      }
+      throw new Error(`timed out waiting for ${label}`);
+    },
+    async close() {
+      controller.abort();
+      try {
+        await reader.cancel();
+      } catch {}
+    }
+  };
 }
 
 async function runContinuityScenario() {
@@ -568,6 +640,7 @@ async function runPublishedAuthoringScenario() {
     }
   });
   let core = null;
+  let revisionEvents = null;
   try {
     core = await startWitnessCoreProcess({
       cwd: workspace.tempRoot,
@@ -588,6 +661,7 @@ async function runPublishedAuthoringScenario() {
     const computeModulePath = path.join(workspace.appRoot, "app", "modules", "health-classify", "assembly", "index.ts");
     const baselineHtml = await fetchText(routeUrl);
     assert.match(baselineHtml, /Live Core Baseline/);
+    revisionEvents = await openJsonEventStream(`${appUrl}/api/runtime/app-revisions/events`, "published app revision event");
 
     const originalSource = await fs.readFile(workspace.watchedSourcePath, "utf8");
     const updatedSource = originalSource.replace(
@@ -607,6 +681,15 @@ async function runPublishedAuthoringScenario() {
     assert.equal(success.response.status, 200);
     assert.equal(success.body?.ok, true);
     assert.equal(success.body?.activated, true);
+
+    const revisionEvent = await revisionEvents.nextEvent({
+      timeoutMs: 30000,
+      predicate: ({ payload }) =>
+        payload?.trigger === "core"
+        && Array.isArray(payload?.changedSources)
+        && payload.changedSources.includes("app/content.wtoml")
+    });
+    assert.equal(revisionEvent.payload?.trigger, "core");
 
     await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.published\.requested"/, {
       description: "published transaction requested event"
@@ -648,7 +731,9 @@ async function runPublishedAuthoringScenario() {
       && Array.isArray(generation?.computeModules)
       && generation.computeModules.some(module => module.id === "engentus.health.classify" && module.success === true)
     ) ?? null;
+    const successfulGenerationId = successfulGenerationRecord?.id ?? null;
     const successfulComputeModule = successfulGenerationRecord?.computeModules?.[0] ?? null;
+    assert.equal(typeof successfulGenerationId, "string");
     assert.equal(successfulGenerationRecord?.computeModuleCount, 1);
     assert.equal(successfulComputeModule?.id, "engentus.health.classify");
     assert.equal(successfulComputeModule?.hostOperation, "engentus.health.classify");
@@ -659,6 +744,21 @@ async function runPublishedAuthoringScenario() {
     assert.match(String(successfulComputeModule?.artifactPath ?? ""), /\.witness-core\/compute-modules\/.+\.wasm$/);
     assert.match(String(successfulComputeModule?.artifactHash ?? ""), /^sha256:/);
     assert.match(String(successfulComputeModule?.storePath ?? ""), /\.witness-core\/artifacts\/compute-modules\/[a-f0-9]+\.wasm$/);
+
+    await delay(1400);
+    const settledStatus = await readWitnessCoreStatus(core.url);
+    assert.equal(settledStatus.generations?.length, 1);
+    assert.equal(settledStatus.generations?.[0]?.id, successfulGenerationId);
+    const journalEvents = await readJournalEvents(workspace.journalPath);
+    const successfulLifecycleKinds = journalEvents
+      .filter(event => event?.generationId === successfulGenerationId)
+      .map(event => event?.kind)
+      .filter(kind => kind === "generation.candidate" || kind === "proof.started" || kind === "generation.green_local");
+    assert.deepEqual(successfulLifecycleKinds, [
+      "generation.candidate",
+      "proof.started",
+      "generation.green_local"
+    ]);
 
     const staleHash = (await readJson(`${core.url}/capabilities/fs/stat?path=${encodeURIComponent("app/content.wtoml")}`)).body?.hash;
     assert.equal(typeof staleHash, "string");
@@ -842,6 +942,7 @@ async function runPublishedAuthoringScenario() {
     assert.equal(coreDownWrite.body?.code, "WITNESS_CORE_UNAVAILABLE");
     assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Pinned Stable/);
   } finally {
+    await revisionEvents?.close?.();
     await safeTeardown({ core, workspace });
   }
 }

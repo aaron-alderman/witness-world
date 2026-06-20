@@ -126,6 +126,20 @@ export async function executeHttpOutbound(request, { appContext, signal, attempt
   if (request.url.startsWith("stub://")) {
     return executeStubOutbound(request, { appContext, signal, attempt });
   }
+  if (appContext?.witnessCoreBridge?.coreUrl) {
+    return await appContext.witnessCoreBridge.executeHttpOutbound({
+      url: request.url,
+      method: request.method,
+      headers: request.headers,
+      bodyText: request.bodyText ?? null,
+      timeoutMs: request.timeoutMs,
+      correlation: {
+        sessionId: appContext?.sessionId ?? null,
+        surfaceId: appContext?.surfaceId ?? null,
+        actor: request.actor ?? null
+      }
+    });
+  }
   const response = await fetch(request.url, {
     method: request.method,
     headers: request.headers,

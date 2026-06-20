@@ -8,6 +8,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use rusqlite::types::{Value as SqlValue, ValueRef};
+use rusqlite::{Connection, ToSql};
+use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 use wasmtime::{Caller, Config as WasmtimeConfig, Engine as WasmtimeEngine, Extern, ExternType, Linker, Module as WasmtimeModule, Store as WasmtimeStore, ValType};
 
 const CAP_STORAGE_READ: &str = "storage.read";
@@ -19,8 +22,11 @@ const CAP_FS_READ: &str = "capability.fs.read";
 const CAP_FS_WRITE: &str = "capability.fs.write";
 const CAP_FS_PATCH: &str = "capability.fs.patch";
 const CAP_FS_STAT: &str = "capability.fs.stat";
+const CAP_NETWORK_HTTP_OUTBOUND: &str = "capability.network.http.outbound";
+const CAP_DB_SQLITE: &str = "capability.db.sqlite";
 const CAP_PROCESS_SOAK: &str = "process.soak";
 const CAP_COMPUTE_EXECUTE: &str = "compute.execute";
+const CAP_VERIFICATION_PERSISTENCE: &str = "verification.persistence";
 const AUTHORING_WRITE_CONFLICT: &str = "authoring.write.conflict";
 const AUTHORING_WRITE_REJECTED: &str = "authoring.write.rejected";
 const COMPUTE_MODULE_RUNTIME_TARGET_HOST_OPERATION: &str = "engentus.pipeline.health.classify";
@@ -1778,6 +1784,60 @@ fn handle_client(
                 }
             }
         }
+        ("POST", "/capabilities/network/http-outbound") => {
+            let body_text = String::from_utf8_lossy(&body).to_string();
+            match handle_http_outbound_capability_request(&body_text) {
+                Ok((response_body, outbound_method, outbound_url)) => {
+                    registry.lock().expect("registry lock").emit(CoreEvent {
+                        kind: format!("{}.execute", CAP_NETWORK_HTTP_OUTBOUND),
+                        capability: CAP_NETWORK_HTTP_OUTBOUND.to_string(),
+                        generation_id: None,
+                        message: Some(format!("method={} url={}", outbound_method, outbound_url)),
+                        generation: None,
+                        serving: None,
+                        emitted_at: now_iso(),
+                    });
+                    write_json(&mut stream, 200, &response_body)
+                }
+                Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, extract_json_string_decoded(&body_text, "url").as_deref())),
+            }
+        }
+        ("POST", "/capabilities/db/sqlite") => {
+            let body_text = String::from_utf8_lossy(&body).to_string();
+            match handle_sqlite_capability_request(cwd, &body_text) {
+                Ok((response_body, operation, source_path)) => {
+                    registry.lock().expect("registry lock").emit(CoreEvent {
+                        kind: format!("{}.{}", CAP_DB_SQLITE, operation),
+                        capability: CAP_DB_SQLITE.to_string(),
+                        generation_id: None,
+                        message: Some(format!("operation={} path={}", operation, source_path)),
+                        generation: None,
+                        serving: None,
+                        emitted_at: now_iso(),
+                    });
+                    write_json(&mut stream, 200, &response_body)
+                }
+                Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, extract_json_string_decoded(&body_text, "path").as_deref())),
+            }
+        }
+        ("POST", "/verification-persistence") => {
+            let body_text = String::from_utf8_lossy(&body).to_string();
+            match handle_verification_persistence_request(cwd, &body_text) {
+                Ok((response_body, operation)) => {
+                    registry.lock().expect("registry lock").emit(CoreEvent {
+                        kind: format!("verification.persistence.{}", operation),
+                        capability: CAP_VERIFICATION_PERSISTENCE.to_string(),
+                        generation_id: None,
+                        message: Some(format!("operation={}", operation)),
+                        generation: None,
+                        serving: None,
+                        emitted_at: now_iso(),
+                    });
+                    write_json(&mut stream, 200, &response_body)
+                }
+                Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, None)),
+            }
+        }
         ("POST", "/soak/start") => {
             let body_text = String::from_utf8_lossy(&body);
             let session_id = extract_json_string_decoded(&body_text, "id").unwrap_or_else(next_generation_id);
@@ -3325,6 +3385,27 @@ struct SourceStatResponse {
     modified_at: Option<String>,
 }
 
+#[derive(Clone, Debug)]
+struct OutboundHttpResponse {
+    status: u16,
+    headers: BTreeMap<String, String>,
+    body_text: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OutboundHttpScheme {
+    Http,
+    Https,
+}
+
+struct OutboundHttpTarget {
+    scheme: OutboundHttpScheme,
+    address: String,
+    host_header: String,
+    path: String,
+    url: String,
+}
+
 fn capability_error(status: u16, message: impl Into<String>) -> CapabilityError {
     CapabilityError {
         status,
@@ -3416,6 +3497,374 @@ fn capability_fs_write(
         hash: format!("sha256:{}", sha256_hex(bytes.clone())),
         size: bytes.len() as u64,
     })
+}
+
+fn http_outbound_response_to_json(response: &OutboundHttpResponse) -> String {
+    let headers = response.headers.iter()
+        .map(|(name, value)| format!("{}:{}", json_string(name), json_string(value)))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"transport\":\"network\",\"status\":{},\"headers\":{{{}}},\"bodyText\":{}}}",
+        response.status,
+        headers,
+        json_string(&response.body_text),
+    )
+}
+
+fn extract_json_headers_map(body: &JsonValue, key: &str) -> BTreeMap<String, String> {
+    let mut headers = BTreeMap::new();
+    let Some(object) = body.get(key).and_then(JsonValue::as_object) else {
+        return headers;
+    };
+    for (name, value) in object {
+        if name.trim().is_empty() {
+            continue;
+        }
+        let header_value = match value {
+            JsonValue::Null => String::new(),
+            JsonValue::String(text) => text.clone(),
+            JsonValue::Bool(flag) => flag.to_string(),
+            JsonValue::Number(number) => number.to_string(),
+            _ => value.to_string(),
+        };
+        headers.insert(name.trim().to_ascii_lowercase(), header_value);
+    }
+    headers
+}
+
+fn parse_outbound_http_url(url: &str) -> Option<OutboundHttpTarget> {
+    let (scheme, default_port, rest) = if let Some(value) = url.strip_prefix("http://") {
+        (OutboundHttpScheme::Http, 80u16, value)
+    } else if let Some(value) = url.strip_prefix("https://") {
+        (OutboundHttpScheme::Https, 443u16, value)
+    } else {
+        return None;
+    };
+    let authority_end = rest
+        .find(|ch| matches!(ch, '/' | '?' | '#'))
+        .unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    if authority.trim().is_empty() {
+        return None;
+    }
+    let suffix = &rest[authority_end..];
+    let path = if suffix.is_empty() {
+        "/".to_string()
+    } else if suffix.starts_with('/') {
+        suffix.to_string()
+    } else {
+        format!("/{}", suffix)
+    };
+    let address = if authority.contains(':') {
+        authority.to_string()
+    } else {
+        format!("{}:{}", authority, default_port)
+    };
+    Some(OutboundHttpTarget {
+        scheme,
+        address,
+        host_header: authority.to_string(),
+        path,
+        url: url.to_string(),
+    })
+}
+
+fn next_outbound_temp_id() -> String {
+    static COUNTER: AtomicU64 = AtomicU64::new(1);
+    let millis = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+    format!("{}_{}", millis, COUNTER.fetch_add(1, Ordering::Relaxed))
+}
+
+fn outbound_temp_file(prefix: &str, suffix: &str) -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "witness-core-{}-{}{}",
+        prefix,
+        next_outbound_temp_id(),
+        suffix
+    ))
+}
+
+fn remove_outbound_temp_file(path: &Path) {
+    let _ = fs::remove_file(path);
+}
+
+fn resolve_curl_command() -> Command {
+    if let Ok(override_bin) = std::env::var("WITNESS_CORE_CURL_BIN") {
+        let trimmed = override_bin.trim();
+        if !trimmed.is_empty() {
+            #[cfg(windows)]
+            {
+                let lower = trimmed.to_ascii_lowercase();
+                if lower.ends_with(".cmd") || lower.ends_with(".bat") {
+                    let mut command = Command::new("cmd");
+                    command.arg("/C").arg(trimmed);
+                    return command;
+                }
+            }
+            return Command::new(trimmed);
+        }
+    }
+    #[cfg(windows)]
+    {
+        Command::new("curl.exe")
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new("curl")
+    }
+}
+
+fn parse_curl_response_headers(header_text: &str) -> (Option<u16>, BTreeMap<String, String>) {
+    let normalized = header_text.replace("\r\n", "\n");
+    let mut current_status = None;
+    let mut current_headers = BTreeMap::new();
+    let mut last_status = None;
+    let mut last_headers = BTreeMap::new();
+    for raw_line in normalized.lines() {
+        let line = raw_line.trim_end_matches('\r');
+        if line.starts_with("HTTP/") {
+            current_status = line
+                .split_whitespace()
+                .nth(1)
+                .and_then(|value| value.parse::<u16>().ok());
+            current_headers.clear();
+            continue;
+        }
+        if line.is_empty() {
+            if current_status.is_some() {
+                last_status = current_status;
+                last_headers = current_headers.clone();
+            }
+            continue;
+        }
+        if let Some((name, value)) = line.split_once(':') {
+            current_headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
+        }
+    }
+    if current_status.is_some() {
+        last_status = current_status;
+        last_headers = current_headers;
+    }
+    (last_status, last_headers)
+}
+
+fn execute_https_outbound_with_curl(
+    target: &OutboundHttpTarget,
+    method: &str,
+    headers: &BTreeMap<String, String>,
+    body_text: &str,
+    timeout_ms: u64,
+) -> Result<OutboundHttpResponse, CapabilityError> {
+    let header_path = outbound_temp_file("curl-headers", ".txt");
+    let body_path = outbound_temp_file("curl-body", ".bin");
+    let request_body_path = if body_text.is_empty() {
+        None
+    } else {
+        Some(outbound_temp_file("curl-request", ".bin"))
+    };
+    if let Some(path) = request_body_path.as_ref() {
+        fs::write(path, body_text.as_bytes())
+            .map_err(|error| capability_error(500, format!("outbound request staging failed: {}", error)))?;
+    }
+    let timeout_seconds = format!("{:.3}", (timeout_ms.max(100) as f64) / 1000.0);
+    let mut command = resolve_curl_command();
+    command
+        .arg("--silent")
+        .arg("--show-error")
+        .arg("--globoff")
+        .arg("--request")
+        .arg(method)
+        .arg("--connect-timeout")
+        .arg(&timeout_seconds)
+        .arg("--max-time")
+        .arg(&timeout_seconds)
+        .arg("--dump-header")
+        .arg(&header_path)
+        .arg("--output")
+        .arg(&body_path)
+        .arg("--write-out")
+        .arg("%{http_code}")
+        .arg("--url")
+        .arg(&target.url)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (name, value) in headers {
+        if matches!(name.as_str(), "host" | "content-length" | "connection") {
+            continue;
+        }
+        command.arg("--header").arg(format!("{}: {}", name, value));
+    }
+    if let Some(path) = request_body_path.as_ref() {
+        command.arg("--data-binary").arg(format!("@{}", path.display()));
+    }
+    let output = match command.output() {
+        Ok(value) => value,
+        Err(error) => {
+            if let Some(path) = request_body_path.as_ref() {
+                remove_outbound_temp_file(path);
+            }
+            remove_outbound_temp_file(&header_path);
+            remove_outbound_temp_file(&body_path);
+            return Err(capability_error(502, format!("outbound curl launch failed: {}", error)));
+        }
+    };
+    let stderr_text = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if !output.status.success() {
+        if let Some(path) = request_body_path.as_ref() {
+            remove_outbound_temp_file(path);
+        }
+        remove_outbound_temp_file(&header_path);
+        remove_outbound_temp_file(&body_path);
+        return Err(capability_error(
+            502,
+            if stderr_text.is_empty() {
+                format!("outbound curl failed with status {}", output.status)
+            } else {
+                format!("outbound curl failed: {}", stderr_text)
+            },
+        ));
+    }
+    let stdout_text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let header_text = fs::read_to_string(&header_path)
+        .map_err(|error| capability_error(502, format!("outbound header read failed: {}", error)))?;
+    let response_body = fs::read(&body_path)
+        .map_err(|error| capability_error(502, format!("outbound body read failed: {}", error)))?;
+    if let Some(path) = request_body_path.as_ref() {
+        remove_outbound_temp_file(path);
+    }
+    remove_outbound_temp_file(&header_path);
+    remove_outbound_temp_file(&body_path);
+    let (header_status, response_headers) = parse_curl_response_headers(&header_text);
+    let status = stdout_text
+        .parse::<u16>()
+        .ok()
+        .or(header_status)
+        .ok_or_else(|| capability_error(502, "missing outbound status"))?;
+    Ok(OutboundHttpResponse {
+        status,
+        headers: response_headers,
+        body_text: String::from_utf8_lossy(&response_body).to_string(),
+    })
+}
+
+fn execute_http_outbound_over_tcp(
+    target: &OutboundHttpTarget,
+    method: &str,
+    headers: &BTreeMap<String, String>,
+    body_text: &str,
+    timeout_ms: u64,
+) -> Result<OutboundHttpResponse, CapabilityError> {
+    let timeout = Duration::from_millis(timeout_ms.max(100));
+    let address = target
+        .address
+        .to_socket_addrs()
+        .map_err(|error| capability_error(400, format!("invalid outbound address: {}", error)))?
+        .next()
+        .ok_or_else(|| capability_error(400, "invalid outbound address"))?;
+    let mut stream = TcpStream::connect_timeout(&address, timeout)
+        .map_err(|error| capability_error(502, format!("outbound connect failed: {}", error)))?;
+    stream
+        .set_read_timeout(Some(timeout))
+        .map_err(|error| capability_error(500, format!("outbound read timeout setup failed: {}", error)))?;
+    stream
+        .set_write_timeout(Some(timeout))
+        .map_err(|error| capability_error(500, format!("outbound write timeout setup failed: {}", error)))?;
+
+    let payload = body_text.as_bytes();
+    let mut request = format!(
+        "{} {} HTTP/1.1\r\nhost: {}\r\ncontent-length: {}\r\nconnection: close\r\n",
+        method,
+        target.path,
+        target.host_header,
+        payload.len()
+    );
+    for (name, value) in headers {
+        if matches!(name.as_str(), "host" | "content-length" | "connection") {
+            continue;
+        }
+        request.push_str(&format!("{}: {}\r\n", name, value));
+    }
+    request.push_str("\r\n");
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| capability_error(502, format!("outbound request write failed: {}", error)))?;
+    if !payload.is_empty() {
+        stream
+            .write_all(payload)
+            .map_err(|error| capability_error(502, format!("outbound request body write failed: {}", error)))?;
+    }
+    stream
+        .flush()
+        .map_err(|error| capability_error(502, format!("outbound request flush failed: {}", error)))?;
+
+    let mut reader = BufReader::new(stream);
+    let mut status_line = String::new();
+    reader
+        .read_line(&mut status_line)
+        .map_err(|error| capability_error(502, format!("outbound status read failed: {}", error)))?;
+    let status = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse::<u16>().ok())
+        .ok_or_else(|| capability_error(502, "missing outbound status"))?;
+    let mut response_headers = BTreeMap::new();
+    loop {
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .map_err(|error| capability_error(502, format!("outbound header read failed: {}", error)))?;
+        if line == "\r\n" || line.is_empty() {
+            break;
+        }
+        if let Some((name, value)) = line.split_once(':') {
+            response_headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
+        }
+    }
+    let mut response_bytes = Vec::new();
+    reader
+        .read_to_end(&mut response_bytes)
+        .map_err(|error| capability_error(502, format!("outbound body read failed: {}", error)))?;
+    Ok(OutboundHttpResponse {
+        status,
+        headers: response_headers,
+        body_text: String::from_utf8_lossy(&response_bytes).to_string(),
+    })
+}
+
+fn execute_http_outbound_capability(
+    url: &str,
+    method: &str,
+    headers: &BTreeMap<String, String>,
+    body_text: &str,
+    timeout_ms: u64,
+) -> Result<OutboundHttpResponse, CapabilityError> {
+    let normalized_method = method.trim().to_ascii_uppercase();
+    if normalized_method.is_empty() || normalized_method.chars().any(|ch| ch.is_whitespace()) {
+        return Err(capability_error(400, "http outbound method is required"));
+    }
+    let Some(target) = parse_outbound_http_url(url) else {
+        return Err(capability_error(400, "unsupported outbound url; only http:// and https:// are currently supported"));
+    };
+    match target.scheme {
+        OutboundHttpScheme::Http => execute_http_outbound_over_tcp(&target, &normalized_method, headers, body_text, timeout_ms),
+        OutboundHttpScheme::Https => execute_https_outbound_with_curl(&target, &normalized_method, headers, body_text, timeout_ms),
+    }
+}
+
+fn handle_http_outbound_capability_request(body_text: &str) -> Result<(String, String, String), CapabilityError> {
+    let payload: JsonValue = serde_json::from_str(body_text)
+        .map_err(|error| capability_error(400, format!("invalid outbound request json: {}", error)))?;
+    let url = payload.get("url").and_then(JsonValue::as_str).unwrap_or("").trim().to_string();
+    if url.is_empty() {
+        return Err(capability_error(400, "outbound url is required"));
+    }
+    let method = payload.get("method").and_then(JsonValue::as_str).unwrap_or("GET").trim().to_string();
+    let headers = extract_json_headers_map(&payload, "headers");
+    let body_text_value = payload.get("bodyText").and_then(JsonValue::as_str).unwrap_or("").to_string();
+    let timeout_ms = payload.get("timeoutMs").and_then(JsonValue::as_u64).unwrap_or(5_000);
+    let response = execute_http_outbound_capability(&url, &method, &headers, &body_text_value, timeout_ms)?;
+    Ok((http_outbound_response_to_json(&response), method, url))
 }
 
 #[derive(Clone, Debug)]
@@ -4742,6 +5191,606 @@ fn capability_event_message(source_path: &str, reason: Option<&str>, preview_onl
     )
 }
 
+fn quote_sql_identifier(identifier: &str) -> String {
+    format!("\"{}\"", identifier.replace('"', "\"\""))
+}
+
+fn sqlite_value_from_json(value: &JsonValue) -> SqlValue {
+    match value {
+        JsonValue::Null => SqlValue::Null,
+        JsonValue::Bool(value) => SqlValue::Integer(if *value { 1 } else { 0 }),
+        JsonValue::Number(value) => {
+            if let Some(integer) = value.as_i64() {
+                SqlValue::Integer(integer)
+            } else if let Some(float) = value.as_f64() {
+                SqlValue::Real(float)
+            } else {
+                SqlValue::Null
+            }
+        }
+        JsonValue::String(value) => SqlValue::Text(value.clone()),
+        JsonValue::Array(_) | JsonValue::Object(_) => SqlValue::Text(value.to_string()),
+    }
+}
+
+fn json_value_from_sqlite(value: ValueRef<'_>) -> JsonValue {
+    match value {
+        ValueRef::Null => JsonValue::Null,
+        ValueRef::Integer(value) => JsonValue::Number(JsonNumber::from(value)),
+        ValueRef::Real(value) => JsonNumber::from_f64(value).map(JsonValue::Number).unwrap_or(JsonValue::Null),
+        ValueRef::Text(value) => JsonValue::String(String::from_utf8_lossy(value).to_string()),
+        ValueRef::Blob(value) => JsonValue::String(String::from_utf8_lossy(value).to_string()),
+    }
+}
+
+enum SqliteParams {
+    None,
+    Positional(Vec<SqlValue>),
+    Named(Vec<(String, SqlValue)>),
+}
+
+fn sqlite_params_from_json(value: Option<JsonValue>) -> Result<SqliteParams, CapabilityError> {
+    let Some(value) = value else {
+        return Ok(SqliteParams::None);
+    };
+    match value {
+        JsonValue::Null => Ok(SqliteParams::None),
+        JsonValue::Array(entries) => Ok(SqliteParams::Positional(
+            entries.iter().map(sqlite_value_from_json).collect()
+        )),
+        JsonValue::Object(entries) => Ok(SqliteParams::Named(
+            entries.into_iter()
+                .map(|(key, value)| (format!(":{}", key), sqlite_value_from_json(&value)))
+                .collect()
+        )),
+        _ => Err(capability_error(400, "params must be an array or object")),
+    }
+}
+
+fn sqlite_body_json_value(body_text: &str, key: &str) -> Result<Option<JsonValue>, CapabilityError> {
+    let Some(value_text) = extract_json_value(body_text, key) else {
+        return Ok(None);
+    };
+    serde_json::from_str::<JsonValue>(&value_text)
+        .map(Some)
+        .map_err(|error| capability_error(400, format!("{} JSON invalid: {}", key, error)))
+}
+
+fn resolve_sqlite_capability_path(cwd: &Path, body_text: &str) -> Result<PathBuf, CapabilityError> {
+    resolve_absolute_under_cwd(
+        cwd,
+        &extract_json_string_decoded(body_text, "path").unwrap_or_default(),
+        "path",
+    )
+}
+
+fn open_sqlite_capability_connection(database_path: &Path) -> Result<Connection, CapabilityError> {
+    if let Some(parent) = database_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| capability_error(500, format!("sqlite parent mkdir failed: {}", error)))?;
+    }
+    Connection::open(database_path)
+        .map_err(|error| capability_error(500, format!("sqlite open failed: {}", error)))
+}
+
+fn execute_sqlite_query(connection: &Connection, sql: &str, params: &SqliteParams) -> Result<Vec<JsonValue>, CapabilityError> {
+    let mut statement = connection.prepare(sql)
+        .map_err(|error| capability_error(500, format!("query prepare failed: {}", error)))?;
+    let column_names = statement.column_names().iter().map(|name| name.to_string()).collect::<Vec<_>>();
+    let mut rows = match params {
+        SqliteParams::None => statement.query([])
+            .map_err(|error| capability_error(500, format!("query failed: {}", error)))?,
+        SqliteParams::Positional(values) => statement.query(rusqlite::params_from_iter(values.iter()))
+            .map_err(|error| capability_error(500, format!("query failed: {}", error)))?,
+        SqliteParams::Named(values) => {
+            let refs = values.iter()
+                .map(|(key, value)| (key.as_str(), value as &dyn ToSql))
+                .collect::<Vec<_>>();
+            statement.query(refs.as_slice())
+                .map_err(|error| capability_error(500, format!("query failed: {}", error)))?
+        }
+    };
+    let mut result_rows = Vec::new();
+    while let Some(row) = rows.next().map_err(|error| capability_error(500, format!("query cursor failed: {}", error)))? {
+        let mut object = JsonMap::new();
+        for (index, name) in column_names.iter().enumerate() {
+            let value = row.get_ref(index)
+                .map_err(|error| capability_error(500, format!("query column read failed: {}", error)))?;
+            object.insert(name.clone(), json_value_from_sqlite(value));
+        }
+        result_rows.push(JsonValue::Object(object));
+    }
+    Ok(result_rows)
+}
+
+fn execute_sqlite_command(connection: &Connection, sql: &str, params: &SqliteParams) -> Result<(u64, i64), CapabilityError> {
+    let mut statement = connection.prepare(sql)
+        .map_err(|error| capability_error(500, format!("command prepare failed: {}", error)))?;
+    let changes = match params {
+        SqliteParams::None => statement.execute([]),
+        SqliteParams::Positional(values) => statement.execute(rusqlite::params_from_iter(values.iter())),
+        SqliteParams::Named(values) => {
+            let refs = values.iter()
+                .map(|(key, value)| (key.as_str(), value as &dyn ToSql))
+                .collect::<Vec<_>>();
+            statement.execute(refs.as_slice())
+        }
+    }
+    .map_err(|error| capability_error(500, format!("command failed: {}", error)))?;
+    Ok((changes as u64, connection.last_insert_rowid()))
+}
+
+fn sqlite_transaction_steps_from_body(body_text: &str) -> Result<Vec<(String, Option<String>, String, SqliteParams)>, CapabilityError> {
+    let mut steps = Vec::new();
+    for row in extract_json_object_array(body_text, "steps") {
+        let kind = extract_json_string_decoded(&row, "kind").unwrap_or_default().trim().to_lowercase();
+        let sql = extract_json_string_decoded(&row, "sql").unwrap_or_default();
+        let name = extract_json_string_decoded(&row, "name").filter(|value| !value.trim().is_empty());
+        if !matches!(kind.as_str(), "query" | "command") || sql.trim().is_empty() {
+            return Err(capability_error(400, "transaction steps require kind=query|command and sql"));
+        }
+        let params = sqlite_params_from_json(sqlite_body_json_value(&row, "params")?)?;
+        steps.push((kind, name, sql, params));
+    }
+    if steps.is_empty() {
+        return Err(capability_error(400, "transaction steps required"));
+    }
+    Ok(steps)
+}
+
+fn handle_sqlite_capability_request(cwd: &Path, body_text: &str) -> Result<(String, String, String), CapabilityError> {
+    let operation = extract_json_string_decoded(body_text, "operation")
+        .or_else(|| extract_json_string(body_text, "operation"))
+        .unwrap_or_default();
+    if operation.trim().is_empty() {
+        return Err(capability_error(400, "operation is required"));
+    }
+    let database_path = resolve_sqlite_capability_path(cwd, body_text)?;
+    let source_path = normalize_path(database_path.strip_prefix(cwd).unwrap_or(&database_path));
+    let mut connection = open_sqlite_capability_connection(&database_path)?;
+    let response = match operation.as_str() {
+        "testConnection" => {
+            connection.query_row("select 1", [], |_| Ok(()))
+                .map_err(|error| capability_error(500, format!("sqlite testConnection failed: {}", error)))?;
+            serde_json::to_string(&serde_json::json!({ "ok": true }))
+                .map_err(|error| capability_error(500, format!("sqlite JSON encode failed: {}", error)))?
+        }
+        "migrate" => {
+            let migration_table = extract_json_string_decoded(body_text, "migrationTable").unwrap_or_else(|| "witness_sql_migrations".to_string());
+            let migration_table = migration_table.trim().to_string();
+            if !migration_table.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_') || migration_table.is_empty() || migration_table.chars().next().unwrap().is_ascii_digit() {
+                return Err(capability_error(400, "migrationTable must be a SQL identifier"));
+            }
+            let migrations = extract_json_object_array(body_text, "migrations")
+                .into_iter()
+                .map(|row| {
+                    Ok((
+                        extract_json_string_decoded(&row, "id").unwrap_or_default(),
+                        extract_json_string_decoded(&row, "sql").unwrap_or_default(),
+                    ))
+                })
+                .collect::<Result<Vec<_>, CapabilityError>>()?;
+            if migrations.is_empty() {
+                return Err(capability_error(400, "migrations required"));
+            }
+            if migrations.iter().any(|(id, sql)| id.trim().is_empty() || sql.trim().is_empty()) {
+                return Err(capability_error(400, "each migration requires id and sql"));
+            }
+            let table = quote_sql_identifier(&migration_table);
+            connection.execute(
+                &format!("create table if not exists {} (id text primary key, applied_at text not null)", table),
+                [],
+            ).map_err(|error| capability_error(500, format!("migration ledger failed: {}", error)))?;
+            let tx = connection.transaction()
+                .map_err(|error| capability_error(500, format!("migration begin failed: {}", error)))?;
+            let lookup_sql = format!("select id from {} where id = ?", table);
+            let insert_sql = format!("insert into {} (id, applied_at) values (?, ?)", table);
+            let mut applied = Vec::new();
+            let mut skipped = Vec::new();
+            for (id, sql) in migrations {
+                let existing = tx.query_row(&lookup_sql, [id.as_str()], |_| Ok(()));
+                if existing.is_ok() {
+                    skipped.push(id);
+                    continue;
+                }
+                tx.execute_batch(&sql)
+                    .map_err(|error| capability_error(500, format!("migration failed: {}", error)))?;
+                let applied_at = now_iso();
+                tx.execute(&insert_sql, [id.as_str(), applied_at.as_str()])
+                    .map_err(|error| capability_error(500, format!("migration ledger insert failed: {}", error)))?;
+                applied.push(id);
+            }
+            tx.commit().map_err(|error| capability_error(500, format!("migration commit failed: {}", error)))?;
+            serde_json::to_string(&serde_json::json!({ "ok": true, "applied": applied, "skipped": skipped }))
+                .map_err(|error| capability_error(500, format!("sqlite JSON encode failed: {}", error)))?
+        }
+        "query" => {
+            let sql = extract_json_string_decoded(body_text, "sql").unwrap_or_default();
+            if sql.trim().is_empty() {
+                return Err(capability_error(400, "sql required"));
+            }
+            let params = sqlite_params_from_json(sqlite_body_json_value(body_text, "params")?)?;
+            let rows = execute_sqlite_query(&connection, &sql, &params)?;
+            serde_json::to_string(&serde_json::json!({ "ok": true, "rows": rows, "rowCount": rows.len() }))
+                .map_err(|error| capability_error(500, format!("sqlite JSON encode failed: {}", error)))?
+        }
+        "command" => {
+            let sql = extract_json_string_decoded(body_text, "sql").unwrap_or_default();
+            if sql.trim().is_empty() {
+                return Err(capability_error(400, "sql required"));
+            }
+            let params = sqlite_params_from_json(sqlite_body_json_value(body_text, "params")?)?;
+            let (changes, last_insert_rowid) = execute_sqlite_command(&connection, &sql, &params)?;
+            serde_json::to_string(&serde_json::json!({ "ok": true, "changes": changes, "lastInsertRowid": last_insert_rowid }))
+                .map_err(|error| capability_error(500, format!("sqlite JSON encode failed: {}", error)))?
+        }
+        "transaction" => {
+            let steps = sqlite_transaction_steps_from_body(body_text)?;
+            let tx = connection.transaction()
+                .map_err(|error| capability_error(500, format!("transaction begin failed: {}", error)))?;
+            let mut results = Vec::new();
+            for (kind, name, sql, params) in steps {
+                if kind == "query" {
+                    let rows = execute_sqlite_query(&tx, &sql, &params)?;
+                    results.push(serde_json::json!({
+                        "kind": kind,
+                        "name": name,
+                        "rowCount": rows.len(),
+                        "rows": rows
+                    }));
+                } else {
+                    let (changes, last_insert_rowid) = execute_sqlite_command(&tx, &sql, &params)?;
+                    results.push(serde_json::json!({
+                        "kind": kind,
+                        "name": name,
+                        "changes": changes,
+                        "lastInsertRowid": last_insert_rowid
+                    }));
+                }
+            }
+            tx.commit().map_err(|error| capability_error(500, format!("transaction commit failed: {}", error)))?;
+            serde_json::to_string(&serde_json::json!({ "ok": true, "results": results }))
+                .map_err(|error| capability_error(500, format!("sqlite JSON encode failed: {}", error)))?
+        }
+        _ => return Err(capability_error(400, "unsupported sqlite capability operation")),
+    };
+    Ok((response, operation, source_path))
+}
+
+struct VerificationPersistencePaths {
+    artifact_root: PathBuf,
+    cache_root: PathBuf,
+    store_root: PathBuf,
+}
+
+fn resolve_absolute_under_cwd(cwd: &Path, requested: &str, label: &str) -> Result<PathBuf, CapabilityError> {
+    let trimmed = requested.trim();
+    if trimmed.is_empty() {
+        return Err(capability_error(400, &format!("{} is required", label)));
+    }
+    let candidate = if Path::new(trimmed).is_absolute() {
+        PathBuf::from(trimmed)
+    } else {
+        cwd.join(trimmed)
+    };
+    let normalized = normalize_path(&candidate);
+    let resolved = PathBuf::from(&normalized);
+    if !resolved.starts_with(cwd) {
+        return Err(capability_error(403, &format!("{} is outside the workspace root", label)));
+    }
+    Ok(resolved)
+}
+
+fn verification_persistence_paths_from_body(cwd: &Path, body_text: &str) -> Result<VerificationPersistencePaths, CapabilityError> {
+    let verification_root = resolve_absolute_under_cwd(
+        cwd,
+        &extract_json_string_decoded(body_text, "verificationRoot").unwrap_or_default(),
+        "verificationRoot",
+    )?;
+    let artifact_root = resolve_absolute_under_cwd(
+        cwd,
+        &extract_json_string_decoded(body_text, "artifactRoot").unwrap_or_default(),
+        "artifactRoot",
+    )?;
+    let cache_root = resolve_absolute_under_cwd(
+        cwd,
+        &extract_json_string_decoded(body_text, "cacheRoot").unwrap_or_default(),
+        "cacheRoot",
+    )?;
+    let store_root = verification_root
+        .join(".witness-core")
+        .join("verification-persistence");
+    Ok(VerificationPersistencePaths {
+        artifact_root,
+        cache_root,
+        store_root,
+    })
+}
+
+fn verification_bucket_dir(paths: &VerificationPersistencePaths, bucket: &str) -> PathBuf {
+    paths.store_root.join("rows").join(bucket)
+}
+
+fn verification_row_path(paths: &VerificationPersistencePaths, bucket: &str, id: &str) -> PathBuf {
+    verification_bucket_dir(paths, bucket).join(format!("{}.json", sha256_hex(id.as_bytes().to_vec())))
+}
+
+fn write_verification_row(paths: &VerificationPersistencePaths, bucket: &str, id: &str, row_json: &str) -> Result<(), CapabilityError> {
+    let file_path = verification_row_path(paths, bucket, id);
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| capability_error(500, &format!("verification persistence mkdir failed: {}", error)))?;
+    }
+    fs::write(file_path, row_json).map_err(|error| capability_error(500, &format!("verification persistence write failed: {}", error)))
+}
+
+fn read_verification_bucket_rows(paths: &VerificationPersistencePaths, bucket: &str) -> Result<Vec<String>, CapabilityError> {
+    let dir = verification_bucket_dir(paths, bucket);
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Ok(Vec::new());
+    };
+    let mut rows = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| capability_error(500, &format!("verification persistence read_dir failed: {}", error)))?;
+        let file_type = entry.file_type().map_err(|error| capability_error(500, &format!("verification persistence file_type failed: {}", error)))?;
+        if !file_type.is_file() {
+            continue;
+        }
+        let content = fs::read_to_string(entry.path())
+            .map_err(|error| capability_error(500, &format!("verification persistence row read failed: {}", error)))?;
+        if !content.trim().is_empty() {
+            rows.push(content);
+        }
+    }
+    Ok(rows)
+}
+
+fn resolve_subpath_under_root(root: &Path, requested_path: &str, label: &str) -> Result<PathBuf, CapabilityError> {
+    let trimmed = requested_path.trim();
+    if trimmed.is_empty() {
+        return Err(capability_error(400, &format!("{} is required", label)));
+    }
+    let candidate = PathBuf::from(trimmed);
+    if !candidate.starts_with(root) {
+        return Err(capability_error(403, &format!("{} is outside the configured verification roots", label)));
+    }
+    Ok(candidate)
+}
+
+fn write_text_file(file_path: &Path, content: &str) -> Result<(), CapabilityError> {
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| capability_error(500, &format!("verification persistence mkdir failed: {}", error)))?;
+    }
+    fs::write(file_path, content).map_err(|error| capability_error(500, &format!("verification persistence write failed: {}", error)))
+}
+
+fn verification_rows_to_json(paths: &VerificationPersistencePaths) -> Result<String, CapabilityError> {
+    let verification_policies = read_verification_bucket_rows(paths, "verificationPolicies")?.join(",");
+    let verification_freshness = read_verification_bucket_rows(paths, "verificationFreshness")?.join(",");
+    let verification_invalidations = read_verification_bucket_rows(paths, "verificationInvalidations")?.join(",");
+    let verification_queue = read_verification_bucket_rows(paths, "verificationQueue")?.join(",");
+    let verification_executions = read_verification_bucket_rows(paths, "verificationExecutions")?.join(",");
+    let test_runs = read_verification_bucket_rows(paths, "testRuns")?.join(",");
+    let test_results = read_verification_bucket_rows(paths, "testResults")?.join(",");
+    let artifacts = read_verification_bucket_rows(paths, "artifacts")?.join(",");
+    let test_artifacts = read_verification_bucket_rows(paths, "testArtifacts")?.join(",");
+    let test_suites = read_verification_bucket_rows(paths, "testSuites")?.join(",");
+    let test_cases = read_verification_bucket_rows(paths, "testCases")?.join(",");
+    let test_reports = read_verification_bucket_rows(paths, "testReports")?.join(",");
+    Ok(format!(
+        "{{\"verificationPolicies\":[{}],\"verificationFreshness\":[{}],\"verificationInvalidations\":[{}],\"verificationQueue\":[{}],\"verificationExecutions\":[{}],\"testRuns\":[{}],\"testResults\":[{}],\"artifacts\":[{}],\"testArtifacts\":[{}],\"testSuites\":[{}],\"testCases\":[{}],\"testReports\":[{}]}}",
+        verification_policies,
+        verification_freshness,
+        verification_invalidations,
+        verification_queue,
+        verification_executions,
+        test_runs,
+        test_results,
+        artifacts,
+        test_artifacts,
+        test_suites,
+        test_cases,
+        test_reports
+    ))
+}
+
+fn verification_read_artifact_content_json(
+    paths: &VerificationPersistencePaths,
+    artifact_id: &str,
+    compatibility: &str,
+) -> Result<String, CapabilityError> {
+    let requested_id = artifact_id.trim();
+    if requested_id.is_empty() {
+        return Err(capability_error(400, "artifactId is required"));
+    }
+    let test_artifact_rows = read_verification_bucket_rows(paths, "testArtifacts")?;
+    let artifact_rows = read_verification_bucket_rows(paths, "artifacts")?;
+    let artifact_row = if compatibility == "testArtifact" {
+        test_artifact_rows
+            .iter()
+            .find(|row| {
+                extract_json_string_decoded(row, "id").as_deref() == Some(requested_id)
+                    || extract_json_string_decoded(row, "artifactId").as_deref() == Some(requested_id)
+            })
+            .cloned()
+    } else {
+        artifact_rows
+            .iter()
+            .find(|row| extract_json_string_decoded(row, "id").as_deref() == Some(requested_id))
+            .cloned()
+            .or_else(|| {
+                test_artifact_rows
+                    .iter()
+                    .find(|row| {
+                        extract_json_string_decoded(row, "id").as_deref() == Some(requested_id)
+                            || extract_json_string_decoded(row, "artifactId").as_deref() == Some(requested_id)
+                    })
+                    .cloned()
+            })
+    };
+    let Some(artifact_row) = artifact_row else {
+        return Ok("{\"ok\":false,\"status\":404,\"error\":\"artifact content not found\"}".to_string());
+    };
+    let Some(content_ref) = extract_json_string_decoded(&artifact_row, "contentRef") else {
+        return Ok("{\"ok\":false,\"status\":404,\"error\":\"artifact content not found\"}".to_string());
+    };
+    let artifact_path = resolve_subpath_under_root(&paths.artifact_root, &content_ref, "contentRef")?;
+    let Ok(content) = fs::read_to_string(&artifact_path) else {
+        return Ok("{\"ok\":false,\"status\":404,\"error\":\"artifact content not found\"}".to_string());
+    };
+    let content_type = extract_json_string_decoded(&artifact_row, "contentType").unwrap_or_else(|| "text/plain".to_string());
+    Ok(format!(
+        "{{\"ok\":true,\"status\":200,\"artifact\":{},\"content\":{},\"contentType\":{}}}",
+        artifact_row,
+        json_string(&content),
+        json_string(&content_type)
+    ))
+}
+
+fn verification_find_reusable_result_json(paths: &VerificationPersistencePaths, cache_key: &str) -> Result<String, CapabilityError> {
+    let cache_key = cache_key.trim();
+    if cache_key.is_empty() {
+        return Err(capability_error(400, "cacheKey is required"));
+    }
+    let cache_rows = read_verification_bucket_rows(paths, "cacheEntries")?;
+    let latest_result = cache_rows
+        .iter()
+        .find(|row| extract_json_string_decoded(row, "cacheKey").as_deref() == Some(cache_key))
+        .and_then(|row| extract_json_value(row, "latestResult"))
+        .unwrap_or_else(|| "null".to_string());
+    Ok(format!("{{\"latestResult\":{}}}", latest_result))
+}
+
+fn verification_persist_bundle(paths: &VerificationPersistencePaths, body_text: &str) -> Result<(), CapabilityError> {
+    if let Some(test_run_json) = extract_json_value(body_text, "testRun").filter(|value| value.trim() != "null") {
+        if let Some(id) = extract_json_string_decoded(&test_run_json, "id").or_else(|| extract_json_string(&test_run_json, "id")) {
+            write_verification_row(paths, "testRuns", &id, &test_run_json)?;
+        }
+    }
+    for row in extract_json_object_array(body_text, "testResults") {
+        if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+            write_verification_row(paths, "testResults", &id, &row)?;
+        }
+    }
+    for row in extract_json_object_array(body_text, "artifacts") {
+        if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+            write_verification_row(paths, "artifacts", &id, &row)?;
+        }
+    }
+    for row in extract_json_object_array(body_text, "testArtifacts") {
+        if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+            write_verification_row(paths, "testArtifacts", &id, &row)?;
+        }
+    }
+    for row in extract_json_object_array(body_text, "testSuites") {
+        if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+            write_verification_row(paths, "testSuites", &id, &row)?;
+        }
+    }
+    for row in extract_json_object_array(body_text, "testCases") {
+        if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+            write_verification_row(paths, "testCases", &id, &row)?;
+        }
+    }
+    for row in extract_json_object_array(body_text, "testReports") {
+        if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+            write_verification_row(paths, "testReports", &id, &row)?;
+        }
+    }
+    for row in extract_json_object_array(body_text, "cacheEntries") {
+        if let Some(cache_key) = extract_json_string_decoded(&row, "cacheKey").or_else(|| extract_json_string(&row, "cacheKey")) {
+            write_verification_row(paths, "cacheEntries", &cache_key, &row)?;
+        }
+    }
+    for row in extract_json_object_array(body_text, "artifactContents") {
+        let Some(content_ref) = extract_json_string_decoded(&row, "contentRef").or_else(|| extract_json_string(&row, "contentRef")) else {
+            continue;
+        };
+        let Some(content) = extract_json_string_decoded(&row, "content").or_else(|| extract_json_string(&row, "content")) else {
+            continue;
+        };
+        let artifact_path = resolve_subpath_under_root(&paths.artifact_root, &content_ref, "contentRef")?;
+        write_text_file(&artifact_path, &content)?;
+    }
+    for row in extract_json_object_array(body_text, "cacheFiles") {
+        let Some(cache_path) = extract_json_string_decoded(&row, "cachePath").or_else(|| extract_json_string(&row, "cachePath")) else {
+            continue;
+        };
+        let Some(content_json) = extract_json_string_decoded(&row, "contentJson").or_else(|| extract_json_string(&row, "contentJson")) else {
+            continue;
+        };
+        let cache_file_path = resolve_subpath_under_root(&paths.cache_root, &cache_path, "cachePath")?;
+        write_text_file(&cache_file_path, &content_json)?;
+    }
+    Ok(())
+}
+
+fn handle_verification_persistence_request(cwd: &Path, body_text: &str) -> Result<(String, String), CapabilityError> {
+    let operation = extract_json_string_decoded(body_text, "operation")
+        .or_else(|| extract_json_string(body_text, "operation"))
+        .unwrap_or_default();
+    if operation.trim().is_empty() {
+        return Err(capability_error(400, "operation is required"));
+    }
+    let paths = verification_persistence_paths_from_body(cwd, body_text)?;
+    let response = match operation.as_str() {
+        "readModelRows" => verification_rows_to_json(&paths)?,
+        "recordPolicyRows" => {
+            for row in extract_json_object_array(body_text, "rows") {
+                if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+                    write_verification_row(&paths, "verificationPolicies", &id, &row)?;
+                }
+            }
+            "{\"ok\":true}".to_string()
+        }
+        "recordFreshnessRows" => {
+            for row in extract_json_object_array(body_text, "rows") {
+                if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+                    write_verification_row(&paths, "verificationFreshness", &id, &row)?;
+                }
+            }
+            "{\"ok\":true}".to_string()
+        }
+        "recordInvalidationRows" => {
+            for row in extract_json_object_array(body_text, "rows") {
+                if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+                    write_verification_row(&paths, "verificationInvalidations", &id, &row)?;
+                }
+            }
+            "{\"ok\":true}".to_string()
+        }
+        "recordQueueRow" => {
+            if let Some(row) = extract_json_value(body_text, "row").filter(|value| value.trim() != "null") {
+                if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+                    write_verification_row(&paths, "verificationQueue", &id, &row)?;
+                }
+            }
+            "{\"ok\":true}".to_string()
+        }
+        "recordExecutionRow" => {
+            if let Some(row) = extract_json_value(body_text, "row").filter(|value| value.trim() != "null") {
+                if let Some(id) = extract_json_string_decoded(&row, "id").or_else(|| extract_json_string(&row, "id")) {
+                    write_verification_row(&paths, "verificationExecutions", &id, &row)?;
+                }
+            }
+            "{\"ok\":true}".to_string()
+        }
+        "persistTestRunBundle" => {
+            verification_persist_bundle(&paths, body_text)?;
+            "{\"ok\":true}".to_string()
+        }
+        "findReusablePassedResult" => verification_find_reusable_result_json(
+            &paths,
+            &extract_json_string_decoded(body_text, "cacheKey").unwrap_or_default(),
+        )?,
+        "readArtifactContent" => verification_read_artifact_content_json(
+            &paths,
+            &extract_json_string_decoded(body_text, "artifactId").unwrap_or_default(),
+            &extract_json_string_decoded(body_text, "compatibility").unwrap_or_else(|| "canonical".to_string()),
+        )?,
+        _ => return Err(capability_error(400, "unsupported verification persistence operation")),
+    };
+    Ok((response, operation))
+}
+
 fn registry_to_json(registry: &Registry) -> String {
     let generations = registry.generations().iter().map(generation_to_json).collect::<Vec<_>>().join(",");
     format!(
@@ -5576,6 +6625,8 @@ fn sha256(input: &[u8]) -> [u8; 32] {
 mod tests {
     use super::*;
     use std::io::Read;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::sync::OnceLock;
 
     struct MemoryStore {
@@ -5632,6 +6683,95 @@ mod tests {
         ));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    fn outbound_curl_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn outbound_curl_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        outbound_curl_test_lock().lock().unwrap_or_else(|error| error.into_inner())
+    }
+
+    fn write_fake_curl_script(root: &Path) -> PathBuf {
+        #[cfg(windows)]
+        {
+            let path = root.join("fake-curl.cmd");
+            let script = r#"@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+set "header="
+set "body="
+:parse
+if "%~1"=="" goto done
+if /I "%~1"=="--dump-header" (
+  set "header=%~2"
+  shift
+  shift
+  goto parse
+)
+if /I "%~1"=="--output" (
+  set "body=%~2"
+  shift
+  shift
+  goto parse
+)
+shift
+goto parse
+:done
+> "!header!" (
+  echo HTTP/1.1 207 Multi-Status
+  echo content-type: application/json
+  echo x-test: via-fake-curl
+  echo.
+)
+> "!body!" <nul set /p ={"ok":true}
+<nul set /p =207
+exit /b 0
+"#;
+            fs::write(&path, script).unwrap();
+            path
+        }
+        #[cfg(not(windows))]
+        {
+            let path = root.join("fake-curl.sh");
+            let script = r#"#!/bin/sh
+header=""
+body=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dump-header|-D)
+      header="$2"
+      shift 2
+      ;;
+    --output|-o)
+      body="$2"
+      shift 2
+      ;;
+    --request|--connect-timeout|--max-time|--write-out|--url|--header|--data-binary)
+      shift 2
+      ;;
+    --silent|--show-error|--globoff)
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+printf 'HTTP/1.1 207 Multi-Status\r\ncontent-type: application/json\r\nx-test: via-fake-curl\r\n\r\n' > "$header"
+printf '{"ok":true}' > "$body"
+printf '207'
+"#;
+            fs::write(&path, script).unwrap();
+            #[cfg(unix)]
+            {
+                let mut permissions = fs::metadata(&path).unwrap().permissions();
+                permissions.set_mode(0o755);
+                fs::set_permissions(&path, permissions).unwrap();
+            }
+            path
+        }
     }
 
     fn fixture_config() -> CoreConfig {
@@ -5799,6 +6939,52 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
     }
 
     #[test]
+    fn sqlite_capability_supports_command_query_and_transaction_rollback() {
+        let root = test_root();
+        let db_path = root.join("app").join("db").join("main.sqlite");
+        let db_path_text = db_path.to_string_lossy().replace('\\', "\\\\");
+
+        let create_body = format!(
+            "{{\"operation\":\"command\",\"path\":\"{}\",\"sql\":\"create table items (id integer primary key, title text not null)\"}}",
+            db_path_text
+        );
+        let (create_response, create_operation, _) = handle_sqlite_capability_request(&root, &create_body).unwrap();
+        assert_eq!(create_operation, "command");
+        let create_json: JsonValue = serde_json::from_str(&create_response).unwrap();
+        assert_eq!(create_json.get("ok").and_then(JsonValue::as_bool), Some(true));
+
+        let insert_body = format!(
+            "{{\"operation\":\"command\",\"path\":\"{}\",\"sql\":\"insert into items(title) values (?)\",\"params\":[\"first\"]}}",
+            db_path_text
+        );
+        let (insert_response, _, _) = handle_sqlite_capability_request(&root, &insert_body).unwrap();
+        let insert_json: JsonValue = serde_json::from_str(&insert_response).unwrap();
+        assert_eq!(insert_json.get("changes").and_then(JsonValue::as_u64), Some(1));
+
+        let query_body = format!(
+            "{{\"operation\":\"query\",\"path\":\"{}\",\"sql\":\"select title from items order by id\"}}",
+            db_path_text
+        );
+        let (query_response, _, _) = handle_sqlite_capability_request(&root, &query_body).unwrap();
+        let query_json: JsonValue = serde_json::from_str(&query_response).unwrap();
+        assert_eq!(query_json.get("rowCount").and_then(JsonValue::as_u64), Some(1));
+        assert_eq!(query_json.pointer("/rows/0/title").and_then(JsonValue::as_str), Some("first"));
+
+        let transaction_body = format!(
+            "{{\"operation\":\"transaction\",\"path\":\"{}\",\"steps\":[{{\"kind\":\"command\",\"sql\":\"insert into items(title) values (?)\",\"params\":[\"rolled-back\"]}},{{\"kind\":\"command\",\"sql\":\"insert into missing_table(title) values (?)\",\"params\":[\"boom\"]}}]}}",
+            db_path_text
+        );
+        let transaction_error = handle_sqlite_capability_request(&root, &transaction_body).unwrap_err();
+        assert_eq!(transaction_error.status, 500);
+
+        let (readback_response, _, _) = handle_sqlite_capability_request(&root, &query_body).unwrap();
+        let readback_json: JsonValue = serde_json::from_str(&readback_response).unwrap();
+        assert_eq!(readback_json.get("rowCount").and_then(JsonValue::as_u64), Some(1));
+        assert_eq!(readback_json.pointer("/rows/0/title").and_then(JsonValue::as_str), Some("first"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn capability_http_write_emits_journal_event() {
         let root = test_root();
         let app_dir = root.join("app");
@@ -5845,6 +7031,266 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         let events = store.read_events().unwrap().join("\n");
         assert!(events.contains("capability.fs.write"));
         assert!(events.contains("path=content.wtoml"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sqlite_capability_http_emits_journal_event() {
+        let root = test_root();
+        let app_dir = root.join("app");
+        fs::create_dir_all(app_dir.join("db")).unwrap();
+        let config = fixture_config();
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
+        let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let watch_state = Arc::new(Mutex::new(WatcherState::default()));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_registry = Arc::clone(&registry);
+        let server_process_state = Arc::clone(&process_state);
+        let server_root = root.clone();
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_client(
+                stream,
+                &server_root,
+                &config,
+                server_registry,
+                server_process_state,
+                watch_state,
+                Arc::new(ComputeModuleRuntime::new().unwrap()),
+            )
+            .unwrap();
+        });
+        let body = "{\"operation\":\"command\",\"path\":\"app/db/main.sqlite\",\"sql\":\"create table items (id integer primary key, title text not null)\"}";
+        let mut client = TcpStream::connect(addr).unwrap();
+        write!(
+            client,
+            "POST /capabilities/db/sqlite HTTP/1.1\r\nhost: test\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+        let mut response_reader = BufReader::new(client);
+        let mut response = String::new();
+        response_reader.read_line(&mut response).unwrap();
+        handle.join().unwrap();
+        assert!(response.contains("200 OK"));
+        assert!(app_dir.join("db").join("main.sqlite").exists());
+        let events = store.read_events().unwrap().join("\n");
+        assert!(events.contains("capability.db.sqlite.command"));
+        assert!(events.contains("path=app/db/main.sqlite"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn http_outbound_capability_http_executes_request_and_emits_journal_event() {
+        let root = test_root();
+        let config = fixture_config();
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
+        let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let watch_state = Arc::new(Mutex::new(WatcherState::default()));
+
+        let target_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let target_addr = target_listener.local_addr().unwrap();
+        let seen_request = Arc::new(Mutex::new(String::new()));
+        let seen_request_clone = Arc::clone(&seen_request);
+        let target_handle = thread::spawn(move || {
+            let (mut stream, _) = target_listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut request = String::new();
+            let mut first_line = String::new();
+            reader.read_line(&mut first_line).unwrap();
+            request.push_str(&first_line);
+            let mut content_length = 0usize;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" || line.is_empty() {
+                    request.push_str(&line);
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':') {
+                    if name.trim().eq_ignore_ascii_case("content-length") {
+                        content_length = value.trim().parse::<usize>().unwrap_or(0);
+                    }
+                }
+                request.push_str(&line);
+            }
+            if content_length > 0 {
+                let mut body = vec![0u8; content_length];
+                reader.read_exact(&mut body).unwrap();
+                request.push_str(&String::from_utf8_lossy(&body));
+            }
+            *seen_request_clone.lock().unwrap() = request;
+            let body = "{\"ok\":true}";
+            write!(
+                stream,
+                "HTTP/1.1 202 Accepted\r\ncontent-type: application/json\r\nx-external-id: ext-1\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        });
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_registry = Arc::clone(&registry);
+        let server_process_state = Arc::clone(&process_state);
+        let server_root = root.clone();
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_client(
+                stream,
+                &server_root,
+                &config,
+                server_registry,
+                server_process_state,
+                watch_state,
+                Arc::new(ComputeModuleRuntime::new().unwrap()),
+            )
+            .unwrap();
+        });
+        let body = format!(
+            "{{\"url\":\"http://127.0.0.1:{}/outbound\",\"method\":\"POST\",\"headers\":{{\"authorization\":\"Bearer test\",\"content-type\":\"application/json\"}},\"bodyText\":\"{{\\\"hello\\\":true}}\",\"timeoutMs\":1500}}",
+            target_addr.port()
+        );
+        let mut client = TcpStream::connect(addr).unwrap();
+        write!(
+            client,
+            "POST /capabilities/network/http-outbound HTTP/1.1\r\nhost: test\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+        let mut response_reader = BufReader::new(client);
+        let mut response = String::new();
+        response_reader.read_line(&mut response).unwrap();
+        let mut response_text = response.clone();
+        response_reader.read_to_string(&mut response_text).unwrap();
+        handle.join().unwrap();
+        target_handle.join().unwrap();
+        assert!(response.contains("200 OK"));
+        assert!(response_text.contains("\"status\":202"));
+        assert!(response_text.contains("\"transport\":\"network\""));
+        let request = seen_request.lock().unwrap().clone();
+        assert!(request.contains("POST /outbound HTTP/1.1"));
+        assert!(request.to_ascii_lowercase().contains("authorization: bearer test"));
+        let events = store.read_events().unwrap().join("\n");
+        assert!(events.contains("capability.network.http.outbound.execute"));
+        assert!(events.contains(&format!("url=http://127.0.0.1:{}/outbound", target_addr.port())));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn http_outbound_capability_https_uses_curl_and_emits_journal_event() {
+        let _guard = outbound_curl_test_guard();
+        let root = test_root();
+        let fake_curl = write_fake_curl_script(&root);
+        let prior_curl = std::env::var_os("WITNESS_CORE_CURL_BIN");
+        std::env::set_var("WITNESS_CORE_CURL_BIN", &fake_curl);
+        let config = fixture_config();
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
+        let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let watch_state = Arc::new(Mutex::new(WatcherState::default()));
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_registry = Arc::clone(&registry);
+        let server_process_state = Arc::clone(&process_state);
+        let server_root = root.clone();
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_client(
+                stream,
+                &server_root,
+                &config,
+                server_registry,
+                server_process_state,
+                watch_state,
+                Arc::new(ComputeModuleRuntime::new().unwrap()),
+            )
+            .unwrap();
+        });
+        let body = "{\"url\":\"https://accounts.example.test/token\",\"method\":\"POST\",\"headers\":{\"authorization\":\"Bearer test\",\"content-type\":\"application/json\"},\"bodyText\":\"{\\\"hello\\\":true}\",\"timeoutMs\":1500}";
+        let mut client = TcpStream::connect(addr).unwrap();
+        write!(
+            client,
+            "POST /capabilities/network/http-outbound HTTP/1.1\r\nhost: test\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+        let mut response_reader = BufReader::new(client);
+        let mut response = String::new();
+        response_reader.read_line(&mut response).unwrap();
+        let mut response_text = response.clone();
+        response_reader.read_to_string(&mut response_text).unwrap();
+        handle.join().unwrap();
+        match prior_curl {
+            Some(value) => std::env::set_var("WITNESS_CORE_CURL_BIN", value),
+            None => std::env::remove_var("WITNESS_CORE_CURL_BIN"),
+        }
+        assert!(response.contains("200 OK"));
+        assert!(response_text.contains("\"status\":207"));
+        assert!(response_text.contains("\"transport\":\"network\""));
+        assert!(response_text.contains("\"x-test\":\"via-fake-curl\""));
+        let events = store.read_events().unwrap().join("\n");
+        assert!(events.contains("capability.network.http.outbound.execute"));
+        assert!(events.contains("url=https://accounts.example.test/token"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn verification_persistence_http_emits_journal_event_and_persists_rows() {
+        let root = test_root();
+        let config = fixture_config();
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
+        let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let watch_state = Arc::new(Mutex::new(WatcherState::default()));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_registry = Arc::clone(&registry);
+        let server_process_state = Arc::clone(&process_state);
+        let server_root = root.clone();
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_client(
+                stream,
+                &server_root,
+                &config,
+                server_registry,
+                server_process_state,
+                watch_state,
+                Arc::new(ComputeModuleRuntime::new().unwrap()),
+            )
+            .unwrap();
+        });
+        let body = "{\"operation\":\"recordPolicyRows\",\"verificationRoot\":\"app/verification\",\"artifactRoot\":\"app/verification/artifacts\",\"cacheRoot\":\"app/verification/cache\",\"rows\":[{\"id\":\"verificationPolicy:test\",\"enabled\":true}]}";
+        let mut client = TcpStream::connect(addr).unwrap();
+        write!(
+            client,
+            "POST /verification-persistence HTTP/1.1\r\nhost: test\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+        let mut response_reader = BufReader::new(client);
+        let mut response = String::new();
+        response_reader.read_line(&mut response).unwrap();
+        handle.join().unwrap();
+        assert!(response.contains("200 OK"));
+        let readback = handle_verification_persistence_request(
+            &root,
+            "{\"operation\":\"readModelRows\",\"verificationRoot\":\"app/verification\",\"artifactRoot\":\"app/verification/artifacts\",\"cacheRoot\":\"app/verification/cache\"}",
+        )
+        .unwrap();
+        assert!(readback.0.contains("verificationPolicy:test"));
+        let events = store.read_events().unwrap().join("\n");
+        assert!(events.contains("verification.persistence.recordPolicyRows"));
         let _ = fs::remove_dir_all(root);
     }
 

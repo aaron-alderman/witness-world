@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
-import fsWatch from "node:fs";
 import path from "node:path";
 import { createWorld } from "./kernel.js";
 import {
@@ -36,6 +35,7 @@ import {
   persistStableAppSourceCache,
   readStableAppSourceCache
 } from "./runtime-stable-source-cache.js";
+import { latestWitnessCoreGeneration } from "./witness-core-bridge.js";
 
 const MANIFEST_ONLY_DOC_KINDS = new Set(["desktopTarget"]);
 const previewResolverCatalogCache = new WeakMap();
@@ -408,22 +408,42 @@ function normalizeBuildError(error) {
   };
 }
 
-function debounce(fn, delayMs) {
-  let timer = null;
-  const wrapped = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      fn();
-    }, delayMs);
-    timer.unref?.();
-  };
-  wrapped.cancel = () => {
-    if (!timer) return;
-    clearTimeout(timer);
-    timer = null;
-  };
-  return wrapped;
+function normalizeDirtyInputMode(value, {
+  watchEnabled = false
+} = {}) {
+  const mode = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (mode === "explicit") return "explicit";
+  if (mode === "watch") return "watch";
+  return watchEnabled === true ? "watch" : "explicit";
+}
+
+function normalizeDirtyDetectionOwner(value, {
+  witnessCoreStatusStore = null,
+  watchEnabled = false
+} = {}) {
+  const mode = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (mode === "witness-core") return "witness-core";
+  if (mode === "local") return "local";
+  return witnessCoreStatusStore ? "witness-core" : (watchEnabled === true ? "local" : "explicit");
+}
+
+function normalizeSourcePathVariants(sourcePath = "") {
+  const normalized = normalizeSlashes(String(sourcePath || "").trim());
+  if (!normalized) return [];
+  const variants = new Set([normalized]);
+  let current = normalized;
+  while (current.startsWith("../")) {
+    current = current.slice(3);
+    if (current) variants.add(current);
+  }
+  return [...variants];
+}
+
+function generationCanDriveCanonicalRefresh(generation = null) {
+  if (!generation || typeof generation !== "object") return false;
+  if (typeof generation.id !== "string" || !generation.id.trim()) return false;
+  if (generation.id.startsWith("preview-")) return false;
+  return generation.state === "green_local" || generation.state === "stable";
 }
 
 function normalizeRevisionEvent({
@@ -497,9 +517,11 @@ export class AppSnapshotManager {
     devMode = false,
     logger = null,
     generationBridge = null,
+    witnessCoreStatusStore = null,
     fsModule = fs,
-    fsWatchModule = fsWatch,
     watchEnabled = devMode,
+    dirtyInputMode = null,
+    dirtyDetectionOwner = null,
     requireGenerationBridgeForPublishedWrites = false
   }) {
     this.manifestPath = path.resolve(manifestPath);
@@ -511,10 +533,17 @@ export class AppSnapshotManager {
     this.devMode = devMode;
     this.logger = logger;
     this.generationBridge = generationBridge ?? null;
+    this.witnessCoreStatusStore = witnessCoreStatusStore ?? null;
     this.requireGenerationBridgeForPublishedWrites = requireGenerationBridgeForPublishedWrites === true;
     this.fs = fsModule;
-    this.fsWatch = fsWatchModule;
     this.watchEnabled = watchEnabled === true;
+    this.dirtyInputMode = normalizeDirtyInputMode(dirtyInputMode, {
+      watchEnabled: this.watchEnabled
+    });
+    this.dirtyDetectionOwner = normalizeDirtyDetectionOwner(dirtyDetectionOwner, {
+      witnessCoreStatusStore: this.witnessCoreStatusStore,
+      watchEnabled: this.watchEnabled
+    });
     this.activeSnapshot = null;
     this.lastGoodSnapshot = null;
     this.stableSnapshot = null;
@@ -524,19 +553,13 @@ export class AppSnapshotManager {
     this.appRevision = 0;
     this.listeners = new Set();
     this.serial = Promise.resolve();
-    this.watchers = [];
+    this.lastAppliedWitnessCoreGenerationId = null;
     this.lastRevisionEvent = normalizeRevisionEvent({
       revision: 0,
       changedSources: [],
       trigger: "initial",
       status: "pending"
     });
-    this.watcherRoots = [];
-    this.scheduleWatchRefresh = debounce(() => {
-      void this.ensureFresh({ trigger: "watch" }).catch(error => {
-        this.logger?.error?.("app.snapshot.watch.failed", { error });
-      });
-    }, 80);
   }
 
   static async create({
@@ -548,9 +571,11 @@ export class AppSnapshotManager {
     devMode = false,
     logger = null,
     generationBridge = null,
+    witnessCoreStatusStore = null,
     fsModule = fs,
-    fsWatchModule = fsWatch,
     watchEnabled = devMode,
+    dirtyInputMode = null,
+    dirtyDetectionOwner = null,
     requireGenerationBridgeForPublishedWrites = false
   }) {
     const manager = new AppSnapshotManager({
@@ -563,9 +588,11 @@ export class AppSnapshotManager {
       devMode,
       logger,
       generationBridge,
+      witnessCoreStatusStore,
       fsModule,
-      fsWatchModule,
       watchEnabled,
+      dirtyInputMode,
+      dirtyDetectionOwner,
       requireGenerationBridgeForPublishedWrites
     });
     await manager.loadStableSnapshotFromCache();
@@ -579,7 +606,6 @@ export class AppSnapshotManager {
       manager.activeSnapshot = manager.stableSnapshot;
       manager.appRevision = Number(manager.activeSnapshot?.appRevision || manager.appRevision || 0);
     }
-    if (devMode && manager.watchEnabled) manager.startWatchers();
     return manager;
   }
 
@@ -692,12 +718,69 @@ export class AppSnapshotManager {
       computeModules: structuredClone(computeModules),
       devMode: this.devMode,
       watchEnabled: this.watchEnabled,
-      watcherCount: this.watchers.length,
+      dirtyInputMode: this.dirtyInputMode,
+      dirtyDetectionOwner: this.dirtyDetectionOwner,
+      watcherCount: 0,
+      lastAppliedWitnessCoreGenerationId: this.lastAppliedWitnessCoreGenerationId,
       listenerCount: this.listeners.size,
       stableAppRevision: Number(this.stableSnapshot?.appRevision || 0),
       servingPreference: this.servingPreference,
       lastRevisionEvent: this.getLastRevisionEvent()
     };
+  }
+
+  resolveWitnessCoreDirtyPaths(sourcePaths = []) {
+    const snapshot = this.activeSnapshot;
+    if (!snapshot?.sourceIndex?.length) return [];
+    const normalizedSourcePaths = [...new Set((Array.isArray(sourcePaths) ? sourcePaths : [])
+      .map(sourcePath => normalizeSlashes(String(sourcePath || "").trim()))
+      .filter(Boolean))];
+    const rows = (snapshot.sourceIndex ?? []).map(row => ({
+      filePath: path.resolve(String(row.filePath || "")),
+      variants: (() => {
+        const variants = new Set();
+        let cursor = this.appRoot;
+        for (let depth = 0; depth < 5; depth += 1) {
+          variants.add(normalizeSlashes(path.relative(cursor, row.filePath)));
+          const parent = path.dirname(cursor);
+          if (!parent || parent === cursor) break;
+          cursor = parent;
+        }
+        return new Set(
+          [...variants]
+            .flatMap(value => normalizeSourcePathVariants(value))
+            .filter(Boolean)
+        );
+      })()
+    }));
+    const dirtyPaths = new Set();
+    for (const sourcePath of normalizedSourcePaths) {
+      for (const row of rows) {
+        if ([...row.variants].some(variant => sourcePath === variant || sourcePath.endsWith(`/${variant}`))) {
+          dirtyPaths.add(row.filePath);
+        }
+      }
+    }
+    return [...dirtyPaths];
+  }
+
+  async syncDirtyPathsFromWitnessCoreStatus() {
+    if (this.dirtyDetectionOwner !== "witness-core") return this.activeSnapshot;
+    const witnessCoreStatus = await this.witnessCoreStatusStore?.refresh?.()
+      ?? this.witnessCoreStatusStore?.getStatus?.()
+      ?? null;
+    const latestGeneration = latestWitnessCoreGeneration(witnessCoreStatus);
+    if (!generationCanDriveCanonicalRefresh(latestGeneration)) return this.activeSnapshot;
+    const generationId = String(latestGeneration.id || "");
+    if (generationId && generationId === this.lastAppliedWitnessCoreGenerationId) return this.activeSnapshot;
+    const dirtyPaths = this.resolveWitnessCoreDirtyPaths(latestGeneration.sourcePaths ?? []);
+    if (!dirtyPaths.length) {
+      this.lastAppliedWitnessCoreGenerationId = generationId || this.lastAppliedWitnessCoreGenerationId;
+      return this.activeSnapshot;
+    }
+    for (const dirtyPath of dirtyPaths) this.pendingDirtySources.add(dirtyPath);
+    this.lastAppliedWitnessCoreGenerationId = generationId || this.lastAppliedWitnessCoreGenerationId;
+    return this.activeSnapshot;
   }
 
   async persistStableSnapshotCache() {
@@ -758,8 +841,11 @@ export class AppSnapshotManager {
 
   async ensureFresh({ trigger = "request", branchId = null, changeSetId = null, status = null } = {}) {
     return this.runExclusive(async () => {
-      const changed = await this.detectChangedPaths();
-      for (const changedPath of changed) this.pendingDirtySources.add(changedPath);
+      if (this.dirtyDetectionOwner === "witness-core") {
+        await this.syncDirtyPathsFromWitnessCoreStatus();
+        if (!this.pendingDirtySources.size) return this.activeSnapshot;
+        return this.consumeDirtyAndRebuild(trigger, { branchId, changeSetId, status });
+      }
       if (!this.pendingDirtySources.size) return this.activeSnapshot;
       return this.consumeDirtyAndRebuild(trigger, { branchId, changeSetId, status });
     });
@@ -897,35 +983,12 @@ export class AppSnapshotManager {
   }
 
   close() {
-    this.scheduleWatchRefresh.cancel?.();
-    for (const watcher of this.watchers) {
-      try { watcher.close(); } catch {}
-    }
-    this.watchers = [];
   }
 
   async runExclusive(action) {
     const task = this.serial.then(action, action);
     this.serial = task.catch(() => {});
     return task;
-  }
-
-  async detectChangedPaths() {
-    const snapshot = this.activeSnapshot;
-    if (!snapshot) return new Set();
-    const checks = await Promise.all((snapshot.sourceIndex ?? []).map(async row => {
-      try {
-        const stat = await this.fs.stat(row.filePath);
-        const currentMtimeMs = Number(stat.mtimeMs || 0);
-        const currentSize = Number(stat.size || 0);
-        return currentMtimeMs !== row.mtimeMs || currentSize !== Number(row.size || 0)
-          ? row.filePath
-          : null;
-      } catch {
-        return row.filePath;
-      }
-    }));
-    return new Set(checks.filter(Boolean));
   }
 
   async consumeDirtyAndRebuild(trigger, eventMeta = {}) {
@@ -984,55 +1047,17 @@ export class AppSnapshotManager {
       changeSetId: eventMeta?.changeSetId ?? null
     });
     for (const listener of this.listeners) listener(this.getLastRevisionEvent());
-    this.refreshWatchRoots();
     return this.activeSnapshot;
-  }
-
-  refreshWatchRoots() {
-    if (!this.devMode || !this.watchEnabled) return;
-    const nextRoots = uniquePaths(allowedRootsFor(this.appRoot));
-    if (JSON.stringify(nextRoots) === JSON.stringify(this.watcherRoots)) return;
-    this.close();
-    this.watcherRoots = nextRoots;
-    this.startWatchers();
-  }
-
-  startWatchers() {
-    if (!this.devMode || !this.watchEnabled || this.watchers.length) return;
-    const recursiveSupported = process.platform === "win32" || process.platform === "darwin";
-    for (const root of this.watcherRoots.length ? this.watcherRoots : uniquePaths(allowedRootsFor(this.appRoot))) {
-      try {
-        const watcher = this.fsWatch.watch(root, { recursive: recursiveSupported }, () => {
-          this.scheduleWatchRefresh();
-        });
-        this.watchers.push(watcher);
-      } catch {
-        const fallbackDirs = new Set([root]);
-        for (const source of this.activeSnapshot?.appProject?.sourceFiles ?? []) {
-          const fileDir = path.dirname(source.file);
-          if (isWithinRoot(fileDir, root)) fallbackDirs.add(fileDir);
-        }
-        for (const directory of fallbackDirs) {
-          try {
-            const watcher = this.fsWatch.watch(directory, () => {
-              this.scheduleWatchRefresh();
-            });
-            this.watchers.push(watcher);
-          } catch {}
-        }
-      }
-    }
   }
 
   setWatcherMode(enabled) {
     const nextEnabled = enabled === true;
     this.watchEnabled = nextEnabled;
-    if (!nextEnabled) {
-      this.close();
-      return;
-    }
-    this.refreshWatchRoots();
-    this.startWatchers();
+    this.dirtyInputMode = this.dirtyDetectionOwner === "witness-core"
+      ? "explicit"
+      : normalizeDirtyInputMode(nextEnabled ? "watch" : "explicit", {
+          watchEnabled: nextEnabled
+        });
   }
 }
 
@@ -1939,18 +1964,78 @@ export class AppPreviewSessionManager {
     appSnapshotManager,
     generationBridge = null,
     logger = null,
-    fsModule = fs
+    fsModule = fs,
+    requireGenerationBridgeForPreviewAccess = false
   } = {}) {
     this.appSnapshotManager = appSnapshotManager ?? null;
     this.generationBridge = generationBridge ?? null;
     this.logger = logger;
     this.fs = fsModule;
+    this.requireGenerationBridgeForPreviewAccess = requireGenerationBridgeForPreviewAccess === true;
     this.sessions = new Map();
     this.pendingPersistence = new Map();
   }
 
   currentActiveSnapshot() {
     return this.appSnapshotManager?.getActiveSnapshot?.() ?? null;
+  }
+
+  previewBridgeUnavailable(operation) {
+    return createAppSnapshotError(`witness core preview ${operation} is required but unavailable`, {
+      status: 503,
+      code: "WITNESS_CORE_UNAVAILABLE"
+    });
+  }
+
+  previewCapabilitySourceId(filePath) {
+    const resolvedPath = path.resolve(String(filePath || ""));
+    const appRoot = path.resolve(String(this.appSnapshotManager?.appRoot ?? path.dirname(resolvedPath)));
+    validateWithinAllowedRoots(resolvedPath, appRoot);
+    if (isWithinRoot(resolvedPath, appRoot)) {
+      return sourceIdForPath(appRoot, resolvedPath);
+    }
+    const sharedLibRoot = sharedLibRootFor(appRoot);
+    if (isWithinRoot(resolvedPath, sharedLibRoot)) {
+      const workspaceRoot = path.resolve(String(this.appSnapshotManager?.cacheCwd ?? process.cwd()));
+      const relativePath = normalizeSlashes(path.relative(workspaceRoot, resolvedPath));
+      if (
+        !relativePath
+        || relativePath.startsWith("..")
+        || path.isAbsolute(relativePath)
+      ) {
+        throw createAppSnapshotError("witness core preview shared library source is outside the configured workspace root", {
+          status: 503,
+          code: "WITNESS_CORE_PREVIEW_SHARED_LIB_UNSUPPORTED",
+          details: {
+            path: resolvedPath,
+            workspaceRoot
+          }
+        });
+      }
+      return relativePath;
+    }
+    throw createAppSnapshotError("preview source path outside allowed roots", {
+      status: 403,
+      code: "APP_PREVIEW_SOURCE_OUT_OF_BOUNDS",
+      details: {
+        path: resolvedPath
+      }
+    });
+  }
+
+  async readPreviewSourceStat(filePath, session = null) {
+    const resolvedPath = path.resolve(String(filePath || ""));
+    if (typeof this.generationBridge?.statSource === "function") {
+      const sourceId = this.previewCapabilitySourceId(resolvedPath);
+      return await this.generationBridge.statSource({
+        path: sourceId,
+        correlation: session?.correlation ?? null
+      });
+    }
+    if (this.requireGenerationBridgeForPreviewAccess) {
+      throw this.previewBridgeUnavailable("source stat");
+    }
+    return await this.fs.stat(resolvedPath);
   }
 
   async readPreviewSourceText(filePath, overlaySources = null, session = null) {
@@ -1960,33 +2045,43 @@ export class AppPreviewSessionManager {
     }
     if (typeof this.generationBridge?.readSource === "function") {
       try {
-        const sourceId = sourceIdForPath(this.appSnapshotManager?.appRoot ?? path.dirname(resolvedPath), resolvedPath);
+        const sourceId = this.previewCapabilitySourceId(resolvedPath);
         const payload = await this.generationBridge.readSource({
           path: sourceId,
           correlation: session?.correlation ?? null
         });
         if (typeof payload?.content === "string") return payload.content;
       } catch (error) {
+        if (this.requireGenerationBridgeForPreviewAccess) throw error;
         this.logger?.warn?.("witness core preview source read failed; falling back to local fs", {
           filePath: resolvedPath,
           error: error instanceof Error ? error.message : String(error)
         });
       }
     }
+    if (this.requireGenerationBridgeForPreviewAccess) {
+      throw this.previewBridgeUnavailable("source read");
+    }
     return await readSourceText(resolvedPath, this.fs, overlaySources, "utf8");
   }
 
   async recordPreviewOverlayPatch(session, edit) {
-    if (typeof this.generationBridge?.patchSource !== "function") return null;
+    if (typeof this.generationBridge?.patchSource !== "function") {
+      if (this.requireGenerationBridgeForPreviewAccess) {
+        throw this.previewBridgeUnavailable("overlay patch");
+      }
+      return null;
+    }
     try {
       return await this.generationBridge.patchSource({
-        path: edit.sourceId,
+        path: this.previewCapabilitySourceId(edit.filePath),
         content: edit.content,
         reason: "preview.overlay.patch",
         previewOnly: true,
         correlation: session?.correlation ?? null
       });
     } catch (error) {
+      if (this.requireGenerationBridgeForPreviewAccess) throw error;
       this.logger?.warn?.("witness core preview overlay patch failed; keeping in-memory preview overlay", {
         previewSessionId: session?.id ?? null,
         sourceId: edit.sourceId,
@@ -1994,6 +2089,32 @@ export class AppPreviewSessionManager {
       });
       return null;
     }
+  }
+
+  createPreviewFsModule(session, overlaySources = null) {
+    return {
+      readFile: async (target, encoding) => {
+        if (!encoding || encoding === "utf8") {
+          return await this.readPreviewSourceText(target, overlaySources, session);
+        }
+        return await this.fs.readFile(target, encoding);
+      },
+      stat: async target => {
+        const resolvedPath = path.resolve(String(target || ""));
+        const overlay = sourceOverlayContentFor(resolvedPath, overlaySources);
+        if (typeof overlay === "string") {
+          return syntheticOverlayStat(overlay);
+        }
+        const stat = await this.readPreviewSourceStat(resolvedPath, session);
+        const modifiedAtMs = typeof stat?.modifiedAt === "string"
+          ? Date.parse(stat.modifiedAt)
+          : NaN;
+        return {
+          mtimeMs: Number.isFinite(modifiedAtMs) ? modifiedAtMs : Date.now(),
+          size: Number(stat?.size || 0)
+        };
+      }
+    };
   }
 
   normalizeSessionCorrelation(correlation = null) {
@@ -2290,12 +2411,13 @@ export class AppPreviewSessionManager {
     const activeSnapshot = this.currentActiveSnapshot();
     if (!activeSnapshot) throw new Error("active app snapshot unavailable");
     const effectiveOverlaySources = new Map(overlaySources ?? session?.overlaySources ?? []);
+    const previewFsModule = this.createPreviewFsModule(session, effectiveOverlaySources);
     let compiled = activeSnapshot;
     if (effectiveOverlaySources.size) {
       const appProject = await loadAppProject(this.appSnapshotManager.manifestPath, {
         readFile: async (target, encoding) => {
           if (encoding && encoding !== "utf8") {
-            return readSourceText(target, this.fs, effectiveOverlaySources, encoding);
+            return previewFsModule.readFile(target, encoding);
           }
           return await this.readPreviewSourceText(target, effectiveOverlaySources, session);
         }
@@ -2307,7 +2429,7 @@ export class AppPreviewSessionManager {
         runtimeProfile: this.appSnapshotManager.runtimeProfile,
         runtimePluginIds: this.appSnapshotManager.runtimePluginIds,
         env: this.appSnapshotManager.env,
-        fsModule: this.fs,
+        fsModule: previewFsModule,
         sourceOverlayByPath: effectiveOverlaySources,
         previousUnits: activeSnapshot?.compiledUnits ?? new Map(),
         dirtyPaths: appProject.sourceFiles.map(row => row.file)

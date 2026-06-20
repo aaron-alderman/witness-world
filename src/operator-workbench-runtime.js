@@ -2,6 +2,28 @@ export function renderOperatorWorkbenchRuntimeFactory() {
   return String.raw`
     const escapeHtml = ${escapeHtml.toString()};
     const gridTemplateColumnsForCount = ${gridTemplateColumnsForCount.toString()};
+    const normalizeAsciiCell = ${normalizeAsciiCell.toString()};
+    const fitAsciiCell = ${fitAsciiCell.toString()};
+    const computeAsciiColumnWidths = ${computeAsciiColumnWidths.toString()};
+    const buildAsciiBorderLine = ${buildAsciiBorderLine.toString()};
+    const buildAsciiRowLine = ${buildAsciiRowLine.toString()};
+    const buildAsciiBoxLines = ${buildAsciiBoxLines.toString()};
+    const renderAsciiEntryHtml = ${renderAsciiEntryHtml.toString()};
+    const renderAsciiTableHtml = ${renderAsciiTableHtml.toString()};
+    const formatTabLabel = ${formatTabLabel.toString()};
+    const getBoxChars = ${getBoxChars.toString()};
+    const buildUnicodeBorderLine = ${buildUnicodeBorderLine.toString()};
+    const buildUnicodeRowLine = ${buildUnicodeRowLine.toString()};
+    const buildUnicodeTableLines = ${buildUnicodeTableLines.toString()};
+    const buildUnicodeBoxLines = ${buildUnicodeBoxLines.toString()};
+    const fitCanvasLine = ${fitCanvasLine.toString()};
+    const leftPaneCanvasModel = ${leftPaneCanvasModel.toString()};
+    const rightPaneCanvasModel = ${rightPaneCanvasModel.toString()};
+    const topPaneCanvasModel = ${topPaneCanvasModel.toString()};
+    const bottomPaneCanvasModel = ${bottomPaneCanvasModel.toString()};
+    const paintBox = ${paintBox.toString()};
+    const paintText = ${paintText.toString()};
+    const drawOperatorWorkbenchCanvas = ${drawOperatorWorkbenchCanvas.toString()};
     const helpCopyForSnapshot = ${helpCopyForSnapshot.toString()};
     const renderSectionDetailHtml = ${renderSectionDetailHtml.toString()};
     const renderSectionRowsHtml = ${renderSectionRowsHtml.toString()};
@@ -26,6 +48,146 @@ function escapeHtml(value) {
 function gridTemplateColumnsForCount(count) {
   const safeCount = Math.max(1, Number(count) || 1);
   return `34px repeat(${safeCount}, minmax(0, 1fr))`;
+}
+
+function normalizeAsciiCell(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function fitAsciiCell(value, width) {
+  const normalized = normalizeAsciiCell(value);
+  const safeWidth = Math.max(1, Number(width) || 1);
+  if (normalized.length <= safeWidth) {
+    return normalized.padEnd(safeWidth, " ");
+  }
+  if (safeWidth <= 3) {
+    return normalized.slice(0, safeWidth);
+  }
+  return `${normalized.slice(0, safeWidth - 3)}...`;
+}
+
+function computeAsciiColumnWidths(columns = [], rows = [], {
+  indexWidth = 2,
+  maxTableWidth = 96
+} = {}) {
+  const safeColumns = columns.length ? columns : ["value"];
+  const rawWidths = safeColumns.map(column => {
+    const labelWidth = normalizeAsciiCell(column).length;
+    const rowWidth = rows.reduce((maxWidth, row) => {
+      const value = row?.columns?.[column];
+      return Math.max(maxWidth, normalizeAsciiCell(value).length);
+    }, 0);
+    return Math.max(6, labelWidth, rowWidth);
+  });
+  const widths = [...rawWidths];
+  const minWidth = 6;
+  const totalWidth = () =>
+    1
+    + (indexWidth + 2)
+    + widths.reduce((sum, width) => sum + width + 3, 0);
+  while (totalWidth() > maxTableWidth && widths.some(width => width > minWidth)) {
+    const widestIndex = widths.reduce((bestIndex, width, index, list) =>
+      width > list[bestIndex] ? index : bestIndex, 0);
+    if (widths[widestIndex] <= minWidth) break;
+    widths[widestIndex] -= 1;
+  }
+  return widths;
+}
+
+function buildAsciiBorderLine(widths = [], indexWidth = 2) {
+  return `+-${"-".repeat(indexWidth)}-+-${widths.map(width => "-".repeat(width)).join("-+-")}-+`;
+}
+
+function buildAsciiRowLine(indexLabel, values = [], widths = [], indexWidth = 2) {
+  const safeIndex = fitAsciiCell(indexLabel, indexWidth);
+  const cells = values.map((value, index) => fitAsciiCell(value, widths[index] || 6));
+  return `| ${safeIndex} | ${cells.join(" | ")} |`;
+}
+
+function buildAsciiBoxLines(lines = [], width = 78) {
+  const safeWidth = Math.max(16, Number(width) || 78);
+  const border = `+${"-".repeat(safeWidth - 2)}+`;
+  const body = (lines.length ? lines : [""]).map(line => `| ${fitAsciiCell(line, safeWidth - 4)} |`);
+  return [border, ...body, border];
+}
+
+function renderAsciiEntryHtml(row = {}, {
+  active = false,
+  interactive = false,
+  dataAttr = "data-row",
+  rowIndex = 0,
+  width = 78
+} = {}) {
+  const kind = String(row.kind || row.type || "row").toUpperCase();
+  const label = normalizeAsciiCell(row.label || "(row)");
+  const detail = normalizeAsciiCell(row.detail || row.summary || "");
+  const lines = [
+    `${active ? ">" : " "} [${kind}] ${label}`,
+    detail ? `  ${detail}` : ""
+  ].filter((line, index) => index === 0 || line);
+  const boxLines = buildAsciiBoxLines(lines, width);
+  if (!interactive) {
+    return `<div class="operator-ascii-entry-static">${boxLines.map(line => `<pre class="operator-ascii-line operator-ascii-entry-line">${escapeHtml(line)}</pre>`).join("")}</div>`;
+  }
+  const disabled = row.actionable === false ? ' data-disabled="true"' : "";
+  const activeAttr = active ? ' data-active="true"' : "";
+  return `<button type="button" class="operator-ascii-entry" ${dataAttr}="${rowIndex}"${activeAttr}${disabled}>${boxLines.map(line => `<span class="operator-ascii-line operator-ascii-entry-line">${escapeHtml(line)}</span>`).join("")}</button>`;
+}
+
+function formatTabLabel(label = "", active = false, enabled = true) {
+  const safeLabel = normalizeAsciiCell(label || "TAB");
+  if (!enabled) return `(${safeLabel})`;
+  return active ? `<${safeLabel}>` : `[${safeLabel}]`;
+}
+
+function renderAsciiTableHtml({
+  columns = [],
+  rows = [],
+  emptyMessage = "(no rows)",
+  activeIndex = -1,
+  interactive = false,
+  rowDataAttr = "data-row",
+  rowIndexForRow = (_row, index) => String(index + 1),
+  rowValuesForRow = (row, resolvedColumns) => resolvedColumns.map(column => row?.columns?.[column] ?? ""),
+  maxTableWidth = 96
+} = {}) {
+  const safeColumns = columns.length ? columns : ["value"];
+  if (!rows.length) {
+    return `<div class="operator-empty">${escapeHtml(emptyMessage)}</div>`;
+  }
+  const indexWidth = Math.max(2, rows.reduce((maxWidth, row, index) =>
+    Math.max(maxWidth, String(rowIndexForRow(row, index)).length), 0));
+  const widths = computeAsciiColumnWidths(safeColumns, rows.map((row, index) => ({
+    columns: Object.fromEntries(safeColumns.map(column => [column, rowValuesForRow(row, safeColumns, index)?.[safeColumns.indexOf(column)] ?? ""]))
+  })), {
+    indexWidth,
+    maxTableWidth
+  });
+  const borderLine = buildAsciiBorderLine(widths, indexWidth);
+  const headerLine = buildAsciiRowLine("#", safeColumns.map(column => String(column).toUpperCase()), widths, indexWidth);
+  const rowHtml = rows.map((row, index) => {
+    const line = buildAsciiRowLine(
+      rowIndexForRow(row, index),
+      rowValuesForRow(row, safeColumns, index),
+      widths,
+      indexWidth
+    );
+    if (!interactive) {
+      return `<pre class="operator-ascii-line operator-ascii-row operator-ascii-row-static">${escapeHtml(line)}</pre>`;
+    }
+    const active = index === activeIndex ? ' data-active="true"' : "";
+    const disabled = row.actionable === false ? ' data-disabled="true"' : "";
+    return `<button type="button" class="operator-ascii-row" ${rowDataAttr}="${index}"${active}${disabled}><span class="operator-ascii-line">${escapeHtml(line)}</span></button>`;
+  }).join("");
+  return `
+    <div class="operator-ascii-table">
+      <pre class="operator-ascii-line operator-ascii-border">${escapeHtml(borderLine)}</pre>
+      <pre class="operator-ascii-line operator-ascii-header">${escapeHtml(headerLine)}</pre>
+      <pre class="operator-ascii-line operator-ascii-border">${escapeHtml(borderLine)}</pre>
+      ${rowHtml}
+      <pre class="operator-ascii-line operator-ascii-border">${escapeHtml(borderLine)}</pre>
+    </div>
+  `;
 }
 
 function sourceTabContentLines(lines = []) {
@@ -102,61 +264,41 @@ function renderSectionRowsHtml(section = {}, {
   const rows = section.rows || [];
   const kind = section.kind || "list";
   if (kind === "kv") {
-    const gridStyle = `grid-template-columns:${gridTemplateColumnsForCount(2)};`;
-    const header = `
-      <div class="operator-table-header" style="${gridStyle}">
-        <span class="operator-row-index">#</span>
-        <span class="operator-table-cell operator-table-head">key</span>
-        <span class="operator-table-cell operator-table-head">value</span>
-      </div>
-    `;
-    const body = rows.map((row, index) => `
-      <div class="operator-row operator-row-table operator-row-static" style="${gridStyle}">
-        <span class="operator-row-index">${index + 1}</span>
-        <span class="operator-table-cell">${escapeHtml(row.columns?.key ?? row.key ?? row.label ?? "")}</span>
-        <span class="operator-table-cell">${escapeHtml(row.columns?.value ?? row.value ?? row.detail ?? "")}</span>
-      </div>
-    `).join("");
-    return `${header}${body || `<div class="operator-empty">${escapeHtml(section.emptyMessage || "(no rows)")}</div>`}`;
+    return renderAsciiTableHtml({
+      columns: ["key", "value"],
+      rows,
+      emptyMessage: section.emptyMessage || "(no rows)",
+      interactive: false,
+      rowValuesForRow: row => [
+        row.columns?.key ?? row.key ?? row.label ?? "",
+        row.columns?.value ?? row.value ?? row.detail ?? ""
+      ],
+      maxTableWidth: 104
+    });
   }
   if ((kind === "table" || section.shape === "table-detail") && (section.columns || []).length) {
-    const columns = section.columns || [];
-    const gridStyle = `grid-template-columns:${gridTemplateColumnsForCount(columns.length)};`;
-    const headerCells = columns.map(column => `<span class="operator-table-cell operator-table-head">${escapeHtml(column)}</span>`).join("");
-    const rowHtml = rows.map((row, index) => {
-      const activeRow = active && index === cursor ? ' data-active="true"' : "";
-      const disabled = row.primaryCommand ? "" : ' data-disabled="true"';
-      const cells = columns.map(column => `<span class="operator-table-cell">${escapeHtml(row.columns?.[column] ?? "")}</span>`).join("");
-      if (active) {
-        return `<button type="button" class="operator-row operator-row-table" data-custom-screen-row="${index}" style="${gridStyle}"${activeRow}${disabled}><span class="operator-row-index">${index + 1}</span>${cells}</button>`;
-      }
-      return `<div class="operator-row operator-row-table operator-row-static" style="${gridStyle}"><span class="operator-row-index">${index + 1}</span>${cells}</div>`;
-    }).join("");
-    return `
-      <div class="operator-table-header" style="${gridStyle}">
-        <span class="operator-row-index">#</span>
-        ${headerCells}
-      </div>
-      ${rowHtml || `<div class="operator-empty">${escapeHtml(section.emptyMessage || "(no rows)")}</div>`}
-    `;
+    return renderAsciiTableHtml({
+      columns: section.columns || [],
+      rows,
+      emptyMessage: section.emptyMessage || "(no rows)",
+      activeIndex: active ? cursor : -1,
+      interactive: active,
+      rowDataAttr: "data-custom-screen-row",
+      rowValuesForRow: (row, columns) => columns.map(column => row.columns?.[column] ?? ""),
+      maxTableWidth: 104
+    });
   }
   return rows.map((row, index) => {
-    const activeRow = active && index === cursor ? ' data-active="true"' : "";
-    const disabled = row.primaryCommand ? "" : ' data-disabled="true"';
-    if (active) {
-      return `
-        <button type="button" class="operator-reference" data-custom-screen-row="${index}"${activeRow}${disabled}>
-          <strong>[${escapeHtml(String(row.kind || section.dataSource || "row").toUpperCase())}] ${escapeHtml(row.label || "(row)")}</strong>
-          <span>${escapeHtml(row.detail || "")}</span>
-        </button>
-      `;
-    }
-    return `
-      <div class="operator-reference operator-reference-static">
-        <strong>[${escapeHtml(String(row.kind || section.dataSource || "row").toUpperCase())}] ${escapeHtml(row.label || "(row)")}</strong>
-        <span>${escapeHtml(row.detail || "")}</span>
-      </div>
-    `;
+    return renderAsciiEntryHtml({
+      ...row,
+      kind: row.kind || section.dataSource || "row"
+    }, {
+      active: active && index === cursor,
+      interactive: active,
+      dataAttr: "data-custom-screen-row",
+      rowIndex: index,
+      width: 78
+    });
   }).join("") || `<div class="operator-empty">${escapeHtml(section.emptyMessage || "(no rows)")}</div>`;
 }
 
@@ -166,13 +308,15 @@ function renderScreenSectionHtml(section = {}, {
 } = {}) {
   const rowCount = (section.rows || []).length;
   const collapsed = Boolean(section.collapsed);
+  const detailStateText = `${section.kind || "detail"} | rows=${rowCount}${collapsed ? " | collapsed" : " | expanded"}`;
+  const listStateText = `${section.kind || "list"} | rows=${rowCount}${collapsed ? " | collapsed" : " | expanded"}`;
   const detailHtml = renderSectionDetailHtml(section.detailLines || [], section.emptyMessage || "(no rows)");
   if ((section.kind || "list") === "detail") {
     return `
       <section class="operator-screen-section" data-screen-section-index="${escapeHtml(String(section.index ?? 0))}" data-active="${active ? "true" : "false"}" data-collapsed="${collapsed ? "true" : "false"}">
         <div class="operator-screen-section-head">
           <strong>${escapeHtml(section.title || "Detail")}</strong>
-          <span>${escapeHtml(section.kind || "detail")} · ${rowCount}${collapsed ? " · collapsed" : ""}</span>
+          <span>${escapeHtml(detailStateText)}</span>
         </div>
         ${collapsed ? "" : `<div class="operator-source-excerpt">${detailHtml}</div>`}
       </section>
@@ -182,7 +326,7 @@ function renderScreenSectionHtml(section = {}, {
     <section class="operator-screen-section" data-screen-section-index="${escapeHtml(String(section.index ?? 0))}" data-active="${active ? "true" : "false"}" data-collapsed="${collapsed ? "true" : "false"}">
       <div class="operator-screen-section-head">
         <strong>${escapeHtml(section.title || "Section")}</strong>
-        <span>${escapeHtml(section.kind || "list")} · ${rowCount}${collapsed ? " · collapsed" : ""}</span>
+        <span>${escapeHtml(listStateText)}</span>
       </div>
       ${collapsed ? "" : `<div class="operator-source-layout">
         <div class="operator-source-list">
@@ -213,13 +357,15 @@ function renderInteractiveScreenSectionHtml(section = {}, {
     ? "[ ]"
     : (collapsed ? "[+]" : "[-]");
   const detailHtml = renderSectionDetailHtml(section.detailLines || [], section.emptyMessage || "(no rows)");
+  const headerLines = buildAsciiBoxLines([
+    `${section.title || "Section"} ${toggleLabel}`,
+    stateText
+  ], 82);
   const headerHtml = `
     <div class="operator-screen-section-head">
       <button type="button" class="operator-screen-section-header" data-screen-section-header="${escapeHtml(String(section.index ?? 0))}">
-        <strong>${escapeHtml(section.title || "Section")}</strong>
-        <span>${escapeHtml(stateText)}</span>
+        ${headerLines.map(line => `<span class="operator-ascii-line operator-ascii-header-line">${escapeHtml(line)}</span>`).join("")}
       </button>
-      <button type="button" class="operator-screen-section-toggle" data-screen-section-toggle="${escapeHtml(String(section.index ?? 0))}"${section.collapsible === false ? ' disabled="true"' : ""}>${escapeHtml(toggleLabel)}</button>
     </div>
   `;
   if ((section.kind || "list") === "detail") {
@@ -277,7 +423,7 @@ export function renderOperatorWorkbenchState({
   }
 
   const title = byId("operator-title");
-  if (title) title.textContent = snapshot.topPane?.title || "Operator Workbench";
+  if (title) title.textContent = snapshot.topPane?.title || "Operator TUI";
   const subtitle = byId("operator-subtitle");
   if (subtitle) subtitle.textContent = snapshot.topPane?.subtitle || "";
   const navigation = snapshot.topPane?.navigation || { chips: [], selectedIndex: 0 };
@@ -305,62 +451,69 @@ export function renderOperatorWorkbenchState({
   const leftHeader = byId("operator-left-header");
   if (leftHeader) leftHeader.textContent = snapshot.leftPane?.header || "";
   const leftTitle = byId("operator-left-title");
-  if (leftTitle) leftTitle.textContent = snapshot.leftPane?.title || "Tree";
+  if (leftTitle) leftTitle.textContent = snapshot.leftPane?.title || "LEFT PANE";
   const leftRows = byId("operator-left-rows");
   if (leftRows) {
     const rows = snapshot.leftPane?.rows || [];
     const columns = snapshot.leftPane?.columns || [];
     const leftShape = snapshot.leftPane?.shape || (snapshot.leftPane?.mode === "results" ? "table" : "tree");
     if (leftShape === "table" && columns.length) {
-      const gridStyle = `grid-template-columns:${gridTemplateColumnsForCount(columns.length)};`;
-      const headerCells = columns.map(column => `<span class="operator-table-cell operator-table-head">${escapeHtml(column)}</span>`).join("");
-      const rowHtml = rows.map((row, index) => {
-        const active = index === snapshot.leftPane.cursor ? ' data-active="true"' : "";
-        const selected = row.selected ? ' data-selected="true"' : "";
-        const disabled = row.actionable === false ? ' disabled="true" data-disabled="true"' : "";
-        const cells = columns.map(column => `<span class="operator-table-cell">${escapeHtml(row.columns?.[column] ?? "")}</span>`).join("");
-        return `<button type="button" class="operator-row operator-row-table" data-left-row="${index}" style="${gridStyle}"${active}${selected}${disabled}><span class="operator-row-index">${row.index}</span>${cells}</button>`;
-      }).join("");
-      leftRows.innerHTML = `
-        <div class="operator-table-header" style="${gridStyle}">
-          <span class="operator-row-index">#</span>
-          ${headerCells}
-        </div>
-        ${rowHtml || '<div class="operator-empty">(no rows)</div>'}
-      `;
+      leftRows.innerHTML = renderAsciiTableHtml({
+        columns,
+        rows,
+        emptyMessage: "(no rows)",
+        activeIndex: snapshot.leftPane.cursor ?? 0,
+        interactive: true,
+        rowDataAttr: "data-left-row",
+        rowIndexForRow: row => row.index ?? "",
+        rowValuesForRow: (row, resolvedColumns) => resolvedColumns.map(column => row.columns?.[column] ?? ""),
+        maxTableWidth: 92
+      });
     } else {
-      leftRows.innerHTML = rows.map((row, index) => {
-        const active = index === snapshot.leftPane.cursor ? ' data-active="true"' : "";
-        const selected = row.selected ? ' data-selected="true"' : "";
-        const disabled = row.actionable === false ? ' disabled="true" data-disabled="true"' : "";
-        return `
-          <button type="button" class="operator-row" data-left-row="${index}"${active}${selected}${disabled}>
-            <span class="operator-row-index">${row.index}</span>
-            <span class="operator-row-main">
-              <strong>${escapeHtml(row.label || "")}</strong>
-              <span>${escapeHtml(row.summary || "")}</span>
-            </span>
-          </button>
-        `;
-      }).join("") || '<div class="operator-empty">(no rows)</div>';
+      leftRows.innerHTML = rows.map((row, index) => renderAsciiEntryHtml({
+        ...row,
+        kind: row.kind || row.type || "item",
+        label: `${row.index ?? index + 1} ${row.label || ""}`.trim(),
+        detail: row.summary || ""
+      }, {
+        active: index === snapshot.leftPane.cursor,
+        interactive: true,
+        dataAttr: "data-left-row",
+        rowIndex: index,
+        width: 72
+      })).join("") || '<div class="operator-empty">(no rows)</div>';
     }
   }
 
   const inspectorTitle = byId("operator-inspector-title");
-  if (inspectorTitle) inspectorTitle.textContent = snapshot.rightPane?.title || "Inspector";
+  if (inspectorTitle) inspectorTitle.textContent = snapshot.rightPane?.title || "RIGHT PANE";
   const inspectTab = byId("operator-tab-inspect");
-  if (inspectTab) inspectTab.dataset.active = snapshot.rightPane?.activeScreenId === "inspect" ? "true" : "false";
+  if (inspectTab) {
+    const activeTab = snapshot.rightPane?.activeScreenId === "inspect";
+    inspectTab.dataset.active = activeTab ? "true" : "false";
+    inspectTab.textContent = formatTabLabel("INSPECT", activeTab, true);
+  }
   const referencesTab = byId("operator-tab-references");
-  if (referencesTab) referencesTab.dataset.active = snapshot.rightPane?.activeScreenId === "references" ? "true" : "false";
+  if (referencesTab) {
+    const activeTab = snapshot.rightPane?.activeScreenId === "references";
+    referencesTab.dataset.active = activeTab ? "true" : "false";
+    referencesTab.textContent = formatTabLabel("REFS", activeTab, true);
+  }
   const sourceTab = byId("operator-tab-source");
   if (sourceTab) {
-    sourceTab.dataset.active = snapshot.rightPane?.activeScreenId === "source" ? "true" : "false";
-    sourceTab.disabled = !snapshot.rightPane?.tabs?.source;
+    const enabled = Boolean(snapshot.rightPane?.tabs?.source);
+    const activeTab = snapshot.rightPane?.activeScreenId === "source";
+    sourceTab.dataset.active = activeTab ? "true" : "false";
+    sourceTab.disabled = !enabled;
+    sourceTab.textContent = formatTabLabel("SOURCE", activeTab, enabled);
   }
   const provenanceTab = byId("operator-tab-provenance");
   if (provenanceTab) {
-    provenanceTab.dataset.active = snapshot.rightPane?.activeScreenId === "provenance" ? "true" : "false";
-    provenanceTab.disabled = !snapshot.rightPane?.tabs?.provenance;
+    const enabled = Boolean(snapshot.rightPane?.tabs?.provenance);
+    const activeTab = snapshot.rightPane?.activeScreenId === "provenance";
+    provenanceTab.dataset.active = activeTab ? "true" : "false";
+    provenanceTab.disabled = !enabled;
+    provenanceTab.textContent = formatTabLabel("PROVENANCE", activeTab, enabled);
   }
   const customScreenBody = byId("operator-custom-screen-body");
   if (customScreenBody) {
@@ -387,7 +540,7 @@ export function renderOperatorWorkbenchState({
   const commandMatches = byId("operator-command-matches");
   if (commandMatches) commandMatches.textContent = (autocomplete.matches || []).slice(0, 4).join("   ");
   const output = byId("operator-last-output");
-  if (output) output.textContent = snapshot.ui?.lastOutput || "Ready.";
+  if (output) output.textContent = snapshot.ui?.lastOutput || "ready";
   const status = byId("operator-last-status");
   if (status) {
     status.dataset.status = snapshot.ui?.lastStatus || "info";

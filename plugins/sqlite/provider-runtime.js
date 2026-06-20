@@ -81,22 +81,74 @@ function applyDbSqlParams(statement, method, normalizedParams) {
   return statement[method]();
 }
 
+function witnessCoreSqliteFailureResult(error, datasource, fallbackReason = "witness-core sqlite capability unavailable") {
+  const status = Number(error?.status || 503);
+  const reason = error instanceof Error
+    ? (error.message || fallbackReason)
+    : fallbackReason;
+  return {
+    ok: false,
+    status,
+    reason,
+    datasource: decorateSqliteDatasource(datasource, {
+      bridgeActive: true,
+      adapterStatus: "witness-core-unavailable",
+      lastError: reason
+    })
+  };
+}
+
+function sqliteBoundaryMetadata({
+  bridgeActive = false,
+  adapterStatus = bridgeActive ? "witness-core" : "ready",
+  lastError = null
+} = {}) {
+  return {
+    adapterStatus,
+    lastError,
+    boundaryOwner: bridgeActive ? "witness-core" : "node",
+    boundaryAuthority: bridgeActive ? "rust-owned" : "transitional-node-fallback",
+    boundaryTransport: bridgeActive ? "capability.db.sqlite" : "node:sqlite",
+    boundaryFallbackAllowed: bridgeActive !== true,
+    boundaryAvailability: String(adapterStatus || "").includes("unavailable") ? "unavailable" : "available"
+  };
+}
+
+function decorateSqliteDatasource(datasource, {
+  bridgeActive = false,
+  adapterStatus = datasource?.adapterStatus ?? (bridgeActive ? "witness-core" : "ready"),
+  lastError = datasource?.lastError ?? null
+} = {}) {
+  if (!datasource || datasource.provider !== "sqlite") return datasource ? { ...datasource } : datasource;
+  return {
+    ...datasource,
+    ...sqliteBoundaryMetadata({ bridgeActive, adapterStatus, lastError })
+  };
+}
+
 export function createDbSqlRuntime({
   runtimeConfig,
   runtimeRoot,
   serverRunnerId,
-  loadSqliteModule = () => import("node:sqlite")
+  loadSqliteModule = () => import("node:sqlite"),
+  getAppContext = null
 }) {
   const sqliteConnections = new Map();
   let sqliteSupportError = null;
   const currentConfig = () => normalizeDbSqlConfig(runtimeConfig, runtimeRoot, serverRunnerId);
+  const witnessCoreBridge = () => getAppContext?.()?.witnessCoreBridge ?? null;
+  const sqliteBridgeActive = () => Boolean(witnessCoreBridge()?.coreUrl);
 
   const datasourceStatus = () => {
     const normalized = currentConfig();
     if (!normalized.ok && !normalized.datasource) {
       return { ok: false, status: normalized.status || 503, reason: normalized.reason || "db.sql datasource invalid", datasource: null };
     }
-    const datasource = normalized.datasource;
+    const bridgeActive = sqliteBridgeActive();
+    const datasource = decorateSqliteDatasource(normalized.datasource, {
+      bridgeActive,
+      adapterStatus: bridgeActive ? "witness-core" : normalized.datasource?.adapterStatus
+    });
     if (datasource.provider === "sqlite") return { ok: true, datasource };
     if (!normalized.ok) return { ok: false, status: normalized.status || 503, reason: normalized.reason || "db.sql datasource invalid", datasource };
     return {
@@ -112,6 +164,10 @@ export function createDbSqlRuntime({
   };
 
   const openSqlite = async datasource => {
+    const bridge = witnessCoreBridge();
+    if (bridge?.coreUrl) {
+      return { ok: true, remote: true, bridge };
+    }
     if (sqliteConnections.has(datasource.path)) return { ok: true, database: sqliteConnections.get(datasource.path) };
     await fs.mkdir(path.dirname(datasource.path), { recursive: true });
     let DatabaseSync = null;
@@ -135,11 +191,22 @@ export function createDbSqlRuntime({
         ok: false,
         status: 503,
         reason: `sqlite runtime unavailable: ${opened.reason}`,
-        datasource: {
-          ...resolved.datasource,
+        datasource: decorateSqliteDatasource(resolved.datasource, {
+          bridgeActive: false,
           adapterStatus: "unavailable",
           lastError: sqliteSupportError instanceof Error ? sqliteSupportError.message : opened.reason
-        }
+        })
+      };
+    }
+    if (opened.remote) {
+      return {
+        ok: true,
+        datasource: decorateSqliteDatasource(resolved.datasource, {
+          bridgeActive: true,
+          adapterStatus: "witness-core"
+        }),
+        remote: true,
+        bridge: opened.bridge
       };
     }
     const { database } = opened;
@@ -162,6 +229,18 @@ export function createDbSqlRuntime({
     if (!normalizedMigrations.length) return { ok: false, status: 400, reason: "migrations required", datasource: resolved.datasource };
     if (normalizedMigrations.some(entry => !entry.id || !entry.sql)) {
       return { ok: false, status: 400, reason: "each migration requires id and sql", datasource: resolved.datasource };
+    }
+    if (resolved.remote) {
+      try {
+        const result = await resolved.bridge.sqliteMigrate({
+          path: resolved.datasource.path,
+          migrationTable: resolved.datasource.migrationTable,
+          migrations: normalizedMigrations
+        });
+        return { ...result, datasource: result?.datasource ?? resolved.datasource };
+      } catch (error) {
+        return witnessCoreSqliteFailureResult(error, resolved.datasource, "witness-core sqlite migrate failed");
+      }
     }
     const ledger = ensureMigrationLedger(resolved.database, resolved.datasource);
     const applied = [];
@@ -198,6 +277,18 @@ export function createDbSqlRuntime({
     if (typeof sql !== "string" || !sql.trim()) return { ok: false, status: 400, reason: "sql required", datasource: resolved.datasource };
     const normalizedParams = normalizeDbSqlParams(params);
     if (!normalizedParams.ok) return { ...normalizedParams, datasource: resolved.datasource };
+    if (resolved.remote) {
+      try {
+        const result = await resolved.bridge.sqliteQuery({
+          path: resolved.datasource.path,
+          sql,
+          params: normalizedParams.kind === "none" ? null : normalizedParams.value
+        });
+        return { ...result, datasource: result?.datasource ?? resolved.datasource };
+      } catch (error) {
+        return witnessCoreSqliteFailureResult(error, resolved.datasource, "witness-core sqlite query failed");
+      }
+    }
     try {
       const statement = resolved.database.prepare(sql);
       const rows = applyDbSqlParams(statement, "all", normalizedParams);
@@ -213,6 +304,18 @@ export function createDbSqlRuntime({
     if (typeof sql !== "string" || !sql.trim()) return { ok: false, status: 400, reason: "sql required", datasource: resolved.datasource };
     const normalizedParams = normalizeDbSqlParams(params);
     if (!normalizedParams.ok) return { ...normalizedParams, datasource: resolved.datasource };
+    if (resolved.remote) {
+      try {
+        const result = await resolved.bridge.sqliteCommand({
+          path: resolved.datasource.path,
+          sql,
+          params: normalizedParams.kind === "none" ? null : normalizedParams.value
+        });
+        return { ...result, datasource: result?.datasource ?? resolved.datasource };
+      } catch (error) {
+        return witnessCoreSqliteFailureResult(error, resolved.datasource, "witness-core sqlite command failed");
+      }
+    }
     try {
       const statement = resolved.database.prepare(sql);
       const result = applyDbSqlParams(statement, "run", normalizedParams);
@@ -239,6 +342,17 @@ export function createDbSqlRuntime({
     if (!normalizedSteps.length) return { ok: false, status: 400, reason: "transaction steps required", datasource: resolved.datasource };
     if (normalizedSteps.some(step => !["query", "command"].includes(step.kind) || !step.sql)) {
       return { ok: false, status: 400, reason: "transaction steps require kind=query|command and sql", datasource: resolved.datasource };
+    }
+    if (resolved.remote) {
+      try {
+        const result = await resolved.bridge.sqliteTransaction({
+          path: resolved.datasource.path,
+          steps: normalizedSteps
+        });
+        return { ...result, datasource: result?.datasource ?? resolved.datasource };
+      } catch (error) {
+        return witnessCoreSqliteFailureResult(error, resolved.datasource, "witness-core sqlite transaction failed");
+      }
     }
     const results = [];
     resolved.database.exec("begin");

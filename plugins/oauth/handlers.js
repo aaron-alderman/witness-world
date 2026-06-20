@@ -126,7 +126,13 @@ export function createOauthHandlers({
           flow,
           code,
           callbackUrl: flow.callbackUrl,
-          fetchImpl
+          fetchImpl,
+          witnessCoreBridge: appContext?.witnessCoreBridge ?? null,
+          correlation: {
+            sessionId: appContext?.sessionId ?? null,
+            surfaceId: appContext?.surfaceId ?? null,
+            actor: requestSession?.actor || backendHost
+          }
         });
       } catch (error) {
         const status = Number.isFinite(error?.status) ? error.status : 401;

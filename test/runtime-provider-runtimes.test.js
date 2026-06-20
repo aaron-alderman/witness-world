@@ -54,6 +54,9 @@ test("runtime provider runtimes keep sqlite migration, query, command, and rollb
     const listed = runtime.listDatasources();
     assert.equal(listed.length, 1);
     assert.equal(listed[0].provider, "sqlite");
+    assert.equal(listed[0].boundaryOwner, "node");
+    assert.equal(listed[0].boundaryAuthority, "transitional-node-fallback");
+    assert.equal(listed[0].boundaryTransport, "node:sqlite");
 
     const migrated = await runtime.migrate({
       datasourceId: "sqlite.main",

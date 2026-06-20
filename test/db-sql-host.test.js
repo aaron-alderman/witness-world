@@ -141,6 +141,10 @@ test("db.sql uses explicit sqlite datasource resources for migration, query, com
     assert.equal(inspectedBody.datasources[0].id, "sqlite_main");
     assert.equal(inspectedBody.datasources[0].provider, "sqlite");
     assert.equal(inspectedBody.datasources[0].path, "db/main.sqlite");
+    assert.match(String(inspectedBody.datasources[0].resolvedPath || ""), /db[\\/]main\.sqlite$/i);
+    assert.equal(inspectedBody.datasources[0].boundaryOwner, "node");
+    assert.equal(inspectedBody.datasources[0].boundaryAuthority, "transitional-node-fallback");
+    assert.equal(inspectedBody.datasources[0].boundaryTransport, "node:sqlite");
     assert.equal(inspectedBody.operations.length, 0);
 
     const migrated = await migrateDbSql(server, {

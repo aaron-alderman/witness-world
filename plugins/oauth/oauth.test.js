@@ -5,6 +5,7 @@ import { createWorld, createThing, relation } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { bundleId, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
+import { createOAuthProvider } from "./oauth-providers.js";
 import { createRuntimeAuthOAuthSupportServices } from "./support-services.js";
 
 test("oauth plugin owns auth.oauth catalog, routes, and handler factory", async () => {
@@ -55,6 +56,166 @@ test("oauth plugin owns OAuth support service normalization and read-shaping", (
   };
   services.emitAuthOauthFlow({ actor: "adam", flow, process: "auth.oauth.start" });
   assert.equal(emitted[0].process, "auth.oauth.start");
+});
+
+test("oauth oidc provider routes plain-http token and userinfo exchange through witness-core when configured", async () => {
+  const provider = createOAuthProvider({
+    oidc: {
+      clientId: "client-1",
+      clientSecret: "secret-1",
+      authorizeUrl: "http://127.0.0.1:4010/authorize",
+      tokenUrl: "http://127.0.0.1:4010/token",
+      userinfoUrl: "http://127.0.0.1:4010/userinfo",
+      scope: "openid profile",
+      externalIdField: "sub",
+      usernameField: "preferred_username",
+      labelField: "name"
+    }
+  });
+  const calls = [];
+
+  const profile = await provider.resolveProfile({
+    code: "code-1",
+    callbackUrl: "http://127.0.0.1:3000/api/oauth/callback/oidc",
+    fetchImpl: async () => {
+      throw new Error("direct fetch should not be used for plain-http witness-core oauth requests");
+    },
+    witnessCoreBridge: {
+      coreUrl: "http://127.0.0.1:8788",
+      async executeHttpOutbound(input) {
+        calls.push(input);
+        if (input.url.endsWith("/token")) {
+          return {
+            transport: "network",
+            status: 200,
+            headers: { "content-type": "application/json" },
+            bodyText: "{\"access_token\":\"token-1\"}"
+          };
+        }
+        return {
+          transport: "network",
+          status: 200,
+          headers: { "content-type": "application/json" },
+          bodyText: "{\"sub\":\"acct-1\",\"preferred_username\":\"ada\",\"name\":\"Ada Lovelace\"}"
+        };
+      }
+    },
+    correlation: {
+      sessionId: "session-1",
+      surfaceId: "surface-1",
+      actor: "adam"
+    }
+  });
+
+  assert.deepEqual(profile, {
+    externalId: "acct-1",
+    username: "ada",
+    label: "Ada Lovelace"
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url, "http://127.0.0.1:4010/token");
+  assert.equal(calls[0].method, "POST");
+  assert.match(String(calls[0].bodyText || ""), /grant_type=authorization_code/);
+  assert.equal(calls[0].correlation.actor, "adam");
+  assert.equal(calls[1].url, "http://127.0.0.1:4010/userinfo");
+  assert.equal(calls[1].method, "GET");
+  assert.equal(calls[1].headers.authorization, "Bearer token-1");
+});
+
+test("oauth oidc provider propagates witness-core bridge failure instead of silently falling back for plain-http requests", async () => {
+  const provider = createOAuthProvider({
+    oidc: {
+      clientId: "client-1",
+      clientSecret: "secret-1",
+      authorizeUrl: "http://127.0.0.1:4010/authorize",
+      tokenUrl: "http://127.0.0.1:4010/token",
+      userinfoUrl: "http://127.0.0.1:4010/userinfo",
+      scope: "openid profile",
+      externalIdField: "sub"
+    }
+  });
+
+  await assert.rejects(
+    provider.resolveProfile({
+      code: "code-1",
+      callbackUrl: "http://127.0.0.1:3000/api/oauth/callback/oidc",
+      fetchImpl: async () => {
+        throw new Error("direct fetch should not be used");
+      },
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async executeHttpOutbound() {
+          throw Object.assign(new Error("witness core unavailable"), {
+            status: 503,
+            code: "WITNESS_CORE_UNAVAILABLE"
+          });
+        }
+      },
+      correlation: {
+        sessionId: "session-1",
+        surfaceId: "surface-1",
+        actor: "adam"
+      }
+    }),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_UNAVAILABLE"
+  );
+});
+
+test("oauth oidc provider routes https token and userinfo exchange through witness-core when authoritative mode is configured", async () => {
+  const calls = [];
+  const provider = createOAuthProvider({
+    oidc: {
+      clientId: "client-1",
+      clientSecret: "secret-1",
+      authorizeUrl: "https://accounts.example.test/authorize",
+      tokenUrl: "https://accounts.example.test/token",
+      userinfoUrl: "https://accounts.example.test/userinfo",
+      scope: "openid profile",
+      externalIdField: "sub"
+    }
+  });
+
+  assert.deepEqual(
+    await provider.resolveProfile({
+      code: "code-1",
+      callbackUrl: "http://127.0.0.1:3000/api/oauth/callback/oidc",
+      fetchImpl: async () => {
+        throw new Error("direct fetch should not be used when witness-core authority is configured");
+      },
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async executeHttpOutbound(input) {
+          calls.push(input);
+          if (input.url.endsWith("/token")) {
+            return {
+              status: 200,
+              headers: { "content-type": "application/json" },
+              bodyText: JSON.stringify({ access_token: "https-token" })
+            };
+          }
+          if (input.url.endsWith("/userinfo")) {
+            return {
+              status: 200,
+              headers: { "content-type": "application/json" },
+              bodyText: JSON.stringify({ sub: "user-https", preferred_username: "ada" })
+            };
+          }
+          throw new Error(`unexpected outbound url ${input.url}`);
+        }
+      },
+      correlation: {
+        sessionId: "session-1",
+        surfaceId: "surface-1",
+        actor: "adam"
+      }
+    }),
+    { externalId: "user-https", username: "ada", label: "ada" }
+  );
+  assert.deepEqual(calls.map(entry => entry.url), [
+    "https://accounts.example.test/token",
+    "https://accounts.example.test/userinfo"
+  ]);
+  assert.equal(calls[0].correlation.actor, "adam");
 });
 
 test("oauth plugin registers OAuth flow and link read-model projectors", () => withRegisteredPluginProjectors(providers, () => {

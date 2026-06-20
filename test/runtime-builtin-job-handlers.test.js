@@ -125,6 +125,58 @@ test("notify.email delivers through the http provider and witnesses the real pro
   assert.equal(emitted.some(entry => entry.process === "notify.email.send.failed"), false);
 });
 
+test("notify.email http provider uses witness-core for plain-http delivery when configured", async () => {
+  const emitted = [];
+  const calls = [];
+  const handlers = createBuiltinNotificationJobHandlers({
+    world: notificationWorld(emitted),
+    backendHost: "backendHost",
+    runtimeConfig: {
+      "notify.email.provider": "http",
+      "notify.email.http.url": "http://mail.example.test/send",
+      "notify.email.http.apiKey": "secret-key",
+      "notify.email.http.fromAddress": "ops@example.test"
+    },
+    fetchImpl: async () => {
+      throw new Error("direct fetch should not be used for witness-core plain-http email delivery");
+    },
+    getAppContext: () => ({
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async executeHttpOutbound(input) {
+          calls.push(input);
+          return {
+            transport: "network",
+            status: 202,
+            headers: { "content-type": "application/json" },
+            bodyText: "{\"id\":\"msg_123\"}"
+          };
+        }
+      }
+    })
+  });
+
+  const result = await handlers["notify.email.deliver"]({
+    actor: "adam",
+    job: { id: "job-1" },
+    payload: { notificationId: "notification-1" },
+    attempt: 1
+  });
+
+  assert.deepEqual(result, { sent: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "http://mail.example.test/send");
+  assert.equal(calls[0].method, "POST");
+  assert.equal(calls[0].headers.authorization, "Bearer secret-key");
+  assert.equal(calls[0].correlation.actor, "adam");
+  assert.deepEqual(JSON.parse(calls[0].bodyText), {
+    to: "x@example.com",
+    subject: "Hello",
+    from: "ops@example.test",
+    body: "Body text"
+  });
+});
+
 test("notify.email http provider failure witnesses notify.email.send.failed and rethrows for retry", async () => {
   const emitted = [];
   const handlers = createBuiltinNotificationJobHandlers({
@@ -153,6 +205,48 @@ test("notify.email http provider failure witnesses notify.email.send.failed and 
   assert.equal(failure.body.transport, "http");
   assert.match(failure.body.reason, /500/);
   assert.equal(emitted.some(entry => entry.process === "notify.email.send"), false);
+});
+
+test("notify.email http provider bridge failure stays fail-closed in authoritative plain-http mode", async () => {
+  const emitted = [];
+  const handlers = createBuiltinNotificationJobHandlers({
+    world: notificationWorld(emitted),
+    backendHost: "backendHost",
+    runtimeConfig: {
+      "notify.email.provider": "http",
+      "notify.email.http.url": "http://mail.example.test/send",
+      "notify.email.http.fromAddress": "ops@example.test"
+    },
+    fetchImpl: async () => {
+      throw new Error("direct fetch should not be used");
+    },
+    getAppContext: () => ({
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async executeHttpOutbound() {
+          throw Object.assign(new Error("witness core unavailable"), {
+            status: 503,
+            code: "WITNESS_CORE_UNAVAILABLE"
+          });
+        }
+      }
+    })
+  });
+
+  await assert.rejects(
+    () => handlers["notify.email.deliver"]({
+      actor: "adam",
+      job: { id: "job-1" },
+      payload: { notificationId: "notification-1" },
+      attempt: 1
+    }),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_UNAVAILABLE"
+  );
+
+  const failure = emitted.find(entry => entry.process === "notify.email.send.failed");
+  assert.ok(failure);
+  assert.equal(failure.body.transport, "http");
+  assert.match(String(failure.body.reason || ""), /witness core unavailable/i);
 });
 
 test("notify.email delivers through the sendgrid provider and witnesses the X-Message-Id header", async () => {
@@ -194,6 +288,146 @@ test("notify.email delivers through the sendgrid provider and witnesses the X-Me
   assert.equal(send.body.transport, "sendgrid");
   assert.equal(send.body.providerMessageId, "sg-msg-1");
   assert.equal(send.body.sender, "ops@example.test");
+});
+
+test("notify.email sendgrid provider uses witness-core for plain-http configured endpoint", async () => {
+  const emitted = [];
+  const calls = [];
+  const handlers = createBuiltinNotificationJobHandlers({
+    world: notificationWorld(emitted),
+    backendHost: "backendHost",
+    runtimeConfig: {
+      "notify.email.provider": "sendgrid",
+      "notify.email.sendgrid.apiKey": "sg-key",
+      "notify.email.sendgrid.fromAddress": "ops@example.test",
+      "notify.email.sendgrid.url": "http://sendgrid.local/mail/send"
+    },
+    fetchImpl: async () => {
+      throw new Error("direct fetch should not be used for witness-core plain-http sendgrid delivery");
+    },
+    getAppContext: () => ({
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async executeHttpOutbound(input) {
+          calls.push(input);
+          return {
+            transport: "network",
+            status: 202,
+            headers: { "x-message-id": "sg-msg-1" },
+            bodyText: ""
+          };
+        }
+      }
+    })
+  });
+
+  const result = await handlers["notify.email.deliver"]({
+    actor: "adam",
+    job: { id: "job-1" },
+    payload: { notificationId: "notification-1" },
+    attempt: 1
+  });
+
+  assert.deepEqual(result, { sent: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "http://sendgrid.local/mail/send");
+  assert.equal(calls[0].correlation.actor, "adam");
+  assert.deepEqual(JSON.parse(calls[0].bodyText), {
+    personalizations: [{ to: [{ email: "x@example.com" }] }],
+    from: { email: "ops@example.test" },
+    subject: "Hello",
+    content: [{ type: "text/plain", value: "Body text" }]
+  });
+});
+
+test("notify.email routes https delivery through witness-core in authoritative mode", async () => {
+  const emitted = [];
+  const calls = [];
+  const handlers = createBuiltinNotificationJobHandlers({
+    world: notificationWorld(emitted),
+    backendHost: "backendHost",
+    runtimeConfig: {
+      "notify.email.provider": "http",
+      "notify.email.http.url": "https://mail.example.test/send",
+      "notify.email.http.fromAddress": "ops@example.test"
+    },
+    fetchImpl: async () => {
+      throw new Error("direct fetch should not be used when witness-core authority is configured");
+    },
+    getAppContext: () => ({
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async executeHttpOutbound(input) {
+          calls.push(input);
+          return {
+            status: 200,
+            headers: { "content-type": "application/json" },
+            bodyText: JSON.stringify({ id: "https-mail-1" })
+          };
+        }
+      }
+    })
+  });
+
+  await handlers["notify.email.deliver"]({
+    actor: "adam",
+    job: { id: "job-1" },
+    payload: { notificationId: "notification-1" },
+    attempt: 1
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://mail.example.test/send");
+  assert.equal(calls[0].correlation.actor, "adam");
+  const success = emitted.find(entry => entry.process === "notify.email.send");
+  assert.ok(success);
+  assert.equal(success.body.transport, "http");
+  assert.equal(success.body.providerMessageId, "https-mail-1");
+});
+
+test("notify.email sendgrid routes https delivery through witness-core in authoritative mode", async () => {
+  const emitted = [];
+  const calls = [];
+  const handlers = createBuiltinNotificationJobHandlers({
+    world: notificationWorld(emitted),
+    backendHost: "backendHost",
+    runtimeConfig: {
+      "notify.email.provider": "sendgrid",
+      "notify.email.sendgrid.apiKey": "sg-key",
+      "notify.email.sendgrid.fromAddress": "ops@example.test"
+    },
+    fetchImpl: async () => {
+      throw new Error("direct fetch should not be used when witness-core authority is configured");
+    },
+    getAppContext: () => ({
+      witnessCoreBridge: {
+        coreUrl: "http://127.0.0.1:8788",
+        async executeHttpOutbound(input) {
+          calls.push(input);
+          return {
+            status: 202,
+            headers: { "x-message-id": "sg-https-1" },
+            bodyText: ""
+          };
+        }
+      }
+    })
+  });
+
+  await handlers["notify.email.deliver"]({
+    actor: "adam",
+    job: { id: "job-1" },
+    payload: { notificationId: "notification-1" },
+    attempt: 1
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api.sendgrid.com/v3/mail/send");
+  assert.equal(calls[0].correlation.actor, "adam");
+  const success = emitted.find(entry => entry.process === "notify.email.send");
+  assert.ok(success);
+  assert.equal(success.body.transport, "sendgrid");
+  assert.equal(success.body.providerMessageId, "sg-https-1");
 });
 
 test("notify.email sendgrid failure witnesses notify.email.send.failed and rethrows for retry", async () => {

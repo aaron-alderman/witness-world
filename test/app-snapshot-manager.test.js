@@ -9,65 +9,175 @@ import { loadAppProject } from "../src/app-project.js";
 import { persistStableAppSourceCache } from "../src/runtime-stable-source-cache.js";
 import { activateWidgetVersion, defineWidget, defineWidgetVersion, defineWidgetVersionTransition, widgetDefinitions } from "../src/widgets.js";
 
-function createManager(fsModule) {
-  const manager = new AppSnapshotManager({
-    manifestPath: "C:/tmp/app.wtoml",
-    appRoot: "C:/tmp",
-    runtimeProfile: "full",
-    devMode: true,
-    logger: null,
-    fsModule
-  });
-  manager.activeSnapshot = {
-    sourceIndex: [
-      {
-        filePath: "C:/tmp/app/shell.rvm",
-        sourceLanguage: "rvm",
-        contentHash: "abc",
-        mtimeMs: 10,
-        size: 100
-      }
-    ]
-  };
-  return manager;
-}
-
 async function writeFile(targetPath, contents) {
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await fs.writeFile(targetPath, contents, "utf8");
 }
 
-test("AppSnapshotManager.detectChangedPaths uses file stat data rather than re-reading source contents", async () => {
-  let readFileCalls = 0;
+test("AppSnapshotManager.ensureFresh skips filesystem probing in explicit dirty-input mode when nothing is pending", async () => {
   let statCalls = 0;
-  const manager = createManager({
-    async readFile() {
-      readFileCalls += 1;
-      throw new Error("detectChangedPaths should not read file contents");
-    },
-    async stat() {
-      statCalls += 1;
-      return { mtimeMs: 10, size: 100 };
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    devMode: true,
+    watchEnabled: false,
+    fsModule: {
+      async stat() {
+        statCalls += 1;
+        throw new Error("explicit mode should not stat files during ensureFresh");
+      }
     }
   });
+  const activeSnapshot = { appRevision: 3, sourceIndex: [] };
+  manager.activeSnapshot = activeSnapshot;
 
-  const changed = await manager.detectChangedPaths();
+  const fresh = await manager.ensureFresh({ trigger: "request" });
 
-  assert.deepEqual([...changed], []);
-  assert.equal(statCalls, 1);
-  assert.equal(readFileCalls, 0);
+  assert.equal(fresh, activeSnapshot);
+  assert.equal(statCalls, 0);
+  assert.equal(manager.diagnostics().dirtyInputMode, "explicit");
 });
 
-test("AppSnapshotManager.detectChangedPaths marks files dirty when stat metadata changes", async () => {
-  const manager = createManager({
-    async stat() {
-      return { mtimeMs: 11, size: 100 };
+test("AppSnapshotManager.ensureFresh in watch mode waits for explicit invalidation instead of probing the filesystem", async () => {
+  let statCalls = 0;
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    devMode: true,
+    watchEnabled: true,
+    fsModule: {
+      async stat() {
+        statCalls += 1;
+        throw new Error("watch mode should not stat files during ensureFresh");
+      }
     }
   });
+  const activeSnapshot = { appRevision: 3, sourceIndex: [] };
+  manager.activeSnapshot = activeSnapshot;
 
-  const changed = await manager.detectChangedPaths();
+  const fresh = await manager.ensureFresh({ trigger: "request" });
 
-  assert.deepEqual([...changed], ["C:/tmp/app/shell.rvm"]);
+  assert.equal(fresh, activeSnapshot);
+  assert.equal(statCalls, 0);
+  assert.equal(manager.diagnostics().dirtyInputMode, "watch");
+});
+
+test("AppSnapshotManager.ensureFresh rebuilds only pending explicit dirty paths without filesystem probing", async () => {
+  let statCalls = 0;
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    devMode: true,
+    watchEnabled: false,
+    fsModule: {
+      async stat() {
+        statCalls += 1;
+        throw new Error("explicit mode should not stat files during ensureFresh");
+      }
+    }
+  });
+  manager.activeSnapshot = { appRevision: 3, sourceIndex: [] };
+  manager.pendingDirtySources.add("C:/tmp/app/shell.rvm");
+  manager.consumeDirtyAndRebuild = async trigger => ({
+    appRevision: 4,
+    trigger
+  });
+
+  const fresh = await manager.ensureFresh({ trigger: "reload" });
+
+  assert.equal(fresh.appRevision, 4);
+  assert.equal(fresh.trigger, "reload");
+  assert.equal(statCalls, 0);
+});
+
+test("AppSnapshotManager.ensureFresh derives dirty paths from witness-core generation metadata without local filesystem probing", async () => {
+  let statCalls = 0;
+  let refreshCalls = 0;
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/examples/engentus/app.wtoml",
+    appRoot: "C:/tmp/examples/engentus",
+    runtimeProfile: "full",
+    devMode: true,
+    watchEnabled: false,
+    dirtyDetectionOwner: "witness-core",
+    witnessCoreStatusStore: {
+      async refresh() {
+        refreshCalls += 1;
+        return {
+          generations: [{
+            id: "gen_live_1",
+            state: "green_local",
+            sourcePaths: ["examples/engentus/app/shell-auth.rvm"]
+          }]
+        };
+      }
+    },
+    fsModule: {
+      async stat() {
+        statCalls += 1;
+        throw new Error("witness-core dirty detection should not stat files during ensureFresh");
+      }
+    }
+  });
+  manager.activeSnapshot = {
+    appRevision: 3,
+    sourceIndex: [{
+      filePath: "C:/tmp/examples/engentus/app/shell-auth.rvm",
+      sourceLanguage: "rvm",
+      contentHash: "abc",
+      mtimeMs: 10,
+      size: 100
+    }]
+  };
+  manager.consumeDirtyAndRebuild = async trigger => ({
+    appRevision: 4,
+    trigger
+  });
+
+  const fresh = await manager.ensureFresh({ trigger: "request" });
+
+  assert.equal(fresh.appRevision, 4);
+  assert.equal(fresh.trigger, "request");
+  assert.equal(refreshCalls, 1);
+  assert.equal(statCalls, 0);
+  assert.equal(manager.lastAppliedWitnessCoreGenerationId, "gen_live_1");
+  assert.equal(manager.diagnostics().dirtyDetectionOwner, "witness-core");
+});
+
+test("AppSnapshotManager.ensureFresh ignores preview witness-core generations for canonical refresh", async () => {
+  const activeSnapshot = { appRevision: 7, sourceIndex: [] };
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    devMode: true,
+    watchEnabled: false,
+    dirtyDetectionOwner: "witness-core",
+    witnessCoreStatusStore: {
+      async refresh() {
+        return {
+          generations: [{
+            id: "preview-session-1-g2",
+            state: "green_local",
+            sourcePaths: ["app/shell.rvm"]
+          }]
+        };
+      }
+    }
+  });
+  manager.activeSnapshot = activeSnapshot;
+  manager.consumeDirtyAndRebuild = async () => {
+    throw new Error("preview or failed generations should not trigger canonical rebuild");
+  };
+
+  const fresh = await manager.ensureFresh({ trigger: "request" });
+
+  assert.equal(fresh, activeSnapshot);
+  assert.equal(manager.pendingDirtySources.size, 0);
+  assert.equal(manager.lastAppliedWitnessCoreGenerationId, null);
 });
 
 test("AppSnapshotManager applySourceEdits uses witness-core bridge for persisted published writes when available", async () => {
@@ -287,6 +397,200 @@ test("AppPreviewSessionManager stores overlay edits without publishing to disk",
       actor: null
     }
   }]);
+});
+
+test("AppPreviewSessionManager fails closed when witness-core preview access is required but unavailable", async () => {
+  const readFileCalls = [];
+  const previewManager = new AppPreviewSessionManager({
+    appSnapshotManager: {
+      manifestPath: "C:/tmp/app.wtoml",
+      appRoot: "C:/tmp",
+      runtimeProfile: "full",
+      runtimePluginIds: [],
+      env: {},
+      getActiveSnapshot() {
+        return { appRevision: 7 };
+      }
+    },
+    fsModule: {
+      async readFile(target) {
+        readFileCalls.push(String(target));
+        return "(surface LocalFallback)";
+      }
+    },
+    requireGenerationBridgeForPreviewAccess: true
+  });
+
+  const session = previewManager.createSession();
+
+  await assert.rejects(
+    previewManager.patchSources(session.id, [{
+      path: "app/shell.rvm",
+      content: "(surface RustOwnedOnly)"
+    }]),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_UNAVAILABLE"
+  );
+
+  assert.deepEqual(readFileCalls, []);
+});
+
+test("AppPreviewSessionManager rebuilds previews through witness-core source capabilities when preview access is required", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-preview-core-"));
+  const appRoot = path.join(tempRoot, "app");
+  const manifestPath = path.join(appRoot, "app.wtoml");
+  const manifestText = `[app]
+id = "preview_core_app"
+imports = ["app/content.wtoml"]
+`;
+  await writeFile(manifestPath, manifestText);
+  await writeFile(path.join(appRoot, "app", "content.wtoml"), "");
+
+  let snapshotManager = null;
+  try {
+    const appProject = await loadAppProject(appRoot);
+    snapshotManager = await AppSnapshotManager.create({
+      appProject,
+      runtimeProfile: "full",
+      devMode: false
+    });
+
+    const bridgeCalls = [];
+    const previewManager = new AppPreviewSessionManager({
+      appSnapshotManager: snapshotManager,
+      fsModule: {
+        async readFile() {
+          throw new Error("local preview read should not be used");
+        },
+        async stat() {
+          throw new Error("local preview stat should not be used");
+        }
+      },
+      generationBridge: {
+        async readSource(input) {
+          bridgeCalls.push({ kind: "read", path: input.path });
+          if (input.path === "app.wtoml") {
+            return { path: input.path, content: manifestText, hash: "sha256:manifest", size: manifestText.length };
+          }
+          if (input.path === "app/content.wtoml") {
+            return { path: input.path, content: "", hash: "sha256:content", size: 0 };
+          }
+          throw new Error(`unexpected read path ${input.path}`);
+        },
+        async statSource(input) {
+          bridgeCalls.push({ kind: "stat", path: input.path });
+          if (input.path === "app.wtoml") {
+            return { path: input.path, exists: true, hash: "sha256:manifest", size: manifestText.length, modifiedAt: "2026-01-01T00:00:00.000Z" };
+          }
+          if (input.path === "app/content.wtoml") {
+            return { path: input.path, exists: true, hash: "sha256:content", size: 0, modifiedAt: "2026-01-01T00:00:00.000Z" };
+          }
+          throw new Error(`unexpected stat path ${input.path}`);
+        },
+        async patchSource(input) {
+          bridgeCalls.push({ kind: "patch", path: input.path, content: input.content });
+          return { path: input.path, hash: "sha256:patched", size: String(input.content ?? "").length };
+        }
+      },
+      requireGenerationBridgeForPreviewAccess: true
+    });
+
+    const session = previewManager.createSession();
+    const updated = await previewManager.patchSources(session.id, [{
+      path: "app/content.wtoml",
+      content: ""
+    }]);
+
+    assert.equal(updated.previewRevision, 1);
+    assert.equal(bridgeCalls.some(call => call.kind === "patch" && call.path === "app/content.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "app.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "stat" && call.path === "app.wtoml"), true);
+  } finally {
+    snapshotManager?.close?.();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("AppPreviewSessionManager uses workspace-scoped witness-core source ids for shared-lib preview sources", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-preview-shared-lib-"));
+  const appRoot = path.join(tempRoot, "examples", "engentus");
+  const manifestPath = path.join(appRoot, "app.wtoml");
+  const manifestText = `[app]
+id = "preview_shared_lib_app"
+imports = ["../_lib/common.wtoml"]
+`;
+  await writeFile(manifestPath, manifestText);
+  await writeFile(path.join(tempRoot, "examples", "_lib", "common.wtoml"), "");
+
+  let snapshotManager = null;
+  try {
+    const appProject = await loadAppProject(appRoot);
+    snapshotManager = await AppSnapshotManager.create({
+      appProject,
+      runtimeProfile: "full",
+      cacheCwd: tempRoot,
+      devMode: false
+    });
+
+    const bridgeCalls = [];
+    const previewManager = new AppPreviewSessionManager({
+      appSnapshotManager: snapshotManager,
+      fsModule: {
+        async readFile() {
+          throw new Error("local shared-lib preview read should not be used");
+        },
+        async stat() {
+          throw new Error("local shared-lib preview stat should not be used");
+        }
+      },
+      generationBridge: {
+        async readSource(input) {
+          bridgeCalls.push({ kind: "read", path: input.path });
+          if (input.path === "app.wtoml") {
+            return { path: input.path, content: manifestText, hash: "sha256:manifest", size: manifestText.length };
+          }
+          if (input.path === "examples/_lib/common.wtoml") {
+            return { path: input.path, content: "", hash: "sha256:shared", size: 0 };
+          }
+          throw new Error(`unexpected read path ${input.path}`);
+        },
+        async statSource(input) {
+          bridgeCalls.push({ kind: "stat", path: input.path });
+          if (input.path === "app.wtoml") {
+            return { path: input.path, exists: true, hash: "sha256:manifest", size: manifestText.length, modifiedAt: "2026-01-01T00:00:00.000Z" };
+          }
+          if (input.path === "examples/_lib/common.wtoml") {
+            return { path: input.path, exists: true, hash: "sha256:shared", size: 0, modifiedAt: "2026-01-01T00:00:00.000Z" };
+          }
+          throw new Error(`unexpected stat path ${input.path}`);
+        },
+        async patchSource(input) {
+          bridgeCalls.push({ kind: "patch", path: input.path, content: input.content });
+          return { path: input.path, hash: "sha256:patched", size: String(input.content ?? "").length };
+        }
+      },
+      requireGenerationBridgeForPreviewAccess: true
+    });
+
+    const session = previewManager.createSession();
+    const sharedLibPath = path.join(tempRoot, "examples", "_lib", "common.wtoml");
+    const internalSession = previewManager.sessions.get(session.id);
+    await previewManager.readPreviewSourceText(sharedLibPath, null, internalSession);
+    await previewManager.readPreviewSourceStat(sharedLibPath, internalSession);
+    const updated = await previewManager.patchSources(session.id, [{
+      path: "../_lib/common.wtoml",
+      content: ""
+    }]);
+
+    assert.equal(updated.previewRevision, 1);
+    assert.equal(bridgeCalls.some(call => call.kind === "patch" && call.path === "examples/_lib/common.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "app.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "stat" && call.path === "app.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "examples/_lib/common.wtoml"), true);
+    assert.equal(bridgeCalls.some(call => call.kind === "stat" && call.path === "examples/_lib/common.wtoml"), true);
+  } finally {
+    snapshotManager?.close?.();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("AppPreviewSessionManager marks sessions stale when the active app revision changes", () => {

@@ -86,6 +86,42 @@ function uniqueStrings(values = []) {
   return [...new Set((values ?? []).map(String).filter(Boolean))];
 }
 
+async function detectLocallyChangedSnapshotPaths(snapshotManager, fsModule = fs) {
+  const snapshot = snapshotManager?.getActiveSnapshot?.();
+  if (!snapshot?.sourceIndex?.length) return [];
+  const checks = await Promise.all((snapshot.sourceIndex ?? []).map(async row => {
+    try {
+      const stat = await fsModule.stat(row.filePath);
+      const currentMtimeMs = Number(stat.mtimeMs || 0);
+      const currentSize = Number(stat.size || 0);
+      return currentMtimeMs !== Number(row.mtimeMs || 0) || currentSize !== Number(row.size || 0)
+        ? row.filePath
+        : null;
+    } catch {
+      return row.filePath;
+    }
+  }));
+  return checks.filter(Boolean);
+}
+
+function coreEventCanDriveSnapshotInvalidation(event = null) {
+  const generation = event?.payload?.generation ?? null;
+  if (!generation || typeof generation !== "object") return false;
+  const generationId = String(generation.id || "").trim();
+  if (!generationId || generationId.startsWith("preview-")) return false;
+  if (!(generation.state === "green_local" || generation.state === "stable")) return false;
+  return Array.isArray(generation.source_paths ?? generation.sourcePaths)
+    && (generation.source_paths ?? generation.sourcePaths).some(path => String(path || "").trim());
+}
+
+function coreEventSourcePaths(event = null) {
+  const generation = event?.payload?.generation ?? null;
+  const sourcePaths = Array.isArray(generation?.source_paths)
+    ? generation.source_paths
+    : (Array.isArray(generation?.sourcePaths) ? generation.sourcePaths : []);
+  return [...new Set(sourcePaths.map(path => String(path || "").trim()).filter(Boolean))];
+}
+
 function mergePluginCatalogs(catalogs = []) {
   const packageById = new Map();
   const rejectedById = new Map();
@@ -710,6 +746,23 @@ export async function startRuntimeServer(world, {
       coreUrl: appContext.witnessCoreUrl,
       logger
     });
+    appContext.witnessCoreStatusUnsubscribe = appContext.witnessCoreStatusStore?.subscribe?.(event => {
+      if (!appContext.witnessCoreUrl) return;
+      if (!coreEventCanDriveSnapshotInvalidation(event)) return;
+      const snapshotManager = appContext.appSnapshotManager;
+      if (!snapshotManager) return;
+      const sourcePaths = coreEventSourcePaths(event);
+      const dirtyPaths = snapshotManager.resolveWitnessCoreDirtyPaths?.(sourcePaths) ?? [];
+      if (!dirtyPaths.length) return;
+      void snapshotManager.markDirtyPaths(dirtyPaths, {
+        trigger: "core"
+      }).catch(error => {
+        logger?.warn?.("runtime.witnessCoreInvalidation.failed", {
+          error: error instanceof Error ? error.message : String(error),
+          sourcePaths
+        });
+      });
+    }) ?? null;
     appContext.resourceProbes = startupTelemetry.probeCollector ?? null;
     appContext.materializedViews = createMaterializedViewRegistry({
       world,
@@ -758,7 +811,7 @@ export async function startRuntimeServer(world, {
       mutationsEnabled: env.WITNESS_RUNTIME_MUTATIONS_ENABLED === "false" ? false : true,
       watchersEnabled: env.WITNESS_RUNTIME_WATCHERS_ENABLED === "false"
         ? false
-        : (activeDevMode === true),
+        : (activeDevMode === true && !appContext.witnessCoreUrl),
       lastStateAt: new Date().toISOString()
     };
     appContext.appSnapshotManager = null;
@@ -1146,6 +1199,51 @@ export async function startRuntimeServer(world, {
   });
   appContext.runtimeProcessHealthMonitor = runtimeProcessHealthMonitor;
 
+  const localSnapshotPollIntervalMs = (() => {
+    const raw = Number(env.WITNESS_RUNTIME_DIRTY_POLL_MS || 250);
+    if (!Number.isFinite(raw) || raw <= 0) return 250;
+    return Math.max(50, Math.trunc(raw));
+  })();
+  let localSnapshotPoller = null;
+  let localSnapshotPollerInFlight = false;
+  const localSnapshotPollingEnabled = () =>
+    activeDevMode === true
+    && !appContext.witnessCoreUrl
+    && appContext.runtimeSupervision?.watchersEnabled === true;
+  const stopLocalSnapshotPoller = () => {
+    if (!localSnapshotPoller) return;
+    clearInterval(localSnapshotPoller);
+    localSnapshotPoller = null;
+  };
+  const startLocalSnapshotPoller = () => {
+    if (localSnapshotPoller || !localSnapshotPollingEnabled()) return;
+    localSnapshotPoller = setInterval(() => {
+      if (serverClosing || localSnapshotPollerInFlight) return;
+      const snapshotManager = appContext.appSnapshotManager;
+      if (!snapshotManager) return;
+      localSnapshotPollerInFlight = true;
+      void detectLocallyChangedSnapshotPaths(snapshotManager, fsModule)
+        .then(changedPaths => {
+          if (!changedPaths.length) return snapshotManager.getActiveSnapshot?.() ?? null;
+          return snapshotManager.markDirtyPaths(changedPaths, { trigger: "watch" });
+        })
+        .catch(error => {
+          logger?.warn?.("runtime.localSnapshotPoller.failed", { error });
+        })
+        .finally(() => {
+          localSnapshotPollerInFlight = false;
+        });
+    }, localSnapshotPollIntervalMs);
+    localSnapshotPoller.unref?.();
+  };
+  const syncLocalSnapshotPoller = () => {
+    if (localSnapshotPollingEnabled()) {
+      startLocalSnapshotPoller();
+      return;
+    }
+    stopLocalSnapshotPoller();
+  };
+
   const supervisionPayload = supervision => ({
     ok: true,
     instanceId: supervision?.instanceId ?? null,
@@ -1191,6 +1289,7 @@ export async function startRuntimeServer(world, {
       supervision.watchersEnabled = supervision.watchersEnabled === true && runtime.context?.devMode === true;
       supervision.lastStateAt = new Date().toISOString();
       runtime.context?.appSnapshotManager?.setWatcherMode?.(supervision.watchersEnabled);
+      syncLocalSnapshotPoller();
       sendJson(res, 200, supervisionPayload(supervision));
       return;
     }
@@ -1205,6 +1304,7 @@ export async function startRuntimeServer(world, {
       supervision.watchersEnabled = false;
       supervision.lastStateAt = new Date().toISOString();
       runtime.context?.appSnapshotManager?.setWatcherMode?.(false);
+      syncLocalSnapshotPoller();
       sendJson(res, 200, supervisionPayload(supervision));
       return;
     }
@@ -1252,7 +1352,6 @@ export async function startRuntimeServer(world, {
       if (
         runtime.context?.devMode
         && runtime.context?.appSnapshotManager
-        && runtime.context?.runtimeSupervision?.watchersEnabled !== false
       ) {
         await runtime.context.appSnapshotManager.ensureFresh({ trigger: "request" });
       }
@@ -1583,7 +1682,8 @@ export async function startRuntimeServer(world, {
         appProject,
         runtimeRoot,
         runtimeOperatorContract: appContext.runtimeOperatorContract,
-        runtimeProfile: appContext.runtimeProfile
+        runtimeProfile: appContext.runtimeProfile,
+        witnessCoreBridge: appContext.witnessCoreBridge
       });
       if (serverClosing) {
         try {
@@ -1629,8 +1729,10 @@ export async function startRuntimeServer(world, {
           devMode: activeDevMode === true,
           logger,
           generationBridge: appContext.witnessCoreBridge,
+          witnessCoreStatusStore: appContext.witnessCoreStatusStore,
           fsModule,
           watchEnabled: appContext.runtimeSupervision?.watchersEnabled !== false,
+          dirtyDetectionOwner: appContext.witnessCoreUrl ? "witness-core" : null,
           requireGenerationBridgeForPublishedWrites: Boolean(appContext.witnessCoreUrl)
         });
         if (serverClosing) {
@@ -1642,9 +1744,11 @@ export async function startRuntimeServer(world, {
           appSnapshotManager,
           generationBridge: appContext.witnessCoreBridge,
           logger,
-          fsModule
+          fsModule,
+          requireGenerationBridgeForPreviewAccess: Boolean(appContext.witnessCoreUrl)
         });
         registerDeferredCloser(() => appSnapshotManager.close());
+        syncLocalSnapshotPoller();
         return {
           appRevision: Number(appSnapshotManager.appRevision || 0),
           sourceCount: Number(appSnapshotManager.diagnostics?.().sourceCount || 0),
@@ -1673,7 +1777,7 @@ export async function startRuntimeServer(world, {
         actors: appContext.actors,
         storage,
         routeCount: mountedRoutesFor(serverRunner.id, appContext).length,
-        runtimePlugins: effectiveRuntimePluginCatalog.activePluginIds
+        runtimePlugins: effectiveRuntimePluginCatalog?.activePluginIds ?? []
       }
     });
 
@@ -1690,10 +1794,14 @@ export async function startRuntimeServer(world, {
       serverClosing = true;
       runtimeProcessHealthMonitor.close();
       clearInterval(sseWatcher);
+      stopLocalSnapshotPoller();
       for (const client of sseClients) client.end();
       sseClients.clear();
       for (const context of new Set(runtimeContexts.values())) context?.close?.();
       const appContextClose = typeof appContext.close === "function" ? appContext.close.bind(appContext) : null;
+      try {
+        appContext.witnessCoreStatusUnsubscribe?.();
+      } catch {}
       appContext.witnessCoreStatusStore?.close?.();
       await appContextClose?.();
       await Promise.allSettled(backgroundStartupTasks);

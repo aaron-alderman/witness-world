@@ -7,6 +7,11 @@ import { createRuntimeVerificationPersistence } from "../../src/runtime-verifica
 import { createHandlers } from "./runtime.js";
 import { buildPlatformModel, filterPlatformModel } from "./platform-model.js";
 import { readPlatformTestRun } from "./test-runs.js";
+import {
+  createLiveCoreWorkspace,
+  reservePort,
+  startWitnessCoreProcess
+} from "../../test/support/witness-core-harness.js";
 
 async function createTempRoot(name) {
   const root = path.join(process.cwd(), "test", `.${name}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`);
@@ -22,7 +27,123 @@ async function createPersistence(runtimeRoot) {
   });
 }
 
-test("verification persistence falls back to JSON when node:sqlite is unavailable", async () => {
+function createWitnessCoreVerificationPersistenceFetch() {
+  const state = {
+    verificationPolicies: new Map(),
+    verificationFreshness: new Map(),
+    verificationInvalidations: new Map(),
+    verificationQueue: new Map(),
+    verificationExecutions: new Map(),
+    testRuns: new Map(),
+    testResults: new Map(),
+    artifacts: new Map(),
+    testArtifacts: new Map(),
+    testSuites: new Map(),
+    testCases: new Map(),
+    testReports: new Map(),
+    cacheEntries: new Map(),
+    artifactContents: new Map()
+  };
+
+  const jsonResponse = body => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return structuredClone(body);
+    }
+  });
+
+  return async (_url, options = {}) => {
+    const body = JSON.parse(String(options.body || "{}"));
+    const op = String(body.operation || "");
+    const upsert = (bucket, rows = []) => {
+      for (const row of rows ?? []) {
+        if (!row?.id) continue;
+        state[bucket].set(String(row.id), structuredClone(row));
+      }
+    };
+    if (op === "readModelRows") {
+      return jsonResponse({
+        verificationPolicies: [...state.verificationPolicies.values()],
+        verificationFreshness: [...state.verificationFreshness.values()],
+        verificationInvalidations: [...state.verificationInvalidations.values()],
+        verificationQueue: [...state.verificationQueue.values()],
+        verificationExecutions: [...state.verificationExecutions.values()],
+        testRuns: [...state.testRuns.values()],
+        testResults: [...state.testResults.values()],
+        artifacts: [...state.artifacts.values()],
+        testArtifacts: [...state.testArtifacts.values()],
+        testSuites: [...state.testSuites.values()],
+        testCases: [...state.testCases.values()],
+        testReports: [...state.testReports.values()]
+      });
+    }
+    if (op === "recordPolicyRows") {
+      upsert("verificationPolicies", body.rows);
+      return jsonResponse({ ok: true });
+    }
+    if (op === "recordFreshnessRows") {
+      upsert("verificationFreshness", body.rows);
+      return jsonResponse({ ok: true });
+    }
+    if (op === "recordInvalidationRows") {
+      upsert("verificationInvalidations", body.rows);
+      return jsonResponse({ ok: true });
+    }
+    if (op === "recordQueueRow") {
+      upsert("verificationQueue", body.row ? [body.row] : []);
+      return jsonResponse({ ok: true });
+    }
+    if (op === "recordExecutionRow") {
+      upsert("verificationExecutions", body.row ? [body.row] : []);
+      return jsonResponse({ ok: true });
+    }
+    if (op === "persistTestRunBundle") {
+      upsert("testRuns", body.testRun ? [body.testRun] : []);
+      upsert("testResults", body.testResults);
+      upsert("artifacts", body.artifacts);
+      upsert("testArtifacts", body.testArtifacts);
+      upsert("testSuites", body.testSuites);
+      upsert("testCases", body.testCases);
+      upsert("testReports", body.testReports);
+      for (const row of body.cacheEntries ?? []) {
+        if (!row?.cacheKey) continue;
+        state.cacheEntries.set(String(row.cacheKey), structuredClone(row));
+      }
+      for (const row of body.artifactContents ?? []) {
+        if (!row?.contentRef) continue;
+        state.artifactContents.set(String(row.contentRef), String(row.content ?? ""));
+      }
+      return jsonResponse({ ok: true });
+    }
+    if (op === "findReusablePassedResult") {
+      const latestResult = state.cacheEntries.get(String(body.cacheKey || ""))?.latestResult ?? null;
+      return jsonResponse({ latestResult });
+    }
+    if (op === "readArtifactContent") {
+      const artifactId = String(body.artifactId || "");
+      const compatibility = String(body.compatibility || "canonical");
+      const artifact = compatibility === "testArtifact"
+        ? [...state.testArtifacts.values()].find(row => row.id === artifactId || row.artifactId === artifactId) ?? null
+        : (
+          state.artifacts.get(artifactId)
+          ?? [...state.testArtifacts.values()].find(row => row.id === artifactId || row.artifactId === artifactId)
+          ?? null
+        );
+      if (!artifact?.contentRef) return jsonResponse({ ok: false, status: 404, error: "artifact content not found" });
+      return jsonResponse({
+        ok: true,
+        status: 200,
+        artifact,
+        content: state.artifactContents.get(String(artifact.contentRef)) ?? "",
+        contentType: artifact.contentType ?? "text/plain"
+      });
+    }
+    throw new Error(`unexpected witness-core verification persistence op ${op}`);
+  };
+}
+
+test("verification persistence uses local JSON compatibility mode when witness-core is unavailable", async () => {
   const runtimeRoot = await createTempRoot("verification-persistence-fallback");
   let persistence = null;
   let reopened = null;
@@ -30,14 +151,11 @@ test("verification persistence falls back to JSON when node:sqlite is unavailabl
     persistence = await createRuntimeVerificationPersistence({
       serverRunner: { id: "runner.main", values: {} },
       runtimeRoot,
-      runtimeProfile: "full",
-      loadSqliteModule: async () => {
-        throw new Error("No such built-in module: node:sqlite");
-      }
+      runtimeProfile: "full"
     });
     const inspect = persistence.inspect();
     assert.equal(inspect.ledgerBackend.runtimeProvider, "json-fallback");
-    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_sqlite_unavailable"), true);
+    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_json_compatibility"), true);
 
     await persistence.recordPolicyRows([{ id: "verificationPolicy:fallback", enabled: true }]);
     await persistence.persistTestRunBundle({
@@ -53,10 +171,7 @@ test("verification persistence falls back to JSON when node:sqlite is unavailabl
     reopened = await createRuntimeVerificationPersistence({
       serverRunner: { id: "runner.main", values: {} },
       runtimeRoot,
-      runtimeProfile: "full",
-      loadSqliteModule: async () => {
-        throw new Error("No such built-in module: node:sqlite");
-      }
+      runtimeProfile: "full"
     });
     const rows = reopened.readModelRows();
     assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:fallback"), true);
@@ -71,7 +186,7 @@ test("verification persistence falls back to JSON when node:sqlite is unavailabl
   }
 });
 
-test("verification persistence synthesizes sqlite and disk backends and survives restart", async () => {
+test("verification persistence keeps synthesized backend metadata while using local JSON compatibility mode", async () => {
   const runtimeRoot = await createTempRoot("verification-persistence");
   let persistence = null;
   let reopened = null;
@@ -80,9 +195,11 @@ test("verification persistence synthesizes sqlite and disk backends and survives
     const inspect = persistence.inspect();
     assert.equal(inspect.source, "synthesized");
     assert.equal(inspect.ledgerBackend.provider, "sqlite");
+    assert.equal(inspect.ledgerBackend.runtimeProvider, "json-fallback");
     assert.equal(inspect.artifactBackend.provider, "disk");
     assert.equal(inspect.cacheBackend.provider, "disk");
     assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_synthesized"), true);
+    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_json_compatibility"), true);
 
     await persistence.recordPolicyRows([{
       id: "verificationPolicy:runner.main:full:defaults",
@@ -232,6 +349,179 @@ test("verification persistence synthesizes sqlite and disk backends and survives
     try { persistence?.close?.(); } catch {}
     try { reopened?.close?.(); } catch {}
     await rm(runtimeRoot, { recursive: true, force: true });
+  }
+});
+
+test("verification persistence can be mediated through witness-core without loading node:sqlite", async () => {
+  const runtimeRoot = await createTempRoot("verification-persistence-remote");
+  const fetchImpl = createWitnessCoreVerificationPersistenceFetch();
+  let sqliteLoads = 0;
+  let persistence = null;
+  let reopened = null;
+  try {
+    persistence = await createRuntimeVerificationPersistence({
+      serverRunner: { id: "runner.main", values: {} },
+      runtimeRoot,
+      runtimeProfile: "full",
+      witnessCoreBridge: { coreUrl: "http://127.0.0.1:8788" },
+      fetchImpl,
+      loadSqliteModule: async () => {
+        sqliteLoads += 1;
+        throw new Error("node:sqlite should not load when witness-core is configured");
+      }
+    });
+    const inspect = persistence.inspect();
+    assert.equal(inspect.ledgerBackend.runtimeProvider, "witness-core");
+    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_witness_core"), true);
+
+    await persistence.recordPolicyRows([{ id: "verificationPolicy:remote", enabled: true }]);
+    await persistence.persistTestRunBundle({
+      testRun: { id: "testRun:remote", gateId: "gate:remote", status: "passed" },
+      testResults: [{ id: "testResult:remote", runId: "testRun:remote", status: "passed", cacheIdentity: { cacheKey: "cache:remote" } }],
+      testArtifacts: [{ id: "testArtifact:remote", runId: "testRun:remote", artifactKind: "stdout", contentType: "text/plain", content: "remote stdout" }],
+      testSuites: [],
+      testCases: [],
+      testReports: []
+    });
+    persistence.close();
+
+    reopened = await createRuntimeVerificationPersistence({
+      serverRunner: { id: "runner.main", values: {} },
+      runtimeRoot,
+      runtimeProfile: "full",
+      witnessCoreBridge: { coreUrl: "http://127.0.0.1:8788" },
+      fetchImpl,
+      loadSqliteModule: async () => {
+        sqliteLoads += 1;
+        throw new Error("node:sqlite should not load when witness-core is configured");
+      }
+    });
+    const rows = reopened.readModelRows();
+    assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:remote"), true);
+    assert.equal(rows.testRuns.some(row => row.id === "testRun:remote"), true);
+    assert.equal(rows.artifacts.some(row => row.id === "artifact:remote"), true);
+    const reusable = await reopened.findReusablePassedResult("cache:remote");
+    assert.equal(reusable?.id, "testResult:remote");
+    const artifact = await reopened.readArtifactContent("artifact:remote");
+    assert.equal(artifact.ok, true);
+    assert.equal(artifact.content, "remote stdout");
+    assert.equal(sqliteLoads, 0);
+  } finally {
+    try { persistence?.close?.(); } catch {}
+    try { reopened?.close?.(); } catch {}
+    await rm(runtimeRoot, { recursive: true, force: true });
+  }
+});
+
+test("verification persistence survives worker reopen and witness-core restart without loading node:sqlite", async () => {
+  const workspace = await createLiveCoreWorkspace({ proofDelayMs: 100 });
+  const port = await reservePort();
+  let core = null;
+  let sqliteLoads = 0;
+  let persistence = null;
+  let reopened = null;
+  let restarted = null;
+  try {
+    core = await startWitnessCoreProcess({
+      cwd: workspace.tempRoot,
+      configPath: workspace.configPath,
+      port
+    });
+
+    const createRemotePersistence = async () => createRuntimeVerificationPersistence({
+      serverRunner: { id: "runner.main", values: {} },
+      runtimeRoot: workspace.appRoot,
+      runtimeProfile: "full",
+      witnessCoreBridge: { coreUrl: core.url },
+      loadSqliteModule: async () => {
+        sqliteLoads += 1;
+        throw new Error("node:sqlite should not load when witness-core is configured");
+      }
+    });
+
+    persistence = await createRemotePersistence();
+    const inspect = persistence.inspect();
+    assert.equal(inspect.ledgerBackend.runtimeProvider, "witness-core");
+    assert.equal(inspect.diagnostics.some(row => row.code === "verification_persistence_witness_core"), true);
+
+    await persistence.recordPolicyRows([{
+      id: "verificationPolicy:restart",
+      enabled: true,
+      producedAt: "2026-06-20T00:00:00.000Z"
+    }]);
+    await persistence.persistTestRunBundle({
+      testRun: {
+        id: "testRun:restart",
+        gateId: "gate:restart",
+        status: "passed",
+        producedAt: "2026-06-20T00:00:01.000Z"
+      },
+      testResults: [{
+        id: "testResult:restart",
+        runId: "testRun:restart",
+        gateId: "gate:restart",
+        status: "passed",
+        producedAt: "2026-06-20T00:00:01.000Z",
+        cacheIdentity: { cacheKey: "cache:restart" }
+      }],
+      testArtifacts: [{
+        id: "testArtifact:restart:stdout",
+        runId: "testRun:restart",
+        artifactKind: "stdout",
+        contentType: "text/plain",
+        content: "restart stdout"
+      }],
+      testSuites: [],
+      testCases: [],
+      testReports: [{
+        id: "testReport:restart:summary",
+        runId: "testRun:restart",
+        gateId: "gate:restart",
+        reportKind: "summary",
+        title: "Restart Summary",
+        status: "passed",
+        summary: "restart survived",
+        producedAt: "2026-06-20T00:00:01.000Z"
+      }]
+    });
+    persistence.close();
+    persistence = null;
+
+    reopened = await createRemotePersistence();
+    let rows = reopened.readModelRows();
+    assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:restart"), true);
+    assert.equal(rows.testRuns.some(row => row.id === "testRun:restart"), true);
+    assert.equal(rows.artifacts.some(row => row.id === "artifact:restart:stdout"), true);
+    assert.equal((await reopened.findReusablePassedResult("cache:restart"))?.id, "testResult:restart");
+    let artifact = await reopened.readArtifactContent("artifact:restart:stdout");
+    assert.equal(artifact.ok, true);
+    assert.equal(artifact.content, "restart stdout");
+    reopened.close();
+    reopened = null;
+
+    await core.stop();
+    core = await startWitnessCoreProcess({
+      cwd: workspace.tempRoot,
+      configPath: workspace.configPath,
+      port
+    });
+
+    restarted = await createRemotePersistence();
+    rows = restarted.readModelRows();
+    assert.equal(rows.verificationPolicies.some(row => row.id === "verificationPolicy:restart"), true);
+    assert.equal(rows.testRuns.some(row => row.id === "testRun:restart"), true);
+    assert.equal(rows.testReports.some(row => row.id === "testReport:restart:summary"), true);
+    assert.equal((await restarted.findReusablePassedResult("cache:restart"))?.id, "testResult:restart");
+    artifact = await restarted.readArtifactContent("artifact:restart:stdout");
+    assert.equal(artifact.ok, true);
+    assert.equal(artifact.content, "restart stdout");
+    assert.equal(sqliteLoads, 0);
+  } finally {
+    try { persistence?.close?.(); } catch {}
+    try { reopened?.close?.(); } catch {}
+    try { restarted?.close?.(); } catch {}
+    try { await core?.stop?.(); } catch {}
+    await workspace.cleanup();
   }
 });
 

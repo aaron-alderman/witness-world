@@ -120,7 +120,8 @@ export async function createRuntimeAppContext({
     runtimeConfigLookup,
     positiveInteger,
     isoAt,
-    fetchImpl: typeof globalThis.fetch === "function" ? (...args) => globalThis.fetch(...args) : null
+    fetchImpl: typeof globalThis.fetch === "function" ? (...args) => globalThis.fetch(...args) : null,
+    getAppContext: () => contextRef
   };
   const pluginJobHandlers = Object.assign(
     {},

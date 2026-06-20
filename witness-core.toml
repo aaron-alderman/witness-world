@@ -1,5 +1,5 @@
 [watch]
-roots = ["src", "plugins", "examples/engentus"]
+roots = ["src", "plugins", "examples/engentus", "examples/_lib"]
 ignore = ["node_modules", "target", ".git", ".witness-core"]
 
 [proof]
@@ -8,7 +8,7 @@ full = "npm test"
 slow_ms = 15000
 
 [package]
-include = ["src/**", "plugins/**", "examples/engentus/**"]
+include = ["src/**", "plugins/**", "examples/engentus/**", "examples/_lib/**"]
 
 [supervise]
 command = "npm run app:engentus"

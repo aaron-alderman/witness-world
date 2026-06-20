@@ -22,6 +22,33 @@ function providerError(reason, status = 401) {
   return error;
 }
 
+function createWitnessCoreBackedFetch({ fetchImpl, witnessCoreBridge, correlation }) {
+  return async (url, options = {}) => {
+    const targetUrl = String(url || "").trim();
+    if (witnessCoreBridge?.coreUrl) {
+      const response = await witnessCoreBridge.executeHttpOutbound({
+        url: targetUrl,
+        method: options?.method || "GET",
+        headers: options?.headers && typeof options.headers === "object" ? options.headers : {},
+        bodyText: options?.body == null ? null : String(options.body),
+        correlation
+      });
+      return {
+        status: Number(response?.status || 0),
+        headers: response?.headers ?? {},
+        async json() {
+          return JSON.parse(String(response?.bodyText ?? "null"));
+        },
+        async text() {
+          return String(response?.bodyText ?? "");
+        }
+      };
+    }
+    if (typeof fetchImpl !== "function") throw providerError("oauth provider requires fetch", 500);
+    return await fetchImpl(url, options);
+  };
+}
+
 // Deterministic local provider — today's behavior, extracted verbatim. Stays the default.
 function createStubProvider() {
   return {
@@ -53,12 +80,12 @@ function createOidcProvider(oidc) {
       url.searchParams.set("scope", oidc.scope);
       return url.toString();
     },
-    async resolveProfile({ code, callbackUrl, fetchImpl }) {
-      if (typeof fetchImpl !== "function") throw providerError("oauth provider requires fetch", 500);
+    async resolveProfile({ code, callbackUrl, fetchImpl, witnessCoreBridge = null, correlation = null }) {
       if (!scalar(code)) throw providerError("oauth provider returned no authorization code", 400);
       const redirectUri = redirectUriFor(callbackUrl);
+      const sendRequest = createWitnessCoreBackedFetch({ fetchImpl, witnessCoreBridge, correlation });
 
-      const tokenResponse = await fetchImpl(oidc.tokenUrl, {
+      const tokenResponse = await sendRequest(oidc.tokenUrl, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
         body: new URLSearchParams({
@@ -84,7 +111,7 @@ function createOidcProvider(oidc) {
       const accessToken = scalar(tokenPayload?.access_token);
       if (!accessToken) throw providerError("oauth token exchange returned no access token", 502);
 
-      const userinfoResponse = await fetchImpl(oidc.userinfoUrl, {
+      const userinfoResponse = await sendRequest(oidc.userinfoUrl, {
         method: "GET",
         // Extra headers let vendor presets satisfy provider requirements (e.g. GitHub's mandatory
         // User-Agent) without a vendor-specific code path.

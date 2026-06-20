@@ -38,6 +38,18 @@ async function makeWorkspaceEngentusApp() {
   };
 }
 
+async function makeTempLiveCoreFixtureApp() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "witness-world-live-core-dev-"));
+  const fixtureRoot = path.join(root, "live-core-app");
+  await fs.cp(path.join(process.cwd(), "test", "fixtures", "live-core-app"), fixtureRoot, { recursive: true });
+  return {
+    root,
+    dslPath: path.join(fixtureRoot, "app.wtoml"),
+    contentPath: path.join(fixtureRoot, "app", "content.wtoml"),
+    routePath: "/live-core"
+  };
+}
+
 async function readShell(shellPath) {
   return fs.readFile(shellPath, "utf8");
 }
@@ -324,40 +336,46 @@ test("POST source edits persist to disk and rebuild the active snapshot", async 
   }
 });
 
-test("dev-mode fs.watch updates publish revision SSE and inject dev reload client", { timeout: 120000 }, async () => {
-  const app = await makeTempEngentusApp();
+test("dev-mode dirty polling updates publish revision SSE and inject dev reload client", { timeout: 120000 }, async () => {
+  const app = await makeTempLiveCoreFixtureApp();
   const server = await startUiServer({
     dslPath: app.dslPath,
-    serverRunnerId: "engentus_server"
+    serverRunnerId: "fixture_server"
   });
-  const events = await openRevisionEvents(`${server.url}/api/runtime/app-revisions/events`);
+  let events = null;
   try {
-    const initialHtmlResponse = await fetch(`${server.url}/engentus/login`);
+    await waitForSnapshotManagerReady(server);
+    const initialRevision = Number(
+      server.server.runtimeContext.appSnapshotManager?.getLastRevisionEvent?.().appRevision || 0
+    );
+    events = await openRevisionEvents(`${server.url}/api/runtime/app-revisions/events`);
+    const initialHtmlResponse = await fetch(`${server.url}${app.routePath}`);
     const initialHtml = await initialHtmlResponse.text();
     assert.equal(initialHtmlResponse.headers.get("cache-control"), "no-cache");
-    assert.match(initialHtml, /Demo sign-in uses the seeded local identities below\./);
+    assert.match(initialHtml, /Live Core Baseline/);
     assert.match(initialHtml, /new EventSource\("\/api\/runtime\/app-revisions\/events"\)/);
 
-    const initialEvent = await events.nextEvent({
-      predicate: payload => Number(payload.appRevision || 0) >= 1
-    });
     const nextWatchEvent = waitForSnapshotEvent(server, {
-      predicate: payload => Number(payload.appRevision || 0) > Number(initialEvent.appRevision || 0) && payload.trigger === "watch"
+      predicate: payload => Number(payload.appRevision || 0) > initialRevision && payload.trigger === "watch"
+    });
+    const nextSseEvent = events.nextEvent({
+      predicate: payload => Number(payload.appRevision || 0) > initialRevision && payload.trigger === "watch"
     });
 
     await replaceShellText(
-      app.authShellPath,
-      'prop text = "Demo sign-in uses the seeded local identities below."',
-      'prop text = "Watcher pushed subtitle."'
+      app.contentPath,
+      'text = "Live Core Baseline"',
+      'text = "Live Core Poller"'
     );
 
-    const watchEvent = await nextWatchEvent;
-    assert.match((watchEvent.changedSources ?? []).join("\n"), /app\/shell-auth\.rvm/);
+    const [watchEvent, sseEvent] = await Promise.all([nextWatchEvent, nextSseEvent]);
+    assert.match((watchEvent.changedSources ?? []).join("\n"), /app\/content\.wtoml/);
+    assert.match((sseEvent.changedSources ?? []).join("\n"), /app\/content\.wtoml/);
 
-    const refreshed = await fetch(`${server.url}/engentus/login`).then(result => result.text());
-    assert.match(refreshed, /Watcher pushed subtitle/);
+    const refreshed = await waitForText(`${server.url}${app.routePath}`, /Live Core Poller/);
+    assert.match(refreshed, /Live Core Poller/);
   } finally {
-    await events.close();
+    await events?.close?.();
     await server.close();
     await fs.rm(app.root, { recursive: true, force: true });
   }

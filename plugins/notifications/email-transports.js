@@ -4,6 +4,40 @@ function scalar(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function createWitnessCoreBackedFetch({ fetchImpl, witnessCoreBridge }) {
+  return async (url, options = {}, correlation = null) => {
+    const targetUrl = String(url || "").trim();
+    if (witnessCoreBridge?.coreUrl) {
+      const response = await witnessCoreBridge.executeHttpOutbound({
+        url: targetUrl,
+        method: options?.method || "GET",
+        headers: options?.headers && typeof options.headers === "object" ? options.headers : {},
+        bodyText: options?.body == null ? null : String(options.body),
+        correlation
+      });
+      const normalizedHeaders = Object.fromEntries(
+        Object.entries(response?.headers ?? {}).map(([name, value]) => [String(name).toLowerCase(), String(value)])
+      );
+      return {
+        status: Number(response?.status || 0),
+        headers: {
+          get(name) {
+            return normalizedHeaders[String(name || "").toLowerCase()] ?? null;
+          }
+        },
+        async json() {
+          return JSON.parse(String(response?.bodyText ?? "null"));
+        },
+        async text() {
+          return String(response?.bodyText ?? "");
+        }
+      };
+    }
+    if (typeof fetchImpl !== "function") throw new Error("email transport requires fetch");
+    return await fetchImpl(url, options);
+  };
+}
+
 // Render the deliverable body once, shared by every transport so the preview an operator
 // inspects is byte-for-byte what a provider receives.
 export function renderNotificationBody(notification, renderTemplatedText = defaultRenderTemplatedText) {
@@ -42,24 +76,25 @@ export function createStubEmailTransport({ sender } = {}) {
 // Vendor-neutral real provider: POST the message to a configured endpoint with bearer auth and
 // read the provider's message id out of the JSON response. Any non-2xx or network failure throws
 // so the jobs.queue retry/dead-letter path stays in control (repair is first-class, not hidden).
-export function createHttpEmailTransport({ runtimeConfig, fetchImpl } = {}) {
+export function createHttpEmailTransport({ runtimeConfig, fetchImpl, witnessCoreBridge = null } = {}) {
   const url = scalar(runtimeConfig?.["notify.email.http.url"]);
   const apiKey = scalar(runtimeConfig?.["notify.email.http.apiKey"]);
   const fromAddress = scalar(runtimeConfig?.["notify.email.http.fromAddress"]);
   const responseIdPath = scalar(runtimeConfig?.["notify.email.http.responseIdPath"]) || "id";
-  const fetchFn = typeof fetchImpl === "function" ? fetchImpl : null;
+  const fetchFn = createWitnessCoreBackedFetch({ fetchImpl, witnessCoreBridge });
   return {
     id: "http",
     sender: fromAddress,
-    async send({ to, subject, body }) {
+    async send({ to, subject, body, actor = null }) {
       if (!url) throw new Error("notify.email.http.url is not configured");
-      if (!fetchFn) throw new Error("http email transport requires fetch");
       const headers = { "content-type": "application/json" };
       if (apiKey) headers.authorization = `Bearer ${apiKey}`;
       const response = await fetchFn(url, {
         method: "POST",
         headers,
         body: JSON.stringify({ to, subject, from: fromAddress, body })
+      }, {
+        actor
       });
       if (!response || typeof response.status !== "number") {
         throw new Error("http email transport received no response");
@@ -95,18 +130,17 @@ const SENDGRID_DEFAULT_URL = "https://api.sendgrid.com/v3/mail/send";
 
 // Concrete SendGrid (v3 mail send) transport. SendGrid replies 202 with an empty body and returns the
 // message id in the X-Message-Id response header, so it cannot reuse the generic body-id transport.
-export function createSendgridEmailTransport({ runtimeConfig, fetchImpl } = {}) {
+export function createSendgridEmailTransport({ runtimeConfig, fetchImpl, witnessCoreBridge = null } = {}) {
   const apiKey = scalar(runtimeConfig?.["notify.email.sendgrid.apiKey"]);
   const fromAddress = scalar(runtimeConfig?.["notify.email.sendgrid.fromAddress"]);
   const url = scalar(runtimeConfig?.["notify.email.sendgrid.url"]) || SENDGRID_DEFAULT_URL;
-  const fetchFn = typeof fetchImpl === "function" ? fetchImpl : null;
+  const fetchFn = createWitnessCoreBackedFetch({ fetchImpl, witnessCoreBridge });
   return {
     id: "sendgrid",
     sender: fromAddress,
-    async send({ to, subject, body }) {
+    async send({ to, subject, body, actor = null }) {
       if (!apiKey) throw new Error("notify.email.sendgrid.apiKey is not configured");
       if (!fromAddress) throw new Error("notify.email.sendgrid.fromAddress is not configured");
-      if (!fetchFn) throw new Error("sendgrid email transport requires fetch");
       const response = await fetchFn(url, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
@@ -116,6 +150,8 @@ export function createSendgridEmailTransport({ runtimeConfig, fetchImpl } = {}) 
           subject,
           content: [{ type: "text/plain", value: body }]
         })
+      }, {
+        actor
       });
       if (!response || typeof response.status !== "number") {
         throw new Error("sendgrid email transport received no response");
@@ -136,9 +172,9 @@ export function createSendgridEmailTransport({ runtimeConfig, fetchImpl } = {}) 
 
 // Resolve the email transport selected by runtime config; unknown providers fall back to stub
 // rather than silently dropping mail.
-export function createEmailTransport({ runtimeConfig, fetchImpl, stubSender } = {}) {
+export function createEmailTransport({ runtimeConfig, fetchImpl, stubSender, witnessCoreBridge = null } = {}) {
   const provider = resolveEmailProvider(runtimeConfig);
-  if (provider === "http") return createHttpEmailTransport({ runtimeConfig, fetchImpl });
-  if (provider === "sendgrid") return createSendgridEmailTransport({ runtimeConfig, fetchImpl });
+  if (provider === "http") return createHttpEmailTransport({ runtimeConfig, fetchImpl, witnessCoreBridge });
+  if (provider === "sendgrid") return createSendgridEmailTransport({ runtimeConfig, fetchImpl, witnessCoreBridge });
   return createStubEmailTransport({ sender: stubSender });
 }

@@ -12,7 +12,8 @@ export function createBuiltinNotificationJobHandlers({
   backendHost,
   runtimeConfig,
   renderTemplatedText,
-  fetchImpl
+  fetchImpl,
+  getAppContext = null
 }) {
   const emailSender = typeof runtimeConfig?.["notify.email.stubSender"] === "string" && runtimeConfig["notify.email.stubSender"].trim()
     ? runtimeConfig["notify.email.stubSender"].trim()
@@ -23,7 +24,12 @@ export function createBuiltinNotificationJobHandlers({
 
   // Email picks its transport (stub or a real provider) from runtime config; SMS stays stub-only.
   const transportFor = channel => channel === "email"
-    ? createEmailTransport({ runtimeConfig, fetchImpl, stubSender: emailSender })
+    ? createEmailTransport({
+        runtimeConfig,
+        fetchImpl,
+        stubSender: emailSender,
+        witnessCoreBridge: getAppContext?.()?.witnessCoreBridge ?? null
+      })
     : createStubEmailTransport({ sender: smsSender });
 
   const deliver = channel => async ({ actor, job, payload, attempt }) => {
@@ -74,6 +80,7 @@ export function createBuiltinNotificationJobHandlers({
         channel,
         notificationId: notification.id,
         attempt,
+        actor: actor || backendHost,
         to: notification.recipient,
         subject: notification.subject,
         body: preview
