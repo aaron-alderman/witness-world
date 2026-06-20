@@ -146,3 +146,50 @@ handler = "repo.close"
 [[serve]]
 serverRunner = "tilth_net_server"
 route = "tilth_net_repo_close_route"
+
+# Conversations: DESIRE-marked sessions announced from tilth (projection)
+[[route]]
+id = "tilth_net_sessions_read_route"
+method = "GET"
+path = "/api/sessions"
+serves = "tilthNetSessions"
+handler = "sessions.read"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_sessions_read_route"
+
+# Daemon announces a DESIRE session (sanitized: id, title, AI summary, project)
+[[route]]
+id = "tilth_net_session_announce_route"
+method = "POST"
+path = "/api/sessions/announce"
+serves = "tilthNetSessions"
+handler = "session.announce"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_session_announce_route"
+
+# Browser toggles a conversation share open / closed
+[[route]]
+id = "tilth_net_session_share_route"
+method = "POST"
+path = "/api/sessions/:id/share"
+serves = "tilthNetSessions"
+handler = "session.share"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_session_share_route"
+
+[[route]]
+id = "tilth_net_session_unshare_route"
+method = "POST"
+path = "/api/sessions/:id/unshare"
+serves = "tilthNetSessions"
+handler = "session.unshare"
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_session_unshare_route"

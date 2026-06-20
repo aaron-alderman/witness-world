@@ -15,7 +15,11 @@ export const handlerCatalog = Object.freeze({
     "repos.read",
     "repo.announce",
     "repo.open",
-    "repo.close"
+    "repo.close",
+    "sessions.read",
+    "session.announce",
+    "session.share",
+    "session.unshare"
   ]),
   handlerMetadata: Object.freeze({})
 });

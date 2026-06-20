@@ -222,7 +222,7 @@ class = "surface-status"
 [[details]]
 id = "session_item_ai_summary_details_repo_clean"
 template = true
-children = ["session_item_ai_summary_summary_repo_clean", "session_item_ai_summary_text_repo_clean", "session_item_ai_summary_bullets_repo_clean"]
+children = ["session_item_ai_summary_summary_repo_clean", "session_item_ai_summary_error_repo_clean", "session_item_ai_summary_text_repo_clean", "session_item_ai_summary_bullets_repo_clean"]
 class = "session-transcript-panel"
 
 [[summary]]
@@ -236,6 +236,12 @@ id = "session_item_ai_summary_text_repo_clean"
 template = true
 text = "${item.aiSummary && item.aiSummary.text ? item.aiSummary.text : ''}"
 class = "surface-note"
+
+[[text]]
+id = "session_item_ai_summary_error_repo_clean"
+template = true
+text = "${item.aiSummary && item.aiSummary.errorText ? item.aiSummary.errorText : ''}"
+class = "surface-state-list surface-note surface-mono session-transcript-preview"
 
 [[text]]
 id = "session_item_ai_summary_bullets_repo_clean"

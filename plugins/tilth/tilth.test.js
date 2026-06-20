@@ -345,4 +345,6 @@ test("tilth AI-summary failures project onto the session", () => {
   const session = projectSessions(world.allWitnesses()).find(row => row.id === "session-1");
   assert.equal(session.aiSummary.status, "failed");
   assert.equal(session.aiSummary.error, "model unavailable");
+  assert.equal(session.aiSummary.errorText, "Error: model unavailable");
+  assert.equal(session.aiSummary.summary, "AI summary failed");
 });

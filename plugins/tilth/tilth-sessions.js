@@ -378,15 +378,17 @@ function transcriptPreviewReadShape(request) {
 }
 
 function aiSummaryReadShape(request) {
+  const bullets = normalizeStringList(request.bullets);
   return {
     status: request.status,
     requestId: request.requestId,
     requestedAt: request.requestedAt,
     completedAt: request.completedAt,
     text: String(request.text || ""),
-    bullets: normalizeStringList(request.bullets),
-    bulletText: normalizeStringList(request.bullets).map(item => `- ${item}`).join("\n"),
+    bullets,
+    bulletText: bullets.map(item => `- ${item}`).join("\n"),
     error: request.error,
+    errorText: request.error ? `Error: ${request.error}` : "",
     summary: aiSummarySummary(request)
   };
 }
@@ -401,6 +403,7 @@ function emptyAiSummary() {
     bullets: [],
     bulletText: "",
     error: null,
+    errorText: "",
     summary: "AI summary not run"
   };
 }
@@ -408,7 +411,7 @@ function emptyAiSummary() {
 function aiSummarySummary(request) {
   if (request.status === "waiting_for_transcript") return "Waiting for transcript preview";
   if (request.status === "pending") return "AI summary pending";
-  if (request.status === "failed") return `AI summary failed: ${request.error || "unknown error"}`;
+  if (request.status === "failed") return "AI summary failed";
   if (request.status !== "completed") return "AI summary not run";
   return request.text || request.bullets.length ? "AI summary loaded" : "AI summary is empty";
 }

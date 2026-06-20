@@ -1,4 +1,5 @@
-# tilth-net frontend: your node's control surface — members + repos to share.
+# tilth-net frontend: your node's control surface.
+# Conversations you marked DESIRE (in tilth) + the repos they touched + members.
 # (No keys, no signing here — the browser reads and toggles; the daemon signs.)
 
 [[defaults]]
@@ -7,7 +8,7 @@ program = "tilth_net_program"
 
 [[page]]
 id = "tilth_net_page"
-children = ["tilth_net_title", "tilth_net_intro", "tilth_net_members_title", "tilth_net_members", "tilth_net_repos_title", "tilth_net_repos"]
+children = ["tilth_net_title", "tilth_net_intro", "tilth_net_convos_title", "tilth_net_convos", "tilth_net_members_title", "tilth_net_members", "tilth_net_repos_title", "tilth_net_repos"]
 title = "Tilth-Net — your node"
 
 [[heading]]
@@ -17,8 +18,52 @@ level = 1
 
 [[text]]
 id = "tilth_net_intro"
-text = "Your control surface. Identities announce themselves and are recognized by an existing member (Members). You choose which local repos share their gitignored working set to the shared commons (Repos — open/close). The browser holds no key: your daemon does the signing and the syncing."
+text = "Your control surface. The conversations you marked DESIRE in tilth show up here with their AI summary — share one to publish it (summary included) to the shared commons. The repos those conversations touched can be opened/closed for sync; a repo shares its working files, minus anything git ignores (so .env, keys and node_modules never leave). The browser holds no key: your daemon does the signing and the syncing."
 class = "surface-lede"
+
+# --- conversations: DESIRE-marked sessions, shareable -----------------------
+[[heading]]
+id = "tilth_net_convos_title"
+text = "Conversations (DESIRE)"
+level = 2
+
+[[box]]
+id = "tilth_net_convos"
+role = "convos-list"
+class = "surface-list"
+
+[[box]]
+id = "convo_item_template"
+template = true
+children = ["convo_item_title", "convo_item_summary", "convo_item_repos", "convo_item_share"]
+class = "${item.shared ? 'surface-card desire' : 'surface-card'}"
+
+[[heading]]
+id = "convo_item_title"
+template = true
+text = "${item.title}"
+level = 3
+
+[[text]]
+id = "convo_item_summary"
+template = true
+text = "${item.aiSummary || '(no AI summary yet)'}"
+class = "surface-lede"
+
+[[text]]
+id = "convo_item_repos"
+template = true
+text = "${item.project} · ${item.reposText}"
+class = "surface-status"
+
+[[button]]
+id = "convo_item_share"
+template = true
+text = "${item.shared ? 'Shared ✓ — unshare' : 'Share conversation'}"
+type = "button"
+action = "shareConversation"
+data-id = "${item.sessionId}"
+data-target = "${item.shared ? 'unshare' : 'share'}"
 
 # --- members directory ------------------------------------------------------
 [[heading]]
@@ -49,7 +94,7 @@ template = true
 text = "${item.scheme} · ${item.id} · ${item.recognized ? 'recognized by ' + item.recognizedBy : 'awaiting recognition'}"
 class = "surface-status"
 
-# --- repos: available to share, opened/closed from here ---------------------
+# --- repos: touched by DESIRE conversations, opened/closed from here --------
 [[heading]]
 id = "tilth_net_repos_title"
 text = "Repos"
@@ -75,7 +120,7 @@ level = 3
 [[text]]
 id = "repo_item_meta"
 template = true
-text = "${item.fileCount} files · ${item.open ? 'OPEN — sharing to the commons' : 'closed'}${item.remote ? ' · ' + item.remote : ''}"
+text = "${item.fileCount} files · ${item.open ? 'OPEN — sharing to the commons' : 'closed'}${item.sessionsText ? ' · ' + item.sessionsText : ''}"
 class = "surface-status"
 
 [[button]]
@@ -96,11 +141,26 @@ rootWidget = "tilth_net_page"
 order = 0
 op = "fetchJson"
 on = "load"
+url = "/api/sessions"
+into = "sessionsResponse"
+
+[[step]]
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "tilth_net_convos"
+from = "sessionsResponse.sessions"
+template = "convo_item_template"
+
+[[step]]
+order = 2
+op = "fetchJson"
+on = "load"
 url = "/api/identities"
 into = "identitiesResponse"
 
 [[step]]
-order = 1
+order = 3
 op = "renderCollection"
 on = "load"
 widget = "tilth_net_members"
@@ -108,19 +168,35 @@ from = "identitiesResponse.identities"
 template = "member_item_template"
 
 [[step]]
-order = 2
+order = 4
 op = "fetchJson"
 on = "load"
 url = "/api/repos"
 into = "reposResponse"
 
 [[step]]
-order = 3
+order = 5
 op = "renderCollection"
 on = "load"
 widget = "tilth_net_repos"
 from = "reposResponse.repos"
 template = "repo_item_template"
+
+# --- click: share / unshare a conversation ----------------------------------
+[[step]]
+order = 0
+op = "postJson"
+on = "click:shareConversation"
+url = "/api/sessions/${event.id}/${event.target}"
+method = "POST"
+body = {}
+into = "sharedToggle"
+
+[[step]]
+order = 1
+op = "run"
+on = "click:shareConversation"
+event = "load"
 
 # --- click: open/close repo sharing -----------------------------------------
 [[step]]

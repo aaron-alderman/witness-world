@@ -263,11 +263,13 @@ export function requestRepoAnnounce(world, { body }) {
   if (!repoName) return { ok: false, status: 400, error: "repoName required" };
   const remote = String(body?.remote || "");
   const fileCount = Number.isFinite(Number(body?.fileCount)) ? Number(body.fileCount) : 0;
+  // which DESIRE conversation(s) surfaced this repo (sanitized titles, for display)
+  const sessions = Array.isArray(body?.sessions) ? body.sessions.map(String) : [];
   const witness = world.emit({
     process: "repo.announce",
     actor: "daemon",
     claims: [thing(`repo:${repoName}`), relation(`repo:${repoName}`, "hasFileCount", String(fileCount))],
-    body: { repoName, remote, fileCount, at: new Date().toISOString() }
+    body: { repoName, remote, fileCount, sessions, at: new Date().toISOString() }
   });
   return { ok: true, status: 201, repoName, witness };
 }
@@ -294,14 +296,77 @@ export function projectRepos(witnesses) {
         repoName: b.repoName,
         remote: String(b.remote || ""),
         fileCount: Number(b.fileCount || 0),
+        sessions: Array.isArray(b.sessions) ? b.sessions : (ex ? ex.sessions : []),
         open: ex ? ex.open : false
       });
     } else if ((w.process === "repo.sync.open" || w.process === "repo.sync.close") && b.repoName) {
-      const ex = repos.get(b.repoName) || { repoName: b.repoName, remote: "", fileCount: 0, open: false };
+      const ex = repos.get(b.repoName) || { repoName: b.repoName, remote: "", fileCount: 0, sessions: [], open: false };
       repos.set(b.repoName, { ...ex, open: w.process === "repo.sync.open" });
     }
   }
-  return [...repos.values()].sort((a, b) => a.repoName.localeCompare(b.repoName));
+  return [...repos.values()].map(r => ({
+    ...r,
+    sessionsText: r.sessions.length ? `from: ${r.sessions.join(", ")}` : ""
+  })).sort((a, b) => a.repoName.localeCompare(b.repoName));
+}
+
+// --- conversations: DESIRE-marked sessions announced from tilth ---------------
+// The daemon reads tilth's DESIRE-marked sessions and announces each here
+// (sanitized: id, title, AI summary, project — no transcript, no path). The
+// browser shows them; "Share conversation" witnesses share-intent (local policy,
+// unsigned); the daemon then publishes that session's content to the commons.
+export function requestSessionAnnounce(world, { body }) {
+  const sessionId = stringOrNull(body?.sessionId);
+  if (!sessionId) return { ok: false, status: 400, error: "sessionId required" };
+  const title = String(body?.title || "");
+  const aiSummary = String(body?.aiSummary || "");
+  const project = String(body?.project || "");
+  const repos = Array.isArray(body?.repos) ? body.repos.map(String) : [];
+  const witness = world.emit({
+    process: "session.announce",
+    actor: "daemon",
+    claims: [thing(`session:${sessionId}`), relation(`session:${sessionId}`, "hasTitle", title)],
+    body: { sessionId, title, aiSummary, project, repos, at: new Date().toISOString() }
+  });
+  return { ok: true, status: 201, sessionId, witness };
+}
+
+export function requestSessionSetShare(world, { sessionId, share }) {
+  const id = stringOrNull(sessionId);
+  if (!id) return { ok: false, status: 400, error: "sessionId required" };
+  const witness = world.emit({
+    process: share ? "session.share" : "session.unshare",
+    actor: "local",                              // your node's policy, not signed
+    claims: [relation(`session:${id}`, "shareState", share ? "shared" : "private")],
+    body: { sessionId: id, share: !!share, at: new Date().toISOString() }
+  });
+  return { ok: true, status: 200, sessionId: id, share: !!share, witness };
+}
+
+export function projectSessions(witnesses) {
+  const sessions = new Map();
+  for (const w of witnesses) {
+    const b = w.body ?? {};
+    if (w.process === "session.announce" && b.sessionId) {
+      const ex = sessions.get(b.sessionId);
+      sessions.set(b.sessionId, {
+        sessionId: b.sessionId,
+        title: String(b.title || ""),
+        aiSummary: String(b.aiSummary || ""),
+        project: String(b.project || ""),
+        repos: Array.isArray(b.repos) ? b.repos : (ex ? ex.repos : []),
+        shared: ex ? ex.shared : false
+      });
+    } else if ((w.process === "session.share" || w.process === "session.unshare") && b.sessionId) {
+      const ex = sessions.get(b.sessionId)
+        || { sessionId: b.sessionId, title: "", aiSummary: "", project: "", repos: [], shared: false };
+      sessions.set(b.sessionId, { ...ex, shared: w.process === "session.share" });
+    }
+  }
+  return [...sessions.values()].map(s => ({
+    ...s,
+    reposText: s.repos.length ? `repos: ${s.repos.join(", ")}` : "no repos detected"
+  })).sort((a, b) => a.title.localeCompare(b.title));
 }
 
 export function createTilthNetHandlers({ world, sendJson, readJson }) {
@@ -337,6 +402,19 @@ export function createTilthNetHandlers({ world, sendJson, readJson }) {
     },
     "repo.close": async ({ res, params }) => {
       const r = requestRepoSetSync(world, { repoName: params?.name, open: false });
+      sendJson(res, r.status, r.ok ? r : { error: r.error });
+    },
+
+    "sessions.read": async ({ res }) => {
+      sendJson(res, 200, { sessions: projectSessions(world.allWitnesses()) });
+    },
+    "session.announce": dispatch(requestSessionAnnounce),
+    "session.share": async ({ res, params }) => {
+      const r = requestSessionSetShare(world, { sessionId: params?.id, share: true });
+      sendJson(res, r.status, r.ok ? r : { error: r.error });
+    },
+    "session.unshare": async ({ res, params }) => {
+      const r = requestSessionSetShare(world, { sessionId: params?.id, share: false });
       sendJson(res, r.status, r.ok ? r : { error: r.error });
     }
   };
