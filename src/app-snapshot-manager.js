@@ -680,11 +680,16 @@ export class AppSnapshotManager {
   }
 
   diagnostics() {
+    const computeModules = Array.isArray(this.activeSnapshot?.appProject?.diagnostics?.computeModules)
+      ? this.activeSnapshot.appProject.diagnostics.computeModules
+      : [];
     return {
       appRevision: this.appRevision,
       buildErrors: [...this.buildErrors],
       pendingDirtySources: [...this.pendingDirtySources].map(filePath => sourceIdForPath(this.appRoot, filePath)),
       sourceCount: this.activeSnapshot?.appProject?.sourceFiles?.length ?? 0,
+      computeModuleCount: computeModules.length,
+      computeModules: structuredClone(computeModules),
       devMode: this.devMode,
       watchEnabled: this.watchEnabled,
       watcherCount: this.watchers.length,

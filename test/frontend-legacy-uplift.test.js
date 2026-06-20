@@ -9,6 +9,65 @@ import {
   previewLegacyFrontendUplift
 } from "../src/frontend-legacy-uplift.js";
 
+const SESSION_SUMMARY_FIELDS = [
+  "authenticated",
+  "identity",
+  "actor",
+  "authenticatedIdentity",
+  "authenticatedActor",
+  "effectiveIdentity",
+  "effectiveActor",
+  "authorityMode",
+  "assumptionGrantId",
+  "label",
+  "authenticatedLabel",
+  "effectiveLabel",
+  "displayName",
+  "jobTitle",
+  "initials",
+  "roles",
+  "homeContext",
+  "perspective",
+  "authenticatedHomeContext",
+  "authenticatedPerspective",
+  "effectiveHomeContext",
+  "effectivePerspective"
+];
+
+function expectedSessionSummaryFields(routeId) {
+  return SESSION_SUMMARY_FIELDS.map(field => ({
+    name: field,
+    type: `legacyUplift.${routeId}.type.state.session.${field}`
+  }));
+}
+
+function expectedLoggedOutSessionWrites(routeId) {
+  return {
+    [`legacyUplift.${routeId}.type.state.session.authenticated`]: false,
+    [`legacyUplift.${routeId}.type.state.session.identity`]: "",
+    [`legacyUplift.${routeId}.type.state.session.actor`]: "",
+    [`legacyUplift.${routeId}.type.state.session.authenticatedIdentity`]: "",
+    [`legacyUplift.${routeId}.type.state.session.authenticatedActor`]: "",
+    [`legacyUplift.${routeId}.type.state.session.effectiveIdentity`]: "",
+    [`legacyUplift.${routeId}.type.state.session.effectiveActor`]: "",
+    [`legacyUplift.${routeId}.type.state.session.authorityMode`]: "",
+    [`legacyUplift.${routeId}.type.state.session.assumptionGrantId`]: "",
+    [`legacyUplift.${routeId}.type.state.session.label`]: "",
+    [`legacyUplift.${routeId}.type.state.session.authenticatedLabel`]: "",
+    [`legacyUplift.${routeId}.type.state.session.effectiveLabel`]: "",
+    [`legacyUplift.${routeId}.type.state.session.displayName`]: "",
+    [`legacyUplift.${routeId}.type.state.session.jobTitle`]: "",
+    [`legacyUplift.${routeId}.type.state.session.initials`]: "",
+    [`legacyUplift.${routeId}.type.state.session.roles`]: [],
+    [`legacyUplift.${routeId}.type.state.session.homeContext`]: "",
+    [`legacyUplift.${routeId}.type.state.session.perspective`]: "",
+    [`legacyUplift.${routeId}.type.state.session.authenticatedHomeContext`]: "",
+    [`legacyUplift.${routeId}.type.state.session.authenticatedPerspective`]: "",
+    [`legacyUplift.${routeId}.type.state.session.effectiveHomeContext`]: "",
+    [`legacyUplift.${routeId}.type.state.session.effectivePerspective`]: ""
+  };
+}
+
 test("legacy frontend native uplift previews and applies a supported legacy login route", () => {
   const world = createWorld();
   applyWitnessToml(world, `
@@ -138,6 +197,11 @@ params = { widget = "login_form" }
   assert.equal(world.allWitnesses().some(witness => witness.process === "desire.defineBoundary" && String(witness.body?.id || "").includes("legacyUplift.login_route.boundary")), true);
   assert.equal(world.allWitnesses().some(witness => witness.process === "desire.definePolicy" && String(witness.body?.id || "").includes("legacyUplift.login_route.policy")), true);
   assert.equal(world.allWitnesses().some(witness => witness.process === "desire.defineSurface" && witness.body?.id === "legacyUplift.login_route.surface.root"), true);
+  const loginSuccess = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineMessage"
+    && witness.body?.id === "legacyUplift.login_route.message.success.submit:login_form.setSession.1"
+  );
+  assert.deepEqual(loginSuccess?.body?.fields, expectedSessionSummaryFields("login_route"));
 
   const second = applyLegacyFrontendUplift(world, {
     actor: "callan"
@@ -500,10 +564,7 @@ op = "initSession"
     witness.process === "desire.defineMessage"
     && witness.body?.id === "legacyUplift.session_refresh_route.message.success.click:session_refresh_button.initSession.0"
   );
-  assert.deepEqual(successMessage?.body?.fields, [{
-    name: "value",
-    type: "legacyUplift.session_refresh_route.type.state.session"
-  }]);
+  assert.deepEqual(successMessage?.body?.fields, expectedSessionSummaryFields("session_refresh_route"));
 });
 
 test("legacy frontend native uplift lowers input-driven fetchJson reads onto native timed interactions", () => {
@@ -638,23 +699,29 @@ op = "initSession"
   ), true);
 });
 
-test("legacy frontend native uplift keeps input-driven writes honestly blocked", () => {
+test("legacy frontend native uplift lowers input-driven postJson writes onto native timed interactions", () => {
   const world = createWorld();
   applyWitnessToml(world, `
 [[route]]
 actor = "system"
-id = "live_search_route"
-path = "/live-search"
-serves = "live_search_route"
+id = "search_submit_route"
+path = "/search-submit"
+serves = "search_submit_route"
 method = "GET"
 handler = "page.home"
-params = { rootWidget = "live_search_page", frontendProgram = "live_search_program" }
+params = { rootWidget = "search_submit_page", frontendProgram = "search_submit_program" }
 
 [[widget]]
 actor = "system"
-id = "live_search_page"
+id = "search_submit_page"
 kind = "Page"
-props = { title = "Live Search" }
+props = { title = "Search Submit" }
+
+[[widget]]
+actor = "system"
+id = "search_form"
+kind = "Form"
+props = { }
 
 [[widget]]
 actor = "system"
@@ -664,28 +731,562 @@ props = { name = "q", value = "" }
 
 [[attachWidget]]
 actor = "system"
-parent = "live_search_page"
+parent = "search_submit_page"
+child = "search_form"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "search_form"
 child = "live_search_input"
 order = 0
 
 [[frontendProgram]]
 actor = "system"
-id = "live_search_program"
-rootWidget = "live_search_page"
+id = "search_submit_program"
+rootWidget = "search_submit_page"
 
 [[frontendStep]]
 actor = "system"
-program = "live_search_program"
+program = "search_submit_program"
 event = "input:live_search_input"
 order = 0
+op = "readForm"
+params = { widget = "search_form", into = "search" }
+
+[[frontendStep]]
+actor = "system"
+program = "search_submit_program"
+event = "input:live_search_input"
+order = 1
 op = "postJson"
-params = { url = "/api/search" }
+params = { url = "/api/search", from = "search" }
+  `);
+
+  const preview = previewLegacyFrontendUplift(world);
+  assert.equal(preview.blocked.length, 0);
+
+  const result = applyLegacyFrontendUplift(world, {
+    actor: "callan"
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.previewAfter.blocked.length, 0);
+
+  const inputSurface = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineSurface"
+    && witness.body?.id === "legacyUplift.search_submit_route.surface.widget.live_search_input"
+  );
+  assert.equal(inputSurface?.body?.interactions?.some(interaction => JSON.stringify(interaction) === JSON.stringify({
+    target: "self",
+    event: "input",
+    action: {
+      kind: "deliver",
+      message: "legacyUplift.search_submit_route.message.trigger.input:live_search_input"
+    },
+    timing: {
+      mode: "debounce",
+      ms: 300
+    }
+  })), true);
+  const boundary = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineBoundary"
+    && witness.body?.id === "legacyUplift.search_submit_route.boundary.input:live_search_input.postJson.1"
+  );
+  assert.deepEqual(boundary?.body?.operations?.[0], {
+    name: "input:live_search_input.postJson.1",
+    kind: "adapter",
+    command: "legacyUplift.search_submit_route.message.command.input:live_search_input.postJson.1",
+    route: "/api/search",
+    method: "POST",
+    loadingState: "legacyUplift.search_submit_route.type.state.input:live_search_input.postJson.1.loading",
+    successEvent: "legacyUplift.search_submit_route.message.success.input:live_search_input.postJson.1",
+    failureEvent: "legacyUplift.search_submit_route.message.failure.input:live_search_input.postJson.1",
+    refreshRuntime: true
+  });
+});
+
+test("legacy frontend native uplift lowers input-driven patchJson writes onto native timed interactions", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "search_patch_route"
+path = "/search-patch"
+serves = "search_patch_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "search_patch_page", frontendProgram = "search_patch_program" }
+
+[[widget]]
+actor = "system"
+id = "search_patch_page"
+kind = "Page"
+props = { title = "Search Patch" }
+
+[[widget]]
+actor = "system"
+id = "search_patch_form"
+kind = "Form"
+props = { }
+
+[[widget]]
+actor = "system"
+id = "search_patch_input"
+kind = "Input"
+props = { name = "q", value = "" }
+
+[[attachWidget]]
+actor = "system"
+parent = "search_patch_page"
+child = "search_patch_form"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "search_patch_form"
+child = "search_patch_input"
+order = 0
+
+[[frontendProgram]]
+actor = "system"
+id = "search_patch_program"
+rootWidget = "search_patch_page"
+
+[[frontendStep]]
+actor = "system"
+program = "search_patch_program"
+event = "input:search_patch_input"
+order = 0
+op = "readForm"
+params = { widget = "search_patch_form", into = "search" }
+
+[[frontendStep]]
+actor = "system"
+program = "search_patch_program"
+event = "input:search_patch_input"
+order = 1
+op = "patchJson"
+params = { url = "/api/search", from = "search" }
+  `);
+
+  const preview = previewLegacyFrontendUplift(world);
+  assert.equal(preview.blocked.length, 0);
+
+  const result = applyLegacyFrontendUplift(world, {
+    actor: "callan"
+  });
+  assert.equal(result.ok, true);
+  assert.equal(world.allWitnesses().some(witness =>
+    witness.process === "desire.defineBoundary"
+    && witness.body?.operations?.[0]?.method === "PATCH"
+    && witness.body?.id === "legacyUplift.search_patch_route.boundary.input:search_patch_input.patchJson.1"
+  ), true);
+});
+
+test("legacy frontend native uplift lowers input-driven deleteJson writes onto native timed interactions", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "search_delete_route"
+path = "/search-delete"
+serves = "search_delete_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "search_delete_page", frontendProgram = "search_delete_program" }
+
+[[widget]]
+actor = "system"
+id = "search_delete_page"
+kind = "Page"
+props = { title = "Search Delete" }
+
+[[widget]]
+actor = "system"
+id = "search_delete_form"
+kind = "Form"
+props = { }
+
+[[widget]]
+actor = "system"
+id = "search_delete_input"
+kind = "Input"
+props = { name = "q", value = "" }
+
+[[attachWidget]]
+actor = "system"
+parent = "search_delete_page"
+child = "search_delete_form"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "search_delete_form"
+child = "search_delete_input"
+order = 0
+
+[[frontendProgram]]
+actor = "system"
+id = "search_delete_program"
+rootWidget = "search_delete_page"
+
+[[frontendStep]]
+actor = "system"
+program = "search_delete_program"
+event = "input:search_delete_input"
+order = 0
+op = "readForm"
+params = { widget = "search_delete_form", into = "search" }
+
+[[frontendStep]]
+actor = "system"
+program = "search_delete_program"
+event = "input:search_delete_input"
+order = 1
+op = "deleteJson"
+params = { url = "/api/search", from = "search" }
+  `);
+
+  const preview = previewLegacyFrontendUplift(world);
+  assert.equal(preview.blocked.length, 0);
+
+  const result = applyLegacyFrontendUplift(world, {
+    actor: "callan"
+  });
+  assert.equal(result.ok, true);
+  assert.equal(world.allWitnesses().some(witness =>
+    witness.process === "desire.defineBoundary"
+    && witness.body?.operations?.[0]?.method === "DELETE"
+    && witness.body?.id === "legacyUplift.search_delete_route.boundary.input:search_delete_input.deleteJson.1"
+  ), true);
+});
+
+test("legacy frontend native uplift lowers input-driven setSession mutations onto native timed interactions", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "session_write_route"
+path = "/session-write"
+serves = "session_write_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "session_write_page", frontendProgram = "session_write_program" }
+
+[[widget]]
+actor = "system"
+id = "session_write_page"
+kind = "Page"
+props = { title = "Session Write" }
+
+[[widget]]
+actor = "system"
+id = "session_write_form"
+kind = "Form"
+props = { }
+
+[[attachWidget]]
+actor = "system"
+parent = "session_write_page"
+child = "session_write_form"
+order = 0
+
+[[widget]]
+actor = "system"
+id = "session_write_input"
+kind = "Input"
+props = { name = "username", value = "" }
+
+[[attachWidget]]
+actor = "system"
+parent = "session_write_form"
+child = "session_write_input"
+order = 0
+
+[[frontendProgram]]
+actor = "system"
+id = "session_write_program"
+rootWidget = "session_write_page"
+
+[[frontendStep]]
+actor = "system"
+program = "session_write_program"
+event = "input:session_write_input"
+order = 0
+op = "readForm"
+params = { widget = "session_write_form", into = "credentials" }
+
+[[frontendStep]]
+actor = "system"
+program = "session_write_program"
+event = "input:session_write_input"
+order = 1
+op = "setSession"
+params = { from = "credentials" }
+  `);
+
+  const preview = previewLegacyFrontendUplift(world);
+  assert.equal(preview.blocked.length, 0);
+
+  const result = applyLegacyFrontendUplift(world, {
+    actor: "callan"
+  });
+  assert.equal(result.ok, true);
+
+  const inputSurface = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineSurface"
+    && witness.body?.id === "legacyUplift.session_write_route.surface.widget.session_write_input"
+  );
+  assert.equal(inputSurface?.body?.interactions?.some(interaction => JSON.stringify(interaction) === JSON.stringify({
+    target: "self",
+    event: "input",
+    action: {
+      kind: "deliver",
+      message: "legacyUplift.session_write_route.message.trigger.input:session_write_input"
+    },
+    timing: {
+      mode: "debounce",
+      ms: 300
+    }
+  })), true);
+  const boundary = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineBoundary"
+    && witness.body?.id === "legacyUplift.session_write_route.boundary.input:session_write_input.setSession.1"
+  );
+  assert.equal(boundary?.body?.operations?.[0]?.route, "/api/session");
+  assert.equal(boundary?.body?.operations?.[0]?.method, "POST");
+  const successMessage = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineMessage"
+    && witness.body?.id === "legacyUplift.session_write_route.message.success.input:session_write_input.setSession.1"
+  );
+  assert.deepEqual(successMessage?.body?.fields, expectedSessionSummaryFields("session_write_route"));
+});
+
+test("legacy frontend native uplift lowers input-driven logout mutations onto native timed interactions", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "session_logout_route"
+path = "/session-logout"
+serves = "session_logout_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "session_logout_page", frontendProgram = "session_logout_program" }
+
+[[widget]]
+actor = "system"
+id = "session_logout_page"
+kind = "Page"
+props = { title = "Session Logout" }
+
+[[widget]]
+actor = "system"
+id = "session_logout_input"
+kind = "Input"
+props = { name = "token", value = "" }
+
+[[attachWidget]]
+actor = "system"
+parent = "session_logout_page"
+child = "session_logout_input"
+order = 0
+
+[[frontendProgram]]
+actor = "system"
+id = "session_logout_program"
+rootWidget = "session_logout_page"
+
+[[frontendStep]]
+actor = "system"
+program = "session_logout_program"
+event = "input:session_logout_input"
+order = 0
+op = "logout"
+  `);
+
+  const preview = previewLegacyFrontendUplift(world);
+  assert.equal(preview.blocked.length, 0);
+
+  const result = applyLegacyFrontendUplift(world, {
+    actor: "callan"
+  });
+  assert.equal(result.ok, true);
+
+  const inputSurface = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineSurface"
+    && witness.body?.id === "legacyUplift.session_logout_route.surface.widget.session_logout_input"
+  );
+  assert.equal(inputSurface?.body?.interactions?.some(interaction => JSON.stringify(interaction) === JSON.stringify({
+    target: "self",
+    event: "input",
+    action: {
+      kind: "deliver",
+      message: "legacyUplift.session_logout_route.message.trigger.input:session_logout_input"
+    },
+    timing: {
+      mode: "debounce",
+      ms: 300
+    }
+  })), true);
+  const boundary = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineBoundary"
+    && witness.body?.id === "legacyUplift.session_logout_route.boundary.input:session_logout_input.logout.0"
+  );
+  assert.equal(boundary?.body?.operations?.[0]?.route, "/api/session");
+  assert.equal(boundary?.body?.operations?.[0]?.method, "DELETE");
+  const successMessage = world.allWitnesses().find(witness =>
+    witness.process === "desire.defineMessage"
+    && witness.body?.id === "legacyUplift.session_logout_route.message.success.input:session_logout_input.logout.0"
+  );
+  assert.deepEqual(successMessage?.body?.fields, []);
+  assert.deepEqual(successMessage?.body?.writes, {
+    "legacyUplift.session_logout_route.type.state.input:session_logout_input.logout.0.loading": false,
+    "legacyUplift.session_logout_route.type.state.input:session_logout_input.logout.0.status": "ready",
+    ...expectedLoggedOutSessionWrites("session_logout_route")
+  });
+});
+
+test("legacy frontend native uplift keeps input-driven external session mutation honestly blocked", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "external_session_route"
+path = "/external-session"
+serves = "external_session_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "external_session_page", frontendProgram = "external_session_program" }
+
+[[widget]]
+actor = "system"
+id = "external_session_page"
+kind = "Page"
+props = { title = "External Session" }
+
+[[widget]]
+actor = "system"
+id = "external_session_form"
+kind = "Form"
+props = { }
+
+[[widget]]
+actor = "system"
+id = "external_session_input"
+kind = "Input"
+props = { name = "username", value = "" }
+
+[[attachWidget]]
+actor = "system"
+parent = "external_session_page"
+child = "external_session_form"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "external_session_form"
+child = "external_session_input"
+order = 0
+
+[[frontendProgram]]
+actor = "system"
+id = "external_session_program"
+rootWidget = "external_session_page"
+
+[[frontendStep]]
+actor = "system"
+program = "external_session_program"
+event = "input:external_session_input"
+order = 0
+op = "readForm"
+params = { widget = "external_session_form", into = "credentials" }
+
+[[frontendStep]]
+actor = "system"
+program = "external_session_program"
+event = "input:external_session_input"
+order = 1
+op = "setSession"
+params = { from = "credentials", url = "https://example.com/api/session" }
   `);
 
   const preview = previewLegacyFrontendUplift(world);
   assert.equal(preview.pending.length, 0);
   assert.equal(preview.blocked.some(row =>
-    row.id === "legacyFrontendUplift:blocked:live_search_route:inputNetwork:0"
-    && row.missingPrimitive === "input-driven write or unsupported network effects remain outside the native timing subset"
+    row.id === "legacyFrontendUplift:blocked:external_session_route:network:1"
+    && row.missingPrimitive === "non-route-backed or external network effects are not native-authored in this tranche"
+  ), true);
+});
+
+test("legacy frontend native uplift keeps input-driven external writes honestly blocked", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[route]]
+actor = "system"
+id = "external_write_route"
+path = "/external-write"
+serves = "external_write_route"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "external_write_page", frontendProgram = "external_write_program" }
+
+[[widget]]
+actor = "system"
+id = "external_write_page"
+kind = "Page"
+props = { title = "External Write" }
+
+[[widget]]
+actor = "system"
+id = "external_write_form"
+kind = "Form"
+props = { }
+
+[[widget]]
+actor = "system"
+id = "external_write_input"
+kind = "Input"
+props = { name = "q", value = "" }
+
+[[attachWidget]]
+actor = "system"
+parent = "external_write_page"
+child = "external_write_form"
+order = 0
+
+[[attachWidget]]
+actor = "system"
+parent = "external_write_form"
+child = "external_write_input"
+order = 0
+
+[[frontendProgram]]
+actor = "system"
+id = "external_write_program"
+rootWidget = "external_write_page"
+
+[[frontendStep]]
+actor = "system"
+program = "external_write_program"
+event = "input:external_write_input"
+order = 0
+op = "readForm"
+params = { widget = "external_write_form", into = "search" }
+
+[[frontendStep]]
+actor = "system"
+program = "external_write_program"
+event = "input:external_write_input"
+order = 1
+op = "postJson"
+params = { url = "https://example.com/api/search", from = "search" }
+  `);
+
+  const preview = previewLegacyFrontendUplift(world);
+  assert.equal(preview.pending.length, 0);
+  assert.equal(preview.blocked.some(row =>
+    row.id === "legacyFrontendUplift:blocked:external_write_route:route:1"
+    && row.missingPrimitive === "external or unresolved route target"
   ), true);
 });

@@ -2375,6 +2375,34 @@ function authorityDecisionRows(witnesses = []) {
   return sortRows(rows, ["evaluatedAt", "id"]);
 }
 
+function promotionDecisionRows(witnesses = []) {
+  const rows = [];
+  for (const witness of witnesses) {
+    if (witness.process !== "platform.branch.ship.decision" || !witness.body?.id) continue;
+    const body = witness.body;
+    rows.push({
+      id: String(body.id),
+      witnessId: witness.id ? String(witness.id) : null,
+      targetKind: body.targetKind ? String(body.targetKind) : "branch",
+      targetId: body.targetId ? String(body.targetId) : null,
+      branchId: body.branchId ? String(body.branchId) : null,
+      changeSetId: body.changeSetId ? String(body.changeSetId) : null,
+      candidateSnapshotId: body.candidateSnapshotId ? String(body.candidateSnapshotId) : null,
+      releaseChannelId: body.releaseChannelId ? String(body.releaseChannelId) : null,
+      postureId: body.postureId ? String(body.postureId) : null,
+      decision: body.decision ? String(body.decision) : "block",
+      summaryStatus: body.summaryStatus ? String(body.summaryStatus) : "unknown",
+      blockingRequirementIds: Array.isArray(body.blockingRequirementIds) ? body.blockingRequirementIds.map(String) : [],
+      warningRequirementIds: Array.isArray(body.warningRequirementIds) ? body.warningRequirementIds.map(String) : [],
+      authorityDecisionId: body.authorityDecisionId ? String(body.authorityDecisionId) : null,
+      proposalId: body.proposalId ? String(body.proposalId) : null,
+      shipRecordId: body.shipRecordId ? String(body.shipRecordId) : null,
+      producedAt: body.producedAt ?? witness.time ?? null
+    });
+  }
+  return sortRows(rows, ["producedAt", "id"]);
+}
+
 export const platformModuleProjectors = {
   authorityPolicies() {
     return PLATFORM_AUTHORITY_POLICY_ROWS.map(row => ({ ...row }));
@@ -2585,6 +2613,23 @@ export const platformModuleProjectors = {
       pushByKey(byReleaseChannel, row.releaseChannelId, row);
     }
     return { rows, byId, byBranch, byReleaseChannel };
+  },
+
+  promotionDecisions(witnesses) {
+    return promotionDecisionRows(witnesses);
+  },
+
+  promotionDecisionIndex(witnesses) {
+    const rows = platformModuleProjectors.promotionDecisions(witnesses);
+    const byId = Object.create(null);
+    const byTarget = Object.create(null);
+    const byReleaseChannel = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(byTarget, `${String(row.targetKind || "")}:${String(row.targetId || "")}`, row);
+      pushByKey(byReleaseChannel, row.releaseChannelId, row);
+    }
+    return { rows, byId, byTarget, byReleaseChannel };
   },
 
   telemetryThresholds() {

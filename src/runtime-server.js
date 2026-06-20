@@ -66,6 +66,7 @@ import {
 import { collectActiveRuntimeContributions } from "./runtime-active-contributions.js";
 import { buildRuntimeOperatorContract } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService } from "./runtime-operator-service.js";
+import { resolveRunnerPromotionPolicy } from "./runtime-promotion-policy.js";
 import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.js";
 import { createStartupTelemetry } from "./startup-telemetry.js";
 import { createRuntimeProcessHealthMonitor } from "./runtime-process-health.js";
@@ -719,9 +720,16 @@ export async function startRuntimeServer(world, {
       runtimeProfile: runnerState.profileState.effectiveRuntimeProfile,
       runtimeConfig: appContext.runtimeConfig
     });
+    const promotionPolicy = resolveRunnerPromotionPolicy({
+      serverRunner: runner,
+      runtimeProfile: runnerState.profileState.effectiveRuntimeProfile
+    });
     appContext.verificationPolicy = verificationPolicy;
     appContext.verificationPolicySource = verificationPolicy.source;
     appContext.verificationPolicyDiagnostics = verificationPolicy.diagnostics ?? [];
+    appContext.promotionPolicy = promotionPolicy;
+    appContext.promotionPolicySource = promotionPolicy.source;
+    appContext.promotionPolicyDiagnostics = promotionPolicy.diagnostics ?? [];
     appContext.verificationPersistence = null;
     appContext.verificationPersistenceDiagnostics = [];
     appContext.runtimeOperatorContract = runtimeOperatorContract ?? buildRuntimeOperatorContract({
@@ -1180,7 +1188,7 @@ export async function startRuntimeServer(world, {
       }
       supervision.role = "active";
       supervision.mutationsEnabled = true;
-      supervision.watchersEnabled = runtime.context?.devMode === true;
+      supervision.watchersEnabled = supervision.watchersEnabled === true && runtime.context?.devMode === true;
       supervision.lastStateAt = new Date().toISOString();
       runtime.context?.appSnapshotManager?.setWatcherMode?.(supervision.watchersEnabled);
       sendJson(res, 200, supervisionPayload(supervision));

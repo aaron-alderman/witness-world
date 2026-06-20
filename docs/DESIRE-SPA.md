@@ -102,8 +102,11 @@ Current truth:
   native repeated collection content
 - it now claims canonical route/state equivalence, query synchronization,
   route-enter preload behavior, same-origin route-backed `click` / `change` /
-  `submit` effects, timed same-origin input-read effects through authored
-  interaction `timing`, and interactive execution through authored process rules
+  `submit` effects, timed same-origin input-read effects, timed route-backed
+  input-write effects through authored interaction `timing`, the canonical
+  `/api/session` read and mutation lane through an explicit authored
+  session-summary state subset, and interactive execution through authored
+  process rules
 - it now claims native `surface + process + projection + collection + boundary
   + policy + capability` runtime support
 - it no longer treats `dispatchDomEvent` or `witness:*` host-event bridges as
@@ -157,8 +160,10 @@ clean floor proved by the canonical authoring pathway probe.
   `frontendStep` construction as the default app-building lane
 - arbitrary external network targets or host-only legacy behavior that still
   lacks a first-class native expression
-- input-driven write effects that still need a native timed write lane before
-  they can leave structured `frontendLegacyUplift.blocked[]`
+- richer object or dynamic session payload branches plus external or
+  non-route-backed input effects that still remain outside the current native
+  timed input and session subset and therefore stay in structured
+  `frontendLegacyUplift.blocked[]`
 
 ### Newly proved
 

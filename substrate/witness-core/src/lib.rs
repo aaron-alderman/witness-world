@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -128,6 +128,29 @@ pub struct ProofRecord {
 }
 
 #[derive(Clone, Debug)]
+pub struct ComputeModuleBuildRecord {
+    pub id: String,
+    pub host_operation: String,
+    pub source: String,
+    pub artifact_path: Option<String>,
+    pub artifact_hash: Option<String>,
+    pub language: String,
+    pub abi: String,
+    pub export_name: String,
+    pub success: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct BuildWorkerResult {
+    pub ok: bool,
+    pub error: Option<String>,
+    pub compute_module_count: usize,
+    pub compute_modules: Vec<ComputeModuleBuildRecord>,
+    pub raw_message: String,
+}
+
+#[derive(Clone, Debug)]
 pub struct Generation {
     pub id: String,
     pub state: GenerationState,
@@ -135,6 +158,7 @@ pub struct Generation {
     pub parent_id: Option<String>,
     pub created_at: String,
     pub source_paths: Vec<String>,
+    pub compute_modules: Vec<ComputeModuleBuildRecord>,
     pub proofs: Vec<ProofRecord>,
     pub correlation: Correlation,
     pub promotion_decision: Option<String>,
@@ -188,6 +212,7 @@ pub struct PackageConfig {
 pub struct SuperviseConfig {
     pub command: Option<String>,
     pub working_dir: Option<String>,
+    pub reload_url: Option<String>,
     pub restart_on_exit: bool,
     pub restart_on_unhealthy: bool,
     pub health_url: Option<String>,
@@ -205,12 +230,26 @@ pub struct FrontDoorConfig {
 }
 
 #[derive(Clone, Debug)]
+pub struct BuildWorkerConfig {
+    pub command: Option<String>,
+    pub working_dir: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TransactionConfig {
+    pub build_timeout_ms: u64,
+    pub stage_root: String,
+}
+
+#[derive(Clone, Debug)]
 pub struct CoreConfig {
     pub watch: WatchConfig,
     pub proof: ProofConfig,
     pub package: PackageConfig,
     pub supervise: SuperviseConfig,
     pub frontdoor: FrontDoorConfig,
+    pub build_worker: BuildWorkerConfig,
+    pub transaction: TransactionConfig,
 }
 
 impl Default for CoreConfig {
@@ -236,6 +275,7 @@ impl Default for CoreConfig {
             supervise: SuperviseConfig {
                 command: None,
                 working_dir: None,
+                reload_url: None,
                 restart_on_exit: true,
                 restart_on_unhealthy: true,
                 health_url: None,
@@ -248,6 +288,14 @@ impl Default for CoreConfig {
                 public_addr: None,
                 drain_timeout_ms: 15_000,
                 startup_cutover_timeout_ms: 45_000,
+            },
+            build_worker: BuildWorkerConfig {
+                command: None,
+                working_dir: None,
+            },
+            transaction: TransactionConfig {
+                build_timeout_ms: 30_000,
+                stage_root: ".witness-core/staging".to_string(),
             },
         }
     }
@@ -290,6 +338,7 @@ pub struct SupervisedProcessState {
     pub reason_codes: Vec<String>,
     pub last_health_sample_at: Option<String>,
     pub health_url: Option<String>,
+    pub reload_url: Option<String>,
     pub degraded_streak: u64,
     pub unhealthy_streak: u64,
     pub last_restart_reason: Option<String>,
@@ -303,6 +352,7 @@ pub struct SupervisedProcessState {
     pub frontdoor_enabled: bool,
     pub frontdoor_active_instance_id: Option<String>,
     pub frontdoor_active_target: Option<String>,
+    pub frontdoor_active_reload_url: Option<String>,
     pub instances: Vec<SupervisedProcessInstanceState>,
 }
 
@@ -385,6 +435,11 @@ pub struct SoakState {
     pub last_session: Option<SoakSession>,
 }
 
+#[derive(Clone, Debug, Default)]
+struct WatcherState {
+    previous: BTreeMap<String, u128>,
+}
+
 impl Default for SupervisedProcessState {
     fn default() -> Self {
         Self {
@@ -406,6 +461,7 @@ impl Default for SupervisedProcessState {
             reason_codes: Vec::new(),
             last_health_sample_at: None,
             health_url: None,
+            reload_url: None,
             degraded_streak: 0,
             unhealthy_streak: 0,
             last_restart_reason: None,
@@ -419,6 +475,7 @@ impl Default for SupervisedProcessState {
             frontdoor_enabled: false,
             frontdoor_active_instance_id: None,
             frontdoor_active_target: None,
+            frontdoor_active_reload_url: None,
             instances: Vec::new(),
         }
     }
@@ -902,6 +959,10 @@ impl Registry {
                 parent_id: extract_json_string(&line, "parentId"),
                 created_at: extract_json_string(&line, "createdAt").unwrap_or_default(),
                 source_paths: extract_json_string_array(&line, "sourcePaths"),
+                compute_modules: extract_json_object_array(&line, "computeModules")
+                    .into_iter()
+                    .filter_map(|row| compute_module_build_record_from_json(&row))
+                    .collect(),
                 proofs: Vec::new(),
                 correlation: Correlation::empty(),
                 promotion_decision: extract_json_string(&line, "promotionDecision"),
@@ -1093,6 +1154,7 @@ pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
         restart_on_exit: config.supervise.restart_on_exit,
         restart_on_unhealthy: config.supervise.restart_on_unhealthy,
         health_url: config.supervise.health_url.clone(),
+        reload_url: config.supervise.reload_url.clone(),
         public_addr: config.frontdoor.public_addr.clone(),
         frontdoor_enabled: config.frontdoor.public_addr.as_deref().is_some_and(|value| !value.trim().is_empty()),
         ..SupervisedProcessState::default()
@@ -1101,7 +1163,7 @@ pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
         let mut registry_guard = registry.lock().expect("registry lock");
         registry_guard.emit(CoreEvent::new("core.started", CAP_NOTIFY_SURFACE));
     }
-    start_watcher(cwd.clone(), config.clone(), Arc::clone(&registry));
+    let watch_state = start_watcher(cwd.clone(), config.clone(), Arc::clone(&registry));
     if config.frontdoor.public_addr.as_deref().is_some_and(|value| !value.trim().is_empty()) {
         start_frontdoor_proxy(
             config.frontdoor.clone(),
@@ -1124,7 +1186,7 @@ pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
             Arc::clone(&process_state),
         );
     }
-    serve_http(addr, cwd, config, registry, process_state)
+    serve_http(addr, cwd, config, registry, process_state, watch_state)
 }
 
 pub fn load_config(path: &Path) -> std::io::Result<CoreConfig> {
@@ -1158,6 +1220,7 @@ pub fn parse_config(text: &str) -> CoreConfig {
             ("package", "include") => config.package.include = parse_string_array(value),
             ("supervise", "command") => config.supervise.command = Some(parse_string(value)),
             ("supervise", "working_dir") => config.supervise.working_dir = Some(parse_string(value)),
+            ("supervise", "reload_url") => config.supervise.reload_url = Some(parse_string(value)),
             ("supervise", "restart_on_exit") => {
                 config.supervise.restart_on_exit = matches!(value.trim(), "true" | "1" | "\"true\"");
             }
@@ -1184,25 +1247,41 @@ pub fn parse_config(text: &str) -> CoreConfig {
             ("frontdoor", "startup_cutover_timeout_ms") => {
                 config.frontdoor.startup_cutover_timeout_ms = value.parse().unwrap_or(config.frontdoor.startup_cutover_timeout_ms);
             }
+            ("build_worker", "command") => config.build_worker.command = Some(parse_string(value)),
+            ("build_worker", "working_dir") => config.build_worker.working_dir = Some(parse_string(value)),
+            ("transaction", "build_timeout_ms") => {
+                config.transaction.build_timeout_ms = value.parse().unwrap_or(config.transaction.build_timeout_ms);
+            }
+            ("transaction", "stage_root") => config.transaction.stage_root = parse_string(value),
             _ => {}
         }
     }
     config
 }
 
-fn start_watcher(cwd: PathBuf, config: CoreConfig, registry: Arc<Mutex<Registry>>) {
+fn start_watcher(cwd: PathBuf, config: CoreConfig, registry: Arc<Mutex<Registry>>) -> Arc<Mutex<WatcherState>> {
+    let watch_state = Arc::new(Mutex::new(WatcherState {
+        previous: fingerprint_files(&cwd, &config),
+    }));
+    let thread_state = Arc::clone(&watch_state);
     thread::spawn(move || {
-        let mut previous = fingerprint_files(&cwd, &config);
         loop {
             thread::sleep(Duration::from_millis(1000));
             let current = fingerprint_files(&cwd, &config);
+            let previous = thread_state.lock().expect("watch state lock").previous.clone();
             let changed = changed_paths(&previous, &current);
             if !changed.is_empty() {
                 run_generation_pipeline(&cwd, &config, &changed, Arc::clone(&registry));
             }
-            previous = current;
+            thread_state.lock().expect("watch state lock").previous = current;
         }
     });
+    watch_state
+}
+
+fn refresh_watcher_baseline(cwd: &Path, config: &CoreConfig, watch_state: &Arc<Mutex<WatcherState>>) {
+    let current = fingerprint_files(cwd, config);
+    watch_state.lock().expect("watch state lock").previous = current;
 }
 
 fn run_generation_pipeline(cwd: &Path, config: &CoreConfig, changed: &[String], registry: Arc<Mutex<Registry>>) {
@@ -1216,6 +1295,7 @@ fn run_generation_pipeline(cwd: &Path, config: &CoreConfig, changed: &[String], 
         parent_id,
         created_at: now_iso(),
         source_paths: changed.to_vec(),
+        compute_modules: Vec::new(),
         proofs: Vec::new(),
         correlation: Correlation::empty(),
         promotion_decision: None,
@@ -1324,6 +1404,7 @@ fn serve_http(
     config: CoreConfig,
     registry: Arc<Mutex<Registry>>,
     process_state: Arc<Mutex<SupervisedProcessState>>,
+    watch_state: Arc<Mutex<WatcherState>>,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(addr)?;
     for stream in listener.incoming() {
@@ -1332,10 +1413,11 @@ fn serve_http(
         };
         let registry = Arc::clone(&registry);
         let process_state = Arc::clone(&process_state);
+        let watch_state = Arc::clone(&watch_state);
         let cwd = cwd.clone();
         let config = config.clone();
         thread::spawn(move || {
-            let _ = handle_client(stream, &cwd, &config, registry, process_state);
+            let _ = handle_client(stream, &cwd, &config, registry, process_state, watch_state);
         });
     }
     Ok(())
@@ -1347,6 +1429,7 @@ fn handle_client(
     config: &CoreConfig,
     registry: Arc<Mutex<Registry>>,
     process_state: Arc<Mutex<SupervisedProcessState>>,
+    watch_state: Arc<Mutex<WatcherState>>,
 ) -> std::io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut first_line = String::new();
@@ -1436,11 +1519,43 @@ fn handle_client(
         }
         ("POST", "/serving/live") => {
             let status = registry.lock().expect("registry lock").request_serving_mode(ServingMode::Live);
+            let changed_paths = {
+                let registry_guard = registry.lock().expect("registry lock");
+                registry_guard
+                    .aliases()
+                    .current_green_local
+                    .as_deref()
+                    .and_then(|id| registry_guard.generation(id))
+                    .map(|generation| generation.source_paths)
+                    .unwrap_or_default()
+            };
+            if !changed_paths.is_empty() {
+                if let Err(error) = maybe_reload_serving_runtime(&process_state, &changed_paths, status.latest_generation_id.as_deref().unwrap_or(""), &registry) {
+                    return write_json(
+                        &mut stream,
+                        502,
+                        &format!("{{\"error\":{},\"serving\":{}}}", json_string(&error), serving_status_to_json(&status)),
+                    );
+                }
+            }
             write_json(&mut stream, 200, &serving_status_to_json(&status))
         }
         ("POST", "/serving/stable") => {
             let status = registry.lock().expect("registry lock").request_serving_mode(ServingMode::Stable);
             write_json(&mut stream, 200, &serving_status_to_json(&status))
+        }
+        ("POST", "/transactions/published-authoring") => {
+            let body_text = String::from_utf8_lossy(&body).to_string();
+            match parse_published_authoring_request(&body_text) {
+                Ok(request) => {
+                    let source_path = request.edits.first().map(|edit| edit.path.clone());
+                    match apply_published_authoring_transaction(cwd, config, &registry, &process_state, &watch_state, request) {
+                        Ok(response) => write_json(&mut stream, 200, &response),
+                        Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, source_path.as_deref())),
+                    }
+                }
+                Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, None)),
+            }
         }
         ("GET", "/capabilities/fs/read") => {
             let params = parse_form_body(query);
@@ -1698,6 +1813,7 @@ fn handle_client(
                     .get("sourcePaths")
                     .map(|value| parse_string_array(value))
                     .unwrap_or_default(),
+                compute_modules: Vec::new(),
                 proofs: Vec::new(),
                 correlation: Correlation {
                     session_id: form.get("sessionId").filter(|value| !value.trim().is_empty()).cloned(),
@@ -1899,6 +2015,11 @@ fn start_supervised_process(
             .filter(|value| !value.trim().is_empty())
             .map(|value| cwd.join(value))
             .unwrap_or_else(|| cwd.clone());
+        let watchers_enabled = if config.reload_url.as_deref().is_some_and(|value| !value.trim().is_empty()) {
+            "false"
+        } else {
+            "true"
+        };
         loop {
             let should_start = {
                 let state = process_state.lock().expect("process state lock");
@@ -1923,10 +2044,15 @@ fn start_supervised_process(
                 state.unhealthy_streak = 0;
             }
 
+            let instance_id = next_instance_id();
             let spawn_result = if let Some(mut direct) = supervised_command(&command) {
                 direct
                     .current_dir(&working_dir)
                     .env("WITNESS_CORE_URL", format!("http://{}", addr))
+                    .env("WITNESS_RUNTIME_INSTANCE_ID", &instance_id)
+                    .env("WITNESS_RUNTIME_ROLE", "active")
+                    .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", "true")
+                    .env("WITNESS_RUNTIME_WATCHERS_ENABLED", watchers_enabled)
                     .spawn()
             } else {
                 Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "shell command required"))
@@ -1935,6 +2061,10 @@ fn start_supervised_process(
                 shell_command(&command)
                     .current_dir(&working_dir)
                     .env("WITNESS_CORE_URL", format!("http://{}", addr))
+                    .env("WITNESS_RUNTIME_INSTANCE_ID", &instance_id)
+                    .env("WITNESS_RUNTIME_ROLE", "active")
+                    .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", "true")
+                    .env("WITNESS_RUNTIME_WATCHERS_ENABLED", watchers_enabled)
                     .spawn()
             }) {
                 Ok(child) => child,
@@ -1973,6 +2103,10 @@ fn start_supervised_process(
                 state.last_error = None;
                 state.ready = false;
                 state.health_url = config.health_url.clone();
+                state.reload_url = config.reload_url.clone();
+                state.watchers_enabled = config.reload_url.as_deref().is_none_or(|value| value.trim().is_empty());
+                state.instance_id = Some(instance_id.clone());
+                state.role = Some("active".to_string());
             }
             registry.lock().expect("registry lock").emit(CoreEvent {
                 kind: "process.started".to_string(),
@@ -2214,6 +2348,13 @@ fn spawn_frontdoor_instance(
         .clone()
         .filter(|value| !value.trim().is_empty())
         .map(|value| interpolate_runtime_template(&value, port, &instance_id, &core_url));
+    let reload_url = config
+        .supervise
+        .reload_url
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| interpolate_runtime_template(&value, port, &instance_id, &core_url));
+    let watchers_enabled = if reload_url.is_some() { "false" } else if role == "active" { "true" } else { "false" };
     let spawn_direct = || {
         if let Some(mut direct) = supervised_command(&command) {
             direct
@@ -2223,7 +2364,7 @@ fn spawn_frontdoor_instance(
                 .env("WITNESS_RUNTIME_INSTANCE_ID", &instance_id)
                 .env("WITNESS_RUNTIME_ROLE", role)
                 .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", if role == "active" { "true" } else { "false" })
-                .env("WITNESS_RUNTIME_WATCHERS_ENABLED", if role == "active" { "true" } else { "false" })
+                .env("WITNESS_RUNTIME_WATCHERS_ENABLED", watchers_enabled)
                 .spawn()
         } else {
             Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "shell command required"))
@@ -2237,7 +2378,7 @@ fn spawn_frontdoor_instance(
             .env("WITNESS_RUNTIME_INSTANCE_ID", &instance_id)
             .env("WITNESS_RUNTIME_ROLE", role)
             .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", if role == "active" { "true" } else { "false" })
-            .env("WITNESS_RUNTIME_WATCHERS_ENABLED", if role == "active" { "true" } else { "false" })
+            .env("WITNESS_RUNTIME_WATCHERS_ENABLED", watchers_enabled)
             .spawn()
     })
     .map_err(|error| format!("failed to spawn supervised process: {}", error))?;
@@ -2273,6 +2414,7 @@ fn spawn_frontdoor_instance(
         health_url,
         activation_url,
         quiesce_url,
+        reload_url,
         drain_deadline: None,
     })
 }
@@ -2702,6 +2844,7 @@ struct ManagedProcessInstance {
     health_url: Option<String>,
     activation_url: Option<String>,
     quiesce_url: Option<String>,
+    reload_url: Option<String>,
     drain_deadline: Option<Instant>,
 }
 
@@ -2731,7 +2874,7 @@ fn replace_http_url_path(url: &str, new_path: &str) -> Option<String> {
     Some(format!("http://{}{}", authority, new_path))
 }
 
-fn issue_http_post(url: &str) -> Result<(), String> {
+fn issue_http_post_with_body(url: &str, body: &str) -> Result<String, String> {
     let Some(target) = parse_http_url(url) else {
         return Err("unsupported control url".to_string());
     };
@@ -2746,10 +2889,11 @@ fn issue_http_post(url: &str) -> Result<(), String> {
     stream
         .set_read_timeout(Some(Duration::from_millis(2_000)))
         .map_err(|error| format!("set read timeout failed: {}", error))?;
+    let payload = body.as_bytes();
     write!(
         stream,
-        "POST {} HTTP/1.1\r\nhost: {}\r\ncontent-length: 2\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n{{}}",
-        target.path, target.host_header
+        "POST {} HTTP/1.1\r\nhost: {}\r\ncontent-length: {}\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n{}",
+        target.path, target.host_header, payload.len(), body
     )
     .map_err(|error| format!("control write failed: {}", error))?;
     let mut reader = BufReader::new(stream);
@@ -2762,11 +2906,28 @@ fn issue_http_post(url: &str) -> Result<(), String> {
         .nth(1)
         .and_then(|code| code.parse::<u16>().ok())
         .ok_or_else(|| "missing control status".to_string())?;
+    loop {
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .map_err(|error| format!("control header read failed: {}", error))?;
+        if line == "\r\n" || line.is_empty() {
+            break;
+        }
+    }
+    let mut response_body = String::new();
+    reader
+        .read_to_string(&mut response_body)
+        .map_err(|error| format!("control body read failed: {}", error))?;
     if (200..300).contains(&http_status) {
-        Ok(())
+        Ok(response_body)
     } else {
         Err(format!("control request rejected: {}", http_status))
     }
+}
+
+fn issue_http_post(url: &str) -> Result<(), String> {
+    issue_http_post_with_body(url, "{}").map(|_| ())
 }
 
 fn active_target_from_state(state: &SupervisedProcessState) -> Option<(String, String)> {
@@ -2859,7 +3020,7 @@ fn sync_frontdoor_state(
         state.last_health_status = active_instance.snapshot.last_health_status.clone();
         state.instance_id = Some(active_instance.snapshot.id.clone());
         state.role = Some(active_instance.snapshot.role.clone());
-        state.watchers_enabled = active_instance.snapshot.role == "active";
+        state.watchers_enabled = active_instance.snapshot.role == "active" && active_instance.reload_url.is_none();
         state.mutations_enabled = active_instance.snapshot.role == "active";
         state.frontdoor_active_instance_id = if active_instance.snapshot.ready {
             Some(active_instance.snapshot.id.clone())
@@ -2868,6 +3029,11 @@ fn sync_frontdoor_state(
         };
         state.frontdoor_active_target = if active_instance.snapshot.ready {
             Some(format!("127.0.0.1:{}", active_instance.snapshot.port))
+        } else {
+            None
+        };
+        state.frontdoor_active_reload_url = if active_instance.snapshot.ready {
+            active_instance.reload_url.clone()
         } else {
             None
         };
@@ -2882,6 +3048,7 @@ fn sync_frontdoor_state(
         state.mutations_enabled = false;
         state.frontdoor_active_instance_id = None;
         state.frontdoor_active_target = None;
+        state.frontdoor_active_reload_url = None;
     }
 }
 
@@ -3122,6 +3289,637 @@ fn capability_fs_write(
         hash: format!("sha256:{}", sha256_hex(bytes.clone())),
         size: bytes.len() as u64,
     })
+}
+
+#[derive(Clone, Debug)]
+struct PublishedAuthoringEdit {
+    path: String,
+    content: String,
+    expected_hash: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct PublishedAuthoringRequest {
+    manifest_path: String,
+    runtime_profile: String,
+    edits: Vec<PublishedAuthoringEdit>,
+    correlation: Correlation,
+}
+
+fn extract_json_array_slice<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+    let needle = format!("\"{}\"", key);
+    let key_index = text.find(&needle)?;
+    let after_key = &text[key_index + needle.len()..];
+    let colon_index = after_key.find(':')?;
+    let after_colon = &after_key[colon_index + 1..];
+    let array_start_relative = after_colon.find('[')?;
+    let array_start = key_index + needle.len() + colon_index + 1 + array_start_relative;
+    let bytes = text.as_bytes();
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    for index in array_start..bytes.len() {
+        let ch = bytes[index] as char;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&text[array_start..=index]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn extract_json_object_array(text: &str, key: &str) -> Vec<String> {
+    let Some(array_text) = extract_json_array_slice(text, key) else {
+        return Vec::new();
+    };
+    let mut results = Vec::new();
+    let bytes = array_text.as_bytes();
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut object_start: Option<usize> = None;
+    for index in 0..bytes.len() {
+        let ch = bytes[index] as char;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '{' => {
+                if depth == 0 {
+                    object_start = Some(index);
+                }
+                depth += 1;
+            }
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    if let Some(start) = object_start.take() {
+                        results.push(array_text[start..=index].to_string());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    results
+}
+
+fn parse_published_authoring_request(body_text: &str) -> Result<PublishedAuthoringRequest, CapabilityError> {
+    let manifest_path = extract_json_string_decoded(body_text, "manifestPath")
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| capability_error(400, "manifestPath is required"))?;
+    let edits = extract_json_object_array(body_text, "edits")
+        .into_iter()
+        .map(|row| {
+            let path = extract_json_string_decoded(&row, "path")
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| capability_error(400, "each edit.path is required"))?;
+            let content = extract_json_string_decoded(&row, "content")
+                .ok_or_else(|| capability_error(400, format!("edit content is required for {}", path)))?;
+            Ok(PublishedAuthoringEdit {
+                path,
+                content,
+                expected_hash: extract_json_string_decoded(&row, "expectedHash").filter(|value| !value.trim().is_empty()),
+            })
+        })
+        .collect::<Result<Vec<_>, CapabilityError>>()?;
+    if edits.is_empty() {
+        return Err(capability_error(400, "edits are required"));
+    }
+    Ok(PublishedAuthoringRequest {
+        manifest_path,
+        runtime_profile: extract_json_string_decoded(body_text, "runtimeProfile")
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "authoring".to_string()),
+        edits,
+        correlation: Correlation {
+            session_id: extract_json_string_decoded(body_text, "sessionId"),
+            surface_id: extract_json_string_decoded(body_text, "surfaceId"),
+            actor: extract_json_string_decoded(body_text, "actor"),
+        },
+    })
+}
+
+fn relative_under(root: &Path, target: &Path) -> Result<PathBuf, String> {
+    target
+        .strip_prefix(root)
+        .map(|value| value.to_path_buf())
+        .map_err(|_| "path is outside workspace root".to_string())
+}
+
+fn should_ignore_copy(path: &Path, config: &CoreConfig) -> bool {
+    let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
+    config.watch.ignore.iter().any(|ignored| ignored.trim_matches('/').eq_ignore_ascii_case(name))
+}
+
+fn copy_workspace_tree(source: &Path, target: &Path, config: &CoreConfig) -> Result<(), String> {
+    if should_ignore_copy(source, config) {
+        return Ok(());
+    }
+    let metadata = fs::metadata(source).map_err(|error| format!("workspace stat failed: {}", error))?;
+    if metadata.is_dir() {
+        fs::create_dir_all(target).map_err(|error| format!("workspace copy mkdir failed: {}", error))?;
+        for entry in fs::read_dir(source).map_err(|error| format!("workspace read_dir failed: {}", error))? {
+            let entry = entry.map_err(|error| format!("workspace read_dir entry failed: {}", error))?;
+            let child_source = entry.path();
+            let child_target = target.join(entry.file_name());
+            copy_workspace_tree(&child_source, &child_target, config)?;
+        }
+        return Ok(());
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("workspace copy parent mkdir failed: {}", error))?;
+    }
+    fs::copy(source, target).map_err(|error| format!("workspace copy failed: {}", error))?;
+    Ok(())
+}
+
+fn stage_workspace_for_transaction(cwd: &Path, config: &CoreConfig, generation_id: &str) -> Result<PathBuf, String> {
+    let stage_root = cwd.join(&config.transaction.stage_root).join(generation_id);
+    if stage_root.exists() {
+        let _ = fs::remove_dir_all(&stage_root);
+    }
+    fs::create_dir_all(&stage_root).map_err(|error| format!("transaction stage mkdir failed: {}", error))?;
+    for entry in fs::read_dir(cwd).map_err(|error| format!("workspace root read failed: {}", error))? {
+        let entry = entry.map_err(|error| format!("workspace root entry failed: {}", error))?;
+        let source = entry.path();
+        if source == cwd.join(".witness-core") {
+            continue;
+        }
+        let target = stage_root.join(entry.file_name());
+        copy_workspace_tree(&source, &target, config)?;
+    }
+    Ok(stage_root)
+}
+
+fn interpolate_transaction_template(template: &str, manifest_path: &str, workspace_root: &str, runtime_profile: &str) -> String {
+    template
+        .replace("{manifest_path}", manifest_path)
+        .replace("{workspace_root}", workspace_root)
+        .replace("{runtime_profile}", runtime_profile)
+}
+
+fn parse_build_worker_result(text: &str) -> BuildWorkerResult {
+    let compute_modules = extract_json_object_array(text, "computeModules")
+        .into_iter()
+        .filter_map(|row| compute_module_build_record_from_json(&row))
+        .collect::<Vec<_>>();
+    let error = extract_json_string_decoded(text, "error").or_else(|| extract_json_string(text, "error"));
+    let raw_message = if !text.trim().is_empty() {
+        text.trim().to_string()
+    } else {
+        error.clone().unwrap_or_else(|| "build worker failed".to_string())
+    };
+    BuildWorkerResult {
+        ok: extract_json_bool(text, "ok"),
+        error,
+        compute_module_count: extract_json_u64(text, "computeModuleCount")
+            .map(|value| value as usize)
+            .unwrap_or(compute_modules.len()),
+        compute_modules,
+        raw_message,
+    }
+}
+
+fn compute_module_event_message(record: &ComputeModuleBuildRecord) -> String {
+    compute_module_build_record_to_json(record)
+}
+
+fn emit_compute_module_build_events(
+    registry: &Arc<Mutex<Registry>>,
+    generation_id: &str,
+    build_result: &BuildWorkerResult,
+) {
+    if build_result.compute_module_count == 0 && build_result.compute_modules.is_empty() {
+        return;
+    }
+    registry.lock().expect("registry lock").emit(CoreEvent {
+        kind: "transaction.compute_module.compile.started".to_string(),
+        capability: CAP_PROOF_RUN.to_string(),
+        generation_id: Some(generation_id.to_string()),
+        message: Some(format!("count={}", build_result.compute_module_count)),
+        generation: None,
+        serving: None,
+        emitted_at: now_iso(),
+    });
+    for record in &build_result.compute_modules {
+        registry.lock().expect("registry lock").emit(CoreEvent {
+            kind: if record.success {
+                "transaction.compute_module.compile.passed".to_string()
+            } else {
+                "transaction.compute_module.compile.failed".to_string()
+            },
+            capability: CAP_PROOF_RUN.to_string(),
+            generation_id: Some(generation_id.to_string()),
+            message: Some(compute_module_event_message(record)),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        if record.success {
+            registry.lock().expect("registry lock").emit(CoreEvent {
+                kind: "transaction.compute_module.artifact.emitted".to_string(),
+                capability: CAP_PROOF_RUN.to_string(),
+                generation_id: Some(generation_id.to_string()),
+                message: Some(compute_module_event_message(record)),
+                generation: None,
+                serving: None,
+                emitted_at: now_iso(),
+            });
+        }
+    }
+}
+
+fn run_build_worker(
+    cwd: &Path,
+    config: &CoreConfig,
+    stage_root: &Path,
+    manifest_path: &str,
+    runtime_profile: &str,
+    generation_id: &str,
+    registry: &Arc<Mutex<Registry>>,
+) -> Result<BuildWorkerResult, BuildWorkerResult> {
+    let command_template = config
+        .build_worker
+        .command
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| BuildWorkerResult {
+            ok: false,
+            error: Some("build worker is not configured".to_string()),
+            compute_module_count: 0,
+            compute_modules: Vec::new(),
+            raw_message: "build worker is not configured".to_string(),
+        })?;
+    let command = interpolate_transaction_template(
+        &command_template,
+        manifest_path,
+        &normalize_path(stage_root),
+        runtime_profile,
+    );
+    registry.lock().expect("registry lock").emit(CoreEvent {
+        kind: "transaction.build.started".to_string(),
+        capability: CAP_PROOF_RUN.to_string(),
+        generation_id: Some(generation_id.to_string()),
+        message: Some(command.clone()),
+        generation: None,
+        serving: None,
+        emitted_at: now_iso(),
+    });
+    let working_dir = config
+        .build_worker
+        .working_dir
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| cwd.join(value))
+        .unwrap_or_else(|| cwd.to_path_buf());
+    let spawn = |mut cmd: Command| {
+        cmd.current_dir(&working_dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|error| format!("build worker spawn failed: {}", error))
+    };
+    let output = if let Some(direct) = supervised_command(&command) {
+        spawn(direct)
+    } else {
+        Err("shell command required".to_string())
+    }
+    .or_else(|_| spawn(shell_command(&command)))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let selected_text = if !stdout.is_empty() {
+        stdout.as_str()
+    } else if !stderr.is_empty() {
+        stderr.as_str()
+    } else {
+        ""
+    };
+    let mut build_result = parse_build_worker_result(selected_text);
+    if build_result.raw_message.trim().is_empty() {
+        build_result.raw_message = if !stderr.is_empty() {
+            stderr.clone()
+        } else if !stdout.is_empty() {
+            stdout.clone()
+        } else {
+            "build worker failed".to_string()
+        };
+    }
+    emit_compute_module_build_events(registry, generation_id, &build_result);
+    if output.status.success() {
+        registry.lock().expect("registry lock").emit(CoreEvent {
+            kind: "transaction.build.passed".to_string(),
+            capability: CAP_PROOF_RUN.to_string(),
+            generation_id: Some(generation_id.to_string()),
+            message: Some(if stdout.is_empty() { "ok".to_string() } else { stdout.clone() }),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        Ok(build_result)
+    } else {
+        let message = if let Some(error) = build_result.error.clone() {
+            error
+        } else if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            "build worker failed".to_string()
+        };
+        build_result.error = Some(message.clone());
+        build_result.raw_message = message.clone();
+        registry.lock().expect("registry lock").emit(CoreEvent {
+            kind: "transaction.build.failed".to_string(),
+            capability: CAP_PROOF_RUN.to_string(),
+            generation_id: Some(generation_id.to_string()),
+            message: Some(message.clone()),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        Err(build_result)
+    }
+}
+
+fn resolve_reload_url(process_state: &Arc<Mutex<SupervisedProcessState>>) -> Option<String> {
+    let state = process_state.lock().expect("process state lock");
+    state
+        .frontdoor_active_reload_url
+        .clone()
+        .or_else(|| state.reload_url.clone())
+        .filter(|value| !value.trim().is_empty())
+}
+
+fn maybe_reload_serving_runtime(
+    process_state: &Arc<Mutex<SupervisedProcessState>>,
+    changed_paths: &[String],
+    generation_id: &str,
+    registry: &Arc<Mutex<Registry>>,
+) -> Result<bool, String> {
+    let Some(reload_url) = resolve_reload_url(process_state) else {
+        return Ok(false);
+    };
+    let body = format!(
+        "{{\"paths\":[{}]}}",
+        changed_paths.iter().map(|value| json_string(value)).collect::<Vec<_>>().join(",")
+    );
+    registry.lock().expect("registry lock").emit(CoreEvent {
+        kind: "transaction.activation.started".to_string(),
+        capability: CAP_NOTIFY_SURFACE.to_string(),
+        generation_id: Some(generation_id.to_string()),
+        message: Some(body.clone()),
+        generation: None,
+        serving: None,
+        emitted_at: now_iso(),
+    });
+    match issue_http_post_with_body(&reload_url, &body) {
+        Ok(message) => {
+            registry.lock().expect("registry lock").emit(CoreEvent {
+                kind: "transaction.activation.passed".to_string(),
+                capability: CAP_NOTIFY_SURFACE.to_string(),
+                generation_id: Some(generation_id.to_string()),
+                message: Some(if message.trim().is_empty() { "ok".to_string() } else { message }),
+                generation: None,
+                serving: None,
+                emitted_at: now_iso(),
+            });
+            Ok(true)
+        }
+        Err(error) => {
+            registry.lock().expect("registry lock").emit(CoreEvent {
+                kind: "transaction.activation.failed".to_string(),
+                capability: CAP_NOTIFY_SURFACE.to_string(),
+                generation_id: Some(generation_id.to_string()),
+                message: Some(error.clone()),
+                generation: None,
+                serving: None,
+                emitted_at: now_iso(),
+            });
+            Err(error)
+        }
+    }
+}
+
+fn published_transaction_response_json(
+    generation: &Generation,
+    activated: bool,
+    activation_error: Option<&str>,
+) -> String {
+    format!(
+        "{{\"ok\":true,\"generation\":{},\"activated\":{},\"activationError\":{}}}",
+        generation_to_json(generation),
+        if activated { "true" } else { "false" },
+        match activation_error {
+            Some(value) => json_string(value),
+            None => "null".to_string(),
+        }
+    )
+}
+
+fn apply_published_authoring_transaction(
+    cwd: &Path,
+    config: &CoreConfig,
+    registry: &Arc<Mutex<Registry>>,
+    process_state: &Arc<Mutex<SupervisedProcessState>>,
+    watch_state: &Arc<Mutex<WatcherState>>,
+    request: PublishedAuthoringRequest,
+) -> Result<String, CapabilityError> {
+    let mut resolved_edits = Vec::new();
+    let generation_id = next_generation_id();
+    registry.lock().expect("registry lock").emit(CoreEvent {
+        kind: "transaction.published.requested".to_string(),
+        capability: CAP_STORAGE_WRITE.to_string(),
+        generation_id: Some(generation_id.clone()),
+        message: Some(format!("manifestPath={} editCount={}", request.manifest_path, request.edits.len())),
+        generation: None,
+        serving: None,
+        emitted_at: now_iso(),
+    });
+    for edit in &request.edits {
+        let resolved = resolve_capability_path(cwd, config, &edit.path)?;
+        let relative_path = relative_under(cwd, &resolved.full_path)
+            .map_err(|message| capability_error(403, message))?;
+        resolved_edits.push((edit, resolved, relative_path));
+    }
+    let manifest_abs = {
+        let manifest_candidate = Path::new(&request.manifest_path);
+        if manifest_candidate.is_absolute() {
+            manifest_candidate.to_path_buf()
+        } else {
+            cwd.join(manifest_candidate)
+        }
+    };
+    let manifest_relative = relative_under(cwd, &manifest_abs).map_err(|message| capability_error(403, message))?;
+    let stage_root = stage_workspace_for_transaction(cwd, config, &generation_id)
+        .map_err(|message| capability_error(500, message))?;
+    let stage_manifest = stage_root.join(&manifest_relative);
+    if !stage_manifest.exists() {
+        let _ = fs::remove_dir_all(&stage_root);
+        return Err(capability_error(404, "staged manifest not found"));
+    }
+    for (edit, _resolved, relative_path) in &resolved_edits {
+        let stat = capability_fs_stat(cwd, config, &edit.path)?;
+        if let Some(expected_hash) = edit.expected_hash.as_deref().filter(|value| !value.trim().is_empty()) {
+            if stat.hash.as_deref() != Some(expected_hash) {
+                registry.lock().expect("registry lock").emit(CoreEvent {
+                    kind: AUTHORING_WRITE_CONFLICT.to_string(),
+                    capability: CAP_STORAGE_WRITE.to_string(),
+                    generation_id: Some(generation_id.clone()),
+                    message: Some(capability_event_message(&edit.path, Some("app.source.write"), false, &request.correlation)),
+                    generation: None,
+                    serving: None,
+                    emitted_at: now_iso(),
+                });
+                return Err(CapabilityError {
+                    status: 409,
+                    message: "source baseline hash mismatch".to_string(),
+                    code: Some("WITNESS_CORE_SOURCE_CONFLICT".to_string()),
+                    actual_hash: stat.hash.clone(),
+                    expected_hash: Some(expected_hash.to_string()),
+                    size: stat.size,
+                    modified_at: stat.modified_at.clone(),
+                    exists: Some(stat.exists),
+                });
+            }
+        }
+        let stage_target = stage_root.join(relative_path);
+        if let Some(parent) = stage_target.parent() {
+            fs::create_dir_all(parent).map_err(|error| capability_error(500, format!("staged parent mkdir failed: {}", error)))?;
+        }
+        fs::write(&stage_target, &edit.content).map_err(|error| capability_error(500, format!("staged source write failed: {}", error)))?;
+    }
+    let mut generation = Generation {
+        id: generation_id.clone(),
+        state: GenerationState::Candidate,
+        content_hash: format!("sha256:{}", sha256_hex(package_bytes(&stage_root, config))),
+        parent_id: registry.lock().expect("registry lock").aliases().current_stable,
+        created_at: now_iso(),
+        source_paths: resolved_edits
+            .iter()
+            .map(|(_, resolved, _)| resolved.source_path.clone())
+            .collect(),
+        compute_modules: Vec::new(),
+        proofs: Vec::new(),
+        correlation: request.correlation.clone(),
+        promotion_decision: None,
+    };
+    registry.lock().expect("registry lock").upsert_generation(generation.clone(), "generation.candidate", CAP_STORAGE_WRITE);
+    match run_build_worker(
+        cwd,
+        config,
+        &stage_root,
+        &normalize_path(&stage_manifest),
+        &request.runtime_profile,
+        &generation_id,
+        registry,
+    ) {
+        Ok(build_result) => {
+            generation.compute_modules = build_result.compute_modules;
+        }
+        Err(build_result) => {
+            generation.compute_modules = build_result.compute_modules;
+            generation.state = GenerationState::CompileFailed;
+            registry.lock().expect("registry lock").upsert_generation(generation.clone(), "generation.compile_failed", CAP_STORAGE_WRITE);
+            let _ = fs::remove_dir_all(&stage_root);
+            return Err(CapabilityError {
+                status: 400,
+                message: build_result.error.unwrap_or(build_result.raw_message),
+                code: Some("COMPILE_FAILED".to_string()),
+                actual_hash: None,
+                expected_hash: None,
+                size: None,
+                modified_at: None,
+                exists: None,
+            });
+        }
+    }
+    generation.state = GenerationState::ProofRunning;
+    generation.proofs.push(ProofRecord {
+        name: "fast".to_string(),
+        command: config.proof.fast.clone(),
+        status: ProofStatus::Running,
+        started_at: now_iso(),
+        finished_at: None,
+        duration_ms: None,
+        exit_code: None,
+    });
+    registry.lock().expect("registry lock").upsert_generation(generation.clone(), "proof.started", CAP_PROOF_RUN);
+    let proof = run_proof(&stage_root, "fast", &config.proof.fast, config.proof.slow_ms, generation.id.clone(), Arc::clone(registry));
+    generation.proofs = vec![proof.clone()];
+    if proof.status != ProofStatus::Passed {
+        generation.state = GenerationState::ProofFailed;
+        registry.lock().expect("registry lock").upsert_generation(generation.clone(), "proof.failed", CAP_PROOF_RUN);
+        let _ = fs::remove_dir_all(&stage_root);
+        return Err(CapabilityError {
+            status: 400,
+            message: "published authoring proof failed".to_string(),
+            code: Some("PROOF_FAILED".to_string()),
+            actual_hash: None,
+            expected_hash: None,
+            size: None,
+            modified_at: None,
+            exists: None,
+        });
+    }
+    for edit in &request.edits {
+        capability_fs_write(
+            cwd,
+            config,
+            &edit.path,
+            &edit.content,
+            false,
+            edit.expected_hash.as_deref(),
+        )?;
+    }
+    registry.lock().expect("registry lock").emit(CoreEvent {
+        kind: "transaction.commit.applied".to_string(),
+        capability: CAP_STORAGE_WRITE.to_string(),
+        generation_id: Some(generation.id.clone()),
+        message: Some(generation.source_paths.join(",")),
+        generation: None,
+        serving: None,
+        emitted_at: now_iso(),
+    });
+    refresh_watcher_baseline(cwd, config, watch_state);
+    generation.state = GenerationState::GreenLocal;
+    registry.lock().expect("registry lock").upsert_generation(generation.clone(), "generation.green_local", CAP_STORAGE_WRITE);
+    let serving_status = registry.lock().expect("registry lock").serving_status();
+    let mut activation_error = None;
+    let mut activated = false;
+    if serving_status.effective_mode == ServingMode::Live {
+        match maybe_reload_serving_runtime(process_state, &generation.source_paths, &generation.id, registry) {
+            Ok(result) => activated = result,
+            Err(error) => activation_error = Some(error),
+        }
+    }
+    let _ = fs::remove_dir_all(&stage_root);
+    Ok(published_transaction_response_json(&generation, activated, activation_error.as_deref()))
 }
 
 fn resolve_capability_path(cwd: &Path, config: &CoreConfig, requested: &str) -> Result<CapabilityPath, CapabilityError> {
@@ -3381,18 +4179,42 @@ fn soak_session_finish_to_json(session: &SoakSession, message: Option<&str>) -> 
 
 fn generation_to_json(generation: &Generation) -> String {
     let source_paths = generation.source_paths.iter().map(|v| json_string(v)).collect::<Vec<_>>().join(",");
+    let compute_modules = generation
+        .compute_modules
+        .iter()
+        .map(compute_module_build_record_to_json)
+        .collect::<Vec<_>>()
+        .join(",");
     let proofs = generation.proofs.iter().map(proof_to_json).collect::<Vec<_>>().join(",");
     format!(
-        "{{{},{},{},{},{},\"sourcePaths\":[{}],\"proofs\":[{}],\"correlation\":{},{} }}",
+        "{{{},{},{},{},{},\"sourcePaths\":[{}],\"computeModuleCount\":{},\"computeModules\":[{}],\"proofs\":[{}],\"correlation\":{},{} }}",
         json_pair("id", &generation.id),
         json_pair("state", generation.state.as_str()),
         json_pair("contentHash", &generation.content_hash),
         json_optional_pair("parentId", generation.parent_id.as_deref()),
         json_pair("createdAt", &generation.created_at),
         source_paths,
+        generation.compute_modules.len(),
+        compute_modules,
         proofs,
         correlation_to_json(&generation.correlation),
         json_optional_pair("promotionDecision", generation.promotion_decision.as_deref())
+    )
+}
+
+fn compute_module_build_record_to_json(record: &ComputeModuleBuildRecord) -> String {
+    format!(
+        "{{{},{},{},{},{},{},{},{},{},{}}}",
+        json_pair("id", &record.id),
+        json_pair("hostOperation", &record.host_operation),
+        json_pair("source", &record.source),
+        json_optional_pair("artifactPath", record.artifact_path.as_deref()),
+        json_optional_pair("artifactHash", record.artifact_hash.as_deref()),
+        json_pair("language", &record.language),
+        json_pair("abi", &record.abi),
+        json_pair("export", &record.export_name),
+        json_bool_pair("success", record.success),
+        json_optional_pair("error", record.error.as_deref())
     )
 }
 
@@ -3462,6 +4284,7 @@ fn supervised_process_state_to_json(state: &SupervisedProcessState) -> String {
         json_string_array_pair("reasonCodes", &state.reason_codes),
         json_optional_pair("lastHealthSampleAt", state.last_health_sample_at.as_deref()),
         json_optional_pair("healthUrl", state.health_url.as_deref()),
+        json_optional_pair("reloadUrl", state.reload_url.as_deref()),
         json_number_optional_pair("degradedStreak", Some(state.degraded_streak)),
         json_number_optional_pair("unhealthyStreak", Some(state.unhealthy_streak)),
         json_optional_pair("lastRestartReason", state.last_restart_reason.as_deref()),
@@ -3475,6 +4298,7 @@ fn supervised_process_state_to_json(state: &SupervisedProcessState) -> String {
         json_optional_pair("publicAddr", state.public_addr.as_deref()),
         json_optional_pair("activeInstanceId", state.frontdoor_active_instance_id.as_deref()),
         json_optional_pair("activeTarget", state.frontdoor_active_target.as_deref()),
+        json_optional_pair("activeReloadUrl", state.frontdoor_active_reload_url.as_deref()),
         format!("\"instances\":[{}]", instances)
     ];
     format!("{{{}}}", fields.join(","))
@@ -3519,6 +4343,10 @@ fn json_optional_pair(key: &str, value: Option<&str>) -> String {
     }
 }
 
+fn json_bool_pair(key: &str, value: bool) -> String {
+    format!("\"{}\":{}", key, if value { "true" } else { "false" })
+}
+
 fn json_object_optional_pair(key: &str, value: Option<String>) -> String {
     match value {
         Some(value) => format!("\"{}\":{}", key, value),
@@ -3531,10 +4359,6 @@ fn json_number_optional_pair(key: &str, value: Option<u64>) -> String {
         Some(value) => format!("\"{}\":{}", key, value),
         None => format!("\"{}\":null", key),
     }
-}
-
-fn json_bool_pair(key: &str, value: bool) -> String {
-    format!("\"{}\":{}", key, if value { "true" } else { "false" })
 }
 
 fn json_string_array_pair(key: &str, values: &[String]) -> String {
@@ -3837,6 +4661,21 @@ fn extract_json_string_array(text: &str, key: &str) -> Vec<String> {
         .collect()
 }
 
+fn compute_module_build_record_from_json(text: &str) -> Option<ComputeModuleBuildRecord> {
+    Some(ComputeModuleBuildRecord {
+        id: extract_json_string(text, "id")?,
+        host_operation: extract_json_string(text, "hostOperation").unwrap_or_default(),
+        source: extract_json_string(text, "source").unwrap_or_default(),
+        artifact_path: extract_json_string(text, "artifactPath"),
+        artifact_hash: extract_json_string(text, "artifactHash"),
+        language: extract_json_string(text, "language").unwrap_or_else(|| "assemblyscript".to_string()),
+        abi: extract_json_string(text, "abi").unwrap_or_else(|| "world.hostOperation.v1".to_string()),
+        export_name: extract_json_string(text, "export").unwrap_or_else(|| "invoke".to_string()),
+        success: extract_json_bool(text, "success"),
+        error: extract_json_string_decoded(text, "error").or_else(|| extract_json_string(text, "error")),
+    })
+}
+
 fn soak_session_from_json(text: &str) -> Option<SoakSession> {
     Some(SoakSession {
         id: extract_json_string(text, "id")?,
@@ -4044,6 +4883,7 @@ mod tests {
             parent_id: None,
             created_at: "1".to_string(),
             source_paths: vec!["src/a.js".to_string()],
+            compute_modules: Vec::new(),
             proofs: Vec::new(),
             correlation: Correlation::empty(),
             promotion_decision: None,
@@ -4103,10 +4943,19 @@ working_dir = "."
 restart_on_exit = false
 restart_on_unhealthy = false
 health_url = "http://127.0.0.1:3000/api/runtime/process-health"
+reload_url = "http://127.0.0.1:3000/api/runtime/app-snapshot/reload"
 health_interval_ms = 50
 health_timeout_ms = 250
 degraded_grace_polls = 7
 unhealthy_grace_polls = 2
+
+[build_worker]
+command = "node src/witness-core-build-worker.js --manifest {manifest_path} --workspace-root {workspace_root} --runtime-profile {runtime_profile}"
+working_dir = "."
+
+[transaction]
+build_timeout_ms = 3210
+stage_root = ".witness-core/staging"
 "#);
         assert_eq!(config.watch.roots, vec!["src", "plugins"]);
         assert_eq!(config.watch.ignore, vec!["target"]);
@@ -4118,10 +4967,18 @@ unhealthy_grace_polls = 2
         assert_eq!(config.supervise.restart_on_exit, false);
         assert_eq!(config.supervise.restart_on_unhealthy, false);
         assert_eq!(config.supervise.health_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/process-health"));
+        assert_eq!(config.supervise.reload_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/app-snapshot/reload"));
         assert_eq!(config.supervise.health_interval_ms, 50);
         assert_eq!(config.supervise.health_timeout_ms, 250);
         assert_eq!(config.supervise.degraded_grace_polls, 7);
         assert_eq!(config.supervise.unhealthy_grace_polls, 2);
+        assert_eq!(
+            config.build_worker.command.as_deref(),
+            Some("node src/witness-core-build-worker.js --manifest {manifest_path} --workspace-root {workspace_root} --runtime-profile {runtime_profile}")
+        );
+        assert_eq!(config.build_worker.working_dir.as_deref(), Some("."));
+        assert_eq!(config.transaction.build_timeout_ms, 3210);
+        assert_eq!(config.transaction.stage_root, ".witness-core/staging");
     }
 
     #[test]
@@ -4187,6 +5044,7 @@ unhealthy_grace_polls = 2
         let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
         let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
         let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let watch_state = Arc::new(Mutex::new(WatcherState::default()));
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let server_registry = Arc::clone(&registry);
@@ -4194,7 +5052,7 @@ unhealthy_grace_polls = 2
         let server_root = root.clone();
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, &server_root, &config, server_registry, server_process_state).unwrap();
+            handle_client(stream, &server_root, &config, server_registry, server_process_state, watch_state).unwrap();
         });
         let body = "{\"path\":\"content.wtoml\",\"content\":\"after\",\"reason\":\"test\"}";
         let mut client = TcpStream::connect(addr).unwrap();
@@ -4227,6 +5085,7 @@ unhealthy_grace_polls = 2
         let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
         let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
         let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let watch_state = Arc::new(Mutex::new(WatcherState::default()));
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let server_registry = Arc::clone(&registry);
@@ -4234,7 +5093,7 @@ unhealthy_grace_polls = 2
         let server_root = root.clone();
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, &server_root, &config, server_registry, server_process_state).unwrap();
+            handle_client(stream, &server_root, &config, server_registry, server_process_state, watch_state).unwrap();
         });
         let body = "{\"path\":\"content.wtoml\",\"content\":\"after\",\"expectedHash\":\"sha256:stale\",\"reason\":\"app.source.write\"}";
         let mut client = TcpStream::connect(addr).unwrap();
@@ -4382,13 +5241,14 @@ unhealthy_grace_polls = 2
         let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
         let registry = Arc::new(Mutex::new(Registry::new(store)));
         let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let watch_state = Arc::new(Mutex::new(WatcherState::default()));
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let server_registry = Arc::clone(&registry);
         let server_process_state = Arc::clone(&process_state);
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, Path::new("."), &CoreConfig::default(), server_registry, server_process_state).unwrap();
+            handle_client(stream, Path::new("."), &CoreConfig::default(), server_registry, server_process_state, watch_state).unwrap();
         });
         let mut client = TcpStream::connect(addr).unwrap();
         client.write_all(b"GET /health HTTP/1.1\r\nhost: test\r\n\r\n").unwrap();
@@ -4485,6 +5345,7 @@ unhealthy_grace_polls = 2
                 restart_on_exit: false,
                 restart_on_unhealthy: true,
                 health_url: Some(health_url),
+                reload_url: None,
                 health_interval_ms: 25,
                 health_timeout_ms: 5_000,
                 degraded_grace_polls: 10,
@@ -4514,13 +5375,14 @@ unhealthy_grace_polls = 2
         let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
         let registry = Arc::new(Mutex::new(Registry::new(store)));
         let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let watch_state = Arc::new(Mutex::new(WatcherState::default()));
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let server_registry = Arc::clone(&registry);
         let server_process_state = Arc::clone(&process_state);
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, Path::new("."), &CoreConfig::default(), server_registry, server_process_state).unwrap();
+            handle_client(stream, Path::new("."), &CoreConfig::default(), server_registry, server_process_state, watch_state).unwrap();
         });
         let body = "id=preview-1&state=green_local&contentHash=sha256%3Atest&sourcePaths=%5B%22app%2Fshell.rvm%22%5D&sessionId=user-session&surfaceId=route.goodman&actor=alice";
         let mut client = TcpStream::connect(addr).unwrap();
@@ -4561,6 +5423,7 @@ unhealthy_grace_polls = 2
                 restart_on_exit: false,
                 restart_on_unhealthy: true,
                 health_url: None,
+                reload_url: None,
                 health_interval_ms: 500,
                 health_timeout_ms: 10_000,
                 degraded_grace_polls: 10,

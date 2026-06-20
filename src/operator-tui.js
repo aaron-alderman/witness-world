@@ -2567,11 +2567,53 @@ function workbenchResultHeader(resultView, materialized) {
   return bits.join(" | ");
 }
 
+function workbenchPrimaryActionForType(type, index) {
+  const ordinal = Math.max(1, (Number(index) || 0) + 1);
+  if (type === "container") {
+    return {
+      command: `open ${ordinal}`,
+      label: "open"
+    };
+  }
+  if (type === "record" || type === "alias") {
+    return {
+      command: `inspect ${ordinal}`,
+      label: "inspect"
+    };
+  }
+  return null;
+}
+
+function primaryCommandForSessionEntry(entry, index) {
+  return workbenchPrimaryActionForType(entry?.type, index)?.command ?? null;
+}
+
+function workbenchLeftPanePaging(resultView, materialized) {
+  if (!resultView || !materialized) return null;
+  return {
+    page: materialized.page,
+    pageSize: materialized.pageSize,
+    totalPages: materialized.totalPages,
+    totalRows: materialized.totalRows,
+    start: materialized.start,
+    end: materialized.end,
+    query: resultView.query,
+    scope: resultView.scope,
+    sort: resultView.sort,
+    filters: resultView.filters.map(filter => ({ ...filter })),
+    activeViewName: resultView.activeViewName ?? null,
+    focusContextId: resultView.focusContextId ?? null
+  };
+}
+
 function workbenchRowsFromEntries(entries, session) {
   return entries.map((entry, index) => {
+    const primaryAction = workbenchPrimaryActionForType(entry.type, index);
     const row = {
       index: index + 1,
       type: entry.type,
+      actionable: Boolean(primaryAction),
+      primaryAction,
       selected: Boolean(
         session.selectionId
         && entry.type === "record"
@@ -2598,12 +2640,16 @@ function workbenchRowsFromEntries(entries, session) {
         kind: entry.record.kind,
         scope: entry.record.scope
       };
+      row.kind = entry.record.kind;
+      row.scope = entry.record.scope;
       return row;
     }
     if (entry.type === "alias") {
       row.label = entry.alias;
       row.summary = entry.record ? `${entry.record.title} <${entry.record.kind}>` : entry.targetId;
       row.target = entry.targetId;
+      row.kind = entry.record?.kind ?? null;
+      row.scope = entry.record?.scope ?? null;
       return row;
     }
     if (entry.type === "note") {
@@ -2833,6 +2879,11 @@ function operatorWorkbenchScreenSpec(state, screenId) {
   return operatorWorkbenchDefinitionForState(state).screensById.get(screenId) ?? null;
 }
 
+function operatorWorkbenchLeftScreenSpec(state, screenId) {
+  if (!screenId) return null;
+  return operatorWorkbenchDefinitionForState(state).leftScreensById?.get(screenId) ?? null;
+}
+
 function operatorWorkbenchDatasetSpec(state, datasetId) {
   if (!datasetId) return null;
   return operatorWorkbenchDefinitionForState(state).datasetsById.get(datasetId) ?? null;
@@ -2892,6 +2943,8 @@ function genericScreenRowColumns(row, provider, columns, sectionKind = "list") {
   }
   const values = {
     kind: row.kind ?? "",
+    key: row.key ?? "",
+    value: row.value ?? "",
     label: row.label ?? "",
     detail: row.detail ?? "",
     path: row.sourcePath ?? row.label ?? "",
@@ -3082,18 +3135,20 @@ function buildWorkbenchScreenSection(sectionSpec, datasetSpec, {
   let detailLines = [];
   if (provider === "inspect") {
     title = sectionSpec?.title ?? inspector?.title ?? fallbackTitle;
-    if (sectionSpec?.kind === "kv") {
+    if (sectionSpec?.kind === "detail") {
+      detailLines = inspector?.inspectLines ?? [sectionSpec.emptyMessage ?? datasetSpec?.emptyMessage ?? "Select a record to inspect."];
+    } else {
       rows = buildInspectMetadataRows(inspector).map((row, baseIndex) => ({
         ...row,
         baseIndex,
         primaryAction: "none",
         primaryCommand: null,
         primaryUi: null,
-        columns: genericScreenRowColumns(row, provider, columns, "kv")
+        columns: genericScreenRowColumns(row, provider, columns, sectionSpec?.kind ?? "list")
       }));
-      detailLines = [];
-    } else {
-      detailLines = inspector?.inspectLines ?? [sectionSpec.emptyMessage ?? datasetSpec?.emptyMessage ?? "Select a record to inspect."];
+      detailLines = sectionSpec?.kind === "list"
+        ? (inspector?.inspectLines ?? [sectionSpec.emptyMessage ?? datasetSpec?.emptyMessage ?? "Select a record to inspect."])
+        : [];
     }
   } else if (provider === "references") {
     title = sectionSpec?.title ?? referencesWorkbench?.title ?? fallbackTitle;
@@ -3268,6 +3323,11 @@ function buildCustomWorkbenchScreen(spec, datasetSpec, {
     activeRowIndex: activeSection?.collapsed ? 0 : (activeSection?.activeRowIndex ?? 0),
     activeSectionIndex,
     activeSectionId: activeSection?.id ?? null,
+    activeSectionTitle: activeSection?.title ?? null,
+    activeSectionRowCount: arrayWrap(activeSection?.rows).length,
+    activeSectionActionable: Boolean(activeSection?.actionable),
+    activeSectionCollapsible: activeSection?.collapsible === false ? false : true,
+    activeSectionCollapsed: Boolean(activeSection?.collapsed),
     sections: sectionModels,
     detailLines: activeSection?.collapsed
       ? [`${activeSection?.title ?? "Section"} is collapsed.`]
@@ -3362,6 +3422,157 @@ function buildWorkbenchNavigationModel(state, session, {
   };
 }
 
+function buildNavigationLeftPaneModel(state, session, {
+  screenId = "builtin.navigation",
+  title = null,
+  header = null,
+  helpText = null,
+  origin = "builtin"
+} = {}) {
+  const entries = buildContainerEntries(state, session, currentContainerId(session));
+  session.lastEntries = entries;
+  return {
+    mode: "tree",
+    screenId,
+    shape: "tree",
+    dataSource: "navigation",
+    title: title ?? (isContextFocusActive(session) ? focusRootLabel(session) : "Tree"),
+    header: header ?? buildTuiPathText(state, session),
+    helpText: helpText ?? "Browse the current navigation tree and activate rows to open containers or inspect targets.",
+    origin,
+    overlay: false,
+    columns: [],
+    rows: workbenchRowsFromEntries(entries, session),
+    paging: null
+  };
+}
+
+function workbenchPrimaryLabelForCommand(command) {
+  const normalized = optionalText(command);
+  if (!normalized) return null;
+  const token = normalized.split(/\s+/, 1)[0]?.toLowerCase() ?? null;
+  return token || null;
+}
+
+function leftPaneRowFromWorkbenchRow(row, index, session) {
+  const recordId = optionalText(row?.targetId) ?? optionalText(row?.ownerTargetId) ?? null;
+  return {
+    index: index + 1,
+    type: "record",
+    actionable: Boolean(row?.primaryCommand),
+    primaryAction: row?.primaryCommand
+      ? {
+          command: row.primaryCommand,
+          label: workbenchPrimaryLabelForCommand(row.primaryCommand)
+        }
+      : null,
+    selected: Boolean(session.selectionId && recordId && session.selectionId === recordId),
+    summary: optionalText(row?.detail) ?? "",
+    label: optionalText(row?.label) ?? optionalText(row?.key) ?? "(row)",
+    columns: row?.columns ? deepClone(row.columns) : null,
+    target: recordId,
+    kind: optionalText(row?.kind) ?? null,
+    scope: optionalText(row?.scope) ?? null,
+    record: recordId
+      ? {
+          id: recordId,
+          title: optionalText(row?.label) ?? recordId,
+          kind: optionalText(row?.kind) ?? "record",
+          scope: optionalText(row?.scope) ?? "world"
+        }
+      : null
+  };
+}
+
+function buildResultLeftPaneModel(resultView, materializedResultView, session) {
+  session.lastEntries = materializedResultView.entries;
+  return {
+    mode: "results",
+    screenId: "builtin.search",
+    shape: "table",
+    dataSource: "search",
+    title: "Search Results",
+    header: workbenchResultHeader(resultView, materializedResultView),
+    helpText: "Search results overlay the authored left pane until cleared.",
+    origin: "builtin",
+    overlay: true,
+    columns: [...resultView.columns],
+    rows: materializedResultView.pageRows.map((row, index) => ({
+      index: index + 1,
+      type: "record",
+      actionable: true,
+      primaryAction: workbenchPrimaryActionForType("record", index),
+      label: row.record.title,
+      summary: optionalText(row.record.summary) ?? "",
+      target: row.record.id,
+      selected: session.selectionId === row.record.id,
+      kind: row.record.kind,
+      scope: row.record.scope,
+      record: {
+        id: row.record.id,
+        title: row.record.title,
+        kind: row.record.kind,
+        scope: row.record.scope
+      },
+      columns: Object.fromEntries(resultView.columns.map(column => [column, resultViewColumnValue(row.record, column)]))
+    })),
+    paging: workbenchLeftPanePaging(resultView, materializedResultView)
+  };
+}
+
+function buildAuthoredLeftPaneModel(state, session, leftScreenSpec, datasetSpec, {
+  inspector,
+  referencesWorkbench,
+  sourceWorkbench,
+  provenanceWorkbench
+} = {}) {
+  if (!leftScreenSpec) return buildNavigationLeftPaneModel(state, session);
+  if (leftScreenSpec.shape === "tree") {
+    return buildNavigationLeftPaneModel(state, session, {
+      screenId: leftScreenSpec.id,
+      title: leftScreenSpec.title,
+      header: leftScreenSpec.subtitle ?? buildTuiPathText(state, session),
+      helpText: leftScreenSpec.helpText ?? null,
+      origin: leftScreenSpec.origin ?? "authored"
+    });
+  }
+  const section = buildWorkbenchScreenSection({
+    id: `${leftScreenSpec.id}.main`,
+    title: leftScreenSpec.title,
+    kind: leftScreenSpec.shape === "table" ? "table" : "list",
+    shape: leftScreenSpec.shape === "table" ? "table-detail" : "list-detail",
+    datasetId: leftScreenSpec.datasetId ?? null,
+    dataSource: leftScreenSpec.dataSource ?? null,
+    columns: arrayWrap(datasetSpec?.columns),
+    emptyMessage: leftScreenSpec.emptyMessage ?? datasetSpec?.emptyMessage ?? "(no rows)",
+    rowFilterKind: leftScreenSpec.rowFilterKind ?? null,
+    rowFilterAction: leftScreenSpec.rowFilterAction ?? null,
+    origin: leftScreenSpec.origin ?? "authored",
+    collapsible: false,
+    collapsed: false
+  }, datasetSpec, {
+    screenState: null,
+    inspector,
+    referencesWorkbench,
+    sourceWorkbench,
+    provenanceWorkbench
+  });
+  return {
+    mode: "tree",
+    screenId: leftScreenSpec.id,
+    shape: leftScreenSpec.shape,
+    dataSource: section.provider ?? leftScreenSpec.dataSource ?? null,
+    title: leftScreenSpec.title ?? section.title ?? "Pane",
+    header: leftScreenSpec.subtitle ?? buildTuiPathText(state, session),
+    helpText: leftScreenSpec.helpText ?? `Authored ${leftScreenSpec.shape} view.`,
+    origin: leftScreenSpec.origin ?? "authored",
+    overlay: false,
+    columns: leftScreenSpec.shape === "table" ? [...section.columns] : [],
+    rows: section.rows.map((row, index) => leftPaneRowFromWorkbenchRow(row, index, session)),
+    paging: null
+  };
+}
+
 function normalizeWorkbenchInspectorSpec(spec = null) {
   if (!spec || typeof spec !== "object") return null;
   const kind = optionalText(spec.kind);
@@ -3377,40 +3588,19 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
   const resultView = session.resultView ?? null;
   const workbenchDefinition = operatorWorkbenchDefinitionForState(state);
   let materializedResultView = null;
-  let leftMode = "tree";
-  let leftHeader = buildTuiPathText(state, session);
-  let leftRows = [];
-  let leftColumns = [];
+  let provisionalLeftRows = [];
   if (resultView) {
-    leftMode = "results";
     materializedResultView = materializeResultView(resultView);
-    session.lastEntries = materializedResultView.entries;
-    leftHeader = workbenchResultHeader(resultView, materializedResultView);
-    leftColumns = [...resultView.columns];
-    leftRows = materializedResultView.pageRows.map((row, index) => ({
-      index: index + 1,
-      type: "record",
-      label: row.record.title,
-      summary: optionalText(row.record.summary) ?? "",
-      target: row.record.id,
-      selected: session.selectionId === row.record.id,
-      record: {
-        id: row.record.id,
-        title: row.record.title,
-        kind: row.record.kind,
-        scope: row.record.scope
-      },
-      columns: Object.fromEntries(resultView.columns.map(column => [column, resultViewColumnValue(row.record, column)]))
-    }));
+    provisionalLeftRows = buildResultLeftPaneModel(resultView, materializedResultView, session).rows;
   } else {
     const entries = buildContainerEntries(state, session, currentContainerId(session));
     session.lastEntries = entries;
-    leftRows = workbenchRowsFromEntries(entries, session);
+    provisionalLeftRows = workbenchRowsFromEntries(entries, session);
   }
 
-  const leftCursorLimit = Math.max(0, leftRows.length - 1);
-  const leftCursor = Math.min(Math.max(0, Number(uiState.leftCursor ?? 0) || 0), leftCursorLimit);
-  const activeLeftRow = leftRows[leftCursor] ?? null;
+  const provisionalLeftCursorLimit = Math.max(0, provisionalLeftRows.length - 1);
+  const provisionalLeftCursor = Math.min(Math.max(0, Number(uiState.leftCursor ?? 0) || 0), provisionalLeftCursorLimit);
+  const activeLeftRow = provisionalLeftRows[provisionalLeftCursor] ?? null;
   const activeLeftRecord = activeLeftRow?.record
     ? state.recordIndex.get(activeLeftRow.record.id) ?? null
     : null;
@@ -3597,6 +3787,26 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
   const rightCursorLimit = Math.max(0, rightCursorRows.length - 1);
   const requestedRightCursor = uiState.rightCursor ?? customScreen?.activeRowIndex ?? 0;
   const rightCursor = Math.min(Math.max(0, Number(requestedRightCursor) || 0), rightCursorLimit);
+  const activeLeftScreenSpec = resultView
+    ? null
+    : (
+        (activeScreenSpec?.leftScreenId ? operatorWorkbenchLeftScreenSpec(state, activeScreenSpec.leftScreenId) : null)
+        ?? (workbenchDefinition.defaultLeftScreen ? operatorWorkbenchLeftScreenSpec(state, workbenchDefinition.defaultLeftScreen) : null)
+      );
+  const activeLeftDatasetSpec = activeLeftScreenSpec?.datasetId
+    ? (operatorWorkbenchDatasetSpec(state, activeLeftScreenSpec.datasetId) ?? null)
+    : null;
+  const leftPaneModel = resultView
+    ? buildResultLeftPaneModel(resultView, materializedResultView, session)
+    : buildAuthoredLeftPaneModel(state, session, activeLeftScreenSpec, activeLeftDatasetSpec, {
+        inspector,
+        referencesWorkbench,
+        sourceWorkbench,
+        provenanceWorkbench
+      });
+  const leftCursorLimit = Math.max(0, leftPaneModel.rows.length - 1);
+  const leftCursor = Math.min(Math.max(0, Number(uiState.leftCursor ?? 0) || 0), leftCursorLimit);
+  const resolvedActiveLeftRow = leftPaneModel.rows[leftCursor] ?? null;
 
   return {
     mode: "detached",
@@ -3667,18 +3877,39 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
       })
     },
     leftPane: {
-      mode: leftMode,
-      title: leftMode === "results" ? "Search Results" : (isContextFocusActive(session) ? focusRootLabel(session) : "Tree"),
-      header: leftHeader,
-      columns: leftColumns,
-      rows: leftRows,
-      cursor: leftCursor
+      mode: leftPaneModel.mode,
+      screenId: leftPaneModel.screenId ?? null,
+      shape: leftPaneModel.shape ?? (leftPaneModel.mode === "results" ? "table" : "tree"),
+      dataSource: leftPaneModel.dataSource ?? null,
+      title: leftPaneModel.title,
+      header: leftPaneModel.header,
+      path: buildTuiPathText(state, session),
+      helpText: leftPaneModel.helpText ?? null,
+      origin: leftPaneModel.origin ?? "builtin",
+      overlay: Boolean(leftPaneModel.overlay),
+      columns: leftPaneModel.columns,
+      rows: leftPaneModel.rows,
+      cursor: leftCursor,
+      activeRowIndex: leftCursor,
+      activeRow: resolvedActiveLeftRow ? structuredClone(resolvedActiveLeftRow) : null,
+      rowCount: leftPaneModel.rows.length,
+      paging: leftPaneModel.paging
     },
     rightPane: {
       title: rightPaneTitleForScreen(customScreen),
       screenMode: rightScreenMode,
       activeScreenId: activeScreenSpec?.id ?? activeScreenId,
       screen: customScreen,
+      activeSection: customScreen
+        ? {
+            id: customScreen.activeSectionId ?? null,
+            title: customScreen.activeSectionTitle ?? null,
+            rowCount: customScreen.activeSectionRowCount ?? 0,
+            actionable: Boolean(customScreen.activeSectionActionable),
+            collapsible: customScreen.activeSectionCollapsible === false ? false : true,
+            collapsed: Boolean(customScreen.activeSectionCollapsed)
+          }
+        : null,
       tab: activeScreenSpec?.id ?? activeScreenId,
       bodyLines: customScreen?.detailLines ?? [],
       references: inspector.references,
@@ -4477,8 +4708,17 @@ export function createOperatorTuiEngine(state, session = createEmptySession()) {
         index === (screen.activeSectionIndex ?? 0) ? "*" : " ",
         section.collapsed ? "-" : " "
       ].join("");
-      return ` [${markers}] ${index + 1}. ${section.title ?? section.id ?? "Section"} <${section.kind ?? "list"}> rows=${arrayWrap(section.rows).length}${section.id ? ` id=${section.id}` : ""}`;
+      const state = section.actionable ? "actionable" : "info";
+      return ` [${markers}] ${index + 1}. ${section.title ?? section.id ?? "Section"} <${section.kind ?? "list"}> rows=${arrayWrap(section.rows).length} state=${state}${section.id ? ` id=${section.id}` : ""}`;
     });
+  }
+
+  function formatSectionCommandOutput(screen, heading = null) {
+    const title = heading ?? `${screen?.title ?? "Screen"} sections`;
+    const activeSummary = screen
+      ? `active=${screen.activeSectionTitle ?? screen.activeSectionId ?? "(none)"} | rows=${screen.activeSectionRowCount ?? 0} | state=${screen.activeSectionCollapsed ? "collapsed" : "expanded"} | ${screen.activeSectionActionable ? "actionable" : "info"}`
+      : "active=(none)";
+    return [title, activeSummary, ...formatSectionCommandLines(screen)].join("\n");
   }
 
   function resolveScreenSectionReference(screen, token) {
@@ -4820,6 +5060,7 @@ export function createOperatorTuiEngine(state, session = createEmptySession()) {
           "  look",
           "  ls",
           "  pwd",
+          "  <index>  (default primary action for the current list row)",
           "  open <index|container>",
           "  back",
           "  close",
@@ -4923,6 +5164,20 @@ export function createOperatorTuiEngine(state, session = createEmptySession()) {
         output: buildTuiPathText(state, session),
         exit: false
       };
+    }
+
+    if (/^\d+$/.test(command)) {
+      const index = Number(command) - 1;
+      const entry = session.lastEntries[index] ?? null;
+      const primaryCommand = primaryCommandForSessionEntry(entry, index);
+      if (!entry || !primaryCommand) {
+        return {
+          output: `no primary action for row ${command}.`,
+          exit: false,
+          status: "error"
+        };
+      }
+      return executeInternal(primaryCommand, options);
     }
 
     if (command === "back" || command === "close") {
@@ -5768,7 +6023,7 @@ export function createOperatorTuiEngine(state, session = createEmptySession()) {
       const activeSection = sections[screen.activeSectionIndex ?? 0] ?? sections[0] ?? null;
       if (command === "section") {
         return {
-          output: [`${screen.title ?? screenId} sections`, ...formatSectionCommandLines(screen)].join("\n"),
+          output: formatSectionCommandOutput(screen, `${screen.title ?? screenId} sections`),
           exit: false
         };
       }
@@ -5798,7 +6053,7 @@ export function createOperatorTuiEngine(state, session = createEmptySession()) {
         const nextSnapshot = await buildOperatorWorkbenchSnapshot(state, session, {});
         const nextScreen = nextSnapshot.rightPane?.screen ?? null;
         return {
-          output: [`${nextScreen?.title ?? screen.title ?? screenId} sections`, ...formatSectionCommandLines(nextScreen ?? screen)].join("\n"),
+          output: formatSectionCommandOutput(nextScreen ?? screen, `${nextScreen?.title ?? screen.title ?? screenId} sections`),
           exit: false,
           ui: {
             activeScreenId: screenId,
@@ -5824,7 +6079,7 @@ export function createOperatorTuiEngine(state, session = createEmptySession()) {
         const nextSnapshot = await buildOperatorWorkbenchSnapshot(state, session, {});
         const nextScreen = nextSnapshot.rightPane?.screen ?? null;
         return {
-          output: [`${nextScreen?.title ?? screen.title ?? screenId} sections`, ...formatSectionCommandLines(nextScreen ?? screen)].join("\n"),
+          output: formatSectionCommandOutput(nextScreen ?? screen, `${nextScreen?.title ?? screen.title ?? screenId} sections`),
           exit: false,
           ui: {
             activeScreenId: screenId,
@@ -5836,7 +6091,7 @@ export function createOperatorTuiEngine(state, session = createEmptySession()) {
       const targetSection = resolveScreenSectionReference(screen, sectionMatch?.[1]);
       if (!targetSection) {
         return {
-          output: "usage: section | section next | section prev | section <id|index> | section collapse | section expand | section toggle",
+          output: `section not found: ${sectionMatch?.[1] ?? "(empty)"}`,
           exit: false,
           status: "error"
         };
@@ -5845,7 +6100,7 @@ export function createOperatorTuiEngine(state, session = createEmptySession()) {
       const nextSnapshot = await buildOperatorWorkbenchSnapshot(state, session, {});
       const nextScreen = nextSnapshot.rightPane?.screen ?? null;
       return {
-        output: [`${nextScreen?.title ?? screen.title ?? screenId} sections`, ...formatSectionCommandLines(nextScreen ?? screen)].join("\n"),
+        output: formatSectionCommandOutput(nextScreen ?? screen, `${nextScreen?.title ?? screen.title ?? screenId} sections`),
         exit: false,
         ui: {
           activeScreenId: screenId,

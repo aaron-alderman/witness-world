@@ -57,6 +57,97 @@ test("app project diagnostics report manifest roots, shell targets, and grouped 
   assert.deepEqual(appProject.diagnostics.imports["plugin/runtime"], []);
 });
 
+test("app project collects compute modules and surfaces diagnostics for their host bindings", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-app-compute-modules-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "compute_module_app"
+
+[[computeModule]]
+actor = "system"
+id = "engentus.health.classify"
+source = "./app/modules/health-classify/assembly/index.ts"
+hostOperation = "engentus.health.classify"
+allowedBindings = ["host.log", "host.metric"]
+`);
+  await writeFile(path.join(appRoot, "app", "modules", "health-classify", "assembly", "index.ts"), `
+export function invoke(): i32 {
+  return 1;
+}
+`);
+  try {
+    const appProject = await loadAppProject(appRoot);
+    assert.equal(appProject.computeModules.length, 1);
+    assert.deepEqual(appProject.computeModules[0], {
+      id: "engentus.health.classify",
+      source: "./app/modules/health-classify/assembly/index.ts",
+      resolvedSourcePath: path.join(appRoot, "app", "modules", "health-classify", "assembly", "index.ts"),
+      language: "assemblyscript",
+      abi: "world.hostOperation.v1",
+      export: "invoke",
+      hostOperation: "engentus.health.classify",
+      maxMemoryPages: null,
+      timeoutMs: null,
+      allowedBindings: ["host.log", "host.metric"],
+      context: null,
+      file: path.join(appRoot, "app.wtoml"),
+      line: 5,
+      values: {
+        actor: "system",
+        id: "engentus.health.classify",
+        source: "./app/modules/health-classify/assembly/index.ts",
+        hostOperation: "engentus.health.classify",
+        allowedBindings: ["host.log", "host.metric"]
+      }
+    });
+    assert.deepEqual(appProject.diagnostics.computeModules, [{
+      id: "engentus.health.classify",
+      source: "./app/modules/health-classify/assembly/index.ts",
+      hostOperation: "engentus.health.classify",
+      language: "assemblyscript",
+      abi: "world.hostOperation.v1",
+      export: "invoke",
+      maxMemoryPages: null,
+      timeoutMs: null,
+      allowedBindings: ["host.log", "host.metric"],
+      file: path.join(appRoot, "app.wtoml"),
+      line: 5
+    }]);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects duplicate compute module host operations", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-app-compute-dup-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "compute_module_app"
+
+[[computeModule]]
+actor = "system"
+id = "engentus.health.classify"
+source = "./app/modules/health-classify/assembly/index.ts"
+hostOperation = "engentus.health.classify"
+
+[[computeModule]]
+actor = "system"
+id = "engentus.health.classify.v2"
+source = "./app/modules/health-classify-v2/assembly/index.ts"
+hostOperation = "engentus.health.classify"
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot),
+      error => error?.code === "APP_COMPUTE_MODULE_DUPLICATE_HOST_OPERATION"
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("app project loads authored runtime plugin registries for later DESIRE application", async () => {
   const appProject = await loadAppProject(path.join(process.cwd(), "examples", "engentus"), {
     runtimeProfile: "full"
@@ -95,11 +186,20 @@ operator_dataset trace_dataset {
 operator_screen trace {
   title "Trace"
   subtitle "Authored trace screen"
+  pane right
   shape table-detail
   shortcut F5
+  left_screen trace_left
   default_section trace_rows
   section trace_summary
   section trace_rows
+}
+
+operator_screen trace_left {
+  title "Trace Left"
+  pane left
+  shape table
+  data_source references
 }
 
 operator_screen_section trace_summary {
@@ -125,6 +225,7 @@ operator_setup shell {
   screen references
   shortcut F5 trace
   default_screen trace
+  default_left_screen trace_left
 }
 `);
   try {
@@ -139,10 +240,47 @@ operator_setup shell {
     assert.deepEqual(traceScreen.sectionIds, ["trace_summary", "trace_rows"]);
     assert.deepEqual(traceScreen.sections.map(section => section.id), ["trace_summary", "trace_rows"]);
     assert.deepEqual(traceScreen.sections.map(section => section.kind), ["detail", "table"]);
+    assert.equal(traceScreen.leftScreenId, "trace_left");
     assert.equal(traceScreen.sections[0].collapsible, false);
     assert.equal(traceScreen.sections[1].collapsed, true);
+    assert.equal(appProject.operatorWorkbench.leftScreens.some(screen => screen.id === "trace_left" && screen.shape === "table"), true);
     assert.equal(appProject.operatorWorkbench.defaultScreen, "trace");
+    assert.equal(appProject.operatorWorkbench.defaultLeftScreen, "trace_left");
     assert.equal(appProject.operatorWorkbench.shortcuts.get("F5"), "trace");
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects invalid authored left-pane references in operator workbench RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-left-screen-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_screen_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+  left_screen missing_left
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /left_screen not found: missing_left/
+    );
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }

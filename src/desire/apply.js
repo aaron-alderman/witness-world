@@ -38,6 +38,7 @@ import {
   installRuntimePlugin,
   removeRuntimePlugin,
   createServerRunner,
+  defineComputeModule,
   defineRuntimePreload,
   defineRoute,
   serveRoute,
@@ -103,6 +104,7 @@ export const NATIVE_RUNTIME_DECLARATION_KINDS = new Set([
   "capabilityRemove",
   "runtimePluginInstall",
   "runtimePluginRemove",
+  "computeModule",
   "runtimePreload",
   "materializedView",
   "serverRunner",
@@ -1413,6 +1415,24 @@ function applyCoreRuntimeDeclaration(world, doc) {
           })
         ]);
       }
+    case "computeModule":
+      return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+        defineComputeModule(world, {
+          actor: req(values, "actor"),
+          id: req(values, "id"),
+          source: req(values, "source"),
+          hostOperation: req(values, "hostOperation"),
+          language: values.language ?? "assemblyscript",
+          abi: values.abi ?? "world.hostOperation.v1",
+          exportName: values.export ?? "invoke",
+          maxMemoryPages: Number.isInteger(values.maxMemoryPages) ? values.maxMemoryPages : null,
+          timeoutMs: Number.isInteger(values.timeoutMs) ? values.timeoutMs : null,
+          allowedBindings: Array.isArray(values.allowedBindings) ? values.allowedBindings : [],
+          context: values.context ?? null,
+          owner: values.owner ?? values.actor,
+          values
+        })
+      ]);
     case "serverRunner":
       {
         const backendHost = resolveCoveredPreparedDocRef(world, values, {

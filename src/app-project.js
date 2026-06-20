@@ -5,6 +5,9 @@ import { buildOperatorWorkbenchDefinition } from "./operator-screen-specs.js";
 import { createStableAppOverlayReadFile, readStableAppSourceCache } from "./runtime-stable-source-cache.js";
 
 export const APP_MANIFEST_BASENAME = "app.wtoml";
+export const COMPUTE_MODULE_LANGUAGE_V1 = "assemblyscript";
+export const COMPUTE_MODULE_ABI_V1 = "world.hostOperation.v1";
+export const COMPUTE_MODULE_EXPORT_V1 = "invoke";
 
 function createAppProjectError(code, message, details = {}) {
   const error = new Error(message);
@@ -27,6 +30,14 @@ function uniqueByFile(rows = []) {
 
 function normalizeId(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeText(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizePositiveInteger(value) {
+  return Number.isInteger(value) && value > 0 ? value : null;
 }
 
 function isWithinRoot(filePath, rootPath) {
@@ -73,6 +84,76 @@ function buildTargetRows(kind, docs = []) {
   });
 }
 
+function buildComputeModuleRows(docs = [], { appRoot }) {
+  return docs.map(doc => {
+    const id = normalizeId(doc.values?.id);
+    if (!id) {
+      throw createAppProjectError(
+        "APP_COMPUTE_MODULE_ID_REQUIRED",
+        `compute module is missing id at ${doc.file}:${doc.line ?? 0}`,
+        { file: doc.file, line: doc.line ?? null }
+      );
+    }
+    const source = normalizeText(doc.values?.source);
+    if (!source) {
+      throw createAppProjectError(
+        "APP_COMPUTE_MODULE_SOURCE_REQUIRED",
+        `compute module ${id} is missing source`,
+        { computeModuleId: id, file: doc.file, line: doc.line ?? null }
+      );
+    }
+    const hostOperation = normalizeText(doc.values?.hostOperation);
+    if (!hostOperation) {
+      throw createAppProjectError(
+        "APP_COMPUTE_MODULE_HOST_OPERATION_REQUIRED",
+        `compute module ${id} is missing hostOperation`,
+        { computeModuleId: id, file: doc.file, line: doc.line ?? null }
+      );
+    }
+    if (/\s/.test(hostOperation)) {
+      throw createAppProjectError(
+        "APP_COMPUTE_MODULE_HOST_OPERATION_INVALID",
+        `compute module ${id} has invalid hostOperation ${hostOperation}`,
+        { computeModuleId: id, hostOperation, file: doc.file, line: doc.line ?? null }
+      );
+    }
+    const language = normalizeText(doc.values?.language) ?? COMPUTE_MODULE_LANGUAGE_V1;
+    if (language !== COMPUTE_MODULE_LANGUAGE_V1) {
+      throw createAppProjectError(
+        "APP_COMPUTE_MODULE_LANGUAGE_UNSUPPORTED",
+        `compute module ${id} must use ${COMPUTE_MODULE_LANGUAGE_V1} in this tranche`,
+        { computeModuleId: id, language, file: doc.file, line: doc.line ?? null }
+      );
+    }
+    const abi = normalizeText(doc.values?.abi) ?? COMPUTE_MODULE_ABI_V1;
+    if (abi !== COMPUTE_MODULE_ABI_V1) {
+      throw createAppProjectError(
+        "APP_COMPUTE_MODULE_ABI_UNSUPPORTED",
+        `compute module ${id} must use ${COMPUTE_MODULE_ABI_V1} in this tranche`,
+        { computeModuleId: id, abi, file: doc.file, line: doc.line ?? null }
+      );
+    }
+    return {
+      id,
+      source,
+      resolvedSourcePath: path.resolve(appRoot, source),
+      language,
+      abi,
+      export: normalizeText(doc.values?.export) ?? COMPUTE_MODULE_EXPORT_V1,
+      hostOperation,
+      maxMemoryPages: normalizePositiveInteger(doc.values?.maxMemoryPages),
+      timeoutMs: normalizePositiveInteger(doc.values?.timeoutMs),
+      allowedBindings: Array.isArray(doc.values?.allowedBindings)
+        ? [...new Set(doc.values.allowedBindings.map(value => String(value).trim()).filter(Boolean))]
+        : [],
+      context: normalizeText(doc.values?.context),
+      file: doc.file ?? null,
+      line: doc.line ?? null,
+      values: structuredClone(doc.values ?? {})
+    };
+  });
+}
+
 function assertUniqueTargetIds(kind, rows) {
   const seen = new Map();
   for (const row of rows) {
@@ -84,6 +165,36 @@ function assertUniqueTargetIds(kind, rows) {
       "APP_TARGET_DUPLICATE_ID",
       `duplicate ${kind} target id: ${row.id}`,
       { kind, targetId: row.id, first: seen.get(row.id), second: row }
+    );
+  }
+}
+
+function assertUniqueComputeModuleIds(rows) {
+  const seen = new Map();
+  for (const row of rows) {
+    if (!seen.has(row.id)) {
+      seen.set(row.id, row);
+      continue;
+    }
+    throw createAppProjectError(
+      "APP_COMPUTE_MODULE_DUPLICATE_ID",
+      `duplicate compute module id: ${row.id}`,
+      { computeModuleId: row.id, first: seen.get(row.id), second: row }
+    );
+  }
+}
+
+function assertUniqueComputeModuleHostOperations(rows) {
+  const seen = new Map();
+  for (const row of rows) {
+    if (!seen.has(row.hostOperation)) {
+      seen.set(row.hostOperation, row);
+      continue;
+    }
+    throw createAppProjectError(
+      "APP_COMPUTE_MODULE_DUPLICATE_HOST_OPERATION",
+      `duplicate compute module hostOperation: ${row.hostOperation}`,
+      { hostOperation: row.hostOperation, first: seen.get(row.hostOperation), second: row }
     );
   }
 }
@@ -230,10 +341,13 @@ export async function loadAppProject(entryPath, options = {}) {
     ...row,
     serverRunner: normalizeId(row.values.serverRunner)
   }));
+  const computeModules = buildComputeModuleRows(loaded.allDocs.filter(doc => doc.kind === "computeModule"), { appRoot });
 
   assertUniqueTargetIds("server", serverTargets);
   assertUniqueTargetIds("mcp", mcpTargets);
   assertUniqueTargetIds("desktop", desktopTargets);
+  assertUniqueComputeModuleIds(computeModules);
+  assertUniqueComputeModuleHostOperations(computeModules);
 
   const serverIds = new Set(serverTargets.map(row => row.id));
   for (const row of mcpTargets) {
@@ -274,6 +388,7 @@ export async function loadAppProject(entryPath, options = {}) {
     allDocs: loaded.allDocs,
     sourceFiles,
     importEntries: loaded.importEntries,
+    computeModules,
     targets: {
       server: serverTargets,
       mcp: mcpTargets,
@@ -287,6 +402,19 @@ export async function loadAppProject(entryPath, options = {}) {
         mcp: mcpTargets.map(row => ({ id: row.id, default: row.default, serverRunner: row.serverRunner, file: row.file, line: row.line })),
         desktop: desktopTargets.map(row => ({ id: row.id, default: row.default, serverRunner: row.serverRunner, file: row.file, line: row.line }))
       },
+      computeModules: computeModules.map(row => ({
+        id: row.id,
+        source: row.source,
+        hostOperation: row.hostOperation,
+        language: row.language,
+        abi: row.abi,
+        export: row.export,
+        maxMemoryPages: row.maxMemoryPages,
+        timeoutMs: row.timeoutMs,
+        allowedBindings: [...row.allowedBindings],
+        file: row.file,
+        line: row.line
+      })),
       imports: groupedImports
     }
   };

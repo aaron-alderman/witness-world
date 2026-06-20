@@ -44,6 +44,11 @@ to = "doc:docs/AUTHORITY-MODEL.md"
 [[relation]]
 from = "folder:docs"
 rel = "contains"
+to = "doc:docs/ASSEMBLYSCRIPT-PROJECT-MODULE-SYSTEM.md"
+
+[[relation]]
+from = "folder:docs"
+rel = "contains"
 to = "doc:docs/BACKEND-SEAMS.md"
 
 [[relation]]

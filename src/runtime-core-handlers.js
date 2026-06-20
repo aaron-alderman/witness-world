@@ -1,3 +1,4 @@
+import path from "node:path";
 import { relation } from "./kernel.js";
 import {
   APP_PREVIEW_SESSIONS_PATH,
@@ -214,6 +215,14 @@ function sourceryMutedForContext(rules = [], {
 
 function runtimeMutationsBlocked(appContext) {
   return appContext?.runtimeSupervision?.mutationsEnabled === false;
+}
+
+function supervisedPublishedTransactionEnabled(appContext) {
+  return Boolean(
+    appContext?.witnessCoreBridge
+    && appContext?.runtimeSupervision?.instanceId
+    && appContext?.runtimeSupervision?.watchersEnabled === false
+  );
 }
 
 function runtimeDrainingPayload(appContext) {
@@ -1498,6 +1507,40 @@ export function createCoreRuntimeBundleHandlers({
       });
     },
 
+    "app.snapshot.reload": async ({ req, res, appContext }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
+      const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
+      if (!snapshotManager) {
+        sendJson(res, 503, { error: "app snapshot manager unavailable" });
+        return;
+      }
+      try {
+        const body = await readJson(req);
+        const sourceIds = Array.isArray(body?.paths) ? body.paths : [];
+        const absolutePaths = sourceIds
+          .map(value => typeof value === "string" && value.trim() ? path.resolve(snapshotManager.appRoot, value.trim()) : null)
+          .filter(Boolean);
+        const snapshot = absolutePaths.length
+          ? await snapshotManager.markDirtyPaths(absolutePaths, { trigger: "reload" })
+          : await snapshotManager.ensureFresh({ trigger: "reload" });
+        sendJson(res, 200, {
+          ok: true,
+          appRevision: Number(snapshot?.appRevision ?? snapshotManager.appRevision ?? 0),
+          changedSources: sourceIds,
+          buildErrors: [...(snapshotManager.buildErrors ?? [])],
+          watchersEnabled: appContext?.runtimeSupervision?.watchersEnabled === true
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    },
+
     "app.preview.session.create": async ({ res, appContext, requestActor, requestSession }) => {
       if (runtimeMutationsBlocked(appContext)) {
         sendJson(res, 409, runtimeDrainingPayload(appContext));
@@ -1761,6 +1804,37 @@ export function createCoreRuntimeBundleHandlers({
         return;
       }
       const body = await readJson(req);
+      if (supervisedPublishedTransactionEnabled(appContext)) {
+        try {
+          const result = await appContext.witnessCoreBridge.publishedAuthoringTransaction({
+            manifestPath: snapshotManager.manifestPath,
+            runtimeProfile: appContext?.runtimeProfile ?? "authoring",
+            edits: Array.isArray(body?.edits) ? body.edits : [],
+            correlation: {
+              sessionId: requestSession?.id ?? null,
+              surfaceId: appContext?.serverRunnerId ?? null,
+              actor: requestActor ?? null
+            }
+          });
+          sendJson(res, 200, {
+            ...result,
+            endpoint: APP_SOURCE_WRITE_PATH
+          });
+          return;
+        } catch (error) {
+          const status = Number(error?.status || error?.httpStatus || 400);
+          const payload = {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error)
+          };
+          if (typeof error?.code === "string" && error.code) payload.code = error.code;
+          for (const key of ["path", "expectedHash", "actualHash", "size", "modifiedAt", "exists"]) {
+            if (error?.[key] !== undefined) payload[key] = error[key];
+          }
+          sendJson(res, status, payload);
+          return;
+        }
+      }
       try {
         const result = await snapshotManager.applySourceEdits(body?.edits ?? [], {
           persist: true,
@@ -1798,7 +1872,7 @@ export function createCoreRuntimeBundleHandlers({
       }
       supervision.role = "active";
       supervision.mutationsEnabled = true;
-      supervision.watchersEnabled = appContext?.devMode === true;
+      supervision.watchersEnabled = supervision.watchersEnabled === true && appContext?.devMode === true;
       supervision.lastStateAt = new Date().toISOString();
       appContext?.appSnapshotManager?.setWatcherMode?.(supervision.watchersEnabled);
       sendJson(res, 200, {

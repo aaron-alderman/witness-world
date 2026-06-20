@@ -1087,6 +1087,11 @@ view PlatformWorkflowDetail {
     PlatformVerificationRequirementSummary
     PlatformVerificationRequirementsTable
     PlatformVerificationBlockingReasons
+    PlatformPromotionPosturesTable
+    PlatformPromotionReadinessTable
+    PlatformPromotionReasonsTable
+    PlatformPromotionDecisionHistory
+    PlatformPromotionStateTable
     PlatformWorkflowSnapshotHistory
     PlatformWorkflowEditHistory
   }
@@ -1167,6 +1172,71 @@ view PlatformVerificationBlockingReasons {
   prop rowFields = "Gate=gateId@concept|Status=status|Reason=reasonSummary|Changed Paths=changedPaths@value|Targets=targetIds@value"
   prop emptyState = "No blocking verification requirements."
   prop rowLimit = "20"
+}
+
+view PlatformPromotionPosturesTable {
+  kind table
+  class platform-promotion-postures
+  prop detailPanelRole = "promotionPostures"
+  prop detailKinds = "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel"
+  prop title = "Promotion Postures"
+  prop summary = "Resolved release-channel posture defaults for the current target context."
+  prop columns = "Channel|Posture|Mode|Proposal|Verification|Docs|Defects|Regressions"
+  prop rowFields = "Channel=releaseChannelId@concept|Posture=postureId|Mode=decisionMode|Proposal=requireApprovedProposal|Verification=requireFreshPassingVerification|Docs=requireDocsFresh|Defects=requireNoBlockingDefects|Regressions=requireNoOpenRegressions"
+  prop emptyState = "No promotion posture rows are available."
+  prop rowLimit = "12"
+}
+
+view PlatformPromotionReadinessTable {
+  kind table
+  class platform-promotion-readiness
+  prop detailPanelRole = "promotionReadiness"
+  prop detailKinds = "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel"
+  prop title = "Release-Channel Readiness"
+  prop summary = "Derived promotion readiness by release channel for the selected target."
+  prop columns = "Channel|Status|Mode|Blocking|Warnings|Latest Run|Summary"
+  prop rowFields = "Channel=releaseChannelId@concept|Status=blockingStatus|Mode=decisionMode|Blocking=blockingRequirementCount|Warnings=warningCount|Latest Run=latestRunAt|Summary=summary"
+  prop emptyState = "No promotion readiness rows are derived for this target."
+  prop rowLimit = "20"
+}
+
+view PlatformPromotionReasonsTable {
+  kind table
+  class platform-promotion-reasons
+  prop detailPanelRole = "promotionReasons"
+  prop detailKinds = "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel"
+  prop title = "Blocking And Warning Reasons"
+  prop summary = "Unsatisfied promotion requirements, including warning-level local posture results."
+  prop columns = "Channel|Requirement|Status|Blocking|Summary|Related"
+  prop rowFields = "Channel=releaseChannelId@concept|Requirement=requirementKind|Status=status|Blocking=blocking|Summary=summary|Related=relatedIds@value"
+  prop emptyState = "No blocking or warning promotion reasons."
+  prop rowLimit = "24"
+}
+
+view PlatformPromotionDecisionHistory {
+  kind table
+  class platform-promotion-decisions
+  prop detailPanelRole = "promotionDecisions"
+  prop detailKinds = "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel"
+  prop title = "Promotion Decision History"
+  prop summary = "Recent allow, warn, and block decisions for the selected target or release channel."
+  prop columns = "Decision|Channel|Target|Proposal|Ship|Produced"
+  prop rowFields = "Decision=decision|Channel=releaseChannelId@concept|Target=targetId@concept|Proposal=proposalId@concept|Ship=shipRecordId@concept|Produced=producedAt"
+  prop emptyState = "No promotion decisions recorded yet."
+  prop rowLimit = "12"
+}
+
+view PlatformPromotionStateTable {
+  kind table
+  class platform-promotion-states
+  prop detailPanelRole = "promotionStates"
+  prop detailKinds = "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel"
+  prop title = "Release-Channel State"
+  prop summary = "Latest ship and last-known-good state for each release channel."
+  prop columns = "Channel|Latest Ship|Executable Ship|Last Known Good|Status|Observation"
+  prop rowFields = "Channel=releaseChannelId@concept|Latest Ship=latestShipRecordId@concept|Executable Ship=latestExecutableShipRecordId@concept|Last Known Good=lastKnownGoodShipRecordId@concept|Status=currentStatus|Observation=observationStatus"
+  prop emptyState = "No promotion state is projected yet."
+  prop rowLimit = "12"
 }
 
 view PlatformWorkflowSnapshotHistory {
@@ -1522,6 +1592,11 @@ view PlatformVerificationDetail {
     PlatformVerificationRequirementSummary
     PlatformVerificationRequirementsTable
     PlatformVerificationBlockingReasons
+    PlatformPromotionPosturesTable
+    PlatformPromotionReadinessTable
+    PlatformPromotionReasonsTable
+    PlatformPromotionDecisionHistory
+    PlatformPromotionStateTable
     PlatformVerificationReportSummary
     PlatformVerificationArtifactsReport
     PlatformVerificationSuiteSummary
@@ -1589,7 +1664,7 @@ view PlatformVerificationRelatedPanel {
   prop runtimeRevisionLinkCards = "Changed Sources=changedSources"
   prop runtimeRevisionLinkCardEmptyStates = "Changed Sources=No changed sources recorded for this revision."
   prop runtimeRevisionPropertyCardTitle = "Snapshot Diagnostics"
-  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Verification status=testMonitorDiagnostics.status|Queued sources=testMonitorDiagnostics.pendingSourceCount|Queued change sets=testMonitorDiagnostics.pendingChangeSetCount|Persistence source=verificationPersistence.source|Ledger backend=verificationPersistence.ledgerBackend.provider|Backend revision event stream=backendRevisionEventsHref@href"
+  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Verification status=testMonitorDiagnostics.status|Queued sources=testMonitorDiagnostics.pendingSourceCount|Queued change sets=testMonitorDiagnostics.pendingChangeSetCount|Persistence source=verificationPersistence.source|Ledger backend=verificationPersistence.ledgerBackend.provider|Promotion compatibility=snapshotDiagnostics.promotionCompatibilitySummary|Backend revision event stream=backendRevisionEventsHref@href"
   prop candidateSnapshotTextCards = "Files=files@path|Errors=errors@errorMessage"
   prop candidateSnapshotTextCardEmptyStates = "Files=No files captured in this candidate snapshot.|Errors=No build or validation errors."
   prop verificationPersistenceCardTitle = "Verification Persistence"
@@ -2228,6 +2303,11 @@ view PlatformShipDetail {
   children {
     PlatformShipPrimaryPanel
     PlatformShipRelatedPanel
+    PlatformPromotionPosturesTable
+    PlatformPromotionReadinessTable
+    PlatformPromotionReasonsTable
+    PlatformPromotionDecisionHistory
+    PlatformPromotionStateTable
     PlatformShipRelationships
   }
   projections {

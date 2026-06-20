@@ -945,6 +945,11 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationRequirementSummary",
     "PlatformVerificationRequirementsTable",
     "PlatformVerificationBlockingReasons",
+    "PlatformPromotionPosturesTable",
+    "PlatformPromotionReadinessTable",
+    "PlatformPromotionReasonsTable",
+    "PlatformPromotionDecisionHistory",
+    "PlatformPromotionStateTable",
     "PlatformWorkflowSnapshotHistory",
     "PlatformWorkflowEditHistory"
   ]);
@@ -954,6 +959,11 @@ test("platform console layout compiles authored top-level surface metadata from 
     "verificationRequirementSummary",
     "verificationRequirements",
     "verificationBlockingReasons",
+    "promotionPostures",
+    "promotionReadiness",
+    "promotionReasons",
+    "promotionDecisions",
+    "promotionStates",
     "snapshotHistory",
     "editHistory"
   ]);
@@ -963,6 +973,11 @@ test("platform console layout compiles authored top-level surface metadata from 
     "changeSet|candidateSnapshot",
     "changeSet|candidateSnapshot",
     "changeSet|candidateSnapshot",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
     "branch|changeSet",
     "changeSet"
   ]);
@@ -1176,6 +1191,11 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationRequirementSummary",
     "PlatformVerificationRequirementsTable",
     "PlatformVerificationBlockingReasons",
+    "PlatformPromotionPosturesTable",
+    "PlatformPromotionReadinessTable",
+    "PlatformPromotionReasonsTable",
+    "PlatformPromotionDecisionHistory",
+    "PlatformPromotionStateTable",
     "PlatformVerificationReportSummary",
     "PlatformVerificationArtifactsReport",
     "PlatformVerificationSuiteSummary",
@@ -1193,6 +1213,11 @@ test("platform console layout compiles authored top-level surface metadata from 
     "verificationRequirementSummary",
     "verificationRequirements",
     "verificationBlockingReasons",
+    "promotionPostures",
+    "promotionReadiness",
+    "promotionReasons",
+    "promotionDecisions",
+    "promotionStates",
     "reportSummary",
     "artifacts",
     "suiteSummary",
@@ -1210,6 +1235,11 @@ test("platform console layout compiles authored top-level surface metadata from 
     "changeSet|candidateSnapshot",
     "changeSet|candidateSnapshot",
     "changeSet|candidateSnapshot",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
+    "branch|changeSet|candidateSnapshot|shipRecord|releaseChannel",
     "testRun|testReport",
     "testRun|testReport",
     "testRun|testReport",
@@ -1254,7 +1284,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationRelatedSurface.props.runtimeRevisionLinkCards, "Changed Sources=changedSources");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionLinkCardEmptyStates, "Changed Sources=No changed sources recorded for this revision.");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyCardTitle, "Snapshot Diagnostics");
-  assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyFields, "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Verification status=testMonitorDiagnostics.status|Queued sources=testMonitorDiagnostics.pendingSourceCount|Queued change sets=testMonitorDiagnostics.pendingChangeSetCount|Persistence source=verificationPersistence.source|Ledger backend=verificationPersistence.ledgerBackend.provider|Backend revision event stream=backendRevisionEventsHref@href");
+  assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyFields, "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Verification status=testMonitorDiagnostics.status|Queued sources=testMonitorDiagnostics.pendingSourceCount|Queued change sets=testMonitorDiagnostics.pendingChangeSetCount|Persistence source=verificationPersistence.source|Ledger backend=verificationPersistence.ledgerBackend.provider|Promotion compatibility=snapshotDiagnostics.promotionCompatibilitySummary|Backend revision event stream=backendRevisionEventsHref@href");
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCards, "Files=files@path|Errors=errors@errorMessage");
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCardEmptyStates, "Files=No files captured in this candidate snapshot.|Errors=No build or validation errors.");
   assert.equal(verificationRelatedSurface.props.testRunPropertyCardTitle, "Verification Streams");
@@ -1905,8 +1935,8 @@ test("platform page views filter the model to page-scoped slices", () => {
   const semantics = filterPlatformModel(model, "semantics");
 
   assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleBoard", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
-  assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "pushRecords", "shipRecords", "summaries", "verificationRequirementSummaries", "verificationRequirements"]);
-  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites", "verificationExecutions", "verificationFreshness", "verificationInvalidations", "verificationPersistence", "verificationPolicies", "verificationQueue", "verificationRequirementSummaries", "verificationRequirements"]);
+  assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "promotionDecisions", "promotionPostures", "promotionRequirementSummaries", "promotionRequirements", "promotionStates", "proposalActions", "proposals", "pushRecords", "shipRecords", "summaries", "verificationRequirementSummaries", "verificationRequirements"]);
+  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "promotionDecisions", "promotionPostures", "promotionRequirementSummaries", "promotionRequirements", "promotionStates", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testArtifacts", "testCases", "testGates", "testMonitorDiagnostics", "testReports", "testRuns", "testSuites", "verificationExecutions", "verificationFreshness", "verificationInvalidations", "verificationPersistence", "verificationPolicies", "verificationQueue", "verificationRequirementSummaries", "verificationRequirements"]);
   assert.deepEqual(Object.keys(knowledge).sort(), ["docTasks", "docs", "epics", "features", "folders", "roadmapTasks", "summaries"]);
   assert.deepEqual(Object.keys(knowledgeDocs).sort(), ["docSections", "docTasks", "docs", "summaries"]);
   assert.deepEqual(Object.keys(knowledgeFolders).sort(), ["edges", "folders", "summaries"]);
@@ -1919,7 +1949,7 @@ test("platform page views filter the model to page-scoped slices", () => {
   assert.deepEqual(Object.keys(artifacts).sort(), ["artifacts", "branches", "candidateSnapshots", "changeSets", "executions", "proposals", "sessions", "summaries", "testReports", "testResults", "testRuns"]);
   assert.deepEqual(Object.keys(sessions).sort(), ["authorityDecisions", "branches", "changeSets", "executionArtifacts", "executions", "proposals", "pushRecords", "sessionTags", "sessions", "shipRecords", "summaries", "testRuns"]);
   assert.deepEqual(Object.keys(pushes).sort(), ["branches", "changeSets", "defects", "gitRefs", "gitRemotes", "proposals", "pushRecords", "summaries"]);
-  assert.deepEqual(Object.keys(ships).sort(), ["branches", "changeSets", "defects", "latestTestResultsByGate", "performanceRegressions", "proposals", "pushRecords", "releaseChannels", "shipRecords", "summaries", "testGates"]);
+  assert.deepEqual(Object.keys(ships).sort(), ["branches", "changeSets", "defects", "latestTestResultsByGate", "performanceRegressions", "promotionDecisions", "promotionPostures", "promotionRequirementSummaries", "promotionRequirements", "promotionStates", "proposals", "pushRecords", "releaseChannels", "shipRecords", "summaries", "testGates"]);
   assert.deepEqual(Object.keys(security).sort(), ["authorityDecisions", "authorityPolicies", "branches", "changeSets", "governanceRoutes", "proposalTargetGovernance", "proposals", "pushRecords", "shipRecords", "summaries"]);
   assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
   assert.deepEqual(Object.keys(modelObjects).sort(), ["edges", "nodes", "summaries"]);

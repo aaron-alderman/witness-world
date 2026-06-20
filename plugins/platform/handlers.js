@@ -22,7 +22,7 @@ import {
 } from "./change-sets.js";
 import { pushPlatformBranch } from "./git-push.js";
 import { ensureAutomaticShipRollbackProposals, shipPlatformBranch } from "./git-ship.js";
-import { buildPlatformSlice, filterPlatformModel, selectVerificationRequirementState } from "./platform-model.js";
+import { buildPlatformSlice, filterPlatformModel, selectPromotionRequirementState, selectVerificationRequirementState } from "./platform-model.js";
 import { readDeclaredPlatformSliceView } from "./materialized-platform-views.js";
 import { renderPlatformPageFragment, renderPlatformShellPage, resolvePlatformLocation } from "./platform-page.js";
 import { buildPlatformProposalCreateBody } from "./platform-proposals.js";
@@ -255,6 +255,44 @@ function blockingVerificationRequirements(requirements = []) {
   );
 }
 
+function selectPromotionState(model, {
+  branchId = null,
+  changeSetId = null,
+  candidateSnapshotId = null,
+  releaseChannelId = null
+} = {}) {
+  const promotionState = selectPromotionRequirementState(model, {
+    branchId,
+    changeSetId,
+    candidateSnapshotId,
+    releaseChannelId
+  });
+  const releaseChannelIds = new Set(
+    (promotionState.promotionRequirementSummaries ?? []).map(row => String(row?.releaseChannelId || "")).filter(Boolean)
+  );
+  return {
+    promotionPostures: (model?.promotionPostures ?? []).filter(row =>
+      (!releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+      && (!releaseChannelIds.size || releaseChannelIds.has(String(row?.releaseChannelId || "")))
+    ),
+    promotionRequirements: promotionState.promotionRequirements,
+    promotionRequirementSummaries: promotionState.promotionRequirementSummaries,
+    promotionRequirementSummary: promotionState.promotionRequirementSummary,
+    promotionStates: (model?.promotionStates ?? []).filter(row =>
+      (!releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+      && (!releaseChannelIds.size || releaseChannelIds.has(String(row?.releaseChannelId || "")))
+    ),
+    promotionDecisions: (model?.promotionDecisions ?? []).filter(row =>
+      (!releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+      && (
+        (branchId && String(row?.branchId || "") === String(branchId || ""))
+        || (changeSetId && String(row?.changeSetId || "") === String(changeSetId || ""))
+        || (candidateSnapshotId && String(row?.candidateSnapshotId || "") === String(candidateSnapshotId || ""))
+      )
+    )
+  };
+}
+
 export function createPlatformHandlers({
   world,
   backendHost,
@@ -465,7 +503,7 @@ export function createPlatformHandlers({
       sendJson(res, 200, { branches: listPlatformBranches(world) });
     },
 
-    "platform.branch.read": async ({ res, params, requestActor, requestSession }) => {
+    "platform.branch.read": async ({ res, params, requestActor, requestSession, appContext }) => {
       const access = authorizePlatformRequest({
         res,
         requestActor,
@@ -483,6 +521,10 @@ export function createPlatformHandlers({
         sendJson(res, result.status || 404, { error: result.error });
         return;
       }
+      const model = await platformModelFor(world, appContext, "ships");
+      const promotionState = selectPromotionState(model, {
+        branchId: result.branch?.id ?? null
+      });
       sendJson(res, result.status, {
         branch: result.branch,
         changeSets: result.changeSets,
@@ -493,7 +535,12 @@ export function createPlatformHandlers({
         pushRecords: result.pushRecords,
         latestPushRecord: result.latestPushRecord,
         shipRecords: result.shipRecords,
-        latestShipRecord: result.latestShipRecord
+        latestShipRecord: result.latestShipRecord,
+        promotionPostures: promotionState.promotionPostures,
+        promotionRequirements: promotionState.promotionRequirements,
+        promotionRequirementSummaries: promotionState.promotionRequirementSummaries,
+        promotionStates: promotionState.promotionStates,
+        promotionDecisions: promotionState.promotionDecisions
       });
     },
 
@@ -595,7 +642,8 @@ export function createPlatformHandlers({
         releaseChannelId: body?.releaseChannelId ?? "releaseChannel:local",
         proposalId: body?.proposalId ?? null,
         session: requestSession ?? null,
-        appContext
+        appContext,
+        authorityDecisionId: access.decisionId ?? null
       });
       if (!result.ok) {
         sendJson(res, result.status || 400, {
@@ -607,7 +655,11 @@ export function createPlatformHandlers({
           pushRecord: result.pushRecord ?? null,
           proposal: result.proposal ?? null,
           rollbackProposal: result.rollbackProposal ?? null,
-          witness: result.witness ?? null
+          witness: result.witness ?? null,
+          promotionPosture: result.promotionPosture ?? null,
+          promotionRequirements: result.promotionRequirements ?? null,
+          promotionRequirementSummary: result.promotionRequirementSummary ?? null,
+          promotionDecision: result.promotionDecision ?? null
         });
         return;
       }
@@ -619,7 +671,11 @@ export function createPlatformHandlers({
         pushRecord: result.pushRecord,
         proposal: result.proposal,
         rollbackProposal: result.rollbackProposal ?? null,
-        witness: result.witness
+        witness: result.witness,
+        promotionPosture: result.promotionPosture ?? null,
+        promotionRequirements: result.promotionRequirements ?? null,
+        promotionRequirementSummary: result.promotionRequirementSummary ?? null,
+        promotionDecision: result.promotionDecision ?? null
       });
     },
 
@@ -661,6 +717,11 @@ export function createPlatformHandlers({
         changeSetId: result.changeSet?.id ?? null,
         candidateSnapshotId: result.latestCandidateSnapshot?.id ?? result.activeCandidateSnapshot?.id ?? null
       });
+      const promotionState = selectPromotionState(model, {
+        branchId: result.branch?.id ?? null,
+        changeSetId: result.changeSet?.id ?? null,
+        candidateSnapshotId: result.latestCandidateSnapshot?.id ?? result.activeCandidateSnapshot?.id ?? null
+      });
       sendJson(res, result.status, {
         changeSet: result.changeSet,
         branch: result.branch,
@@ -669,7 +730,12 @@ export function createPlatformHandlers({
         latestCandidateSnapshot: result.latestCandidateSnapshot,
         activeCandidateSnapshot: result.activeCandidateSnapshot,
         verificationRequirements: verificationState.verificationRequirements,
-        verificationRequirementSummary: verificationState.verificationRequirementSummary
+        verificationRequirementSummary: verificationState.verificationRequirementSummary,
+        promotionPostures: promotionState.promotionPostures,
+        promotionRequirements: promotionState.promotionRequirements,
+        promotionRequirementSummaries: promotionState.promotionRequirementSummaries,
+        promotionStates: promotionState.promotionStates,
+        promotionDecisions: promotionState.promotionDecisions
       });
     },
 
@@ -800,6 +866,11 @@ export function createPlatformHandlers({
         changeSetId: result.changeSet?.id ?? null,
         candidateSnapshotId: result.candidateSnapshot?.id ?? null
       });
+      const promotionState = selectPromotionState(model, {
+        branchId: result.changeSet?.branchId ?? null,
+        changeSetId: result.changeSet?.id ?? null,
+        candidateSnapshotId: result.candidateSnapshot?.id ?? null
+      });
       sendJson(res, result.status, {
         changeSet: result.changeSet,
         candidateSnapshot: result.candidateSnapshot,
@@ -807,7 +878,12 @@ export function createPlatformHandlers({
         witness: result.witness,
         revisionEvent: result.revisionEvent,
         verificationRequirements: verificationState.verificationRequirements,
-        verificationRequirementSummary: verificationState.verificationRequirementSummary
+        verificationRequirementSummary: verificationState.verificationRequirementSummary,
+        promotionPostures: promotionState.promotionPostures,
+        promotionRequirements: promotionState.promotionRequirements,
+        promotionRequirementSummaries: promotionState.promotionRequirementSummaries,
+        promotionStates: promotionState.promotionStates,
+        promotionDecisions: promotionState.promotionDecisions
       });
     },
 
@@ -849,6 +925,11 @@ export function createPlatformHandlers({
         changeSetId: params.id || "",
         candidateSnapshotId
       });
+      const preApplyPromotionState = selectPromotionState(verificationModel, {
+        branchId: changeSet?.branchId ?? null,
+        changeSetId: params.id || "",
+        candidateSnapshotId
+      });
       const verificationGatingEnabled = Boolean(
         appContext?.verificationPolicy
         || (verificationModel.verificationPolicies ?? []).some(row => row?.gateId)
@@ -882,6 +963,11 @@ export function createPlatformHandlers({
           candidateSnapshotId,
           verificationRequirementSummary: verificationState.verificationRequirementSummary,
           verificationRequirements: blockingRequirements,
+          promotionPostures: preApplyPromotionState.promotionPostures,
+          promotionRequirements: preApplyPromotionState.promotionRequirements,
+          promotionRequirementSummaries: preApplyPromotionState.promotionRequirementSummaries,
+          promotionStates: preApplyPromotionState.promotionStates,
+          promotionDecisions: preApplyPromotionState.promotionDecisions,
           witness
         });
         return;
@@ -909,10 +995,21 @@ export function createPlatformHandlers({
           changeSetId: result.changeSet?.id ?? null
         }
       );
+      const postApplyModel = await platformModelFor(world, appContext, "workflowChangeSets");
+      const postApplyPromotionState = selectPromotionState(postApplyModel, {
+        branchId: result.changeSet?.branchId ?? null,
+        changeSetId: result.changeSet?.id ?? null,
+        candidateSnapshotId: result.candidateSnapshotId ?? candidateSnapshotId
+      });
       sendJson(res, result.status, {
         changeSet: result.changeSet,
         candidateSnapshotId: result.candidateSnapshotId,
         verificationRequirementSummary: verificationState.verificationRequirementSummary,
+        promotionPostures: postApplyPromotionState.promotionPostures,
+        promotionRequirements: postApplyPromotionState.promotionRequirements,
+        promotionRequirementSummaries: postApplyPromotionState.promotionRequirementSummaries,
+        promotionStates: postApplyPromotionState.promotionStates,
+        promotionDecisions: postApplyPromotionState.promotionDecisions,
         witness: result.witness,
         runtimeSnapshotRefresh: snapshotRefresh.touchedRuntime
           ? {

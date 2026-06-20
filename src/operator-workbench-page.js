@@ -252,6 +252,9 @@ export function renderOperatorWorkbenchPage() {
         border-color: rgba(29,107,87,0.32);
         box-shadow: inset 0 0 0 1px rgba(29,107,87,0.14);
       }
+      .operator-screen-section[data-actionable="false"] {
+        border-style: dashed;
+      }
       .operator-screen-section[data-collapsed="true"] {
         background: rgba(255,255,255,0.42);
       }
@@ -260,7 +263,32 @@ export function renderOperatorWorkbenchPage() {
         align-items: baseline;
         justify-content: space-between;
         gap: 12px;
+      }
+      .operator-screen-section-header,
+      .operator-screen-section-toggle {
+        border: 1px solid transparent;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+      }
+      .operator-screen-section-header {
+        display: grid;
+        gap: 4px;
+        justify-items: start;
+        text-align: left;
+        padding: 0;
         cursor: pointer;
+      }
+      .operator-screen-section-toggle {
+        padding: 4px 8px;
+        border-radius: 999px;
+        border-color: var(--border);
+        background: rgba(255,255,255,0.68);
+        cursor: pointer;
+      }
+      .operator-screen-section-toggle[disabled] {
+        cursor: default;
+        opacity: 0.55;
       }
       .operator-screen-section-head span {
         color: var(--muted);

@@ -9,6 +9,34 @@ import {
 import { frontendProgram, widgetTree } from "./widgets.js";
 
 const INPUT_INTERACTION_TIMING_MS = 300;
+const SESSION_SUMMARY_STATE_SPECS = [
+  { field: "authenticated", stateName: "session.authenticated", valueType: "bool", initial: false },
+  { field: "identity", stateName: "session.identity", valueType: "text", initial: "" },
+  { field: "actor", stateName: "session.actor", valueType: "text", initial: "" },
+  { field: "authenticatedIdentity", stateName: "session.authenticatedIdentity", valueType: "text", initial: "" },
+  { field: "authenticatedActor", stateName: "session.authenticatedActor", valueType: "text", initial: "" },
+  { field: "effectiveIdentity", stateName: "session.effectiveIdentity", valueType: "text", initial: "" },
+  { field: "effectiveActor", stateName: "session.effectiveActor", valueType: "text", initial: "" },
+  { field: "authorityMode", stateName: "session.authorityMode", valueType: "text", initial: "" },
+  { field: "assumptionGrantId", stateName: "session.assumptionGrantId", valueType: "text", initial: "" },
+  { field: "label", stateName: "session.label", valueType: "text", initial: "" },
+  { field: "authenticatedLabel", stateName: "session.authenticatedLabel", valueType: "text", initial: "" },
+  { field: "effectiveLabel", stateName: "session.effectiveLabel", valueType: "text", initial: "" },
+  { field: "displayName", stateName: "session.displayName", valueType: "text", initial: "" },
+  { field: "jobTitle", stateName: "session.jobTitle", valueType: "text", initial: "" },
+  { field: "initials", stateName: "session.initials", valueType: "text", initial: "" },
+  { field: "roles", stateName: "session.roles", valueType: "text[]", initial: [] },
+  { field: "homeContext", stateName: "session.homeContext", valueType: "text", initial: "" },
+  { field: "perspective", stateName: "session.perspective", valueType: "text", initial: "" },
+  { field: "authenticatedHomeContext", stateName: "session.authenticatedHomeContext", valueType: "text", initial: "" },
+  { field: "authenticatedPerspective", stateName: "session.authenticatedPerspective", valueType: "text", initial: "" },
+  { field: "effectiveHomeContext", stateName: "session.effectiveHomeContext", valueType: "text", initial: "" },
+  { field: "effectivePerspective", stateName: "session.effectivePerspective", valueType: "text", initial: "" }
+];
+
+function cloneInitialValue(value) {
+  return Array.isArray(value) ? [...value] : value;
+}
 
 function trimString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
@@ -281,6 +309,7 @@ function analyzeRouteSource(world, source) {
   const handledLoadSteps = new Set();
   const queryBindings = [];
   const interactiveCollectionOutputsByOrder = new Map();
+  let sessionSummaryStates = null;
 
   function ensureSurface(surfaceId) {
     if (!surfaceBindings.has(surfaceId)) surfaceBindings.set(surfaceId, []);
@@ -361,11 +390,39 @@ function analyzeRouteSource(world, source) {
     return id;
   }
 
+  function ensureSessionSummaryStates() {
+    if (sessionSummaryStates) return sessionSummaryStates;
+    sessionSummaryStates = {};
+    for (const spec of SESSION_SUMMARY_STATE_SPECS) {
+      sessionSummaryStates[spec.field] = ensureState(spec.stateName, {
+        valueType: spec.valueType,
+        initial: cloneInitialValue(spec.initial)
+      });
+    }
+    return sessionSummaryStates;
+  }
+
+  function sessionSummarySuccessFields() {
+    const stateIds = ensureSessionSummaryStates();
+    return SESSION_SUMMARY_STATE_SPECS.map(spec => ({
+      name: spec.field,
+      type: stateIds[spec.field]
+    }));
+  }
+
+  function sessionSummaryLoggedOutWrites() {
+    const stateIds = ensureSessionSummaryStates();
+    return Object.fromEntries(
+      SESSION_SUMMARY_STATE_SPECS.map(spec => [stateIds[spec.field], cloneInitialValue(spec.initial)])
+    );
+  }
+
   function ensureRouteCommand({
     name,
     route,
     method,
     into = null,
+    successFields = null,
     collectionOutputs = null,
     successWrites = {},
     requestFields = [],
@@ -393,7 +450,9 @@ function analyzeRouteSource(world, source) {
     messages.set(successId, {
       id: successId,
       role: "event",
-      fields: into ? [{ name: "value", type: into }] : [],
+      fields: Array.isArray(successFields)
+        ? successFields
+        : (into ? [{ name: "value", type: into }] : []),
       writes: {
         [loadingStateId]: false,
         [statusStateId]: "ready",
@@ -750,12 +809,11 @@ function analyzeRouteSource(world, source) {
       continue;
     }
     if (step?.op === "initSession") {
-      ensureState("session", { valueType: "text", initial: "" });
       ensurePreloadRouteCommand({
         preloadName: `${sanitizeIdPart(step.event)}.${sanitizeIdPart(step.op)}.${step.order}`,
         route: "/api/session",
         method: "GET",
-        into: ids.types.session ?? ensureState("session", { valueType: "text", initial: "" })
+        successFields: sessionSummarySuccessFields()
       });
       handledLoadSteps.add(step.order);
     }
@@ -1010,16 +1068,17 @@ function analyzeRouteSource(world, source) {
 
     if (asyncIndex >= 0) {
       const step = steps[asyncIndex];
-      const inputReadSupported = eventKind === "input" && ["fetchJson", "initSession"].includes(step?.op);
-      if (eventKind === "input" && !inputReadSupported) {
+      const inputTimedSupported = eventKind === "input"
+        && ["fetchJson", "initSession", "postJson", "patchJson", "deleteJson", "setSession", "logout"].includes(step?.op);
+      if (eventKind === "input" && !inputTimedSupported) {
         blocked.push({
           id: `legacyFrontendUplift:blocked:${routeId}:inputNetwork:${step.order}`,
           routeId,
           limitationType: "missing-primitive",
           goal: `uplift input-driven ${step?.op} on ${routeId}`,
           attemptedAuthoringPath: "native surface interaction + boundary route operation",
-          missingPrimitive: "input-driven write or unsupported network effects remain outside the native timing subset",
-          minimumHumanAction: "move the effect to click/change/submit or wait for a native timed write lane before uplift",
+          missingPrimitive: "input-driven external or unsupported network effects remain outside the native timed interaction subset",
+          minimumHumanAction: "replace the effect with a same-origin route-backed native flow or keep it blocked until a first-class authored primitive exists",
           proof: [`step ${eventName}#${step.order} uses ${step?.op}`]
         });
         continue;
@@ -1061,6 +1120,8 @@ function analyzeRouteSource(world, source) {
         ? (interactiveCollectionOutputsByOrder.get(step.order) ?? null)
         : null;
       let intoState = null;
+      let successFields = null;
+      let successWrites = {};
       if (step.op === "fetchJson") {
         const into = trimString(step?.params?.into);
         if (!into && !collectionOutputs) {
@@ -1079,8 +1140,10 @@ function analyzeRouteSource(world, source) {
         if (into && !collectionOutputs) {
           intoState = ensureState(into, { valueType: "text", initial: "" });
         }
-      } else if (step.op === "initSession") {
-        intoState = ids.types.session ?? ensureState("session", { valueType: "text", initial: "" });
+      } else if (step.op === "initSession" || step.op === "setSession") {
+        successFields = sessionSummarySuccessFields();
+      } else if (step.op === "logout") {
+        successWrites = sessionSummaryLoggedOutWrites();
       }
 
       const requestFields = [];
@@ -1115,7 +1178,9 @@ function analyzeRouteSource(world, source) {
         route,
         method,
         into: intoState,
+        successFields,
         collectionOutputs,
+        successWrites,
         requestFields
       });
       processHandles.add(directEventMessageId);
@@ -1126,7 +1191,7 @@ function analyzeRouteSource(world, source) {
           target: "self",
           event: eventKind,
           action: { kind: "deliver", message: directEventMessageId },
-          ...(inputReadSupported
+          ...(inputTimedSupported
             ? { timing: { mode: "debounce", ms: INPUT_INTERACTION_TIMING_MS } }
             : {})
         });

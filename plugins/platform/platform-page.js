@@ -2806,6 +2806,11 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
   const requirementSummarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationRequirementSummary", "PlatformVerificationRequirementSummary");
   const requirementsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationRequirements", "PlatformVerificationRequirementsTable");
   const blockingSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationBlockingReasons", "PlatformVerificationBlockingReasons");
+  const promotionPosturesSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionPostures", "PlatformPromotionPosturesTable");
+  const promotionReadinessSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionReadiness", "PlatformPromotionReadinessTable");
+  const promotionReasonsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionReasons", "PlatformPromotionReasonsTable");
+  const promotionDecisionsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionDecisions", "PlatformPromotionDecisionHistory");
+  const promotionStatesSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionStates", "PlatformPromotionStateTable");
   const snapshotSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "snapshotHistory", "PlatformWorkflowSnapshotHistory");
   const editSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "editHistory", "PlatformWorkflowEditHistory");
   const branchIdPrefixes = surfaceIdPrefixes(surface, "branchIdPrefixes");
@@ -2836,6 +2841,19 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
       ${renderCardSpecs(relatedSurface, "branchLinkCards", "branchLinkCardEmptyStates", ctx, branch, "links")}
       ${renderCardSpecs(relatedSurface, "branchTextCards", "branchTextCardEmptyStates", ctx, branch, "text")}
     `);
+    setPromotionSections({
+      sections,
+      detailKind,
+      posturesSurface: promotionPosturesSurface,
+      readinessSurface: promotionReadinessSurface,
+      reasonsSurface: promotionReasonsSurface,
+      decisionsSurface: promotionDecisionsSurface,
+      statesSurface: promotionStatesSurface,
+      model,
+      ctx,
+      targetKind: "branch",
+      targetId: branch.id
+    });
     setAuthoredDetailSection(sections, snapshotSurface, detailKind, renderAuthoredSurfaceTable(snapshotSurface, renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
       <tr>
         <td>${esc(snapshot.status || "")}</td>
@@ -2882,6 +2900,19 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
       summarySurface: requirementSummarySurface,
       requirementsSurface,
       blockingSurface,
+      model,
+      ctx,
+      targetKind: "changeSet",
+      targetId: changeSet.id
+    });
+    setPromotionSections({
+      sections,
+      detailKind,
+      posturesSurface: promotionPosturesSurface,
+      readinessSurface: promotionReadinessSurface,
+      reasonsSurface: promotionReasonsSurface,
+      decisionsSurface: promotionDecisionsSurface,
+      statesSurface: promotionStatesSurface,
       model,
       ctx,
       targetKind: "changeSet",
@@ -3097,6 +3128,119 @@ function setVerificationRequirementSections({
   ));
 }
 
+function setPromotionSections({
+  sections,
+  detailKind,
+  posturesSurface,
+  readinessSurface,
+  reasonsSurface,
+  decisionsSurface,
+  statesSurface,
+  model,
+  ctx,
+  targetKind = null,
+  targetId = null,
+  releaseChannelId = null
+}) {
+  const postureRows = (model.promotionPostures ?? [])
+    .filter(row => !releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+    .slice(0, surfaceRowLimit(posturesSurface, 12));
+  const readinessRows = (model.promotionRequirementSummaries ?? [])
+    .filter(row =>
+      (!targetKind || String(row?.targetKind || "") === String(targetKind || ""))
+      && (!targetId || String(row?.targetId || "") === String(targetId || ""))
+      && (!releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+    )
+    .slice(0, surfaceRowLimit(readinessSurface, 20));
+  const reasonRows = (model.promotionRequirements ?? [])
+    .filter(row =>
+      (!targetKind || String(row?.targetKind || "") === String(targetKind || ""))
+      && (!targetId || String(row?.targetId || "") === String(targetId || ""))
+      && (!releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+      && String(row?.status || "") !== "satisfied"
+    )
+    .slice(0, surfaceRowLimit(reasonsSurface, 24));
+  const decisionRows = (model.promotionDecisions ?? [])
+    .filter(row =>
+      (!targetKind || String(row?.targetKind || "") === String(targetKind || ""))
+      && (!targetId || String(row?.targetId || "") === String(targetId || ""))
+      && (!releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+    )
+    .sort((left, right) => String(right?.producedAt || "").localeCompare(String(left?.producedAt || "")))
+    .slice(0, surfaceRowLimit(decisionsSurface, 12));
+  const stateRows = (model.promotionStates ?? [])
+    .filter(row => !releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+    .slice(0, surfaceRowLimit(statesSurface, 12));
+  setAuthoredDetailSection(sections, posturesSurface, detailKind, renderAuthoredSurfaceTable(
+    posturesSurface,
+    renderRowsFromSurfaceSchema(posturesSurface, "rowFields", postureRows, ctx, row => `
+      <tr>
+        <td>${renderConceptLink(ctx, row.releaseChannelId)}</td>
+        <td>${esc(row.postureId || "")}</td>
+        <td>${esc(row.decisionMode || "")}</td>
+        <td>${esc(row.requireApprovedProposal === true ? "yes" : "no")}</td>
+        <td>${esc(row.requireFreshPassingVerification === true ? "yes" : "no")}</td>
+        <td>${esc(row.requireDocsFresh === true ? "yes" : "no")}</td>
+        <td>${esc(row.requireNoBlockingDefects === true ? "yes" : "no")}</td>
+        <td>${esc(row.requireNoOpenRegressions === true ? "yes" : "no")}</td>
+      </tr>
+    `)
+  ));
+  setAuthoredDetailSection(sections, readinessSurface, detailKind, renderAuthoredSurfaceTable(
+    readinessSurface,
+    renderRowsFromSurfaceSchema(readinessSurface, "rowFields", readinessRows, ctx, row => `
+      <tr>
+        <td>${renderConceptLink(ctx, row.releaseChannelId)}</td>
+        <td>${esc(row.blockingStatus || "")}</td>
+        <td>${esc(row.decisionMode || "")}</td>
+        <td>${esc(row.blockingRequirementCount ?? "")}</td>
+        <td>${esc(row.warningCount ?? "")}</td>
+        <td>${esc(row.latestRunAt || "")}</td>
+        <td>${esc(row.summary || "")}</td>
+      </tr>
+    `)
+  ));
+  setAuthoredDetailSection(sections, reasonsSurface, detailKind, renderAuthoredSurfaceTable(
+    reasonsSurface,
+    renderRowsFromSurfaceSchema(reasonsSurface, "rowFields", reasonRows, ctx, row => `
+      <tr>
+        <td>${renderConceptLink(ctx, row.releaseChannelId)}</td>
+        <td>${esc(row.requirementKind || "")}</td>
+        <td>${esc(row.status || "")}</td>
+        <td>${esc(row.blocking === true ? "yes" : "no")}</td>
+        <td>${esc(row.summary || "")}</td>
+        <td>${renderValue(ctx, row.relatedIds ?? [])}</td>
+      </tr>
+    `)
+  ));
+  setAuthoredDetailSection(sections, decisionsSurface, detailKind, renderAuthoredSurfaceTable(
+    decisionsSurface,
+    renderRowsFromSurfaceSchema(decisionsSurface, "rowFields", decisionRows, ctx, row => `
+      <tr>
+        <td>${esc(row.decision || "")}</td>
+        <td>${renderConceptLink(ctx, row.releaseChannelId)}</td>
+        <td>${row.targetId ? renderConceptLink(ctx, row.targetId) : ""}</td>
+        <td>${row.proposalId ? renderConceptLink(ctx, row.proposalId) : ""}</td>
+        <td>${row.shipRecordId ? renderConceptLink(ctx, row.shipRecordId) : ""}</td>
+        <td>${esc(row.producedAt || "")}</td>
+      </tr>
+    `)
+  ));
+  setAuthoredDetailSection(sections, statesSurface, detailKind, renderAuthoredSurfaceTable(
+    statesSurface,
+    renderRowsFromSurfaceSchema(statesSurface, "rowFields", stateRows, ctx, row => `
+      <tr>
+        <td>${renderConceptLink(ctx, row.releaseChannelId)}</td>
+        <td>${row.latestShipRecordId ? renderConceptLink(ctx, row.latestShipRecordId) : ""}</td>
+        <td>${row.latestExecutableShipRecordId ? renderConceptLink(ctx, row.latestExecutableShipRecordId) : ""}</td>
+        <td>${row.lastKnownGoodShipRecordId ? renderConceptLink(ctx, row.lastKnownGoodShipRecordId) : ""}</td>
+        <td>${esc(row.currentStatus || "")}</td>
+        <td>${esc(row.observationStatus || "")}</td>
+      </tr>
+    `)
+  ));
+}
+
 function renderVerificationDetail(surface, detail, model, ctx) {
   const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary", "PlatformVerificationPrimaryPanel");
   const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related", "PlatformVerificationRelatedPanel");
@@ -3113,6 +3257,11 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const requirementSummarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationRequirementSummary", "PlatformVerificationRequirementSummary");
   const requirementsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationRequirements", "PlatformVerificationRequirementsTable");
   const blockingSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "verificationBlockingReasons", "PlatformVerificationBlockingReasons");
+  const promotionPosturesSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionPostures", "PlatformPromotionPosturesTable");
+  const promotionReadinessSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionReadiness", "PlatformPromotionReadinessTable");
+  const promotionReasonsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionReasons", "PlatformPromotionReasonsTable");
+  const promotionDecisionsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionDecisions", "PlatformPromotionDecisionHistory");
+  const promotionStatesSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionStates", "PlatformPromotionStateTable");
   const verificationPolicyIdPrefixes = surfaceIdPrefixes(surface, "verificationPolicyIdPrefixes");
   const verificationFreshnessIdPrefixes = surfaceIdPrefixes(surface, "verificationFreshnessIdPrefixes");
   const verificationInvalidationIdPrefixes = surfaceIdPrefixes(surface, "verificationInvalidationIdPrefixes");
@@ -3335,6 +3484,19 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       summarySurface: requirementSummarySurface,
       requirementsSurface,
       blockingSurface,
+      model,
+      ctx,
+      targetKind: "candidateSnapshot",
+      targetId: snapshot.id
+    });
+    setPromotionSections({
+      sections,
+      detailKind,
+      posturesSurface: promotionPosturesSurface,
+      readinessSurface: promotionReadinessSurface,
+      reasonsSurface: promotionReasonsSurface,
+      decisionsSurface: promotionDecisionsSurface,
+      statesSurface: promotionStatesSurface,
       model,
       ctx,
       targetKind: "candidateSnapshot",
@@ -3887,6 +4049,11 @@ function renderPushDetail(surface, detail, model, ctx) {
 function renderShipDetail(surface, detail, model, ctx) {
   const primarySurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "primary");
   const relatedSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "related");
+  const promotionPosturesSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionPostures", "PlatformPromotionPosturesTable");
+  const promotionReadinessSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionReadiness", "PlatformPromotionReadinessTable");
+  const promotionReasonsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionReasons", "PlatformPromotionReasonsTable");
+  const promotionDecisionsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionDecisions", "PlatformPromotionDecisionHistory");
+  const promotionStatesSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "promotionStates", "PlatformPromotionStateTable");
   const relationshipsSurface = authoredChildSurfaceByProp(surface, "detailPanelRole", "relationships");
   const emptyDetail = () => renderSurfaceEmptyCard(surface, {
     title: surfacePropText(surface, "emptyTitle", "Detail"),
@@ -3964,6 +4131,26 @@ function renderShipDetail(surface, detail, model, ctx) {
     ${renderCardSpecs(relatedSurface, `${inferredKind}LinkCards`, `${inferredKind}LinkCardEmptyStates`, ctx, enrichedDetail, "links")}
     ${renderCardSpecs(relatedSurface, `${inferredKind}TextCards`, `${inferredKind}TextCardEmptyStates`, ctx, enrichedDetail, "text")}
   `);
+  setPromotionSections({
+    sections,
+    detailKind: inferredKind,
+    posturesSurface: promotionPosturesSurface,
+    readinessSurface: promotionReadinessSurface,
+    reasonsSurface: promotionReasonsSurface,
+    decisionsSurface: promotionDecisionsSurface,
+    statesSurface: promotionStatesSurface,
+    model,
+    ctx,
+    targetKind: inferredKind === "shipRecord" || inferredKind === "branch" || inferredKind === "proposal"
+      ? "branch"
+      : null,
+    targetId: inferredKind === "shipRecord"
+      ? enrichedDetail.branchId
+      : (inferredKind === "branch" || inferredKind === "proposal" ? enrichedDetail.targetId ?? enrichedDetail.id : null),
+    releaseChannelId: inferredKind === "shipRecord"
+      ? enrichedDetail.releaseChannelId
+      : (inferredKind === "releaseChannel" ? enrichedDetail.id : null)
+  });
   setAuthoredDetailSection(sections, relationshipsSurface, inferredKind, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
     <tr>
       <td>${renderConceptLink(ctx, edge.from)}</td>

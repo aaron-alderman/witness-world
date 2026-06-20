@@ -86,7 +86,9 @@ export async function createLiveCoreWorkspace({
   proofDelayMs = 1000,
   supervise = null,
   runtimeConfig = null,
-  frontdoor = null
+  frontdoor = null,
+  buildWorker = null,
+  transaction = null
 } = {}) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-core-fixture-"));
   const appDirName = path.basename(fixtureRoot);
@@ -112,6 +114,12 @@ export async function createLiveCoreWorkspace({
   const frontdoorConfig = typeof frontdoor === "function"
     ? frontdoor({ tempRoot, appRoot, appDirName, manifestPath, watchedSourcePath, configPath, journalPath })
     : frontdoor;
+  const buildWorkerConfig = typeof buildWorker === "function"
+    ? buildWorker({ tempRoot, appRoot, appDirName, manifestPath, watchedSourcePath, configPath, journalPath })
+    : buildWorker;
+  const transactionConfig = typeof transaction === "function"
+    ? transaction({ tempRoot, appRoot, appDirName, manifestPath, watchedSourcePath, configPath, journalPath })
+    : transaction;
 
   const proofCommand = `${process.execPath} proof-check.mjs`;
   await fs.writeFile(proofScriptPath, `
@@ -130,7 +138,16 @@ process.exit(0);
 command = ${tomlString(superviseConfig.command)}
 working_dir = ${tomlString(superviseConfig.workingDir ?? ".")}
 restart_on_exit = ${superviseConfig.restartOnExit === false ? "false" : "true"}
-${superviseConfig.healthUrl ? `health_url = ${tomlString(superviseConfig.healthUrl)}\n` : ""}${Number.isFinite(superviseConfig.healthIntervalMs) ? `health_interval_ms = ${Number(superviseConfig.healthIntervalMs)}\n` : ""}${Number.isFinite(superviseConfig.healthTimeoutMs) ? `health_timeout_ms = ${Number(superviseConfig.healthTimeoutMs)}\n` : ""}${superviseConfig.restartOnUnhealthy === true ? "restart_on_unhealthy = true\n" : superviseConfig.restartOnUnhealthy === false ? "restart_on_unhealthy = false\n" : ""}${Number.isFinite(superviseConfig.degradedGracePolls) ? `degraded_grace_polls = ${Number(superviseConfig.degradedGracePolls)}\n` : ""}${Number.isFinite(superviseConfig.unhealthyGracePolls) ? `unhealthy_grace_polls = ${Number(superviseConfig.unhealthyGracePolls)}\n` : ""}` : "";
+${superviseConfig.healthUrl ? `health_url = ${tomlString(superviseConfig.healthUrl)}\n` : ""}${superviseConfig.reloadUrl ? `reload_url = ${tomlString(superviseConfig.reloadUrl)}\n` : ""}${Number.isFinite(superviseConfig.healthIntervalMs) ? `health_interval_ms = ${Number(superviseConfig.healthIntervalMs)}\n` : ""}${Number.isFinite(superviseConfig.healthTimeoutMs) ? `health_timeout_ms = ${Number(superviseConfig.healthTimeoutMs)}\n` : ""}${superviseConfig.restartOnUnhealthy === true ? "restart_on_unhealthy = true\n" : superviseConfig.restartOnUnhealthy === false ? "restart_on_unhealthy = false\n" : ""}${Number.isFinite(superviseConfig.degradedGracePolls) ? `degraded_grace_polls = ${Number(superviseConfig.degradedGracePolls)}\n` : ""}${Number.isFinite(superviseConfig.unhealthyGracePolls) ? `unhealthy_grace_polls = ${Number(superviseConfig.unhealthyGracePolls)}\n` : ""}` : "";
+  const buildWorkerToml = buildWorkerConfig ? `
+
+[build_worker]
+command = ${tomlString(buildWorkerConfig.command)}
+${buildWorkerConfig.workingDir ? `working_dir = ${tomlString(buildWorkerConfig.workingDir)}\n` : ""}` : "";
+  const transactionToml = transactionConfig ? `
+
+[transaction]
+${Number.isFinite(transactionConfig.buildTimeoutMs) ? `build_timeout_ms = ${Number(transactionConfig.buildTimeoutMs)}\n` : ""}${transactionConfig.stageRoot ? `stage_root = ${tomlString(transactionConfig.stageRoot)}\n` : ""}` : "";
   const frontdoorToml = frontdoorConfig ? `
 
 [frontdoor]
@@ -148,7 +165,7 @@ slow_ms = 250
 
 [package]
 include = [${tomlString(`${appDirName}/**`)}]
-${superviseToml}${frontdoorToml}
+${superviseToml}${buildWorkerToml}${transactionToml}${frontdoorToml}
 `.trimStart(), "utf8");
 
   return {

@@ -2972,6 +2972,48 @@ export function defineRuntimePreload(world, { actor, id, when, targets, owner = 
   });
 }
 
+export function defineComputeModule(world, {
+  actor,
+  id,
+  source,
+  hostOperation,
+  language = "assemblyscript",
+  abi = "world.hostOperation.v1",
+  exportName = "invoke",
+  maxMemoryPages = null,
+  timeoutMs = null,
+  allowedBindings = [],
+  owner = actor,
+  context = null,
+  values = null
+}) {
+  createThing(world, { actor, id, owner });
+  return world.emit({
+    process: "defineComputeModule",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "computeModule"),
+      relation(id, "bindsHostOperation", String(hostOperation)),
+      relation(id, "usesComputeLanguage", String(language || "assemblyscript")),
+      relation(id, "usesComputeAbi", String(abi || "world.hostOperation.v1")),
+      ...(context ? [relation(id, "inContext", context)] : [])
+    ],
+    body: {
+      id,
+      source: String(source),
+      hostOperation: String(hostOperation),
+      language: String(language || "assemblyscript"),
+      abi: String(abi || "world.hostOperation.v1"),
+      export: typeof exportName === "string" && exportName.trim() ? exportName.trim() : "invoke",
+      maxMemoryPages: Number.isInteger(maxMemoryPages) && maxMemoryPages > 0 ? maxMemoryPages : null,
+      timeoutMs: Number.isInteger(timeoutMs) && timeoutMs > 0 ? timeoutMs : null,
+      allowedBindings: uniqueSortedStrings(allowedBindings),
+      context: context ? String(context) : null,
+      values: values && typeof values === "object" && !Array.isArray(values) ? structuredClone(values) : null
+    }
+  });
+}
+
 export function serveRoute(world, { actor, serverRunner, route }) {
   const rels = world.project(witnessRelations);
   const canServe = rels.some(r => r.from === serverRunner && r.rel === "supportsProcess" && r.to === "serveRoute");
@@ -3352,6 +3394,41 @@ export const moduleProjectors = {
         targets: Array.isArray(witness.body.targets) ? structuredClone(witness.body.targets) : [],
         context: contexts.get(witness.body.id) ?? (witness.body.context ? String(witness.body.context) : null),
         witness: witness.id
+      });
+    }
+    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  },
+
+  computeModules(witnesses) {
+    const rows = new Map();
+    const contexts = moduleProjectors.objectContexts(witnesses);
+    for (const witness of witnesses) {
+      if (witness.process !== "defineComputeModule" || !witness.body?.id) continue;
+      rows.set(witness.body.id, {
+        id: String(witness.body.id),
+        source: String(witness.body.source ?? ""),
+        hostOperation: String(witness.body.hostOperation ?? ""),
+        language: typeof witness.body.language === "string" && witness.body.language.trim()
+          ? witness.body.language.trim()
+          : "assemblyscript",
+        abi: typeof witness.body.abi === "string" && witness.body.abi.trim()
+          ? witness.body.abi.trim()
+          : "world.hostOperation.v1",
+        export: typeof witness.body.export === "string" && witness.body.export.trim()
+          ? witness.body.export.trim()
+          : "invoke",
+        maxMemoryPages: Number.isInteger(witness.body.maxMemoryPages) && witness.body.maxMemoryPages > 0
+          ? witness.body.maxMemoryPages
+          : null,
+        timeoutMs: Number.isInteger(witness.body.timeoutMs) && witness.body.timeoutMs > 0
+          ? witness.body.timeoutMs
+          : null,
+        allowedBindings: uniqueSortedStrings(witness.body.allowedBindings),
+        context: contexts.get(witness.body.id) ?? (witness.body.context ? String(witness.body.context) : null),
+        witness: witness.id,
+        values: witness.body.values && typeof witness.body.values === "object" && !Array.isArray(witness.body.values)
+          ? structuredClone(witness.body.values)
+          : null
       });
     }
     return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));

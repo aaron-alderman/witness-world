@@ -138,7 +138,10 @@ function withAuthoredScreen(state, {
   rowFilterKind = null,
   rowFilterAction = null,
   defaultSectionId = null,
-  sections = []
+  sections = [],
+  leftScreens = [],
+  defaultLeftScreenId = null,
+  leftScreenId = null
 } = {}) {
   const sectionRows = sections.map(section => ({
     name: section.id,
@@ -158,6 +161,22 @@ function withAuthoredScreen(state, {
         rowFilterKind: section.rowFilterKind ?? null,
         rowFilterAction: section.rowFilterAction ?? null,
         priority: section.priority ?? null
+      }
+    }
+  }));
+  const leftScreenRows = leftScreens.map(screen => ({
+    name: screen.id,
+    body: {
+      declarationKind: "operator_screen",
+      values: {
+        id: screen.id,
+        title: screen.title ?? screen.id,
+        subtitle: screen.subtitle ?? null,
+        pane: "left",
+        shape: screen.shape ?? "list",
+        dataset: screen.dataset ?? null,
+        dataSource: screen.dataSource ?? null,
+        helpText: screen.helpText ?? null
       }
     }
   }));
@@ -189,14 +208,17 @@ function withAuthoredScreen(state, {
                 id: screenId,
                 title: "Trace",
                 subtitle: "Authored trace screen",
+                pane: "right",
                 shape,
                 dataset: datasetId,
                 shortcut,
+                leftScreen: leftScreenId,
                 defaultSection: defaultSectionId,
                 sections: sections.map(section => section.id)
               }
             }
           },
+          ...leftScreenRows,
           ...sectionRows,
           {
             name: "shell",
@@ -205,7 +227,8 @@ function withAuthoredScreen(state, {
               values: {
                 screens: [screenId, "references", "source", "provenance"],
                 shortcuts: [{ shortcut, screenId }],
-                defaultScreen: screenId
+                defaultScreen: screenId,
+                defaultLeftScreen: defaultLeftScreenId
               }
             }
           }
@@ -305,6 +328,9 @@ test("workbench controller exposes root tree and primary navigation action", asy
   const initial = await controller.snapshot();
   assert.equal(initial.leftPane.mode, "tree");
   assert.deepEqual(initial.leftPane.rows.map(row => row.label), ["Session", "World", "Platform"]);
+  assert.equal(initial.leftPane.activeRowIndex, 0);
+  assert.equal(initial.leftPane.activeRow?.primaryAction?.command, "open 1");
+  assert.equal(initial.leftPane.rows[1].primaryAction?.command, "open 2");
 
   await controller.dispatchIntent({ type: "set-left-cursor", index: 1 });
   const activated = await controller.dispatchIntent({ type: "activate-primary" });
@@ -332,11 +358,97 @@ test("workbench controller inspects records as the primary left-pane action", as
   assert.equal(searched.snapshot.leftPane.mode, "results");
   assert.deepEqual(searched.snapshot.leftPane.columns, ["title", "id"]);
   assert.equal(searched.snapshot.leftPane.rows.length >= 2, true);
+  assert.equal(searched.snapshot.leftPane.paging?.page, 1);
+  assert.equal(searched.snapshot.leftPane.paging?.query, "alpha");
+  assert.equal(searched.snapshot.leftPane.rows[0].primaryAction?.command, "inspect 1");
 
   await controller.dispatchIntent({ type: "set-left-cursor", index: 0 });
   const inspected = await controller.dispatchIntent({ type: "activate-primary" });
   assert.equal(inspected.snapshot.session.selectionId, null);
   assert.equal(inspected.snapshot.rightPane.bodyLines.some(line => line.includes("thing.alpha")), true);
+});
+
+test("workbench controller resolves a default authored left screen when no search overlay is active", async () => {
+  const state = withAuthoredScreen(makeState(), {
+    leftScreens: [{
+      id: "left.refs",
+      title: "Reference Rail",
+      shape: "table",
+      dataSource: "references"
+    }],
+    defaultLeftScreenId: "left.refs"
+  });
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  await controller.executeCommand("inspect thing.alpha");
+  const next = await controller.snapshot();
+
+  assert.equal(next.leftPane.screenId, "left.refs");
+  assert.equal(next.leftPane.shape, "table");
+  assert.equal(next.leftPane.origin, "authored");
+  assert.equal(next.leftPane.rows.length >= 1, true);
+});
+
+test("workbench controller lets the active right screen override the authored left screen", async () => {
+  const state = withAuthoredScreen(makeState(), {
+    leftScreens: [
+      { id: "left.refs", title: "Reference Rail", shape: "table", dataSource: "references" },
+      { id: "left.source", title: "Source Rail", shape: "table", dataSource: "source" }
+    ],
+    defaultLeftScreenId: "left.refs",
+    leftScreenId: "left.source"
+  });
+  state.recordIndex.get("thing.alpha").sourceHints = [
+    { file: "C:/tmp/world/alpha-one.rvm", line: 3, section: "view", sourceLanguage: "rvm" }
+  ];
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  await controller.executeCommand("inspect thing.alpha");
+  let next = await controller.snapshot();
+  assert.equal(next.leftPane.screenId, "left.refs");
+
+  next = (await controller.executeCommand("screen trace")).snapshot;
+  assert.equal(next.leftPane.screenId, "left.source");
+  assert.equal(next.leftPane.title, "Source Rail");
+  assert.equal(next.leftPane.rows.length, 1);
+});
+
+test("search overlay takes precedence over authored left screens and clear restores them", async () => {
+  const state = withAuthoredScreen(makeState(), {
+    leftScreens: [{
+      id: "left.refs",
+      title: "Reference Rail",
+      shape: "table",
+      dataSource: "references"
+    }],
+    defaultLeftScreenId: "left.refs"
+  });
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  await controller.executeCommand("inspect thing.alpha");
+  let next = await controller.snapshot();
+  assert.equal(next.leftPane.screenId, "left.refs");
+
+  next = (await controller.executeCommand("search alpha")).snapshot;
+  assert.equal(next.leftPane.screenId, "builtin.search");
+  assert.equal(next.leftPane.overlay, true);
+
+  next = (await controller.executeCommand("clear")).snapshot;
+  assert.equal(next.leftPane.screenId, "left.refs");
+  assert.equal(next.leftPane.overlay, false);
+});
+
+test("operator TUI raw shell accepts a bare index as the current row primary action", async () => {
+  const state = makeState();
+  const engine = createOperatorTuiEngine(state);
+
+  await engine.execute("search alpha");
+  const inspected = await engine.execute("1");
+
+  assert.equal(inspected.output.includes("id: thing.alpha"), true);
 });
 
 test("workbench controller pins inspected records and activates typed references", async () => {
@@ -754,6 +866,8 @@ test("workbench controller honors authored default sections on first open", asyn
 
   assert.equal(next.snapshot.rightPane.screen.activeSectionIndex, 1);
   assert.equal(next.snapshot.rightPane.screen.activeSectionId, "trace.meta");
+  assert.equal(next.snapshot.rightPane.activeSection?.id, "trace.meta");
+  assert.equal(next.snapshot.rightPane.activeSection?.actionable, false);
   assert.equal(next.snapshot.rightPane.screen.sections[1].rows.some(row => row.columns?.key === "title"), true);
 });
 
@@ -803,13 +917,14 @@ test("operator TUI raw shell section commands switch and collapse authored secti
   await engine.execute("screen trace thing.alpha");
   let result = await engine.execute("section");
   assert.match(result.output, /Trace sections/);
+  assert.match(result.output, /active=Links \| rows=3 \| state=expanded \| actionable/);
   assert.match(result.output, /\[\*\s\]/);
 
   result = await engine.execute("section 2");
   assert.match(result.output, /\[\*\s\] 2\. Links/);
 
   result = await engine.execute("section collapse");
-  assert.match(result.output, /Links <table> rows=\d+ id=trace.links/);
+  assert.match(result.output, /Links <table> rows=\d+ state=actionable id=trace.links/);
   assert.match(result.output, /\[\*-]/);
 });
 
@@ -1432,6 +1547,8 @@ test("renderOperatorWorkbenchState renders stacked screen sections and only acti
   const html = elements.get("operator-custom-screen-body").innerHTML;
   assert.equal(html.includes("Summary"), true);
   assert.equal(html.includes("Links"), true);
+  assert.equal(html.includes("data-screen-section-header"), true);
+  assert.equal(html.includes("data-screen-section-toggle"), true);
   assert.equal(html.includes('data-custom-screen-row="0"'), true);
 });
 
@@ -1448,6 +1565,14 @@ test("renderOperatorWorkbenchState renders collapsed sections header-only", () =
         title: "Trace",
         screenMode: "custom-screen",
         activeScreenId: "trace",
+        activeSection: {
+          id: "summary",
+          title: "Summary",
+          rowCount: 0,
+          actionable: false,
+          collapsible: true,
+          collapsed: true
+        },
         tab: "trace",
         screen: {
           title: "Trace",
@@ -1489,6 +1614,63 @@ test("renderOperatorWorkbenchState renders collapsed sections header-only", () =
   const html = elements.get("operator-custom-screen-body").innerHTML;
   assert.equal(html.includes('data-collapsed="true"'), true);
   assert.equal(html.includes('data-custom-screen-row='), false);
+  assert.equal(html.includes("data-screen-section-header"), true);
+  assert.equal(html.includes("data-screen-section-toggle"), true);
+});
+
+test("renderOperatorWorkbenchState surfaces active section context in help copy", () => {
+  const { documentTarget, elements } = makeFakeDocument();
+  renderOperatorWorkbenchState({
+    snapshot: {
+      path: "root",
+      focus: { active: false, kind: null, id: null },
+      preview: { available: true, status: "active" },
+      topPane: { title: "Operator Workbench", subtitle: "global" },
+      leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+      rightPane: {
+        title: "Trace",
+        screenMode: "custom-screen",
+        activeScreenId: "trace",
+        activeSection: {
+          id: "links",
+          title: "Links",
+          rowCount: 3,
+          actionable: true,
+          collapsible: true,
+          collapsed: false
+        },
+        tab: "trace",
+        screen: {
+          title: "Trace",
+          helpText: null,
+          activeSectionIndex: 0,
+          sections: [],
+          rows: [],
+          activeRowIndex: 0,
+          detailLines: []
+        },
+        cursor: 0,
+        tabs: { inspect: true, references: true, source: true, provenance: true },
+        target: { kind: "record", id: "thing.alpha", mode: "record" }
+      },
+      ui: {
+        focusedPane: "right",
+        inspectorTab: "trace",
+        rightScreenMode: "custom-screen",
+        helpOpen: true,
+        numberBuffer: "",
+        lastOutput: "Ready.",
+        lastStatus: "info",
+        displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto" }
+      }
+    },
+    documentTarget,
+    commandDraft: "",
+    autocomplete: { preview: "", matches: [] }
+  });
+
+  assert.equal(elements.get("operator-help-context").textContent.includes("section=Links"), true);
+  assert.equal(elements.get("operator-help-summary").textContent.includes("[ and ]"), true);
 });
 
 test("startOperatorWorkbenchRuntime reports bridge unavailability clearly", async () => {
@@ -1906,6 +2088,98 @@ test("startOperatorWorkbenchRuntime maps right-pane section keys onto section in
     "move-right-section",
     "collapse-right-section",
     "expand-right-section"
+  ]);
+});
+
+test("startOperatorWorkbenchRuntime routes section header clicks and toggles through the bridge", async () => {
+  const { documentTarget } = makeFakeDocument();
+  const calls = [];
+  const snapshot = {
+    path: "root",
+    focus: { active: false, kind: null, id: null },
+    preview: { available: true, status: "active" },
+    topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+    leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+    rightPane: {
+      title: "Trace",
+      screenMode: "custom-screen",
+      activeScreenId: "trace",
+      activeSection: {
+        id: "summary",
+        title: "Summary",
+        rowCount: 0,
+        actionable: false,
+        collapsible: true,
+        collapsed: false
+      },
+      tab: "trace",
+      screen: {
+        title: "Trace",
+        activeSectionIndex: 0,
+        sections: [
+          { id: "summary", title: "Summary", kind: "detail", rows: [], detailLines: ["Alpha"], collapsible: true, collapsed: false, actionable: false }
+        ],
+        rows: [],
+        activeRowIndex: 0,
+        detailLines: ["Alpha"]
+      },
+      cursor: 0,
+      tabs: { inspect: true, references: true, source: true, provenance: true },
+      target: { kind: "record", id: "thing.alpha", mode: "record" }
+    },
+    ui: {
+      focusedPane: "right",
+      inspectorTab: "trace",
+      rightScreenMode: "custom-screen",
+      helpOpen: false,
+      numberBuffer: "",
+      lastOutput: "Ready.",
+      lastStatus: "info",
+      displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto", pageSize: 25 }
+    }
+  };
+  const windowTarget = {
+    listeners: new Map(),
+    witnessOperatorWorkbench: {
+      async getSnapshot() { return snapshot; },
+      async getAutocomplete() { return { preview: "", matches: [] }; },
+      async runCommand() { return { snapshot }; },
+      async dispatchIntent(intent) {
+        calls.push(intent);
+        return { snapshot };
+      },
+      async updateDisplaySettings() { return { snapshot }; }
+    },
+    addEventListener(type, handler) {
+      this.listeners.set(type, handler);
+    }
+  };
+
+  const runtime = startOperatorWorkbenchRuntime({ windowTarget, documentTarget });
+  await runtime.started;
+
+  const click = documentTarget.listeners.get("click");
+  const dblclick = documentTarget.listeners.get("dblclick");
+  const targetFor = (selector, datasetKey, value) => ({
+    closest(query) {
+      if (query === selector) return { dataset: { [datasetKey]: String(value) } };
+      return null;
+    }
+  });
+
+  await click({ target: targetFor("[data-screen-section-header]", "screenSectionHeader", 0) });
+  await click({ target: targetFor("[data-screen-section-toggle]", "screenSectionToggle", 0) });
+  await dblclick({ target: targetFor("[data-screen-section-header]", "screenSectionHeader", 0) });
+
+  assert.deepEqual(calls.map(call => call.type), [
+    "set-focused-pane",
+    "set-right-section",
+    "set-focused-pane",
+    "set-right-section",
+    "toggle-right-section-collapsed",
+    "set-focused-pane",
+    "set-right-section",
+    "toggle-right-section-collapsed"
   ]);
 });
 

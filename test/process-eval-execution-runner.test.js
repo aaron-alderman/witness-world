@@ -191,6 +191,10 @@ test("process runtime ignores stale route results instead of applying success or
       body: { id: "LoadNotice", role: "state", initial: "", valueType: "text" }
     },
     {
+      process: "desire.defineType",
+      body: { id: "FollowUpState", role: "state", initial: "idle", valueType: "text" }
+    },
+    {
       process: "desire.defineMessage",
       body: { id: "RefreshRequested", role: "event", writes: {} }
     },
@@ -235,13 +239,17 @@ test("process runtime ignores stale route results instead of applying success or
       process: "desire.defineProcess",
       body: {
         id: "LoadProcess",
-        state: ["LoadBusy", "LoadNotice"],
+        state: ["LoadBusy", "LoadNotice", "FollowUpState"],
         handles: ["RefreshRequested", "LoadSucceeded", "LoadFailed"],
         emits: ["LoadRemote"],
         rules: [
           {
             trigger: "RefreshRequested",
             steps: [{ kind: "command", command: "LoadRemote" }]
+          },
+          {
+            trigger: "LoadSucceeded",
+            steps: [{ kind: "setState", state: "FollowUpState", value: "applied" }]
           }
         ]
       }
@@ -267,6 +275,7 @@ test("process runtime ignores stale route results instead of applying success or
 
   assert.equal(runtime.value("LoadBusy"), true);
   assert.equal(runtime.value("LoadNotice"), "");
+  assert.equal(runtime.value("FollowUpState"), "idle");
   assert.equal(runtime.trace.some(entry => entry.kind === "route.ignore" && entry.outcome === "ignored"), true);
 });
 

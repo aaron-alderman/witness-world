@@ -171,6 +171,11 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "Pins the live runtime back to its current stable snapshot without mutating authored source.",
     { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
   ),
+  "app.snapshot.reload": directAuthority(
+    "session-state",
+    "Reloads the serving runtime snapshot from canonical disk state without persisting authored source.",
+    { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-state" }
+  ),
   "asset.attach": proposalFallback(
     "context-or-target-authority",
     "Attempts shared target authority first and routes to bootstrap proposal creation when direct attachment is not allowed."

@@ -126,10 +126,39 @@ export function createWitnessCoreBridge({
       options.headers = { "content-type": "application/json; charset=utf-8" };
       options.body = JSON.stringify(body);
     }
-    const response = await fetchImpl(`${normalizedCoreUrl}${endpoint}`, options);
+    let response;
+    try {
+      response = await fetchImpl(`${normalizedCoreUrl}${endpoint}`, options);
+    } catch (error) {
+      throw createWitnessCoreRequestError("witness core unavailable", {
+        status: 503,
+        code: "WITNESS_CORE_UNAVAILABLE",
+        details: {
+          cause: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
     if (!response?.ok) {
-      const details = await response.text().catch(() => "");
-      throw new Error(`witness core request failed (${response?.status || "unknown"}): ${details || "request rejected"}`);
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+      const details = payload && typeof payload === "object" ? payload : null;
+      const message = typeof details?.error === "string" && details.error
+        ? details.error
+        : "request rejected";
+      throw createWitnessCoreRequestError(
+        `witness core request failed (${response?.status || "unknown"}): ${message}`,
+        {
+          status: response?.status || 500,
+          code: typeof details?.code === "string" && details.code
+            ? details.code
+            : (response?.status === 409 ? "WITNESS_CORE_SOURCE_CONFLICT" : null),
+          details
+        }
+      );
     }
     return await response.json();
   };
@@ -224,6 +253,23 @@ export function createWitnessCoreBridge({
     },
     async patchSource(input = {}) {
       return await sourceCapabilityRequest("POST", "/capabilities/fs/patch", input);
+    },
+    async publishedAuthoringTransaction({
+      manifestPath,
+      runtimeProfile = "authoring",
+      edits = [],
+      correlation = null
+    } = {}) {
+      return await postJson("/transactions/published-authoring", {
+        body: {
+          manifestPath: String(manifestPath || ""),
+          runtimeProfile: String(runtimeProfile || "authoring"),
+          edits: Array.isArray(edits) ? edits : [],
+          sessionId: correlation?.sessionId ? String(correlation.sessionId) : null,
+          surfaceId: correlation?.surfaceId ? String(correlation.surfaceId) : null,
+          actor: correlation?.actor ? String(correlation.actor) : null
+        }
+      });
     },
     async createPreviewSession({ session } = {}) {
       const payload = cloneSessionPayload(session);

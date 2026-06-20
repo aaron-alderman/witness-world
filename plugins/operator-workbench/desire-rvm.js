@@ -1,8 +1,11 @@
-const VALID_SHAPES = new Set(["detail", "list-detail", "table-detail"]);
+const VALID_RIGHT_SHAPES = new Set(["detail", "list-detail", "table-detail"]);
+const VALID_LEFT_SHAPES = new Set(["list", "table", "tree"]);
+const VALID_SHAPES = new Set([...VALID_RIGHT_SHAPES, ...VALID_LEFT_SHAPES]);
 const VALID_DATASET_PROVIDERS = new Set(["inspect", "references", "source", "provenance"]);
 const VALID_SHORTCUTS = new Set(["F2", "F3", "F4", "F5", "F6", "F7", "F8"]);
 const VALID_PRIMARY_ACTIONS = new Set(["open-link", "source-open", "provenance-open", "inspect-record", "none"]);
 const VALID_SECTION_KINDS = new Set(["detail", "list", "table", "kv"]);
+const VALID_SCREEN_PANES = new Set(["right", "left"]);
 
 function escapeRegExp(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -90,13 +93,16 @@ function parseOperatorScreen(form) {
   const parsed = pluginParsedData(form);
   if (parsed) return parsed;
   const bodyLines = formBodyLines(form);
+  const pane = readSimpleValue(bodyLines, "pane") ?? "right";
   return {
     id: formName(form),
     title: readSimpleValue(bodyLines, "title"),
     subtitle: readSimpleValue(bodyLines, "subtitle"),
-    shape: readSimpleValue(bodyLines, "shape") ?? "list-detail",
+    pane,
+    shape: readSimpleValue(bodyLines, "shape") ?? (pane === "left" ? "list" : "list-detail"),
     dataset: readSimpleValue(bodyLines, "dataset"),
     dataSource: readSimpleValue(bodyLines, "data_source"),
+    leftScreen: readSimpleValue(bodyLines, "left_screen"),
     helpText: readSimpleValue(bodyLines, "help"),
     emptyMessage: readSimpleValue(bodyLines, "empty_message"),
     rowFilterKind: readSimpleValue(bodyLines, "row_filter_kind"),
@@ -148,7 +154,8 @@ function parseOperatorSetup(form) {
     id: formName(form),
     screens: readRepeatedSimpleValues(bodyLines, "screen").map(value => String(value)),
     shortcuts,
-    defaultScreen: readSimpleValue(bodyLines, "default_screen")
+    defaultScreen: readSimpleValue(bodyLines, "default_screen"),
+    defaultLeftScreen: readSimpleValue(bodyLines, "default_left_screen")
   };
 }
 
@@ -164,8 +171,36 @@ function validateOperatorDataset(form) {
 
 function validateOperatorScreen(form) {
   const payload = parseOperatorScreen(form);
+  if (!VALID_SCREEN_PANES.has(String(payload.pane))) {
+    throw new Error(`operator_screen ${formName(form)} pane must be one of ${[...VALID_SCREEN_PANES].join(", ")}`);
+  }
   if (!VALID_SHAPES.has(String(payload.shape))) {
     throw new Error(`operator_screen ${formName(form)} shape must be one of ${[...VALID_SHAPES].join(", ")}`);
+  }
+  if (payload.pane === "left") {
+    if (!VALID_LEFT_SHAPES.has(String(payload.shape))) {
+      throw new Error(`operator_screen ${formName(form)} left-pane shape must be one of ${[...VALID_LEFT_SHAPES].join(", ")}`);
+    }
+    if (payload.shape === "tree") {
+      if (payload.dataset || payload.dataSource) {
+        throw new Error(`operator_screen ${formName(form)} pane left tree cannot declare dataset or data_source`);
+      }
+    } else if (!payload.dataset && !VALID_DATASET_PROVIDERS.has(String(payload.dataSource))) {
+      throw new Error(`operator_screen ${formName(form)} must declare dataset or data_source (${[...VALID_DATASET_PROVIDERS].join(", ")})`);
+    }
+    if (payload.shortcut) {
+      throw new Error(`operator_screen ${formName(form)} pane left cannot declare shortcut`);
+    }
+    if ((payload.sections ?? []).length || payload.defaultSection) {
+      throw new Error(`operator_screen ${formName(form)} pane left cannot declare sections`);
+    }
+    if (payload.leftScreen) {
+      throw new Error(`operator_screen ${formName(form)} pane left cannot declare left_screen`);
+    }
+    return;
+  }
+  if (!VALID_RIGHT_SHAPES.has(String(payload.shape))) {
+    throw new Error(`operator_screen ${formName(form)} right-pane shape must be one of ${[...VALID_RIGHT_SHAPES].join(", ")}`);
   }
   if (!payload.dataset && !VALID_DATASET_PROVIDERS.has(String(payload.dataSource)) && !(payload.sections ?? []).length) {
     throw new Error(`operator_screen ${formName(form)} must declare dataset or data_source (${[...VALID_DATASET_PROVIDERS].join(", ")})`);
@@ -227,12 +262,16 @@ function serializeOperatorDataset(payload) {
 function serializeOperatorScreen(payload) {
   const lines = [
     `operator_screen ${payload.id} {`,
+    `  pane ${payload.pane ?? "right"}`,
     `  shape ${payload.shape ?? "list-detail"}`
   ];
-  if (payload.dataset) lines.push(`  dataset ${payload.dataset}`);
-  else lines.push(`  data_source ${payload.dataSource ?? "references"}`);
+  if (payload.shape !== "tree") {
+    if (payload.dataset) lines.push(`  dataset ${payload.dataset}`);
+    else lines.push(`  data_source ${payload.dataSource ?? "references"}`);
+  }
   if (payload.title) lines.push(`  title "${payload.title}"`);
   if (payload.subtitle) lines.push(`  subtitle "${payload.subtitle}"`);
+  if (payload.leftScreen) lines.push(`  left_screen ${payload.leftScreen}`);
   if (payload.helpText) lines.push(`  help "${payload.helpText}"`);
   if (payload.emptyMessage) lines.push(`  empty_message "${payload.emptyMessage}"`);
   if (payload.rowFilterKind) lines.push(`  row_filter_kind ${payload.rowFilterKind}`);
@@ -304,9 +343,11 @@ function normalizeOperatorScreen(node, context) {
         id: values.id,
         title: values.title ?? values.id,
         subtitle: values.subtitle ?? null,
+        pane: values.pane ?? "right",
         shape: values.shape ?? "list-detail",
         dataset: values.dataset ?? null,
         dataSource: values.dataSource ?? null,
+        leftScreen: values.leftScreen ?? null,
         helpText: values.helpText ?? null,
         emptyMessage: values.emptyMessage ?? null,
         rowFilterKind: values.rowFilterKind ?? null,
@@ -360,7 +401,8 @@ function normalizeOperatorSetup(node, context) {
           shortcut: normalizeShortcut(row.shortcut),
           screenId: row.screenId
         })).filter(row => row.shortcut && row.screenId),
-        defaultScreen: values.defaultScreen ?? null
+        defaultScreen: values.defaultScreen ?? null,
+        defaultLeftScreen: values.defaultLeftScreen ?? null
       }, values.id, {
         pluginId: "plugin.operator-workbench"
       })

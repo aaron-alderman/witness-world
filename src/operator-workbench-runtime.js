@@ -6,6 +6,7 @@ export function renderOperatorWorkbenchRuntimeFactory() {
     const renderSectionDetailHtml = ${renderSectionDetailHtml.toString()};
     const renderSectionRowsHtml = ${renderSectionRowsHtml.toString()};
     const renderScreenSectionHtml = ${renderScreenSectionHtml.toString()};
+    const renderInteractiveScreenSectionHtml = ${renderInteractiveScreenSectionHtml.toString()};
     const setBridgeUnavailableState = ${setBridgeUnavailableState.toString()};
     const renderOperatorWorkbenchState = ${renderOperatorWorkbenchState.toString()};
     const startOperatorWorkbenchRuntime = ${startOperatorWorkbenchRuntime.toString()};
@@ -47,17 +48,18 @@ function sourceTabContentLines(lines = []) {
 function helpCopyForSnapshot(snapshot = null) {
   const pane = snapshot?.ui?.focusedPane || "left";
   if (pane === "right") {
-    const section = (() => {
-      const screen = snapshot?.rightPane?.screen ?? null;
-      const sections = screen?.sections ?? [];
-      return sections[screen?.activeSectionIndex ?? 0] ?? null;
-    })();
-    const sectionSuffix = section
-      ? ` | ${section.title || "Section"} (${section.collapsed ? "collapsed" : `${(section.rows || []).length} rows`})`
-      : "";
+    const section = snapshot?.rightPane?.activeSection ?? null;
+    const sectionSummary = section
+      ? [
+          `section=${section.title || section.id || "section"}`,
+          `rows=${section.rowCount ?? 0}`,
+          `state=${section.collapsed ? "collapsed" : "expanded"}`
+        ].join(" | ")
+      : "section=(none)";
     return {
-      context: `${snapshot?.rightPane?.screen?.title || "Screen"}${sectionSuffix}`,
-      summary: snapshot?.rightPane?.screen?.helpText || "Review the active screen sections, use [ and ] to move sections, - and = to collapse or expand, then press Enter on actionable rows."
+      context: `${snapshot?.rightPane?.screen?.title || "Screen"} | ${sectionSummary}`,
+      summary: snapshot?.rightPane?.screen?.helpText
+        || "Use [ and ] to move sections, - and = to collapse or expand, and Enter to activate the active row when the section is actionable."
     };
   }
   if (pane === "bottom") {
@@ -72,9 +74,17 @@ function helpCopyForSnapshot(snapshot = null) {
       summary: "Move across breadcrumb and status chips, then press Enter to trigger the selected navigation action."
     };
   }
+  const activeRow = snapshot?.leftPane?.activeRow ?? null;
+  const primaryLabel = activeRow?.primaryAction?.label ?? null;
+  const targetLabel = activeRow?.label ?? "row";
+  const leftKind = snapshot?.leftPane?.overlay
+    ? "Search Overlay"
+    : ((snapshot?.leftPane?.origin === "authored" ? "Authored" : "Navigation"));
   return {
-    context: snapshot?.leftPane?.mode === "results" ? "Results" : "Tree",
-    summary: "Move the active row, then Enter to open containers or inspect records."
+    context: `${snapshot?.leftPane?.title || "Left Pane"} | ${leftKind}${snapshot?.leftPane?.paging ? ` | ${snapshot.leftPane.paging.start}-${snapshot.leftPane.paging.end} of ${snapshot.leftPane.paging.totalRows}` : ""}`,
+    summary: primaryLabel
+      ? `Move the active row, then Enter to ${primaryLabel} ${targetLabel}.`
+      : "Move the active row, then Enter to trigger its primary action."
   };
 }
 
@@ -186,6 +196,55 @@ function renderScreenSectionHtml(section = {}, {
   `;
 }
 
+function renderInteractiveScreenSectionHtml(section = {}, {
+  active = false,
+  cursor = 0
+} = {}) {
+  const rowCount = (section.rows || []).length;
+  const collapsed = Boolean(section.collapsed);
+  const actionable = Boolean(section.actionable);
+  const stateText = [
+    section.kind || "list",
+    `rows=${rowCount}`,
+    collapsed ? "collapsed" : "expanded",
+    actionable ? "actionable" : "info"
+  ].join(" | ");
+  const toggleLabel = section.collapsible === false
+    ? "[ ]"
+    : (collapsed ? "[+]" : "[-]");
+  const detailHtml = renderSectionDetailHtml(section.detailLines || [], section.emptyMessage || "(no rows)");
+  const headerHtml = `
+    <div class="operator-screen-section-head">
+      <button type="button" class="operator-screen-section-header" data-screen-section-header="${escapeHtml(String(section.index ?? 0))}">
+        <strong>${escapeHtml(section.title || "Section")}</strong>
+        <span>${escapeHtml(stateText)}</span>
+      </button>
+      <button type="button" class="operator-screen-section-toggle" data-screen-section-toggle="${escapeHtml(String(section.index ?? 0))}"${section.collapsible === false ? ' disabled="true"' : ""}>${escapeHtml(toggleLabel)}</button>
+    </div>
+  `;
+  if ((section.kind || "list") === "detail") {
+    return `
+      <section class="operator-screen-section" data-screen-section-index="${escapeHtml(String(section.index ?? 0))}" data-active="${active ? "true" : "false"}" data-collapsed="${collapsed ? "true" : "false"}" data-actionable="${actionable ? "true" : "false"}">
+        ${headerHtml}
+        ${collapsed ? "" : `<div class="operator-source-excerpt">${detailHtml}</div>`}
+      </section>
+    `;
+  }
+  return `
+    <section class="operator-screen-section" data-screen-section-index="${escapeHtml(String(section.index ?? 0))}" data-active="${active ? "true" : "false"}" data-collapsed="${collapsed ? "true" : "false"}" data-actionable="${actionable ? "true" : "false"}">
+      ${headerHtml}
+      ${collapsed ? "" : `<div class="operator-source-layout">
+        <div class="operator-source-list">
+          ${renderSectionRowsHtml(section, { active, cursor })}
+        </div>
+        ${(section.detailLines || []).length
+          ? `<div class="operator-source-excerpt">${detailHtml}</div>`
+          : ""}
+      </div>`}
+    </section>
+  `;
+}
+
 function setBridgeUnavailableState(documentTarget = null, message = "") {
   const byId = id => documentTarget?.getElementById?.(id) || null;
   const output = byId("operator-last-output");
@@ -251,14 +310,16 @@ export function renderOperatorWorkbenchState({
   if (leftRows) {
     const rows = snapshot.leftPane?.rows || [];
     const columns = snapshot.leftPane?.columns || [];
-    if (snapshot.leftPane?.mode === "results" && columns.length) {
+    const leftShape = snapshot.leftPane?.shape || (snapshot.leftPane?.mode === "results" ? "table" : "tree");
+    if (leftShape === "table" && columns.length) {
       const gridStyle = `grid-template-columns:${gridTemplateColumnsForCount(columns.length)};`;
       const headerCells = columns.map(column => `<span class="operator-table-cell operator-table-head">${escapeHtml(column)}</span>`).join("");
       const rowHtml = rows.map((row, index) => {
         const active = index === snapshot.leftPane.cursor ? ' data-active="true"' : "";
         const selected = row.selected ? ' data-selected="true"' : "";
+        const disabled = row.actionable === false ? ' disabled="true" data-disabled="true"' : "";
         const cells = columns.map(column => `<span class="operator-table-cell">${escapeHtml(row.columns?.[column] ?? "")}</span>`).join("");
-        return `<button type="button" class="operator-row operator-row-table" data-left-row="${index}" style="${gridStyle}"${active}${selected}><span class="operator-row-index">${row.index}</span>${cells}</button>`;
+        return `<button type="button" class="operator-row operator-row-table" data-left-row="${index}" style="${gridStyle}"${active}${selected}${disabled}><span class="operator-row-index">${row.index}</span>${cells}</button>`;
       }).join("");
       leftRows.innerHTML = `
         <div class="operator-table-header" style="${gridStyle}">
@@ -271,8 +332,9 @@ export function renderOperatorWorkbenchState({
       leftRows.innerHTML = rows.map((row, index) => {
         const active = index === snapshot.leftPane.cursor ? ' data-active="true"' : "";
         const selected = row.selected ? ' data-selected="true"' : "";
+        const disabled = row.actionable === false ? ' disabled="true" data-disabled="true"' : "";
         return `
-          <button type="button" class="operator-row" data-left-row="${index}"${active}${selected}>
+          <button type="button" class="operator-row" data-left-row="${index}"${active}${selected}${disabled}>
             <span class="operator-row-index">${row.index}</span>
             <span class="operator-row-main">
               <strong>${escapeHtml(row.label || "")}</strong>
@@ -307,7 +369,7 @@ export function renderOperatorWorkbenchState({
     const sections = (model.sections || []).length ? model.sections : [model];
     customScreenBody.innerHTML = `
         <div class="operator-screen-sections">
-        ${sections.map((section, index) => renderScreenSectionHtml({
+        ${sections.map((section, index) => renderInteractiveScreenSectionHtml({
           ...section,
           index
         }, {
@@ -430,6 +492,19 @@ export function startOperatorWorkbenchRuntime({
       await dispatch({ type: "set-left-cursor", index: Number(leftRow.dataset.leftRow) || 0 });
       return;
     }
+    const screenSectionToggle = target?.closest?.("[data-screen-section-toggle]");
+    if (screenSectionToggle) {
+      await dispatch({ type: "set-focused-pane", pane: "right" });
+      await dispatch({ type: "set-right-section", index: Number(screenSectionToggle.dataset.screenSectionToggle) || 0 });
+      await dispatch({ type: "toggle-right-section-collapsed" });
+      return;
+    }
+    const screenSectionHeader = target?.closest?.("[data-screen-section-header]");
+    if (screenSectionHeader) {
+      await dispatch({ type: "set-focused-pane", pane: "right" });
+      await dispatch({ type: "set-right-section", index: Number(screenSectionHeader.dataset.screenSectionHeader) || 0 });
+      return;
+    }
     const customScreenRow = target?.closest?.("[data-custom-screen-row]");
     if (customScreenRow) {
       await dispatch({ type: "set-focused-pane", pane: "right" });
@@ -439,12 +514,6 @@ export function startOperatorWorkbenchRuntime({
         screenId: snapshot?.rightPane?.activeScreenId || snapshot?.screens?.activeScreenId || null
       });
       await dispatch({ type: "set-right-cursor", index: Number(customScreenRow.dataset.customScreenRow) || 0 });
-      return;
-    }
-    const screenSection = target?.closest?.("[data-screen-section-index]");
-    if (screenSection) {
-      await dispatch({ type: "set-focused-pane", pane: "right" });
-      await dispatch({ type: "set-right-section", index: Number(screenSection.dataset.screenSectionIndex) || 0 });
       return;
     }
     const navChip = target?.closest?.("[data-nav-chip]");
@@ -497,6 +566,13 @@ export function startOperatorWorkbenchRuntime({
 
   documentTarget?.addEventListener?.("dblclick", async event => {
     const target = event.target;
+    const screenSectionHeader = target?.closest?.("[data-screen-section-header]");
+    if (screenSectionHeader) {
+      await dispatch({ type: "set-focused-pane", pane: "right" });
+      await dispatch({ type: "set-right-section", index: Number(screenSectionHeader.dataset.screenSectionHeader) || 0 });
+      await dispatch({ type: "toggle-right-section-collapsed" });
+      return;
+    }
     if (target?.closest?.("[data-left-row]")) {
       await dispatch({ type: "activate-primary" });
       return;
@@ -652,6 +728,7 @@ export function startOperatorWorkbenchRuntime({
       return;
     }
     if (event.key.toLowerCase() === "s") {
+      if (snapshot?.leftPane?.mode !== "results") return;
       event.preventDefault();
       commandDraft = "sort by ";
       commandInput?.focus?.();
@@ -659,6 +736,7 @@ export function startOperatorWorkbenchRuntime({
       return;
     }
     if (event.key.toLowerCase() === "f") {
+      if (snapshot?.leftPane?.mode !== "results") return;
       event.preventDefault();
       commandDraft = "filter ";
       commandInput?.focus?.();

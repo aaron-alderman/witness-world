@@ -9,6 +9,7 @@ export function diagnosticsFromPlatformAppContext(appContext) {
   const lastGoodSnapshot = snapshotManager?.lastGoodSnapshot ?? activeSnapshot ?? null;
   const testMonitor = appContext?.providerRuntimes?.["platform.testMonitor"]?.inspect?.() ?? null;
   const verificationPersistence = appContext?.verificationPersistence?.inspect?.() ?? null;
+  const promotionPolicy = appContext?.promotionPolicy ?? null;
   const composition = runtimeCompositionStory({
     startupRunner: {
       id: appContext?.serverRunnerId ?? null,
@@ -107,10 +108,21 @@ export function diagnosticsFromPlatformAppContext(appContext) {
             : []
         }
       : null,
+    promotionPolicy: promotionPolicy
+      ? {
+          source: promotionPolicy.source ? String(promotionPolicy.source) : "synthesized",
+          serverRunnerId: promotionPolicy.serverRunnerId ? String(promotionPolicy.serverRunnerId) : null,
+          runtimeProfile: promotionPolicy.runtimeProfile ? String(promotionPolicy.runtimeProfile) : null,
+          diagnostics: Array.isArray(promotionPolicy.diagnostics)
+            ? promotionPolicy.diagnostics.map(row => ({ ...row }))
+            : []
+        }
+      : null,
     appSnapshot: snapshotDiagnostics
       ? {
           ...snapshotDiagnostics,
           lastGoodAppRevision: Number(lastGoodSnapshot?.appRevision || snapshotDiagnostics.appRevision || 0),
+          promotionCompatibilitySummary: "Runtime snapshot promote/rollback/serve-live remains a compatibility lane and is not yet governed by release-channel posture.",
           activeSourceIds: Array.isArray(activeSnapshot?.sourceIndex)
             ? activeSnapshot.sourceIndex.map(row => String(row.sourceId || row.filePath || ""))
             : [],

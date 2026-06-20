@@ -41,6 +41,7 @@ function defaultUiState(displaySettings) {
 
 function commandForPrimaryRow(row) {
   if (!row) return null;
+  if (row.primaryAction?.command) return row.primaryAction.command;
   if (row.type === "container") return `open ${row.index}`;
   if (row.type === "record") return `inspect ${row.index}`;
   if (row.type === "alias") return `inspect ${row.index}`;
@@ -289,13 +290,18 @@ export function createOperatorWorkbenchController({
       const row = next.rightPane?.screen?.rows?.[uiState.rightCursor] ?? null;
       if (!row) {
         return {
-          result: { output: "no active screen row.", status: "error" },
+          result: {
+            output: section?.actionable === false
+              ? `${section.title || "section"} has no actionable row.`
+              : "no active screen row.",
+            status: "error"
+          },
           snapshot: next
         };
       }
       if (!row.primaryCommand) {
         return {
-          result: { output: row.detail || "screen row is informational only.", status: "error" },
+          result: { output: `${section?.title || "section"} is informational only.`, status: "error" },
           snapshot: next
         };
       }

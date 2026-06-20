@@ -186,6 +186,7 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         exactRoute("POST", "/api/runtime/app-snapshot/promote-current", "app.snapshot.promoteCurrent"),
         exactRoute("POST", "/api/runtime/app-snapshot/rollback-stable", "app.snapshot.rollbackStable"),
         exactRoute("POST", "/api/runtime/app-snapshot/serve-live", "app.snapshot.serveLive"),
+        exactRoute("POST", "/api/runtime/app-snapshot/reload", "app.snapshot.reload"),
         exactRoute("POST", "/api/runtime/app-preview-sessions", "app.preview.session.create"),
         patternRoute("GET", /^\/api\/runtime\/app-preview-sessions\/([^/]+)$/, "app.preview.session.read", ["id"]),
         patternRoute("PATCH", /^\/api\/runtime\/app-preview-sessions\/([^/]+)\/sources$/, "app.preview.session.patchSources", ["id"]),

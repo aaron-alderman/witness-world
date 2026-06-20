@@ -1,8 +1,11 @@
-const VALID_SCREEN_SHAPES = new Set(["detail", "list-detail", "table-detail"]);
+const VALID_RIGHT_SCREEN_SHAPES = new Set(["detail", "list-detail", "table-detail"]);
+const VALID_LEFT_SCREEN_SHAPES = new Set(["list", "table", "tree"]);
+const VALID_SCREEN_SHAPES = new Set([...VALID_RIGHT_SCREEN_SHAPES, ...VALID_LEFT_SCREEN_SHAPES]);
 const VALID_DATASET_PROVIDERS = new Set(["inspect", "references", "source", "provenance"]);
 const VALID_SHORTCUTS = new Set(["F2", "F3", "F4", "F5", "F6", "F7", "F8"]);
 const VALID_PRIMARY_ACTIONS = new Set(["open-link", "source-open", "provenance-open", "inspect-record", "none"]);
 const VALID_SECTION_KINDS = new Set(["detail", "list", "table", "kv"]);
+const VALID_SCREEN_PANES = new Set(["right", "left"]);
 
 const BUILTIN_DATASET_DEFINITIONS = Object.freeze([
   Object.freeze({
@@ -120,6 +123,10 @@ function normalizeColumns(values) {
   return (Array.isArray(values) ? values : []).map(optionalText).filter(Boolean);
 }
 
+function arrayWrap(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function cloneDatasetSpec(spec = {}) {
   return {
     id: spec.id,
@@ -140,10 +147,12 @@ function cloneScreenSpec(spec = {}) {
   return {
     id: spec.id,
     title: spec.title,
+    pane: spec.pane ?? "right",
     subtitle: spec.subtitle ?? null,
     shape: spec.shape,
     datasetId: spec.datasetId ?? null,
     dataSource: spec.dataSource ?? null,
+    leftScreenId: spec.leftScreenId ?? null,
     helpText: spec.helpText ?? null,
     emptyMessage: spec.emptyMessage ?? null,
     shortcut: spec.shortcut ?? null,
@@ -206,20 +215,24 @@ function normalizeAuthoredDatasetSpec(residual = null) {
 function normalizeAuthoredScreenSpec(residual = null) {
   const values = residual?.body?.values ?? {};
   const id = optionalText(values.id) ?? optionalText(residual?.name);
-  const shape = optionalText(values.shape) ?? "list-detail";
+  const pane = optionalText(values.pane)?.toLowerCase() ?? "right";
+  const shape = optionalText(values.shape) ?? (pane === "left" ? "list" : "list-detail");
   const datasetId = optionalText(values.dataset) ?? optionalText(values.datasetId) ?? optionalText(values.dataset_id);
   const dataSource = optionalText(values.dataSource) ?? optionalText(values.data_source);
+  const leftScreenId = optionalText(values.leftScreen) ?? optionalText(values.left_screen) ?? null;
   const sectionIds = Array.isArray(values.sections)
     ? values.sections.map(optionalText).filter(Boolean)
     : [];
-  if (!id || !VALID_SCREEN_SHAPES.has(shape) || (!datasetId && !VALID_DATASET_PROVIDERS.has(dataSource) && !sectionIds.length)) return null;
+  if (!id || !VALID_SCREEN_PANES.has(pane) || !VALID_SCREEN_SHAPES.has(shape)) return null;
   return {
     id,
     title: optionalText(values.title) ?? id,
+    pane,
     subtitle: optionalText(values.subtitle),
     shape,
     datasetId,
     dataSource,
+    leftScreenId,
     helpText: optionalText(values.helpText) ?? optionalText(values.help) ?? null,
     emptyMessage: optionalText(values.emptyMessage) ?? optionalText(values.empty_message) ?? null,
     shortcut: normalizeShortcut(values.shortcut),
@@ -254,8 +267,8 @@ function normalizeAuthoredScreenSectionSpec(residual = null) {
     dataSource,
     columns: normalizeColumns(values.columns),
     emptyMessage: optionalText(values.emptyMessage) ?? optionalText(values.empty_message) ?? null,
-    collapsible: values.collapsible === undefined ? null : Boolean(values.collapsible),
-    collapsed: values.collapsed === undefined ? null : Boolean(values.collapsed),
+    collapsible: values.collapsible === undefined || values.collapsible === null ? null : Boolean(values.collapsible),
+    collapsed: values.collapsed === undefined || values.collapsed === null ? null : Boolean(values.collapsed),
     rowFilterKind: optionalText(values.rowFilterKind) ?? optionalText(values.row_filter_kind) ?? null,
     rowFilterAction: optionalText(values.rowFilterAction) ?? optionalText(values.row_filter_action) ?? null,
     priority: optionalInteger(values.priority),
@@ -286,7 +299,8 @@ function normalizeAuthoredSetup(residual = null) {
       ? values.screens.map(optionalText).filter(Boolean)
       : [],
     shortcuts: normalizeSetupShortcutRows(values),
-    defaultScreen: optionalText(values.defaultScreen) ?? optionalText(values.default_screen) ?? null
+    defaultScreen: optionalText(values.defaultScreen) ?? optionalText(values.default_screen) ?? null,
+    defaultLeftScreen: optionalText(values.defaultLeftScreen) ?? optionalText(values.default_left_screen) ?? null
   };
 }
 
@@ -352,24 +366,30 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
   for (const dataset of builtinDatasets) datasetsById.set(dataset.id, dataset);
   for (const dataset of authored.datasets) datasetsById.set(dataset.id, cloneDatasetSpec(dataset));
 
-  const authoredById = new Map();
-  for (const screen of authored.screens) authoredById.set(screen.id, cloneScreenSpec(screen));
+  const authoredRightById = new Map();
+  const authoredLeftById = new Map();
+  for (const screen of authored.screens) {
+    const cloned = cloneScreenSpec(screen);
+    if (cloned.pane === "left") authoredLeftById.set(cloned.id, cloned);
+    else authoredRightById.set(cloned.id, cloned);
+  }
   const authoredSectionsById = new Map();
   for (const section of authored.sections) authoredSectionsById.set(section.id, cloneScreenSectionSpec(section));
-  const screensById = new Map();
-  for (const screen of builtins) screensById.set(screen.id, screen);
-  for (const screen of authoredById.values()) screensById.set(screen.id, screen);
+  const rightScreensById = new Map();
+  for (const screen of builtins) rightScreensById.set(screen.id, screen);
+  for (const screen of authoredRightById.values()) rightScreensById.set(screen.id, screen);
+  const leftScreensById = new Map(authoredLeftById.entries());
 
   const orderedIds = [];
   const seen = new Set();
   for (const setup of authored.setupRows) {
     for (const id of setup.screens) {
-      if (!screensById.has(id) || seen.has(id)) continue;
+      if (!rightScreensById.has(id) || seen.has(id)) continue;
       seen.add(id);
       orderedIds.push(id);
     }
   }
-  for (const screen of authoredById.values()) {
+  for (const screen of authoredRightById.values()) {
     if (seen.has(screen.id)) continue;
     seen.add(screen.id);
     orderedIds.push(screen.id);
@@ -381,10 +401,16 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
   }
 
   const screens = orderedIds
-    .map(id => screensById.get(id))
+    .map(id => rightScreensById.get(id))
     .filter(Boolean)
     .map(screen => {
+      if (!VALID_RIGHT_SCREEN_SHAPES.has(screen.shape)) {
+        throw new Error(`operator_screen ${screen.id} invalid right-pane shape: ${screen.shape}`);
+      }
       const datasetId = screen.datasetId ?? builtinDatasetIdForProvider(screen.dataSource);
+      if (!datasetId && !VALID_DATASET_PROVIDERS.has(screen.dataSource) && !arrayWrap(screen.sectionIds).length) {
+        throw new Error(`operator_screen ${screen.id} requires dataset, data_source, or sections`);
+      }
       if (datasetId && !datasetsById.has(datasetId)) {
         throw new Error(`operator_screen ${screen.id} dataset not found: ${datasetId}`);
       }
@@ -410,26 +436,66 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
       if (defaultSectionId && !sections.some(section => section.id === defaultSectionId)) {
         throw new Error(`operator_screen ${screen.id} default_section not found: ${defaultSectionId}`);
       }
+      const leftScreenId = screen.leftScreenId ?? null;
+      if (leftScreenId && !leftScreensById.has(leftScreenId)) {
+        throw new Error(`operator_screen ${screen.id} left_screen not found: ${leftScreenId}`);
+      }
       return {
         ...screen,
         datasetId: datasetId ?? null,
         dataSource: dataset?.provider ?? screen.dataSource ?? null,
+        leftScreenId,
         defaultSectionId,
         sectionIds: [...sectionIds],
         sections
       };
     });
 
+  const leftScreens = [...leftScreensById.values()].map(screen => {
+    if (!VALID_LEFT_SCREEN_SHAPES.has(screen.shape)) {
+      throw new Error(`operator_screen ${screen.id} invalid left-pane shape: ${screen.shape}`);
+    }
+    if (screen.shortcut) {
+      throw new Error(`operator_screen ${screen.id} cannot declare shortcuts on pane=left`);
+    }
+    if (screen.leftScreenId) {
+      throw new Error(`operator_screen ${screen.id} left_screen is only valid on pane=right`);
+    }
+    if (screen.defaultSectionId || arrayWrap(screen.sectionIds).length || arrayWrap(screen.sections).length) {
+      throw new Error(`operator_screen ${screen.id} pane=left cannot declare sections`);
+    }
+    if (screen.shape === "tree") {
+      if (screen.datasetId || screen.dataSource) {
+        throw new Error(`operator_screen ${screen.id} pane=left shape=tree cannot declare dataset or data_source`);
+      }
+      return {
+        ...screen,
+        datasetId: null,
+        dataSource: "navigation"
+      };
+    }
+    const datasetId = screen.datasetId ?? builtinDatasetIdForProvider(screen.dataSource);
+    if (!datasetId || !datasetsById.has(datasetId)) {
+      throw new Error(`operator_screen ${screen.id} dataset not found: ${datasetId ?? "(none)"}`);
+    }
+    const dataset = datasetsById.get(datasetId);
+    return {
+      ...screen,
+      datasetId,
+      dataSource: dataset?.provider ?? screen.dataSource ?? null
+    };
+  });
+
   const shortcuts = new Map();
   for (const screen of builtins) {
     if (screen.shortcut) shortcuts.set(screen.shortcut, screen.id);
   }
-  for (const screen of authoredById.values()) {
+  for (const screen of authoredRightById.values()) {
     if (screen.shortcut) shortcuts.set(screen.shortcut, screen.id);
   }
   for (const setup of authored.setupRows) {
     for (const row of setup.shortcuts) {
-      if (!screensById.has(row.screenId)) continue;
+      if (!rightScreensById.has(row.screenId)) continue;
       shortcuts.set(row.shortcut, row.screenId);
     }
   }
@@ -442,15 +508,23 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
     .filter(Boolean)
     .sort((left, right) => left.shortcut.localeCompare(right.shortcut));
 
-  const defaultScreen = authored.setupRows.find(row => row.defaultScreen && screensById.has(row.defaultScreen))?.defaultScreen ?? null;
+  const invalidDefaultLeftScreen = authored.setupRows.find(row => row.defaultLeftScreen && !leftScreensById.has(row.defaultLeftScreen)) ?? null;
+  if (invalidDefaultLeftScreen?.defaultLeftScreen) {
+    throw new Error(`operator_setup ${invalidDefaultLeftScreen.id} default_left_screen not found: ${invalidDefaultLeftScreen.defaultLeftScreen}`);
+  }
+  const defaultScreen = authored.setupRows.find(row => row.defaultScreen && rightScreensById.has(row.defaultScreen))?.defaultScreen ?? null;
+  const defaultLeftScreen = authored.setupRows.find(row => row.defaultLeftScreen && leftScreensById.has(row.defaultLeftScreen))?.defaultLeftScreen ?? null;
   return {
     datasets: [...datasetsById.values()].map(cloneDatasetSpec),
     datasetsById,
     screens,
     screensById: new Map(screens.map(screen => [screen.id, screen])),
+    leftScreens,
+    leftScreensById: new Map(leftScreens.map(screen => [screen.id, screen])),
     shortcuts,
     shortcutRows,
-    defaultScreen
+    defaultScreen,
+    defaultLeftScreen
   };
 }
 

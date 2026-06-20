@@ -533,8 +533,10 @@ Current proof status:
   `frontendLegacyUplift`
 - collection repeat authoring, route-authored preload policies, same-origin
   route-backed `click` / `change` / `submit` effects, timed same-origin
-  `input:*` read effects through authored interaction `timing`, and canonical
-  query-state bindings are in the constrained public lane
+  `input:*` read effects, timed route-backed `input:*` write effects through
+  authored interaction `timing`, the canonical `/api/session` read and
+  mutation lane on an explicit authored session-summary state subset, and
+  canonical query-state bindings are in the constrained public lane
 - `dispatchDomEvent` is retired from public/runtime support surfaces and no
   longer counts as an acceptable authored-native target
 - bootstrap and embedded authored flows no longer depend on named page-local
@@ -542,9 +544,11 @@ Current proof status:
 - `frontendLegacyUplift.retirementStatus`, `pending[]`, `blocked[]`, and
   `retiredRoutes[]` are now the honest inspection surfaces for remaining
   unservable legacy frontend routes
-- input-driven writes and other unsupported legacy network semantics remain
-  honestly blocked; the native debounce/throttle read lane now exists on
-  canonical `page.surface` without reintroducing hidden per-keystroke JS
+- richer object or dynamic session payload branches plus
+  external/non-route-backed input effects remain honestly blocked; the native
+  debounce/throttle lane now covers route-backed input reads, route-backed
+  input writes, and the canonical session mutation lane on canonical
+  `page.surface` without reintroducing hidden per-keystroke JS
 - maintained starter/bootstrap app creation now emits native `surface`,
   `process`, `projection`, `collection`, `boundary`, `policy`, and
   `page.surface` route material directly instead of seeding a legacy app and

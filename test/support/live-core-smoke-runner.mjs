@@ -488,8 +488,8 @@ async function runPreviewScenario() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         edits: [{
-          path: "app/content.wtoml",
-          content: '[[surface]]\nactor = "tester"\nid = "LiveCoreRoot"\nsurfaceKind = '
+          path: "app.wtoml",
+          content: "[app\nroute = \"/live-core\"\n"
         }]
       })
     });
@@ -513,27 +513,66 @@ async function runPreviewScenario() {
 }
 
 async function runPublishedAuthoringScenario() {
-  const workspace = await createLiveCoreWorkspace({ proofDelayMs: 300 });
-  const port = await reservePort();
-  const core = await startWitnessCoreProcess({
-    cwd: workspace.tempRoot,
-    configPath: workspace.configPath,
-    port
+  const corePort = await reservePort();
+  const appPort = await reservePort();
+  const appUrl = `http://127.0.0.1:${appPort}`;
+  const shellPath = value => String(value).replaceAll("\\", "/");
+  const workspace = await createLiveCoreWorkspace({
+    proofDelayMs: 300,
+    supervise: ({ manifestPath }) => ({
+      command: [
+        shellPath(process.execPath),
+        shellPath(path.join(REPO_ROOT, "src", "cli.js")),
+        "serve",
+        shellPath(manifestPath),
+        "--server",
+        "fixture_server",
+        "--port",
+        String(appPort),
+        "--runtime-profile",
+        "authoring"
+      ].join(" "),
+      workingDir: shellPath(REPO_ROOT),
+      restartOnExit: true,
+      healthUrl: `${appUrl}/api/runtime/process-health`,
+      reloadUrl: `${appUrl}/api/runtime/app-snapshot/reload`,
+      healthIntervalMs: 100,
+      healthTimeoutMs: 45000
+    }),
+    buildWorker: ({ manifestPath }) => ({
+      command: [
+        shellPath(process.execPath),
+        shellPath(path.join(REPO_ROOT, "src", "witness-core-build-worker.js")),
+        "--manifest",
+        "{manifest_path}",
+        "--runtime-profile",
+        "{runtime_profile}"
+      ].join(" "),
+      workingDir: shellPath(REPO_ROOT)
+    }),
+    transaction: {
+      buildTimeoutMs: 30000,
+      stageRoot: ".witness-core/staging"
+    }
   });
-  let server = null;
+  let core = null;
   try {
-    server = await startUiServer({
-      dslPath: workspace.manifestPath,
-      serverRunnerId: "fixture_server",
-      runtimeProfile: "authoring",
-      devMode: false,
-      env: {
-        ...process.env,
-        WITNESS_CORE_URL: core.url
-      }
+    core = await startWitnessCoreProcess({
+      cwd: workspace.tempRoot,
+      configPath: workspace.configPath,
+      port: corePort
+    });
+    await waitForWitnessCoreHealthState(core.url, health =>
+      health.process?.running === true && health.process?.ready === true,
+    {
+      timeoutMs: 45000,
+      description: "published transaction supervised process ready"
     });
 
-    const routeUrl = `${server.url}${workspace.servedRoutePath}`;
+    const initialHealth = await readProcessHealth(appUrl);
+    assert.equal(initialHealth.watchersEnabled, false);
+
+    const routeUrl = `${appUrl}${workspace.servedRoutePath}`;
     const baselineHtml = await fetchText(routeUrl);
     assert.match(baselineHtml, /Live Core Baseline/);
 
@@ -542,7 +581,7 @@ async function runPublishedAuthoringScenario() {
       'text = "Live Core Baseline"',
       'text = "Live Core Published"'
     );
-    const success = await readJson(`${server.url}/api/runtime/app-sources`, {
+    const success = await readJson(`${appUrl}/api/runtime/app-sources`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -554,21 +593,22 @@ async function runPublishedAuthoringScenario() {
     });
     assert.equal(success.response.status, 200);
     assert.equal(success.body?.ok, true);
+    assert.equal(success.body?.activated, true);
 
-    await waitForJournalPattern(workspace.journalPath, /"kind":"capability\.fs\.stat"/, {
-      description: "published source stat capability event"
+    await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.published\.requested"/, {
+      description: "published transaction requested event"
     });
-    await waitForJournalPattern(workspace.journalPath, /"kind":"capability\.fs\.write"/, {
-      description: "published source write capability event"
+    await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.build\.started"/, {
+      description: "published transaction build started event"
     });
-    await waitForJournalPattern(workspace.journalPath, /reason=app\.source\.write/, {
-      description: "published source write reason"
+    await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.build\.passed"/, {
+      description: "published transaction build passed event"
     });
-    await waitForJournalPattern(workspace.journalPath, /previewOnly=false/, {
-      description: "published source write preview flag"
+    await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.commit\.applied"/, {
+      description: "published transaction commit applied event"
     });
-    await waitForJournalPattern(workspace.journalPath, /surfaceId=fixture_server/, {
-      description: "published source write surface provenance"
+    await waitForJournalPattern(workspace.journalPath, /"kind":"transaction\.activation\.passed"/, {
+      description: "published transaction activation passed event"
     });
 
     assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Published/);
@@ -576,9 +616,7 @@ async function runPublishedAuthoringScenario() {
       description: "published authoring route update"
     });
 
-    const staleHash = success.body?.changedSources?.includes("app/content.wtoml")
-      ? (await readJson(`${core.url}/capabilities/fs/stat?path=${encodeURIComponent("app/content.wtoml")}`)).body?.hash
-      : null;
+    const staleHash = (await readJson(`${core.url}/capabilities/fs/stat?path=${encodeURIComponent("app/content.wtoml")}`)).body?.hash;
     assert.equal(typeof staleHash, "string");
 
     const outOfBandSource = updatedSource.replace(
@@ -587,7 +625,7 @@ async function runPublishedAuthoringScenario() {
     );
     await fs.writeFile(workspace.watchedSourcePath, outOfBandSource, "utf8");
 
-    const staleWrite = await readJson(`${server.url}/api/runtime/app-sources`, {
+    const staleWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -608,9 +646,67 @@ async function runPublishedAuthoringScenario() {
       description: "published source conflict journal event"
     });
 
+    const compileFailWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        edits: [{
+          path: "app/content.wtoml",
+          content: '[[surface]]\nactor = "tester"\nid = "LiveCoreRoot"\nsurfaceKind = '
+        }]
+      })
+    });
+    assert.equal(compileFailWrite.response.status, 400);
+    assert.equal(compileFailWrite.body?.code, "COMPILE_FAILED");
+    assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Out Of Band/);
+
+    const proofFailWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        edits: [{
+          path: "app/content.wtoml",
+          content: outOfBandSource.replace('text = "Live Core Out Of Band"', 'text = "FAIL_PROOF_TOKEN keep compile valid"')
+        }]
+      })
+    });
+    assert.equal(proofFailWrite.response.status, 400);
+    assert.equal(proofFailWrite.body?.code, "PROOF_FAILED");
+    assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Out Of Band/);
+
+    await requestStableServing({ coreUrl: core.url });
+    const stablePinnedSource = outOfBandSource.replace(
+      'text = "Live Core Out Of Band"',
+      'text = "Live Core Pinned Stable"'
+    );
+    const stablePinnedWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        edits: [{
+          path: "app/content.wtoml",
+          content: stablePinnedSource
+        }]
+      })
+    });
+    assert.equal(stablePinnedWrite.response.status, 200);
+    assert.equal(stablePinnedWrite.body?.activated, false);
+    assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Pinned Stable/);
+    const stillOldLive = await fetchText(routeUrl);
+    assert.match(stillOldLive, /Live Core Baseline|Live Core Published|Live Core Out Of Band/);
+    assert.equal(stillOldLive.includes("Live Core Pinned Stable"), false);
+
+    const serveLive = await readJson(`${core.url}/serving/live`, {
+      method: "POST"
+    });
+    assert.equal(serveLive.response.status, 200);
+    await waitForText(routeUrl, html => html.includes("Live Core Pinned Stable"), {
+      description: "runtime serving reload after explicit live request"
+    });
+
     await core.stop();
 
-    const coreDownWrite = await readJson(`${server.url}/api/runtime/app-sources`, {
+    const coreDownWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -622,9 +718,9 @@ async function runPublishedAuthoringScenario() {
     });
     assert.equal(coreDownWrite.response.status, 503);
     assert.equal(coreDownWrite.body?.code, "WITNESS_CORE_UNAVAILABLE");
-    assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Out Of Band/);
+    assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Pinned Stable/);
   } finally {
-    await safeTeardown({ server, core, workspace });
+    await safeTeardown({ core, workspace });
   }
 }
 

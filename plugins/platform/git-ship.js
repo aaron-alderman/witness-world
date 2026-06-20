@@ -1,6 +1,6 @@
 import { createThing, relation } from "../../src/kernel.js";
 import { createProposal, moduleProjectors } from "../../src/modules.js";
-import { buildPlatformModel } from "./platform-model.js";
+import { buildPlatformModel, selectPromotionRequirementState } from "./platform-model.js";
 import { diagnosticsFromPlatformAppContext } from "./app-context-diagnostics.js";
 import { readDeclaredPlatformShipView } from "./materialized-platform-views.js";
 
@@ -192,6 +192,21 @@ function gateResultsForShip(model, branchId, latestPush, proposal, releaseChanne
   };
 }
 
+function promotionGateResults(requirements = []) {
+  const checks = (Array.isArray(requirements) ? requirements : []).map(row => ({
+    id: row.requirementKind,
+    ok: row.status === "satisfied" || row.status === "warn",
+    summary: row.summary || "",
+    releaseChannelId: row.releaseChannelId || null,
+    blocking: row.blocking === true,
+    relatedIds: [...(row.relatedIds ?? [])]
+  }));
+  return {
+    ok: checks.every(row => row.ok),
+    checks
+  };
+}
+
 function rollbackReasonFromSignals(shipRecord, regressions = [], defects = []) {
   if (regressions.length) {
     return `Automatic rollback follow-up for ${shipRecord.branchId}: ${regressions.length} post-ship performance regressions opened during the observation window.`;
@@ -288,7 +303,8 @@ export async function shipPlatformBranch(world, {
   proposalId = null,
   session = null,
   appContext = null,
-  allowPendingProposal = false
+  allowPendingProposal = false,
+  authorityDecisionId = null
 } = {}) {
   const branch = world.project(moduleProjectors.branchIndex).byId?.[branchId] ?? null;
   if (!branch) return { ok: false, status: 404, error: "branch not found" };
@@ -309,44 +325,105 @@ export async function shipPlatformBranch(world, {
     })
   });
   const latestPush = latestPushedRecord(model.pushRecords, branchId);
-  if (!latestPush) {
-    return {
-      ok: false,
-      status: 409,
-      error: "branch has no successful push record to ship",
-      branch,
-      releaseChannel,
-      pushRecord: null,
-      proposal: null,
-      gateResults: { ok: false, checks: [{ id: "latestPushedState", ok: false, summary: "Branch has no successful push record." }] }
-    };
-  }
   const appliedChangeSet = latestAppliedChangeSet(model.changeSets, branchId);
   const proposal = resolveShipProposal(model.proposals, branchId, releaseChannel.id, proposalId, allowPendingProposal);
-  const gateResults = gateResultsForShip(model, branchId, latestPush, proposal, releaseChannel);
-  const upToDate = Boolean(
-    appliedChangeSet?.id
-    && String(appliedChangeSet.id) === String(latestPush.changeSetId || "")
-    && !branchHasLaterShipMutations(world, branchId, latestPush.createdAt)
-  );
-  gateResults.checks.splice(4, 0, {
-    id: "branchUpToDate",
-    ok: upToDate,
-    summary: upToDate
-      ? "Branch has no later applied or edited state after the latest successful push."
-      : "Branch has later applied or edited state after the latest successful push."
+  const promotionPosture = (model.promotionPostures ?? []).find(row =>
+    String(row?.releaseChannelId || "") === String(releaseChannel.id || "")
+  ) ?? null;
+  const promotionState = selectPromotionRequirementState(model, {
+    branchId,
+    releaseChannelId: releaseChannel.id,
+    preferCandidateSnapshot: false
   });
-  gateResults.ok = gateResults.checks.every(row => row.ok);
-  if (!gateResults.ok) {
+  const promotionRequirementSummary = promotionState.promotionRequirementSummaries.find(row =>
+    String(row?.targetKind || "") === "branch"
+    && String(row?.targetId || "") === String(branchId || "")
+    && String(row?.releaseChannelId || "") === String(releaseChannel.id || "")
+  ) ?? promotionState.promotionRequirementSummary ?? null;
+  const promotionRequirements = promotionState.promotionRequirements.filter(row =>
+    String(row?.targetKind || "") === "branch"
+    && String(row?.targetId || "") === String(branchId || "")
+    && String(row?.releaseChannelId || "") === String(releaseChannel.id || "")
+  );
+  const blockingRequirements = promotionRequirements.filter(row =>
+    row.blocking === true
+    && ["failed", "stale", "missing", "running"].includes(String(row.status || ""))
+  );
+  const warningRequirements = promotionRequirements.filter(row => String(row.status || "") === "warn");
+  const decision = blockingRequirements.length
+    ? "block"
+    : (warningRequirements.length ? "warn" : "allow");
+  const gateResults = promotionGateResults(promotionRequirements);
+  const decisionProducedAt = nowIso();
+  const plannedShipRecordId = !blockingRequirements.length
+    ? shipRecordId(branchId, (world.project(moduleProjectors.shipRecordIndex).byBranch?.[branchId]?.length ?? 0) + 1)
+    : null;
+  const decisionBody = {
+    id: `promotionDecision:${String(branchId || "")}:${String(releaseChannel.id || "")}:${decisionProducedAt}`,
+    targetKind: "branch",
+    targetId: String(branchId || ""),
+    branchId: String(branchId || ""),
+    changeSetId: appliedChangeSet?.id ?? latestPush?.changeSetId ?? null,
+    candidateSnapshotId: appliedChangeSet?.latestCandidateSnapshotId ?? null,
+    releaseChannelId: releaseChannel.id,
+    postureId: promotionPosture?.postureId ?? releaseChannel.name,
+    decision,
+    summaryStatus: promotionRequirementSummary?.blockingStatus ?? "unknown",
+    blockingRequirementIds: blockingRequirements.map(row => String(row.id || "")),
+    warningRequirementIds: warningRequirements.map(row => String(row.id || "")),
+    authorityDecisionId: optionalText(authorityDecisionId),
+    proposalId: proposal?.id ?? null,
+    shipRecordId: plannedShipRecordId,
+    producedAt: decisionProducedAt
+  };
+  const decisionWitness = promotionPosture?.recordDecisionHistory === false
+    ? null
+    : world.emit({
+        process: "platform.branch.ship.decision",
+        actor,
+        claims: [
+          relation(branchId, "evaluates", releaseChannel.id)
+        ],
+        body: decisionBody
+      });
+  const promotionDecision = decisionWitness
+    ? { ...decisionBody, witnessId: decisionWitness.id ? String(decisionWitness.id) : null }
+    : decisionBody;
+  if (blockingRequirements.length) {
+    const error = blockingRequirements.some(row => String(row?.requirementKind || "") === "latestPushPresent")
+      ? "no successful push record"
+      : "promotion requirements block ship";
+    const message = `Promotion posture blocks shipping ${branchId} to ${releaseChannel.id}.`;
+    const blockedWitness = world.emit({
+      process: "platform.branch.ship.blocked",
+      actor,
+      claims: [
+        relation(branchId, "attemptedShipTo", releaseChannel.id)
+      ],
+      body: {
+        branchId,
+        releaseChannelId: releaseChannel.id,
+        decisionId: promotionDecision.id,
+        blockingRequirementIds: blockingRequirements.map(row => row.id),
+        blockedAt: decisionProducedAt,
+        message
+      }
+    });
     return {
       ok: false,
       status: 409,
-      error: "ship gates failed",
+      error,
+      message,
       branch: (model.branches ?? []).find(row => String(row.id || "") === String(branchId || "")) ?? branch,
       releaseChannel,
       pushRecord: latestPush,
       proposal,
-      gateResults
+      gateResults,
+      promotionPosture,
+      promotionRequirements,
+      promotionRequirementSummary,
+      promotionDecision,
+      witness: blockedWitness
     };
   }
 
@@ -374,6 +451,7 @@ export async function shipPlatformBranch(world, {
     compareUrl: latestPush.compareUrl ?? null,
     pullRequestUrl: latestPush.pullRequestUrl ?? null,
     proposalId: proposal?.id ?? null,
+    promotionDecisionId: promotionDecision.id,
     owner: actor,
     runtimeProfile: branch.runtimeProfile ?? null,
     session: session?.id ?? null,
@@ -410,6 +488,10 @@ export async function shipPlatformBranch(world, {
     gateResults,
     pushRecord: latestPush,
     proposal,
+    promotionPosture,
+    promotionRequirements,
+    promotionRequirementSummary,
+    promotionDecision,
     rollbackProposal: null,
     witness
   };

@@ -7,6 +7,7 @@ import { contextNamingStateFromProject } from "../../src/context-naming-world.js
 import { moduleProjectors } from "../../src/modules.js";
 import { packageApplyPreviewRowsFromProject } from "../../src/package-authorship-world.js";
 import { buildGovernanceRouteInventory } from "../../src/runtime-governance.js";
+import { resolvePromotionPosture } from "../../src/runtime-promotion-policy.js";
 import { buildMutableSurfaceSemanticsLedger } from "../../src/runtime-semantics.js";
 import { parseWitnessToml } from "../../src/dsl.js";
 import {
@@ -2679,6 +2680,453 @@ export function selectVerificationRequirementState(model, {
   };
 }
 
+function latestPushedRecordForRows(pushRecords = [], branchId = "") {
+  return [...(Array.isArray(pushRecords) ? pushRecords : [])]
+    .filter(row => String(row?.branchId || "") === String(branchId || "") && String(row?.status || "") === "pushed")
+    .sort(compareTimeline)
+    .at(-1) ?? null;
+}
+
+function latestAppliedChangeSetForRows(changeSets = [], branchId = "") {
+  return [...(Array.isArray(changeSets) ? changeSets : [])]
+    .filter(row => String(row?.branchId || "") === String(branchId || "") && String(row?.status || "") === "applied")
+    .sort(compareTimeline)
+    .at(-1) ?? null;
+}
+
+function branchHasLaterShipMutationsFromRows(changeSets = [], latestPush = null, branchId = "") {
+  const latestPushAt = requirementActivityAt(latestPush);
+  if (!latestPushAt) return true;
+  return (Array.isArray(changeSets) ? changeSets : []).some(changeSet =>
+    String(changeSet?.branchId || "") === String(branchId || "")
+    && requirementActivityAt(changeSet) > latestPushAt
+    && ["open", "validated", "applied", "rejected", "abandoned"].includes(String(changeSet?.status || ""))
+  );
+}
+
+function latestShipRecordForRows(shipRecords = [], releaseChannelId = null) {
+  return [...(Array.isArray(shipRecords) ? shipRecords : [])]
+    .filter(row => !releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+    .sort(compareTimeline)
+    .at(-1) ?? null;
+}
+
+function latestExecutableShipRecordForRows(shipRecords = [], releaseChannelId = null, releaseChannelsById = Object.create(null)) {
+  return [...(Array.isArray(shipRecords) ? shipRecords : [])]
+    .filter(row =>
+      (!releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+      && releaseChannelsById[String(row?.releaseChannelId || "")]?.executable === true
+    )
+    .sort(compareTimeline)
+    .at(-1) ?? null;
+}
+
+function lastKnownGoodShipRecordForRows(shipRecords = [], releaseChannelId = null, releaseChannelsById = Object.create(null)) {
+  return [...(Array.isArray(shipRecords) ? shipRecords : [])]
+    .filter(row =>
+      (!releaseChannelId || String(row?.releaseChannelId || "") === String(releaseChannelId || ""))
+      && ["shipped", "recorded"].includes(String(row?.status || ""))
+      && (
+        releaseChannelsById[String(row?.releaseChannelId || "")]?.executable !== true
+        || String(row?.observationStatus || "") !== "rollback-requested"
+      )
+    )
+    .sort(compareTimeline)
+    .at(-1) ?? null;
+}
+
+function promotionRequirementSummaryStatus(requirements = []) {
+  const rows = Array.isArray(requirements) ? requirements : [];
+  if (!rows.length) return "unknown";
+  const blockingRows = rows.filter(row => row.blocking === true);
+  const warningRows = rows.filter(row => row.blocking !== true);
+  if (blockingRows.some(row => row.status === "running")) return "running";
+  if (blockingRows.some(row => ["failed", "stale", "missing"].includes(String(row.status || "")))) return "blocked";
+  if (warningRows.some(row => row.status === "warn")) return "warn";
+  if (rows.every(row => row.status === "satisfied")) return "ready";
+  return "unknown";
+}
+
+function promotionRequirementSignalStatus({
+  ok,
+  blocking,
+  missing = false,
+  running = false,
+  stale = false
+} = {}) {
+  if (ok) return "satisfied";
+  if (running) return blocking ? "running" : "warn";
+  if (missing) return blocking ? "missing" : "warn";
+  if (stale) return blocking ? "stale" : "warn";
+  return blocking ? "failed" : "warn";
+}
+
+function buildPromotionPostures({
+  releaseChannels = [],
+  promotionPolicy = null
+} = {}) {
+  return (Array.isArray(releaseChannels) ? releaseChannels : []).map(channel => {
+    const posture = resolvePromotionPosture(promotionPolicy, channel.id);
+    return {
+      ...posture,
+      title: channel.title || channel.name || channel.id,
+      executable: channel.executable === true,
+      description: channel.description || null,
+      producedAt: null
+    };
+  });
+}
+
+function buildPromotionStates({
+  releaseChannels = [],
+  shipRecords = [],
+  snapshotDiagnostics = null,
+  promotionCompatibilitySummary = null
+} = {}) {
+  const releaseChannelsById = Object.fromEntries((Array.isArray(releaseChannels) ? releaseChannels : []).map(row => [String(row.id || ""), row]));
+  return (Array.isArray(releaseChannels) ? releaseChannels : []).map(channel => {
+    const latestShipRecord = latestShipRecordForRows(shipRecords, channel.id);
+    const latestExecutableShipRecord = latestExecutableShipRecordForRows(shipRecords, channel.id, releaseChannelsById);
+    const lastKnownGoodShipRecord = lastKnownGoodShipRecordForRows(shipRecords, channel.id, releaseChannelsById);
+    return {
+      id: `promotionState:${String(channel.id || "")}`,
+      releaseChannelId: String(channel.id || ""),
+      latestShipRecordId: latestShipRecord?.id ?? null,
+      latestExecutableShipRecordId: latestExecutableShipRecord?.id ?? null,
+      lastKnownGoodShipRecordId: lastKnownGoodShipRecord?.id ?? null,
+      currentStatus: latestShipRecord?.status ?? "missing",
+      observationStatus: latestShipRecord?.observationStatus ?? null,
+      activeAppRevision: Number(snapshotDiagnostics?.appRevision || 0) || null,
+      lastGoodAppRevision: Number(snapshotDiagnostics?.lastGoodAppRevision || 0) || null,
+      compatibilitySummary: promotionCompatibilitySummary ?? null,
+      producedAt: latestShipRecord?.createdAt ?? null
+    };
+  });
+}
+
+function buildPromotionRequirements({
+  branches = [],
+  changeSets = [],
+  candidateSnapshots = [],
+  releaseChannels = [],
+  branchTestRedGreen = [],
+  verificationRequirementSummaries = [],
+  defects = [],
+  performanceRegressions = [],
+  pushRecords = [],
+  shipRecords = [],
+  proposals = [],
+  promotionPostures = [],
+  promotionDecisions = [],
+  serverRunnerId = null,
+  runtimeProfile = null
+} = {}) {
+  const branchById = Object.fromEntries((Array.isArray(branches) ? branches : []).map(row => [String(row.id || ""), row]));
+  const branchTestRedGreenById = Object.fromEntries((Array.isArray(branchTestRedGreen) ? branchTestRedGreen : []).map(row => [String(row.branchId || ""), row]));
+  const changeSetsByBranch = Object.create(null);
+  for (const row of Array.isArray(changeSets) ? changeSets : []) pushByKey(changeSetsByBranch, row.branchId, row);
+  const summariesByTarget = new Map();
+  for (const row of Array.isArray(verificationRequirementSummaries) ? verificationRequirementSummaries : []) {
+    summariesByTarget.set(`${String(row?.targetKind || "")}:${String(row?.targetId || "")}`, row);
+  }
+  const postureByChannelId = Object.fromEntries((Array.isArray(promotionPostures) ? promotionPostures : []).map(row => [String(row.releaseChannelId || ""), row]));
+  const targets = [
+    ...(Array.isArray(branches) ? branches : []).map(branch => ({
+      targetKind: "branch",
+      targetId: String(branch.id || ""),
+      branchId: String(branch.id || ""),
+      changeSetId: null,
+      candidateSnapshotId: null,
+      producedAt: branch.updatedAt ?? branch.createdAt ?? null
+    })),
+    ...(Array.isArray(changeSets) ? changeSets : []).map(changeSet => ({
+      targetKind: "changeSet",
+      targetId: String(changeSet.id || ""),
+      branchId: String(changeSet.branchId || ""),
+      changeSetId: String(changeSet.id || ""),
+      candidateSnapshotId: String(changeSet.latestCandidateSnapshotId || "") || null,
+      producedAt: changeSet.updatedAt ?? changeSet.validatedAt ?? changeSet.createdAt ?? null
+    })),
+    ...(Array.isArray(candidateSnapshots) ? candidateSnapshots : []).map(snapshot => ({
+      targetKind: "candidateSnapshot",
+      targetId: String(snapshot.id || ""),
+      branchId: String(snapshot.branchId || ""),
+      changeSetId: String(snapshot.changeSetId || ""),
+      candidateSnapshotId: String(snapshot.id || ""),
+      producedAt: snapshot.createdAt ?? null
+    }))
+  ].filter(target => target.targetId && target.branchId);
+  const requirementRows = [];
+  const summaryRows = [];
+  for (const target of targets) {
+    const branch = branchById[target.branchId] ?? null;
+    const latestPush = latestPushedRecordForRows(pushRecords, target.branchId);
+    const latestAppliedChangeSet = latestAppliedChangeSetForRows(changeSetsByBranch[target.branchId] ?? [], target.branchId);
+    const branchUpToDate = Boolean(
+      latestPush?.id
+      && latestAppliedChangeSet?.id
+      && String(latestAppliedChangeSet.id || "") === String(latestPush.changeSetId || "")
+      && !branchHasLaterShipMutationsFromRows(changeSetsByBranch[target.branchId] ?? [], latestPush, target.branchId)
+    );
+    const verificationSummary = summariesByTarget.get(`${target.targetKind}:${target.targetId}`)
+      ?? summariesByTarget.get(`branch:${target.branchId}`)
+      ?? null;
+    const branchRedGreen = branchTestRedGreenById[target.branchId] ?? null;
+    const branchHasSelectedGates = Number(
+      branchRedGreen?.totalSelectedGates
+      ?? branchRedGreen?.selectedGateIds?.length
+      ?? 0
+    ) > 0;
+    const branchVerificationReady = branchHasSelectedGates && String(branchRedGreen?.status || "") === "green";
+    const branchVerificationRunning = branchHasSelectedGates && String(branchRedGreen?.status || "") === "running";
+    const branchVerificationPending = !verificationSummary && (
+      !branchHasSelectedGates
+      || ["pending", "idle"].includes(String(branchRedGreen?.status || ""))
+    );
+    const openDefects = (Array.isArray(defects) ? defects : []).filter(row =>
+      String(row?.branchId || "") === String(target.branchId || "")
+      && String(row?.status || "") === "open"
+    );
+    const openRegressions = (Array.isArray(performanceRegressions) ? performanceRegressions : []).filter(row =>
+      String(row?.status || "") === "open"
+      && (row?.branchIds ?? []).some(branchId => String(branchId || "") === String(target.branchId || ""))
+    );
+    for (const channel of Array.isArray(releaseChannels) ? releaseChannels : []) {
+      const posture = postureByChannelId[String(channel.id || "")] ?? resolvePromotionPosture(null, channel.id);
+      const proposal = (Array.isArray(proposals) ? proposals : [])
+        .filter(row =>
+          String(row?.targetProcess || "") === "branch.ship"
+          && String(row?.targetId || "") === String(target.branchId || "")
+          && String(row?.body?.releaseChannelId || "") === String(channel.id || "")
+          && String(row?.status || "") === "approved"
+        )
+        .sort((left, right) => compareTimeline(right, left))[0] ?? null;
+      const targetDecisionRows = (Array.isArray(promotionDecisions) ? promotionDecisions : []).filter(row =>
+        String(row?.targetKind || "") === String(target.targetKind || "")
+        && String(row?.targetId || "") === String(target.targetId || "")
+        && String(row?.releaseChannelId || "") === String(channel.id || "")
+      );
+      const requirementBase = {
+        targetKind: target.targetKind,
+        targetId: target.targetId,
+        branchId: target.branchId,
+        changeSetId: target.changeSetId,
+        candidateSnapshotId: target.candidateSnapshotId,
+        releaseChannelId: String(channel.id || ""),
+        serverRunnerId,
+        runtimeProfile,
+        postureId: posture.postureId,
+        producedAt: requirementActivityAt(latestRow([
+          latestPush,
+          latestAppliedChangeSet,
+          verificationSummary,
+          proposal,
+          ...targetDecisionRows,
+          { producedAt: target.producedAt }
+        ])) || target.producedAt || null
+      };
+      const rows = [
+        {
+          ...requirementBase,
+          id: `promotionRequirement:${target.targetKind}:${target.targetId}:${channel.id}:verificationFresh`,
+          requirementKind: "verificationFresh",
+          blocking: posture.requireFreshPassingVerification === true,
+          status: promotionRequirementSignalStatus({
+            ok: verificationSummary?.blockingStatus === "ready" || branchVerificationReady,
+            blocking: posture.requireFreshPassingVerification === true,
+            missing: (
+              (!verificationSummary || Number(verificationSummary?.totalGateCount || 0) === 0)
+              && branchVerificationPending
+            ),
+            running: verificationSummary?.blockingStatus === "running" || branchVerificationRunning,
+            stale: verificationSummary?.blockingStatus === "blocked" && Number(verificationSummary?.staleCount || 0) > 0
+          }),
+          summary: verificationSummary?.summary || branchRedGreen?.summary || "No fresh passing verification evidence.",
+          relatedIds: unique([
+            ...(verificationSummary ? [verificationSummary.id] : []),
+            ...((verificationSummary?.targetKind && verificationSummary?.targetId) ? [verificationSummary.targetId] : [])
+          ])
+        },
+        {
+          ...requirementBase,
+          id: `promotionRequirement:${target.targetKind}:${target.targetId}:${channel.id}:docsFresh`,
+          requirementKind: "docsFresh",
+          blocking: posture.requireDocsFresh === true,
+          status: promotionRequirementSignalStatus({
+            ok: String(branch?.docsFreshness?.status || "") !== "stale",
+            blocking: posture.requireDocsFresh === true,
+            missing: !branch?.docsFreshness,
+            stale: String(branch?.docsFreshness?.status || "") === "stale"
+          }),
+          summary: branch?.docsFreshness?.summary || "No docs freshness data.",
+          relatedIds: (branch?.docsFreshness?.missingDocs ?? []).map(doc => `doc:${doc}`)
+        },
+        {
+          ...requirementBase,
+          id: `promotionRequirement:${target.targetKind}:${target.targetId}:${channel.id}:noBlockingDefects`,
+          requirementKind: "noBlockingDefects",
+          blocking: posture.requireNoBlockingDefects === true,
+          status: promotionRequirementSignalStatus({
+            ok: openDefects.length === 0,
+            blocking: posture.requireNoBlockingDefects === true
+          }),
+          summary: openDefects.length ? `${openDefects.length} open linked defects.` : "No open linked defects.",
+          relatedIds: openDefects.map(row => String(row.id || ""))
+        },
+        {
+          ...requirementBase,
+          id: `promotionRequirement:${target.targetKind}:${target.targetId}:${channel.id}:noOpenRegressions`,
+          requirementKind: "noOpenRegressions",
+          blocking: posture.requireNoOpenRegressions === true,
+          status: promotionRequirementSignalStatus({
+            ok: openRegressions.length === 0,
+            blocking: posture.requireNoOpenRegressions === true
+          }),
+          summary: openRegressions.length ? `${openRegressions.length} open performance regressions.` : "No open performance regressions.",
+          relatedIds: openRegressions.map(row => String(row.id || ""))
+        },
+        {
+          ...requirementBase,
+          id: `promotionRequirement:${target.targetKind}:${target.targetId}:${channel.id}:latestPushPresent`,
+          requirementKind: "latestPushPresent",
+          blocking: true,
+          status: promotionRequirementSignalStatus({
+            ok: Boolean(latestPush?.id),
+            blocking: true,
+            missing: !latestPush?.id
+          }),
+          summary: latestPush?.id ? `Latest pushed state is ${latestPush.id}.` : "Branch has no successful push record.",
+          relatedIds: latestPush?.id ? [latestPush.id] : []
+        },
+        {
+          ...requirementBase,
+          id: `promotionRequirement:${target.targetKind}:${target.targetId}:${channel.id}:branchUpToDate`,
+          requirementKind: "branchUpToDate",
+          blocking: true,
+          status: promotionRequirementSignalStatus({
+            ok: branchUpToDate,
+            blocking: true,
+            stale: latestPush?.id ? !branchUpToDate : false,
+            missing: !latestPush?.id
+          }),
+          summary: branchUpToDate
+            ? "Branch has no later applied or edited state after the latest successful push."
+            : "Branch has later applied or edited state after the latest successful push.",
+          relatedIds: unique([
+            ...(latestPush?.id ? [latestPush.id] : []),
+            ...(latestAppliedChangeSet?.id ? [latestAppliedChangeSet.id] : [])
+          ])
+        },
+        {
+          ...requirementBase,
+          id: `promotionRequirement:${target.targetKind}:${target.targetId}:${channel.id}:approvedProposal`,
+          requirementKind: "approvedProposal",
+          blocking: posture.requireApprovedProposal === true,
+          status: promotionRequirementSignalStatus({
+            ok: Boolean(proposal?.id),
+            blocking: posture.requireApprovedProposal === true,
+            missing: !proposal?.id
+          }),
+          summary: proposal?.id
+            ? `Proposal ${proposal.id} satisfies approval for ${channel.id}.`
+            : `No approved branch.ship proposal was found for ${channel.id}.`,
+          relatedIds: proposal?.id ? [proposal.id] : []
+        }
+      ];
+      requirementRows.push(...rows);
+      const totalRequirementCount = rows.length;
+      const blockingRequirementCount = rows.filter(row => row.blocking === true).length;
+      const satisfiedCount = rows.filter(row => row.status === "satisfied").length;
+      const failedCount = rows.filter(row => row.status === "failed").length;
+      const staleCount = rows.filter(row => row.status === "stale").length;
+      const missingCount = rows.filter(row => row.status === "missing").length;
+      const runningCount = rows.filter(row => row.status === "running").length;
+      const warningCount = rows.filter(row => row.status === "warn").length;
+      summaryRows.push({
+        id: `promotionRequirementSummary:${target.targetKind}:${target.targetId}:${channel.id}`,
+        targetKind: target.targetKind,
+        targetId: target.targetId,
+        branchId: target.branchId,
+        changeSetId: target.changeSetId,
+        candidateSnapshotId: target.candidateSnapshotId,
+        releaseChannelId: String(channel.id || ""),
+        serverRunnerId,
+        runtimeProfile,
+        postureId: posture.postureId,
+        decisionMode: posture.decisionMode,
+        blockingStatus: promotionRequirementSummaryStatus(rows),
+        totalRequirementCount,
+        blockingRequirementCount,
+        satisfiedCount,
+        failedCount,
+        staleCount,
+        missingCount,
+        runningCount,
+        warningCount,
+        latestRunAt: verificationSummary?.latestRunAt ?? null,
+        summary: rows.map(row => row.summary).filter(Boolean).slice(0, 3).join(" "),
+        producedAt: rows.map(row => String(row.producedAt || "")).filter(Boolean).sort((left, right) => left.localeCompare(right)).at(-1) ?? target.producedAt ?? null
+      });
+    }
+  }
+  return {
+    promotionRequirements: requirementRows.sort((left, right) =>
+      String(left.targetKind || "").localeCompare(String(right.targetKind || ""))
+      || String(left.targetId || "").localeCompare(String(right.targetId || ""))
+      || String(left.releaseChannelId || "").localeCompare(String(right.releaseChannelId || ""))
+      || String(left.requirementKind || "").localeCompare(String(right.requirementKind || ""))
+    ),
+    promotionRequirementSummaries: summaryRows.sort((left, right) =>
+      String(left.targetKind || "").localeCompare(String(right.targetKind || ""))
+      || String(left.targetId || "").localeCompare(String(right.targetId || ""))
+      || String(left.releaseChannelId || "").localeCompare(String(right.releaseChannelId || ""))
+    )
+  };
+}
+
+export function selectPromotionRequirementState(model, {
+  branchId = null,
+  changeSetId = null,
+  candidateSnapshotId = null,
+  releaseChannelId = null,
+  preferCandidateSnapshot = true
+} = {}) {
+  const normalizedBranchId = optionalText(branchId);
+  const normalizedChangeSetId = optionalText(changeSetId);
+  const normalizedCandidateSnapshotId = optionalText(candidateSnapshotId);
+  const normalizedReleaseChannelId = optionalText(releaseChannelId);
+  const requirements = (model?.promotionRequirements ?? []).filter(row =>
+    (!normalizedReleaseChannelId || String(row?.releaseChannelId || "") === normalizedReleaseChannelId)
+    && (
+      (normalizedCandidateSnapshotId && String(row?.candidateSnapshotId || "") === normalizedCandidateSnapshotId)
+      || (normalizedChangeSetId && String(row?.changeSetId || "") === normalizedChangeSetId)
+      || (normalizedBranchId && String(row?.branchId || "") === normalizedBranchId)
+    )
+  );
+  const summaries = (model?.promotionRequirementSummaries ?? []).filter(row =>
+    (!normalizedReleaseChannelId || String(row?.releaseChannelId || "") === normalizedReleaseChannelId)
+    && (
+      (normalizedCandidateSnapshotId && String(row?.candidateSnapshotId || "") === normalizedCandidateSnapshotId)
+      || (normalizedChangeSetId && String(row?.changeSetId || "") === normalizedChangeSetId)
+      || (normalizedBranchId && String(row?.branchId || "") === normalizedBranchId)
+    )
+  );
+  const preferredSummary = preferCandidateSnapshot && normalizedCandidateSnapshotId
+    ? summaries.find(row => row.targetKind === "candidateSnapshot" && String(row?.targetId || "") === normalizedCandidateSnapshotId)
+    : null;
+  const changeSetSummary = normalizedChangeSetId
+    ? summaries.find(row => row.targetKind === "changeSet" && String(row?.targetId || "") === normalizedChangeSetId)
+    : null;
+  const branchSummaries = normalizedBranchId
+    ? summaries.filter(row => row.targetKind === "branch" && String(row?.targetId || "") === normalizedBranchId)
+    : [];
+  return {
+    promotionRequirements: requirements,
+    promotionRequirementSummaries: summaries,
+    promotionRequirementSummary: preferredSummary ?? changeSetSummary ?? branchSummaries[0] ?? null
+  };
+}
+
 function telemetryMetricNodeId(id) {
   return `telemetryMetric:${String(id || "")}`;
 }
@@ -3889,6 +4337,7 @@ export async function buildPlatformModel({
   const pushRecords = projectRows(project, moduleProjectors.pushRecords);
   const releaseChannels = projectRows(project, moduleProjectors.releaseChannels);
   const shipRecords = projectRows(project, moduleProjectors.shipRecords);
+  const promotionDecisions = projectRows(project, moduleProjectors.promotionDecisions);
   const conflicts = projectRows(project, moduleProjectors.conflicts);
   const mergeIntents = projectRows(project, moduleProjectors.mergeIntents);
   const changeSetsByBranch = Object.create(null);
@@ -5138,6 +5587,36 @@ export async function buildPlatformModel({
     testReports,
     verificationPolicy: appContext?.verificationPolicy ?? null
   });
+  const promotionPostures = buildPromotionPostures({
+    releaseChannels,
+    promotionPolicy: appContext?.promotionPolicy ?? null
+  });
+  const {
+    promotionRequirements,
+    promotionRequirementSummaries
+  } = buildPromotionRequirements({
+    branches,
+    changeSets,
+    candidateSnapshots,
+    releaseChannels,
+    branchTestRedGreen,
+    verificationRequirementSummaries,
+    defects,
+    performanceRegressions,
+    pushRecords,
+    shipRecords,
+    proposals,
+    promotionPostures,
+    promotionDecisions,
+    serverRunnerId: appContext?.promotionPolicy?.serverRunnerId ?? appContext?.serverRunnerId ?? null,
+    runtimeProfile: appContext?.promotionPolicy?.runtimeProfile ?? appContext?.runtimeProfile ?? null
+  });
+  const promotionStates = buildPromotionStates({
+    releaseChannels,
+    shipRecords,
+    snapshotDiagnostics,
+    promotionCompatibilitySummary: diagnostics?.appSnapshot?.promotionCompatibilitySummary ?? null
+  });
   const branchTestRedGreenById = Object.fromEntries(branchTestRedGreen.map(row => [String(row.branchId || ""), row]));
   const changeSetTestRedGreenById = Object.fromEntries(changeSetTestRedGreen.map(row => [String(row.changeSetId || ""), row]));
   const enrichedBranches = branches.map(row => ({
@@ -5394,6 +5873,11 @@ export async function buildPlatformModel({
     pushRecords: pushRecords.map(row => ({ ...row })),
     releaseChannels: releaseChannels.map(row => ({ ...row })),
     shipRecords: shipRecords.map(row => ({ ...row })),
+    promotionPostures: promotionPostures.map(row => ({ ...row })),
+    promotionRequirements: promotionRequirements.map(row => ({ ...row })),
+    promotionRequirementSummaries: promotionRequirementSummaries.map(row => ({ ...row })),
+    promotionStates: promotionStates.map(row => ({ ...row })),
+    promotionDecisions: promotionDecisions.map(row => ({ ...row })),
     defects: defects.map(row => ({ ...row })),
     defectObservations: defectObservations.map(row => ({ ...row })),
     defectClusters: defectClusters.map(row => ({ ...row })),
@@ -5469,6 +5953,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       candidateSnapshots: model.candidateSnapshots,
       verificationRequirements: model.verificationRequirements,
       verificationRequirementSummaries: model.verificationRequirementSummaries,
+      promotionPostures: model.promotionPostures,
+      promotionRequirements: model.promotionRequirements,
+      promotionRequirementSummaries: model.promotionRequirementSummaries,
+      promotionStates: model.promotionStates,
+      promotionDecisions: model.promotionDecisions,
       pushRecords: model.pushRecords,
       shipRecords: model.shipRecords,
       proposals: model.proposals,
@@ -5483,6 +5972,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       changeSets: model.changeSets,
       verificationRequirements: model.verificationRequirements,
       verificationRequirementSummaries: model.verificationRequirementSummaries,
+      promotionPostures: model.promotionPostures,
+      promotionRequirements: model.promotionRequirements,
+      promotionRequirementSummaries: model.promotionRequirementSummaries,
+      promotionStates: model.promotionStates,
+      promotionDecisions: model.promotionDecisions,
       proposals: model.proposals,
       pushRecords: model.pushRecords,
       shipRecords: model.shipRecords,
@@ -5495,6 +5989,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       branches: model.branches,
       branchBoard: model.branchBoard,
       branchLifecycleVocabulary: model.branchLifecycleVocabulary,
+      promotionPostures: model.promotionPostures,
+      promotionRequirements: model.promotionRequirements,
+      promotionRequirementSummaries: model.promotionRequirementSummaries,
+      promotionStates: model.promotionStates,
+      promotionDecisions: model.promotionDecisions,
       pushRecords: model.pushRecords,
       shipRecords: model.shipRecords,
       candidateSnapshots: model.candidateSnapshots,
@@ -5508,6 +6007,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       candidateSnapshots: model.candidateSnapshots,
       verificationRequirements: model.verificationRequirements,
       verificationRequirementSummaries: model.verificationRequirementSummaries,
+      promotionPostures: model.promotionPostures,
+      promotionRequirements: model.promotionRequirements,
+      promotionRequirementSummaries: model.promotionRequirementSummaries,
+      promotionStates: model.promotionStates,
+      promotionDecisions: model.promotionDecisions,
       summaries: model.summaries
     };
   }
@@ -5533,6 +6037,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       verificationExecutions: model.verificationExecutions,
       verificationRequirements: model.verificationRequirements,
       verificationRequirementSummaries: model.verificationRequirementSummaries,
+      promotionPostures: model.promotionPostures,
+      promotionRequirements: model.promotionRequirements,
+      promotionRequirementSummaries: model.promotionRequirementSummaries,
+      promotionStates: model.promotionStates,
+      promotionDecisions: model.promotionDecisions,
       runtimeRevisions: model.runtimeRevisions,
       activeRuntimeRevision: model.activeRuntimeRevision,
       candidateSnapshots: model.candidateSnapshots,
@@ -5555,6 +6064,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       verificationQueue: model.verificationQueue,
       verificationRequirements: model.verificationRequirements,
       verificationRequirementSummaries: model.verificationRequirementSummaries,
+      promotionPostures: model.promotionPostures,
+      promotionRequirements: model.promotionRequirements,
+      promotionRequirementSummaries: model.promotionRequirementSummaries,
+      promotionStates: model.promotionStates,
+      promotionDecisions: model.promotionDecisions,
       branchTestRedGreen: model.branchTestRedGreen,
       changeSetTestRedGreen: model.changeSetTestRedGreen,
       latestTestResultsByGate: model.latestTestResultsByGate,
@@ -5576,6 +6090,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       verificationExecutions: model.verificationExecutions,
       verificationRequirements: model.verificationRequirements,
       verificationRequirementSummaries: model.verificationRequirementSummaries,
+      promotionPostures: model.promotionPostures,
+      promotionRequirements: model.promotionRequirements,
+      promotionRequirementSummaries: model.promotionRequirementSummaries,
+      promotionStates: model.promotionStates,
+      promotionDecisions: model.promotionDecisions,
       latestTestResultsByGate: model.latestTestResultsByGate,
       activeRuntimeRevision: model.activeRuntimeRevision,
       testMonitorDiagnostics: model.testMonitorDiagnostics,
@@ -5595,6 +6114,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       verificationInvalidations: model.verificationInvalidations,
       verificationRequirements: model.verificationRequirements,
       verificationRequirementSummaries: model.verificationRequirementSummaries,
+      promotionPostures: model.promotionPostures,
+      promotionRequirements: model.promotionRequirements,
+      promotionRequirementSummaries: model.promotionRequirementSummaries,
+      promotionStates: model.promotionStates,
+      promotionDecisions: model.promotionDecisions,
       summaries: model.summaries
     };
   }
@@ -5605,6 +6129,11 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       candidateSnapshots: model.candidateSnapshots,
       verificationRequirements: model.verificationRequirements,
       verificationRequirementSummaries: model.verificationRequirementSummaries,
+      promotionPostures: model.promotionPostures,
+      promotionRequirements: model.promotionRequirements,
+      promotionRequirementSummaries: model.promotionRequirementSummaries,
+      promotionStates: model.promotionStates,
+      promotionDecisions: model.promotionDecisions,
       snapshotBuilds: model.snapshotBuilds,
       snapshotBuildErrors: model.snapshotBuildErrors,
       snapshotDiagnostics: model.snapshotDiagnostics,
@@ -6546,11 +7075,75 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
         .filter(row => (row.branchIds ?? []).some(branchId => branchIds.has(String(branchId || ""))))
         .map(row => String(row.id || ""))
     );
+    const promotionRequirements = id
+      ? (model.promotionRequirements ?? []).filter(row =>
+        row.targetId === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.candidateSnapshotId === id
+        || row.releaseChannelId === id
+        || branchIds.has(String(row.branchId || ""))
+        || changeSetIds.has(String(row.changeSetId || ""))
+        || releaseChannelIds.has(String(row.releaseChannelId || ""))
+      )
+      : (model.promotionRequirements ?? []).filter(row =>
+        branchIds.has(String(row.branchId || ""))
+        || releaseChannelIds.has(String(row.releaseChannelId || ""))
+      );
+    const promotionRequirementSummaries = id
+      ? (model.promotionRequirementSummaries ?? []).filter(row =>
+        row.targetId === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.candidateSnapshotId === id
+        || row.releaseChannelId === id
+        || branchIds.has(String(row.branchId || ""))
+        || changeSetIds.has(String(row.changeSetId || ""))
+        || releaseChannelIds.has(String(row.releaseChannelId || ""))
+      )
+      : (model.promotionRequirementSummaries ?? []).filter(row =>
+        branchIds.has(String(row.branchId || ""))
+        || releaseChannelIds.has(String(row.releaseChannelId || ""))
+      );
+    const promotionDecisionIds = new Set(
+      (promotionRequirementSummaries ?? []).flatMap(row =>
+        (model.promotionDecisions ?? [])
+          .filter(decision =>
+            String(decision.targetKind || "") === String(row.targetKind || "")
+            && String(decision.targetId || "") === String(row.targetId || "")
+            && String(decision.releaseChannelId || "") === String(row.releaseChannelId || "")
+          )
+          .map(decision => String(decision.id || ""))
+      )
+    );
     return {
       shipRecords,
       releaseChannels: id
         ? (model.releaseChannels ?? []).filter(row => row.id === id || releaseChannelIds.has(String(row.id || "")))
         : (model.releaseChannels ?? []),
+      promotionPostures: id
+        ? (model.promotionPostures ?? []).filter(row => row.releaseChannelId === id || releaseChannelIds.has(String(row.releaseChannelId || "")))
+        : (model.promotionPostures ?? []),
+      promotionRequirements,
+      promotionRequirementSummaries,
+      promotionStates: id
+        ? (model.promotionStates ?? []).filter(row => row.releaseChannelId === id || releaseChannelIds.has(String(row.releaseChannelId || "")))
+        : (model.promotionStates ?? []),
+      promotionDecisions: id
+        ? (model.promotionDecisions ?? []).filter(row =>
+          row.id === id
+          || row.targetId === id
+          || row.branchId === id
+          || row.changeSetId === id
+          || row.candidateSnapshotId === id
+          || row.releaseChannelId === id
+          || promotionDecisionIds.has(String(row.id || ""))
+          || branchIds.has(String(row.branchId || ""))
+        )
+        : (model.promotionDecisions ?? []).filter(row =>
+          branchIds.has(String(row.branchId || ""))
+          || releaseChannelIds.has(String(row.releaseChannelId || ""))
+        ),
       branches: id
         ? (model.branches ?? []).filter(row => row.id === id || branchIds.has(String(row.id || "")) || (row.shipRecordIds ?? []).includes(id))
         : (model.branches ?? []).filter(row => (row.shipRecordIds ?? []).length > 0),
