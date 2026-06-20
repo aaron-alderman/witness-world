@@ -243,7 +243,7 @@ export function createProcessRuntime(world, options = {}) {
     return current;
   }
 
-  async function runRuleSteps(steps, eventId, proc) {
+  async function runRuleSteps(steps, eventId, proc, runtimeOptions = null) {
     let lastObservation = null;
     for (const step of steps ?? []) {
       if (step?.kind === "setState") {
@@ -282,14 +282,14 @@ export function createProcessRuntime(world, options = {}) {
           continue;
         }
         if (routeInvoker && adapterByCommand.has(step.command)) {
-          lastObservation = await stepViaRoute(step.command);
+          lastObservation = await stepViaRoute(step.command, runtimeOptions);
           continue;
         }
         throw new Error(`rule command '${step.command}' has no runtime handler`);
       }
       if (step?.kind === "option") {
         const branch = projectionTruthiness(configValue(step.config)) ? (step.real ?? []) : (step.else ?? []);
-        lastObservation = await runRuleSteps(branch, eventId, proc) ?? lastObservation;
+        lastObservation = await runRuleSteps(branch, eventId, proc, runtimeOptions) ?? lastObservation;
         continue;
       }
       throw new Error(`unknown process rule step kind '${step?.kind}'`);
@@ -297,13 +297,13 @@ export function createProcessRuntime(world, options = {}) {
     return lastObservation;
   }
 
-  async function deliverAuthored(eventId, payload = null) {
+  async function deliverAuthored(eventId, payload = null, runtimeOptions = null) {
     const proc = handlerOf.get(eventId);
     if (!proc) throw new Error(`deliverAuthored: event '${eventId}' is handled by no process`);
     const rule = ruleFor(eventId);
     const delivered = deliver(eventId, payload);
     if (!rule) return delivered;
-    const outcome = await trackAsync("process.rule", () => runRuleSteps(rule.steps ?? [], eventId, proc), {
+    const outcome = await trackAsync("process.rule", () => runRuleSteps(rule.steps ?? [], eventId, proc, runtimeOptions), {
       label: eventId,
       processRef: proc,
       correlationId: eventId,
@@ -369,7 +369,7 @@ export function createProcessRuntime(world, options = {}) {
     });
   }
 
-  async function stepViaRoute(commandId) {
+  async function stepViaRoute(commandId, runtimeOptions = null) {
     const binding = adapterByCommand.get(commandId);
     if (!binding) throw new Error(`stepViaRoute: command '${commandId}' has no bound adapter`);
     if (typeof routeInvoker !== "function") throw new Error(`stepViaRoute: command '${commandId}' has no route invoker`);
@@ -385,11 +385,21 @@ export function createProcessRuntime(world, options = {}) {
         actorState: binding.op.actorState ?? null,
         request,
         binding,
+        requestContext: runtimeOptions?.routeRequestContext ?? null,
         runtime: {
           value: id => state.get(id),
           snapshot
         }
       });
+      if (response?.status === "ignored" || response?.ignored === true) {
+        const obs = record("route.ignore", commandId, emitterOf.get(commandId) ?? null, []);
+        obs.route = route;
+        obs.method = binding.op.method ?? "POST";
+        obs.outcome = "ignored";
+        obs.request = request;
+        obs.response = response;
+        return obs;
+      }
       const outcome = response?.status === "failure" ? "failure" : "success";
       const eventId = outcome === "failure" ? binding.op.failureEvent : binding.op.successEvent;
       const obs = eventId

@@ -54,7 +54,7 @@ to = "wtoml:plugins/starter/this.folder.wtoml"
 [[relation]]
 from = "folder:plugins/starter"
 rel = "contains"
-to = "json:plugins/starter/todo-starter-blueprint.json"
+to = "json:plugins/starter/todo-starter-legacy-fixture.json"
 
 # --- End of auto-generated structural section ---
 

@@ -92,13 +92,14 @@ Bring the remaining app-specific and operating-surface mutations under one share
 
 ### A4. Package or Plugin Authorship Model
 
-Decide and implement the authored unit for reusable composition.
+The authored reusable unit is now `package`, with `plugin` retained as a
+runtime-facing flavor and compatibility export seam.
 
 Reference design:
 
 - [docs/PACKAGE-PLUGIN-AUTHORSHIP-MODEL.md](../PACKAGE-PLUGIN-AUTHORSHIP-MODEL.md)
 
-Candidate direction suggested by current discussion:
+Current shipped baseline:
 
 - plugin authorship happens through MCP
 - authoring produces a canonical `wtoml` patch bundle
@@ -106,8 +107,9 @@ Candidate direction suggested by current discussion:
 - concurrent revisions can coexist under different identities or namespaces
 - runtime can choose side A or side B while a later transformer or merge resolves them
 
-This direction is not shipped.
-It needs an explicit design and execution path.
+What remains is to tighten the product language, keep the package/runtime
+import-export seam honest, and remove any residual ambiguity between authored
+package truth and filesystem compatibility material.
 
 ### A5. Merge, Namespace, and Convergence Semantics
 
@@ -281,11 +283,11 @@ Acceptance:
 
 Current proof:
 
-- canonical-id compatibility classes are now enforced through shared covered-target helpers for stewardship and capability mutation seams, with `plugins/authoring-core/authoring-core.test.js` and `plugins/capability-authoring/capability-authoring.test.js` proving same-context, imported-visible, legacy-unscoped, and hidden-foreign target behavior instead of letting those routes inherit an implicit “all canonical ids are fine” default
+- canonical-id compatibility classes are now enforced through shared covered-target helpers for stewardship and capability mutation seams, with `plugins/authoring-core/authoring-core.test.js` and `plugins/capability-authoring/capability-authoring.test.js` proving same-context and imported-visible canonical sugar still works while legacy-unscoped canonical ids are now rejected on covered authoring seams instead of inheriting an implicit “all canonical ids are fine” default
 
 - package authorship now uses the same contextual-ref lane for `packageRevision`, `packageRevision.publish`, `packagePatch`, `packageNamespace`, `packageDependency`, and `packageTransformer` references in `plugins/authoring-core/authoring-core-processes.js`, `plugins/authoring-core/authoring-core-handlers.js`, and `plugins/authoring-core/authoring-core-proposal-targets.js`, with `plugins/authoring-core/authoring-core.test.js` covering local, imported, hidden, and ambiguous package-noun reference behavior plus pre-authority lowering for handler and proposal execution paths
 
-- canonical-id compatibility classes are now explicit product state instead of code-only constants: `plugins/bootstrap/bootstrap-read-models.js` publishes the allowed class list in bootstrap state, `plugins/bootstrap/bootstrap-live-state.js` exposes `canonicalIdPolicyClasses()` and `classifyCanonicalIdPolicy(...)`, and `plugins/bootstrap/bootstrap-live-state.test.js` plus `test/bootstrap-host.test.js` prove same-context, imported, legacy, and hidden cases are inspectable without reading validator internals
+- canonical-id compatibility classes are now explicit product state instead of code-only constants: `plugins/bootstrap/bootstrap-read-models.js` publishes the still-allowed transitional class list in bootstrap state, `plugins/bootstrap/bootstrap-live-state.js` exposes `canonicalIdPolicyClasses()` and `classifyCanonicalIdPolicy(...)`, and `plugins/bootstrap/bootstrap-live-state.test.js` plus `test/bootstrap-host.test.js` prove same-context/imported classes remain inspectable while `legacy-only-path` survives only as a retired diagnostic classification and migration-required bridge row
 
 ### Stage A3. Unify Authority and Proposal Coverage
 
@@ -332,6 +334,7 @@ Current proof:
 - remaining widget and app-composition CRUD lanes now route unauthorized signed-in actors toward real proposals through the shared authoring seams in `plugins/authoring-core/authoring-core-handlers.js` and `plugins/program-authoring/program-authoring-handlers.js`, with `plugins/authoring-core/authoring-core.test.js` covering widget plus route and serve proposal fallback and `plugins/program-authoring/program-authoring.test.js` covering backend-program version activate and rollback proposal fallback plus approved execution through shared helpers
 - legacy app-serving frontend is now retired instead of bridge-hosted: `src/runtime-bundle-handlers.js`, `src/runtime-server.js`, `src/runtime-routing.js`, `src/runtime-core-handlers.js`, `plugins/authoring-core/runtime.js`, `plugins/mcp/mcp-tools.js`, `plugins/bootstrap/bootstrap-read-models.js`, and `src/runtime-authoring-policy.js` now remove runnable `page.home` / `compat.legacy-widget-program` serving, remove `frontendLegacyMigration`, return explicit `410` retirement responses for retired legacy routes, and expose only `frontendLegacyUplift` retirement diagnostics plus native uplift as the governed path forward
 - constrained/bootstrap/operator truth now matches that retirement: `page.home` is absent from core runtime handler catalogs and bootstrap route-authoring guidance, compatibility-bridge ledgers no longer claim legacy frontend bridge activity, maintained starter/bootstrap app creation now authors a native `page.surface` todo flow directly instead of seeding legacy app material plus post-seed uplift, and the focused proof suite (`test/frontend-legacy-uplift.test.js`, `plugins/authoring-core/authoring-core.test.js`, `plugins/bootstrap/bootstrap-read-models.test.js`, `plugins/mcp/mcp.test.js`, `test/runtime-routing.test.js`, `test/runtime-governance.test.js`, and `test/runtime-authoring-policy.test.js`) covers retirement status, proposal fallback, constrained reads, and native uplift end to end
+- authoring/profile truth no longer advertises `page.home` as a live frontend consumer outside those retirement fixtures: `src/runtime-authoring-policy.js`, `src/runtime-governance.js`, `plugins/bootstrap/bootstrap-shell-render-view.test.js`, and `test/bootstrap-host.test.js` now describe the maintained starter and public frontend matrix only in terms of canonical `page.surface`, so the remaining `page.home` references are confined to historical uplift inputs, explicit retirement diagnostics, and dedicated retirement-proof tests
 - public legacy frontend authoring is now retired alongside serving: `plugins/program-authoring/runtime.js`, `plugins/program-authoring/program-authoring-handlers.js`, `src/runtime-governance.js`, `src/runtime-authoring-policy.js`, `src/runtime-server.js`, `plugins/bootstrap/bootstrap-page-main.wtoml`, `plugins/bootstrap/bootstrap-state-list-render.js`, and `plugins/starter/*` now remove constrained/operator `frontendProgram.create` and `frontendStep.create`, return explicit `410` retirement truth from `/api/frontend-programs` and `/api/frontend-steps`, keep bootstrap focused on native noun inventory plus `frontendLegacyUplift` diagnostics, and keep legacy widget/program/step records only as inspect or uplift-analysis inputs instead of a live app-authoring lane
 - widget version operations are no longer review-only folklore in product surfaces: `plugins/inspect/runtime.js` now proposes `widgetVersion.activate` and `widgetVersion.rollback` through the same proposal lane, while `test/bootstrap-host.test.js`, `test/host.test.js`, `plugins/inspect/inspect.test.js`, and `test/ui.live-inspector.test.js` prove read-only shared widget version changes create real proposals and apply only after authorized approval
 - remaining canvas and asset shared mutations now follow the same rule, with `plugins/assets/handlers.js` returning proposals for unauthorized asset attach and detach requests and shared canvas proposal targets executing through `plugins/proposals/proposal-executor.js`; `test/canvas-host.test.js` and `test/runtime-authoring-services.test.js` prove proposal fallback and approved execution for asset attachment, scoped perspective creation, canvas thing mutation, batch mutation, duplicate or removeMany, and place operations
@@ -360,15 +363,11 @@ Current proof:
 Objective:
 Reusable composition becomes expressible through the platform itself.
 
-Decision question:
+Current direction:
 
-Should the reusable unit be expressed as:
-
-- manifest plus filesystem package
-- patch-first package revision
-- authored object model that lowers to patch bundles
-
-Recommended sequence:
+- authored object model that lowers to canonical patch bundles
+- package-first authorship with plugin as runtime-facing flavor
+- deterministic revision, coexistence, and convergence review
 
 #### A4.1 Define the authored nouns
 
@@ -484,40 +483,23 @@ Current proof:
 - those same convergence and apply-preview rows now render in the visible bootstrap authored-state inventory through `plugins/bootstrap/bootstrap-state-list-render.js` and `plugins/bootstrap/bootstrap-page-main.wtoml`, with `test/ui.bootstrap.test.js` proving remaining glue and revision apply status are product-visible instead of trapped behind bootstrap-state JSON
 - `test/package-authorship-world.test.js`, `plugins/platform/platform.test.js`, `plugins/mcp/mcp.test.js`, `plugins/authoring-core/authoring-core.test.js`, `test/runtime-governance.test.js`, `plugins/bootstrap/bootstrap-read-models.test.js`, `plugins/bootstrap/bootstrap-live-state.test.js`, and `test/bootstrap-host.test.js` cover transformer authoring, transformer-linked patches, namespace-scoped transformer bundle preview, convergence reads, bootstrap inspection surfaces, and governance wiring end to end
 
-## Detailed Task Backlog
+## Remaining Group A Work
 
-### Immediate tranche of concrete work
+The original early-stage backlog below this point is largely shipped. The
+useful remaining backlog is now:
 
-1. Add a compatibility-bridge inventory projection and route.
-2. Enumerate remaining mutating routes and classify governance coverage.
-3. Add missing contextual-ref lowering coverage for authored core nouns.
-4. Write the capability compatibility schema and evaluator contract.
-5. Design the authored package or patch nouns in a dedicated spec.
-6. Prototype canonical `wtoml` ordering and deterministic serialization tests.
-7. Define MCP tool shapes for package or patch authoring.
-
-### "Trivialized" implementation breakdown for the first three slices
-
-#### Compatibility bridge inventory
-
-- add one source-of-truth list in code for known bridges
-- project that list into diagnostics
-- expose one bootstrap or inspector read surface
-- add one test that fails when an unregistered bridge is emitted
-
-#### Governance route inventory
-
-- search for mutating handlers
-- annotate each with a governance mode
-- fail tests when a new mutating handler has no governance annotation
-- project the annotation catalog for operator review
-
-#### Contextual ref coverage
-
-- enumerate reference-bearing fields in the schema
-- add lowering helpers for one noun at a time
-- add ambiguity and visibility tests per noun
-- remove direct canonical-id fallback only after tests and diagnostics exist
+1. retire or explicitly fence the remaining legacy and canonical-id
+   compatibility residue so no product-facing surface implies they are normal
+   authoring lanes
+2. keep shrinking `frontendLegacyUplift.blocked[]` by promoting real native
+   expressions where they belong and leaving the rest honestly blocked
+3. stabilize the shared proposal-execution proof lane so proposal fallback and
+   approved execution stay green across remaining shared mutation families
+4. tighten A4 language and runtime seams so authored `package` truth,
+   deterministic bundle output, and filesystem/plugin compatibility material are
+   clearly separated in product surfaces and docs
+5. continue turning coexistence and convergence from inspectable truth into a
+   routine operator workflow without reintroducing fake merge simplicity
 
 ## Acceptance Gates
 
@@ -529,7 +511,7 @@ This group only counts as materially advanced when:
 - namespaces and merge semantics are treated as product concerns, not postponed folklore
 - new contributors would be forced toward context, capability, and authority semantics rather than easy global-id shortcuts
 
-## Current Frontend Proof (2026-06-19)
+## Current Frontend Proof (2026-06-20)
 
 The canonical frontend floor on `page.surface` now includes:
 
@@ -549,7 +531,9 @@ Current proof status:
   `frontendLegacyUplift` succeeds
 - native subset uplift off retired legacy route state is live through
   `frontendLegacyUplift`
-- collection repeat authoring, route-authored preload policies, and canonical
+- collection repeat authoring, route-authored preload policies, same-origin
+  route-backed `click` / `change` / `submit` effects, timed same-origin
+  `input:*` read effects through authored interaction `timing`, and canonical
   query-state bindings are in the constrained public lane
 - `dispatchDomEvent` is retired from public/runtime support surfaces and no
   longer counts as an acceptable authored-native target
@@ -558,10 +542,16 @@ Current proof status:
 - `frontendLegacyUplift.retirementStatus`, `pending[]`, `blocked[]`, and
   `retiredRoutes[]` are now the honest inspection surfaces for remaining
   unservable legacy frontend routes
+- input-driven writes and other unsupported legacy network semantics remain
+  honestly blocked; the native debounce/throttle read lane now exists on
+  canonical `page.surface` without reintroducing hidden per-keystroke JS
 - maintained starter/bootstrap app creation now emits native `surface`,
   `process`, `projection`, `collection`, `boundary`, `policy`, and
   `page.surface` route material directly instead of seeding a legacy app and
   uplifting it as a post-step
+- active runtime/profile and route-authoring proof fixtures now use canonical
+  `page.surface`; the remaining `page.home` declarations are confined to
+  historical source-ingestion, uplift, and explicit retirement diagnostics
 
 ## Primary Source Map
 

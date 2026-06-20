@@ -9,10 +9,10 @@ test("mounted route ownership includes the route entry before generic-host owner
       method: "GET",
       path: "/",
       serves: "page",
-      handler: "page.home"
+      handler: "page.surface"
     },
     handlerMetadataById: {
-      "page.home": {
+      "page.surface": {
         ownerClass: "generic-host",
         ownerBundleId: "bundle-core-runtime"
       }
@@ -33,7 +33,7 @@ test("mounted route ownership includes the route entry before generic-host owner
       class: "generic-host",
       bundleId: "bundle-core-runtime",
       pluginId: null,
-      handlerId: "page.home",
+      handlerId: "page.surface",
       note: "Runtime behavior is owned by shared host/runtime code."
     }
   ]);

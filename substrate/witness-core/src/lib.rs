@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -14,6 +14,35 @@ const CAP_STORAGE_WRITE: &str = "storage.write";
 const CAP_NOTIFY_SURFACE: &str = "notify.surface";
 const CAP_PROOF_RUN: &str = "proof.run";
 const CAP_PACKAGE_PROMOTE: &str = "package.promote";
+const CAP_FS_READ: &str = "capability.fs.read";
+const CAP_FS_WRITE: &str = "capability.fs.write";
+const CAP_FS_PATCH: &str = "capability.fs.patch";
+const CAP_FS_STAT: &str = "capability.fs.stat";
+const CAP_PROCESS_SOAK: &str = "process.soak";
+const AUTHORING_WRITE_CONFLICT: &str = "authoring.write.conflict";
+const AUTHORING_WRITE_REJECTED: &str = "authoring.write.rejected";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ServingMode {
+    Live,
+    Stable,
+}
+
+impl ServingMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Live => "live",
+            Self::Stable => "stable",
+        }
+    }
+
+    fn from_str(value: &str) -> Self {
+        match value {
+            "stable" => Self::Stable,
+            _ => Self::Live,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GenerationState {
@@ -119,6 +148,25 @@ pub struct Aliases {
 }
 
 #[derive(Clone, Debug)]
+pub struct ServingDirective {
+    pub requested_mode: ServingMode,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct ServingStatus {
+    pub requested_mode: ServingMode,
+    pub effective_mode: ServingMode,
+    pub reason: String,
+    pub updated_at: String,
+    pub latest_generation_id: Option<String>,
+    pub latest_generation_state: Option<String>,
+    pub current_stable: Option<String>,
+    pub current_green_local: Option<String>,
+    pub last_good: Option<String>,
+}
+
+#[derive(Clone, Debug)]
 pub struct WatchConfig {
     pub roots: Vec<String>,
     pub ignore: Vec<String>,
@@ -141,6 +189,19 @@ pub struct SuperviseConfig {
     pub command: Option<String>,
     pub working_dir: Option<String>,
     pub restart_on_exit: bool,
+    pub restart_on_unhealthy: bool,
+    pub health_url: Option<String>,
+    pub health_interval_ms: u64,
+    pub health_timeout_ms: u64,
+    pub degraded_grace_polls: u64,
+    pub unhealthy_grace_polls: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct FrontDoorConfig {
+    pub public_addr: Option<String>,
+    pub drain_timeout_ms: u64,
+    pub startup_cutover_timeout_ms: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -149,6 +210,7 @@ pub struct CoreConfig {
     pub proof: ProofConfig,
     pub package: PackageConfig,
     pub supervise: SuperviseConfig,
+    pub frontdoor: FrontDoorConfig,
 }
 
 impl Default for CoreConfig {
@@ -175,9 +237,37 @@ impl Default for CoreConfig {
                 command: None,
                 working_dir: None,
                 restart_on_exit: true,
+                restart_on_unhealthy: true,
+                health_url: None,
+                health_interval_ms: 500,
+                health_timeout_ms: 10_000,
+                degraded_grace_polls: 10,
+                unhealthy_grace_polls: 3,
+            },
+            frontdoor: FrontDoorConfig {
+                public_addr: None,
+                drain_timeout_ms: 15_000,
+                startup_cutover_timeout_ms: 45_000,
             },
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct SupervisedProcessInstanceState {
+    pub id: String,
+    pub state: String,
+    pub port: Option<u16>,
+    pub running: bool,
+    pub ready: bool,
+    pub pid: Option<u32>,
+    pub inflight_connections: u64,
+    pub last_started_at: Option<String>,
+    pub last_exited_at: Option<String>,
+    pub last_health_status: Option<String>,
+    pub drain_started_at: Option<String>,
+    pub drain_finished_at: Option<String>,
+    pub role: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -185,6 +275,7 @@ pub struct SupervisedProcessState {
     pub command: Option<String>,
     pub working_dir: Option<String>,
     pub restart_on_exit: bool,
+    pub restart_on_unhealthy: bool,
     pub running: bool,
     pub pid: Option<u32>,
     pub restart_count: u64,
@@ -192,8 +283,106 @@ pub struct SupervisedProcessState {
     pub last_exited_at: Option<String>,
     pub last_exit_code: Option<i32>,
     pub last_error: Option<String>,
+    pub ready: bool,
+    pub last_ready_at: Option<String>,
+    pub last_health_status: Option<String>,
+    pub status: Option<String>,
+    pub reason_codes: Vec<String>,
+    pub last_health_sample_at: Option<String>,
+    pub health_url: Option<String>,
+    pub degraded_streak: u64,
+    pub unhealthy_streak: u64,
+    pub last_restart_reason: Option<String>,
     pub restart_requested: bool,
     pub stop_requested: bool,
+    pub instance_id: Option<String>,
+    pub role: Option<String>,
+    pub mutations_enabled: bool,
+    pub watchers_enabled: bool,
+    pub public_addr: Option<String>,
+    pub frontdoor_enabled: bool,
+    pub frontdoor_active_instance_id: Option<String>,
+    pub frontdoor_active_target: Option<String>,
+    pub instances: Vec<SupervisedProcessInstanceState>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SoakMark {
+    pub phase: String,
+    pub message: Option<String>,
+    pub marked_at: String,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SoakHighWater {
+    pub rss: u64,
+    pub heap_used: u64,
+    pub event_loop_p95_ms: u64,
+    pub active_requests: u64,
+    pub sse_clients: u64,
+    pub preview_sessions: u64,
+    pub snapshot_watchers: u64,
+    pub fswatcher_resources: u64,
+    pub timeout_resources: u64,
+    pub restart_count: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct SoakSample {
+    pub sequence: u64,
+    pub phase: Option<String>,
+    pub sampled_at: String,
+    pub ready: bool,
+    pub status: String,
+    pub reason_codes: Vec<String>,
+    pub rss: u64,
+    pub heap_used: u64,
+    pub event_loop_p95_ms: u64,
+    pub active_requests: u64,
+    pub sse_clients: u64,
+    pub preview_sessions: u64,
+    pub snapshot_watchers: u64,
+    pub fswatcher_resources: u64,
+    pub timeout_resources: u64,
+    pub process_running: bool,
+    pub process_ready: bool,
+    pub pid: Option<u32>,
+    pub restart_count: u64,
+    pub serving_requested_mode: String,
+    pub serving_effective_mode: String,
+    pub serving_reason: String,
+    pub latest_generation_id: Option<String>,
+    pub latest_generation_state: Option<String>,
+    pub stable_failover: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct SoakSession {
+    pub id: String,
+    pub scenario: String,
+    pub status: String,
+    pub started_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+    pub failure_reason: Option<String>,
+    pub sample_count: u64,
+    pub healthy_samples: u64,
+    pub degraded_samples: u64,
+    pub unhealthy_samples: u64,
+    pub restart_observed: bool,
+    pub stable_failover_observed: bool,
+    pub start_restart_count: u64,
+    pub latest_restart_count: u64,
+    pub current_phase: Option<String>,
+    pub latest_sample: Option<SoakSample>,
+    pub marks: Vec<SoakMark>,
+    pub high_water: SoakHighWater,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SoakState {
+    pub current_session: Option<SoakSession>,
+    pub last_session: Option<SoakSession>,
 }
 
 impl Default for SupervisedProcessState {
@@ -202,6 +391,7 @@ impl Default for SupervisedProcessState {
             command: None,
             working_dir: None,
             restart_on_exit: false,
+            restart_on_unhealthy: true,
             running: false,
             pid: None,
             restart_count: 0,
@@ -209,9 +399,43 @@ impl Default for SupervisedProcessState {
             last_exited_at: None,
             last_exit_code: None,
             last_error: None,
+            ready: false,
+            last_ready_at: None,
+            last_health_status: None,
+            status: None,
+            reason_codes: Vec::new(),
+            last_health_sample_at: None,
+            health_url: None,
+            degraded_streak: 0,
+            unhealthy_streak: 0,
+            last_restart_reason: None,
             restart_requested: false,
             stop_requested: false,
+            instance_id: None,
+            role: None,
+            mutations_enabled: true,
+            watchers_enabled: true,
+            public_addr: None,
+            frontdoor_enabled: false,
+            frontdoor_active_instance_id: None,
+            frontdoor_active_target: None,
+            instances: Vec::new(),
         }
+    }
+}
+
+impl SoakHighWater {
+    fn absorb(&mut self, sample: &SoakSample) {
+        self.rss = self.rss.max(sample.rss);
+        self.heap_used = self.heap_used.max(sample.heap_used);
+        self.event_loop_p95_ms = self.event_loop_p95_ms.max(sample.event_loop_p95_ms);
+        self.active_requests = self.active_requests.max(sample.active_requests);
+        self.sse_clients = self.sse_clients.max(sample.sse_clients);
+        self.preview_sessions = self.preview_sessions.max(sample.preview_sessions);
+        self.snapshot_watchers = self.snapshot_watchers.max(sample.snapshot_watchers);
+        self.fswatcher_resources = self.fswatcher_resources.max(sample.fswatcher_resources);
+        self.timeout_resources = self.timeout_resources.max(sample.timeout_resources);
+        self.restart_count = self.restart_count.max(sample.restart_count);
     }
 }
 
@@ -262,6 +486,7 @@ pub struct CoreEvent {
     pub generation_id: Option<String>,
     pub message: Option<String>,
     pub generation: Option<Generation>,
+    pub serving: Option<ServingDirective>,
     pub emitted_at: String,
 }
 
@@ -273,6 +498,7 @@ impl CoreEvent {
             generation_id: None,
             message: None,
             generation: None,
+            serving: None,
             emitted_at: now_iso(),
         }
     }
@@ -280,6 +506,11 @@ impl CoreEvent {
     fn with_generation(mut self, generation: &Generation) -> Self {
         self.generation_id = Some(generation.id.clone());
         self.generation = Some(generation.clone());
+        self
+    }
+
+    fn with_serving(mut self, serving: &ServingDirective) -> Self {
+        self.serving = Some(serving.clone());
         self
     }
 
@@ -294,13 +525,20 @@ impl CoreEvent {
         if let Some(generation) = &self.generation {
             fields.push(format!("\"generation\":{}", generation_to_json(generation)));
         }
+        if let Some(serving) = &self.serving {
+            fields.push(format!("\"serving\":{}", serving_directive_to_json(serving)));
+        }
         format!("{{{}}}", fields.into_iter().filter(|v| !v.is_empty()).collect::<Vec<_>>().join(","))
     }
 }
 
 pub struct Registry {
     generations: BTreeMap<String, Generation>,
+    preview_sessions: BTreeMap<String, String>,
     aliases: Aliases,
+    serving: ServingDirective,
+    last_effective_serving_mode: ServingMode,
+    soak: SoakState,
     store: Arc<dyn CoreStore>,
     subscribers: Vec<mpsc::Sender<CoreEvent>>,
 }
@@ -309,11 +547,19 @@ impl Registry {
     pub fn new(store: Arc<dyn CoreStore>) -> Self {
         let mut registry = Self {
             generations: BTreeMap::new(),
+            preview_sessions: BTreeMap::new(),
             aliases: Aliases::default(),
+            serving: ServingDirective {
+                requested_mode: ServingMode::Live,
+                updated_at: now_iso(),
+            },
+            last_effective_serving_mode: ServingMode::Live,
+            soak: SoakState::default(),
             store,
             subscribers: Vec::new(),
         };
         registry.replay_journal();
+        registry.last_effective_serving_mode = registry.effective_serving_mode();
         registry
     }
 
@@ -335,6 +581,31 @@ impl Registry {
         self.generations.get(id).cloned()
     }
 
+    pub fn preview_session(&self, id: &str) -> Option<String> {
+        self.preview_sessions.get(id).cloned()
+    }
+
+    pub fn soak_state(&self) -> SoakState {
+        self.soak.clone()
+    }
+
+    pub fn serving_status(&self) -> ServingStatus {
+        let latest = self.latest_generation();
+        let effective_mode = self.effective_serving_mode();
+        let reason = self.effective_serving_reason().to_string();
+        ServingStatus {
+            requested_mode: self.serving.requested_mode,
+            effective_mode,
+            reason,
+            updated_at: self.serving.updated_at.clone(),
+            latest_generation_id: latest.as_ref().map(|generation| generation.id.clone()),
+            latest_generation_state: latest.as_ref().map(|generation| generation.state.as_str().to_string()),
+            current_stable: self.aliases.current_stable.clone(),
+            current_green_local: self.aliases.current_green_local.clone(),
+            last_good: self.aliases.last_good.clone(),
+        }
+    }
+
     pub fn subscribe(&mut self) -> mpsc::Receiver<CoreEvent> {
         let (sender, receiver) = mpsc::channel();
         self.subscribers.push(sender);
@@ -342,6 +613,7 @@ impl Registry {
     }
 
     pub fn upsert_generation(&mut self, generation: Generation, kind: &str, capability: &str) {
+        let previous_effective_mode = self.effective_serving_mode();
         self.generations.insert(generation.id.clone(), generation.clone());
         if generation.state == GenerationState::GreenLocal {
             self.aliases.current_green_local = Some(generation.id.clone());
@@ -359,6 +631,7 @@ impl Registry {
             self.aliases.last_good = Some(generation.id.clone());
         }
         self.emit(CoreEvent::new(kind, capability).with_generation(&generation));
+        self.emit_serving_effective_change_if_needed(previous_effective_mode);
     }
 
     pub fn promote(&mut self, id: &str) -> Result<Generation, String> {
@@ -374,7 +647,211 @@ impl Registry {
         generation.state = GenerationState::Stable;
         generation.promotion_decision = Some("rollback-local".to_string());
         self.upsert_generation(generation.clone(), "generation.rollback", CAP_PACKAGE_PROMOTE);
+        self.request_serving_mode(ServingMode::Stable);
         Ok(generation)
+    }
+
+    pub fn request_serving_mode(&mut self, mode: ServingMode) -> ServingStatus {
+        let previous_effective_mode = self.effective_serving_mode();
+        self.serving.requested_mode = mode;
+        self.serving.updated_at = now_iso();
+        let kind = match mode {
+            ServingMode::Live => "serving.live.requested",
+            ServingMode::Stable => "serving.stable.requested",
+        };
+        self.emit(CoreEvent::new(kind, CAP_PACKAGE_PROMOTE).with_serving(&self.serving));
+        if let Some(event) = self.build_serving_effective_change_event(previous_effective_mode) {
+            self.emit(event);
+        }
+        self.serving_status()
+    }
+
+    pub fn upsert_preview_session(&mut self, id: &str, document: String) -> String {
+        self.preview_sessions.insert(id.to_string(), document.clone());
+        self.emit(CoreEvent {
+            kind: "preview.session.upsert".to_string(),
+            capability: CAP_STORAGE_WRITE.to_string(),
+            generation_id: None,
+            message: Some(document.clone()),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        document
+    }
+
+    pub fn delete_preview_session(&mut self, id: &str) -> bool {
+        let removed = self.preview_sessions.remove(id).is_some();
+        if removed {
+            self.emit(CoreEvent {
+                kind: "preview.session.delete".to_string(),
+                capability: CAP_STORAGE_WRITE.to_string(),
+                generation_id: None,
+                message: Some(id.to_string()),
+                generation: None,
+                serving: None,
+                emitted_at: now_iso(),
+            });
+        }
+        removed
+    }
+
+    pub fn start_soak_session(
+        &mut self,
+        id: &str,
+        scenario: &str,
+        process_state: &SupervisedProcessState,
+    ) -> SoakSession {
+        let session = SoakSession {
+            id: id.to_string(),
+            scenario: scenario.to_string(),
+            status: "running".to_string(),
+            started_at: now_iso(),
+            updated_at: now_iso(),
+            completed_at: None,
+            failure_reason: None,
+            sample_count: 0,
+            healthy_samples: 0,
+            degraded_samples: 0,
+            unhealthy_samples: 0,
+            restart_observed: false,
+            stable_failover_observed: false,
+            start_restart_count: process_state.restart_count,
+            latest_restart_count: process_state.restart_count,
+            current_phase: None,
+            latest_sample: None,
+            marks: Vec::new(),
+            high_water: SoakHighWater::default(),
+        };
+        self.soak.current_session = Some(session.clone());
+        self.emit(CoreEvent {
+            kind: "process.soak.started".to_string(),
+            capability: CAP_PROCESS_SOAK.to_string(),
+            generation_id: None,
+            message: Some(soak_session_to_json(&session)),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        session
+    }
+
+    pub fn mark_soak_session(&mut self, session_id: &str, phase: &str, message: Option<&str>) -> Result<SoakSession, String> {
+        let session = self
+            .soak
+            .current_session
+            .as_mut()
+            .filter(|entry| entry.id == session_id)
+            .ok_or_else(|| "soak session not found".to_string())?;
+        let mark = SoakMark {
+            phase: phase.to_string(),
+            message: message.map(|value| value.to_string()).filter(|value| !value.trim().is_empty()),
+            marked_at: now_iso(),
+        };
+        session.current_phase = Some(mark.phase.clone());
+        session.updated_at = mark.marked_at.clone();
+        session.marks.push(mark.clone());
+        let snapshot = session.clone();
+        self.emit(CoreEvent {
+            kind: "process.soak.mark".to_string(),
+            capability: CAP_PROCESS_SOAK.to_string(),
+            generation_id: None,
+            message: Some(soak_mark_to_json(session_id, &mark)),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        Ok(snapshot)
+    }
+
+    pub fn record_soak_sample(
+        &mut self,
+        session_id: &str,
+        mut sample: SoakSample,
+    ) -> Result<SoakSession, String> {
+        let serving = self.serving_status();
+        let session = self
+            .soak
+            .current_session
+            .as_mut()
+            .filter(|entry| entry.id == session_id)
+            .ok_or_else(|| "soak session not found".to_string())?;
+        sample.serving_requested_mode = serving.requested_mode.as_str().to_string();
+        sample.serving_effective_mode = serving.effective_mode.as_str().to_string();
+        sample.serving_reason = serving.reason.clone();
+        sample.latest_generation_id = serving.latest_generation_id.clone();
+        sample.latest_generation_state = serving.latest_generation_state.clone();
+        sample.stable_failover =
+            serving.requested_mode == ServingMode::Live && serving.effective_mode == ServingMode::Stable;
+        sample.sequence = session.sample_count + 1;
+        if sample.phase.is_none() {
+            sample.phase = session.current_phase.clone();
+        }
+        session.sample_count = sample.sequence;
+        session.updated_at = sample.sampled_at.clone();
+        session.latest_restart_count = sample.restart_count;
+        session.restart_observed = sample.restart_count > session.start_restart_count;
+        session.stable_failover_observed = session.stable_failover_observed || sample.stable_failover;
+        session.current_phase = sample.phase.clone().or_else(|| session.current_phase.clone());
+        match sample.status.as_str() {
+            "healthy" => session.healthy_samples += 1,
+            "unhealthy" => session.unhealthy_samples += 1,
+            _ => session.degraded_samples += 1,
+        }
+        session.high_water.absorb(&sample);
+        session.latest_sample = Some(sample.clone());
+        let snapshot = session.clone();
+        self.emit(CoreEvent {
+            kind: "process.soak.sample".to_string(),
+            capability: CAP_PROCESS_SOAK.to_string(),
+            generation_id: sample.latest_generation_id.clone(),
+            message: Some(soak_sample_payload_to_json(session_id, &sample)),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        Ok(snapshot)
+    }
+
+    pub fn complete_soak_session(&mut self, session_id: &str, message: Option<&str>) -> Result<SoakSession, String> {
+        self.finish_soak_session(session_id, "completed", message)
+    }
+
+    pub fn fail_soak_session(&mut self, session_id: &str, message: Option<&str>) -> Result<SoakSession, String> {
+        self.finish_soak_session(session_id, "failed", message)
+    }
+
+    fn finish_soak_session(&mut self, session_id: &str, status: &str, message: Option<&str>) -> Result<SoakSession, String> {
+        let mut session = self
+            .soak
+            .current_session
+            .clone()
+            .filter(|entry| entry.id == session_id)
+            .ok_or_else(|| "soak session not found".to_string())?;
+        let completed_at = now_iso();
+        session.status = status.to_string();
+        session.updated_at = completed_at.clone();
+        session.completed_at = Some(completed_at);
+        if status == "failed" {
+            session.failure_reason = message.map(|value| value.to_string()).filter(|value| !value.trim().is_empty());
+        }
+        let event_kind = if status == "failed" {
+            "process.soak.failed"
+        } else {
+            "process.soak.completed"
+        };
+        self.soak.current_session = None;
+        self.soak.last_session = Some(session.clone());
+        self.emit(CoreEvent {
+            kind: event_kind.to_string(),
+            capability: CAP_PROCESS_SOAK.to_string(),
+            generation_id: None,
+            message: Some(soak_session_finish_to_json(&session, message)),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        Ok(session)
     }
 
     pub fn emit(&mut self, event: CoreEvent) {
@@ -388,6 +865,33 @@ impl Registry {
         };
         for line in lines {
             let kind = extract_json_string(&line, "kind").unwrap_or_default();
+            if kind.starts_with("serving.") {
+                if let Some(requested_mode) = extract_json_string(&line, "requestedMode") {
+                    self.serving.requested_mode = ServingMode::from_str(&requested_mode);
+                }
+                if let Some(updated_at) = extract_json_string(&line, "updatedAt") {
+                    self.serving.updated_at = updated_at;
+                }
+                continue;
+            }
+            if kind == "preview.session.upsert" {
+                if let Some(document) = extract_json_string_decoded(&line, "message") {
+                    if let Some(id) = extract_json_string_decoded(&document, "id").or_else(|| extract_json_string(&document, "id")) {
+                        self.preview_sessions.insert(id, document);
+                    }
+                }
+                continue;
+            }
+            if kind == "preview.session.delete" {
+                if let Some(id) = extract_json_string_decoded(&line, "message") {
+                    self.preview_sessions.remove(&id);
+                }
+                continue;
+            }
+            if kind.starts_with("process.soak.") {
+                self.replay_soak_event(&kind, &line);
+                continue;
+            }
             let Some(id) = extract_json_string(&line, "id") else {
                 continue;
             };
@@ -420,6 +924,162 @@ impl Registry {
             }
         }
     }
+
+    fn latest_generation(&self) -> Option<Generation> {
+        self.generations().into_iter().last()
+    }
+
+    fn effective_serving_mode(&self) -> ServingMode {
+        if self.serving.requested_mode == ServingMode::Stable {
+            return ServingMode::Stable;
+        }
+        match self.latest_generation().map(|generation| generation.state) {
+            Some(GenerationState::CompileFailed | GenerationState::ProofFailed) => ServingMode::Stable,
+            _ => ServingMode::Live,
+        }
+    }
+
+    fn effective_serving_reason(&self) -> &'static str {
+        if self.serving.requested_mode == ServingMode::Stable {
+            return "requested-stable";
+        }
+        match self.latest_generation().map(|generation| generation.state) {
+            Some(GenerationState::CompileFailed | GenerationState::ProofFailed) => "latest-failed",
+            _ => "requested-live",
+        }
+    }
+
+    fn build_serving_effective_change_event(&mut self, previous_effective_mode: ServingMode) -> Option<CoreEvent> {
+        let next_effective_mode = self.effective_serving_mode();
+        if next_effective_mode == previous_effective_mode {
+            self.last_effective_serving_mode = next_effective_mode;
+            return None;
+        }
+        self.last_effective_serving_mode = next_effective_mode;
+        let status = self.serving_status();
+        Some(CoreEvent {
+            kind: "serving.effective.changed".to_string(),
+            capability: CAP_NOTIFY_SURFACE.to_string(),
+            generation_id: status.latest_generation_id.clone(),
+            message: Some(format!(
+                "effectiveMode={} reason={}",
+                status.effective_mode.as_str(),
+                status.reason
+            )),
+            generation: status
+                .latest_generation_id
+                .as_deref()
+                .and_then(|id| self.generation(id)),
+            serving: Some(self.serving.clone()),
+            emitted_at: now_iso(),
+        })
+    }
+
+    fn emit_serving_effective_change_if_needed(&mut self, previous_effective_mode: ServingMode) {
+        if let Some(event) = self.build_serving_effective_change_event(previous_effective_mode) {
+            self.emit(event);
+        }
+    }
+
+    fn replay_soak_event(&mut self, kind: &str, line: &str) {
+        let Some(message) = extract_json_string_decoded(line, "message") else {
+            return;
+        };
+        match kind {
+            "process.soak.started" => {
+                if let Some(session) = soak_session_from_json(&message) {
+                    self.soak.current_session = Some(session);
+                }
+            }
+            "process.soak.mark" => {
+                let session_id = extract_json_string(&message, "sessionId").unwrap_or_default();
+                let Some(mark) = soak_mark_from_json(&message) else {
+                    return;
+                };
+                if self.soak.current_session.as_ref().map(|entry| entry.id.as_str()) == Some(session_id.as_str()) {
+                    if let Some(session) = self.soak.current_session.as_mut() {
+                        session.current_phase = Some(mark.phase.clone());
+                        session.updated_at = mark.marked_at.clone();
+                        session.marks.push(mark);
+                    }
+                }
+            }
+            "process.soak.sample" => {
+                let session_id = extract_json_string(&message, "sessionId").unwrap_or_default();
+                let Some(sample) = soak_sample_from_json(&message) else {
+                    return;
+                };
+                if self.soak.current_session.as_ref().map(|entry| entry.id.as_str()) == Some(session_id.as_str()) {
+                    if let Some(session) = self.soak.current_session.as_mut() {
+                        session.sample_count = sample.sequence;
+                        session.updated_at = sample.sampled_at.clone();
+                        session.latest_restart_count = sample.restart_count;
+                        session.restart_observed = sample.restart_count > session.start_restart_count;
+                        session.stable_failover_observed = session.stable_failover_observed || sample.stable_failover;
+                        session.current_phase = sample.phase.clone().or_else(|| session.current_phase.clone());
+                        match sample.status.as_str() {
+                            "healthy" => session.healthy_samples += 1,
+                            "unhealthy" => session.unhealthy_samples += 1,
+                            _ => session.degraded_samples += 1,
+                        }
+                        session.high_water.absorb(&sample);
+                        session.latest_sample = Some(sample);
+                    }
+                }
+            }
+            "process.soak.completed" | "process.soak.failed" => {
+                let Some(id) = extract_json_string(&message, "id") else {
+                    return;
+                };
+                let status = extract_json_string(&message, "status").unwrap_or_else(|| {
+                    if kind.ends_with("failed") {
+                        "failed".to_string()
+                    } else {
+                        "completed".to_string()
+                    }
+                });
+                let updated_at = extract_json_string(&message, "updatedAt").unwrap_or_else(now_iso);
+                let failure_reason = extract_json_string_decoded(&message, "message")
+                    .or_else(|| extract_json_string(&message, "message"));
+                let mut session = self
+                    .soak
+                    .current_session
+                    .clone()
+                    .filter(|entry| entry.id == id)
+                    .or_else(|| soak_finished_session_from_json(&message))
+                    .unwrap_or_else(|| SoakSession {
+                        id,
+                        scenario: "soak".to_string(),
+                        status: status.clone(),
+                        started_at: updated_at.clone(),
+                        updated_at: updated_at.clone(),
+                        completed_at: Some(updated_at.clone()),
+                        failure_reason: if status == "failed" { failure_reason.clone() } else { None },
+                        sample_count: 0,
+                        healthy_samples: 0,
+                        degraded_samples: 0,
+                        unhealthy_samples: 0,
+                        restart_observed: false,
+                        stable_failover_observed: false,
+                        start_restart_count: 0,
+                        latest_restart_count: 0,
+                        current_phase: None,
+                        latest_sample: None,
+                        marks: Vec::new(),
+                        high_water: SoakHighWater::default(),
+                    });
+                session.status = status.clone();
+                session.updated_at = updated_at.clone();
+                session.completed_at = Some(updated_at);
+                if status == "failed" {
+                    session.failure_reason = failure_reason;
+                }
+                self.soak.current_session = None;
+                self.soak.last_session = Some(session);
+            }
+            _ => {}
+        }
+    }
 }
 
 pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
@@ -431,6 +1091,10 @@ pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
         command: config.supervise.command.clone(),
         working_dir: config.supervise.working_dir.clone(),
         restart_on_exit: config.supervise.restart_on_exit,
+        restart_on_unhealthy: config.supervise.restart_on_unhealthy,
+        health_url: config.supervise.health_url.clone(),
+        public_addr: config.frontdoor.public_addr.clone(),
+        frontdoor_enabled: config.frontdoor.public_addr.as_deref().is_some_and(|value| !value.trim().is_empty()),
         ..SupervisedProcessState::default()
     }));
     {
@@ -438,14 +1102,29 @@ pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
         registry_guard.emit(CoreEvent::new("core.started", CAP_NOTIFY_SURFACE));
     }
     start_watcher(cwd.clone(), config.clone(), Arc::clone(&registry));
-    start_supervised_process(
-        cwd.clone(),
-        addr.clone(),
-        config.supervise.clone(),
-        Arc::clone(&registry),
-        Arc::clone(&process_state),
-    );
-    serve_http(addr, registry, process_state)
+    if config.frontdoor.public_addr.as_deref().is_some_and(|value| !value.trim().is_empty()) {
+        start_frontdoor_proxy(
+            config.frontdoor.clone(),
+            Arc::clone(&registry),
+            Arc::clone(&process_state),
+        );
+        start_supervised_process_frontdoor(
+            cwd.clone(),
+            addr.clone(),
+            config.clone(),
+            Arc::clone(&registry),
+            Arc::clone(&process_state),
+        );
+    } else {
+        start_supervised_process(
+            cwd.clone(),
+            addr.clone(),
+            config.supervise.clone(),
+            Arc::clone(&registry),
+            Arc::clone(&process_state),
+        );
+    }
+    serve_http(addr, cwd, config, registry, process_state)
 }
 
 pub fn load_config(path: &Path) -> std::io::Result<CoreConfig> {
@@ -481,6 +1160,29 @@ pub fn parse_config(text: &str) -> CoreConfig {
             ("supervise", "working_dir") => config.supervise.working_dir = Some(parse_string(value)),
             ("supervise", "restart_on_exit") => {
                 config.supervise.restart_on_exit = matches!(value.trim(), "true" | "1" | "\"true\"");
+            }
+            ("supervise", "restart_on_unhealthy") => {
+                config.supervise.restart_on_unhealthy = matches!(value.trim(), "true" | "1" | "\"true\"");
+            }
+            ("supervise", "health_url") => config.supervise.health_url = Some(parse_string(value)),
+            ("supervise", "health_interval_ms") => {
+                config.supervise.health_interval_ms = value.parse().unwrap_or(config.supervise.health_interval_ms);
+            }
+            ("supervise", "health_timeout_ms") => {
+                config.supervise.health_timeout_ms = value.parse().unwrap_or(config.supervise.health_timeout_ms);
+            }
+            ("supervise", "degraded_grace_polls") => {
+                config.supervise.degraded_grace_polls = value.parse().unwrap_or(config.supervise.degraded_grace_polls);
+            }
+            ("supervise", "unhealthy_grace_polls") => {
+                config.supervise.unhealthy_grace_polls = value.parse().unwrap_or(config.supervise.unhealthy_grace_polls);
+            }
+            ("frontdoor", "public_addr") => config.frontdoor.public_addr = Some(parse_string(value)),
+            ("frontdoor", "drain_timeout_ms") => {
+                config.frontdoor.drain_timeout_ms = value.parse().unwrap_or(config.frontdoor.drain_timeout_ms);
+            }
+            ("frontdoor", "startup_cutover_timeout_ms") => {
+                config.frontdoor.startup_cutover_timeout_ms = value.parse().unwrap_or(config.frontdoor.startup_cutover_timeout_ms);
             }
             _ => {}
         }
@@ -525,6 +1227,7 @@ fn run_generation_pipeline(cwd: &Path, config: &CoreConfig, changed: &[String], 
         generation_id: Some(generation.id.clone()),
         message: Some(changed.join(", ")),
         generation: Some(generation.clone()),
+        serving: None,
         emitted_at: now_iso(),
     });
 
@@ -585,6 +1288,7 @@ fn run_proof(cwd: &Path, name: &str, command: &str, slow_ms: u64, generation_id:
                     generation_id: Some(generation_id),
                     message: Some(format!("proof {name} {}", record.status.as_str())),
                     generation: None,
+                    serving: None,
                     emitted_at: now_iso(),
                 });
                 return record;
@@ -598,6 +1302,7 @@ fn run_proof(cwd: &Path, name: &str, command: &str, slow_ms: u64, generation_id:
                         generation_id: Some(generation_id.clone()),
                         message: Some(format!("proof {name} exceeded {slow_ms}ms")),
                         generation: None,
+                        serving: None,
                         emitted_at: now_iso(),
                     });
                 }
@@ -615,6 +1320,8 @@ fn run_proof(cwd: &Path, name: &str, command: &str, slow_ms: u64, generation_id:
 
 fn serve_http(
     addr: String,
+    cwd: PathBuf,
+    config: CoreConfig,
     registry: Arc<Mutex<Registry>>,
     process_state: Arc<Mutex<SupervisedProcessState>>,
 ) -> std::io::Result<()> {
@@ -625,8 +1332,10 @@ fn serve_http(
         };
         let registry = Arc::clone(&registry);
         let process_state = Arc::clone(&process_state);
+        let cwd = cwd.clone();
+        let config = config.clone();
         thread::spawn(move || {
-            let _ = handle_client(stream, registry, process_state);
+            let _ = handle_client(stream, &cwd, &config, registry, process_state);
         });
     }
     Ok(())
@@ -634,6 +1343,8 @@ fn serve_http(
 
 fn handle_client(
     mut stream: TcpStream,
+    cwd: &Path,
+    config: &CoreConfig,
     registry: Arc<Mutex<Registry>>,
     process_state: Arc<Mutex<SupervisedProcessState>>,
 ) -> std::io::Result<()> {
@@ -642,7 +1353,8 @@ fn handle_client(
     reader.read_line(&mut first_line)?;
     let mut parts = first_line.split_whitespace();
     let method = parts.next().unwrap_or("");
-    let path = parts.next().unwrap_or("/");
+    let raw_path = parts.next().unwrap_or("/");
+    let (path, query) = raw_path.split_once('?').unwrap_or((raw_path, ""));
     let mut content_length = 0usize;
     loop {
         let mut line = String::new();
@@ -663,12 +1375,15 @@ fn handle_client(
     match (method, path) {
         ("GET", "/health") => {
             let state = process_state.lock().expect("process state lock").clone();
+            let soak = registry.lock().expect("registry lock").soak_state();
             write_json(
                 &mut stream,
                 200,
                 &format!(
-                    "{{\"ok\":true,\"service\":\"witness-core\",\"process\":{}}}",
-                    supervised_process_state_to_json(&state)
+                    "{{\"ok\":{},\"service\":\"witness-core\",\"process\":{},\"soak\":{}}}",
+                    if state.status.as_deref() == Some("unhealthy") { "false" } else { "true" },
+                    supervised_process_state_to_json(&state),
+                    soak_state_to_json(&soak)
                 ),
             )
         }
@@ -676,12 +1391,25 @@ fn handle_client(
             let registry = registry.lock().expect("registry lock");
             write_json(&mut stream, 200, &registry_to_json(&registry))
         }
+        ("GET", "/soak") => {
+            let soak = registry.lock().expect("registry lock").soak_state();
+            write_json(&mut stream, 200, &soak_state_to_json(&soak))
+        }
+        ("GET", "/serving") => {
+            let registry = registry.lock().expect("registry lock");
+            write_json(&mut stream, 200, &serving_status_to_json(&registry.serving_status()))
+        }
         ("GET", "/processes") => {
             let state = process_state.lock().expect("process state lock").clone();
+            let soak = registry.lock().expect("registry lock").soak_state();
             write_json(
                 &mut stream,
                 200,
-                &format!("{{\"process\":{}}}", supervised_process_state_to_json(&state)),
+                &format!(
+                    "{{\"process\":{},\"soak\":{}}}",
+                    supervised_process_state_to_json(&state),
+                    soak_state_to_json(&soak)
+                ),
             )
         }
         ("POST", "/processes/restart") => {
@@ -704,6 +1432,250 @@ fn handle_client(
                     &format!("{{\"ok\":true,\"process\":{}}}", supervised_process_state_to_json(&state)),
                 ),
                 Err(error) => write_json(&mut stream, 409, &format!("{{\"error\":{}}}", json_string(&error))),
+            }
+        }
+        ("POST", "/serving/live") => {
+            let status = registry.lock().expect("registry lock").request_serving_mode(ServingMode::Live);
+            write_json(&mut stream, 200, &serving_status_to_json(&status))
+        }
+        ("POST", "/serving/stable") => {
+            let status = registry.lock().expect("registry lock").request_serving_mode(ServingMode::Stable);
+            write_json(&mut stream, 200, &serving_status_to_json(&status))
+        }
+        ("GET", "/capabilities/fs/read") => {
+            let params = parse_form_body(query);
+            let correlation = capability_correlation_from_params(&params);
+            let source_path = params.get("path").map(String::as_str).unwrap_or("");
+            match capability_fs_read(cwd, config, source_path) {
+                Ok(response) => {
+                    registry.lock().expect("registry lock").emit(CoreEvent {
+                        kind: CAP_FS_READ.to_string(),
+                        capability: CAP_FS_READ.to_string(),
+                        generation_id: None,
+                        message: Some(capability_event_message(&response.source_path, None, false, &correlation)),
+                        generation: None,
+                        serving: None,
+                        emitted_at: now_iso(),
+                    });
+                    write_json(&mut stream, 200, &source_content_to_json(&response))
+                }
+                Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, if source_path.trim().is_empty() { None } else { Some(source_path) })),
+            }
+        }
+        ("GET", "/capabilities/fs/stat") => {
+            let params = parse_form_body(query);
+            let correlation = capability_correlation_from_params(&params);
+            let source_path = params.get("path").map(String::as_str).unwrap_or("");
+            match capability_fs_stat(cwd, config, source_path) {
+                Ok(response) => {
+                    registry.lock().expect("registry lock").emit(CoreEvent {
+                        kind: CAP_FS_STAT.to_string(),
+                        capability: CAP_FS_STAT.to_string(),
+                        generation_id: None,
+                        message: Some(capability_event_message(&response.source_path, None, false, &correlation)),
+                        generation: None,
+                        serving: None,
+                        emitted_at: now_iso(),
+                    });
+                    write_json(&mut stream, 200, &source_stat_to_json(&response))
+                }
+                Err(error) => write_json(&mut stream, error.status, &capability_error_to_json(&error, if source_path.trim().is_empty() { None } else { Some(source_path) })),
+            }
+        }
+        ("PUT", "/capabilities/fs/write") | ("POST", "/capabilities/fs/patch") => {
+            let body_text = String::from_utf8_lossy(&body);
+            let source_path = extract_json_string_decoded(&body_text, "path").unwrap_or_default();
+            let content = extract_json_string_decoded(&body_text, "content").unwrap_or_default();
+            let expected_hash = extract_json_string_decoded(&body_text, "expectedHash");
+            let reason = extract_json_string_decoded(&body_text, "reason").unwrap_or_default();
+            let preview_only = extract_json_bool(&body_text, "previewOnly");
+            let correlation = Correlation {
+                session_id: extract_json_string_decoded(&body_text, "sessionId"),
+                surface_id: extract_json_string_decoded(&body_text, "surfaceId"),
+                actor: extract_json_string_decoded(&body_text, "actor"),
+            };
+            let event_kind = if method == "PUT" { CAP_FS_WRITE } else { CAP_FS_PATCH };
+            match capability_fs_write(cwd, config, &source_path, &content, preview_only, expected_hash.as_deref()) {
+                Ok(response) => {
+                    registry.lock().expect("registry lock").emit(CoreEvent {
+                        kind: event_kind.to_string(),
+                        capability: event_kind.to_string(),
+                        generation_id: None,
+                        message: Some(capability_event_message(&response.source_path, Some(&reason), preview_only, &correlation)),
+                        generation: None,
+                        serving: None,
+                        emitted_at: now_iso(),
+                    });
+                    write_json(&mut stream, 200, &source_content_to_json(&response))
+                }
+                Err(error) => {
+                    if !preview_only {
+                        let kind = if error.status == 409 {
+                            AUTHORING_WRITE_CONFLICT
+                        } else {
+                            AUTHORING_WRITE_REJECTED
+                        };
+                        let message = format!(
+                            "{} error={} expectedHash={} actualHash={}",
+                            capability_event_message(&source_path, Some(&reason), preview_only, &correlation),
+                            error.message,
+                            error.expected_hash.as_deref().unwrap_or("-"),
+                            error.actual_hash.as_deref().unwrap_or("-"),
+                        );
+                        registry.lock().expect("registry lock").emit(CoreEvent {
+                            kind: kind.to_string(),
+                            capability: event_kind.to_string(),
+                            generation_id: None,
+                            message: Some(message),
+                            generation: None,
+                            serving: None,
+                            emitted_at: now_iso(),
+                        });
+                    }
+                    write_json(&mut stream, error.status, &capability_error_to_json(&error, if source_path.trim().is_empty() { None } else { Some(&source_path) }))
+                }
+            }
+        }
+        ("POST", "/soak/start") => {
+            let body_text = String::from_utf8_lossy(&body);
+            let session_id = extract_json_string_decoded(&body_text, "id").unwrap_or_else(next_generation_id);
+            let scenario = extract_json_string_decoded(&body_text, "scenario").unwrap_or_else(|| "soak".to_string());
+            let state = process_state.lock().expect("process state lock").clone();
+            let session = registry
+                .lock()
+                .expect("registry lock")
+                .start_soak_session(&session_id, &scenario, &state);
+            write_json(&mut stream, 200, &soak_session_to_json(&session))
+        }
+        ("POST", "/soak/mark") => {
+            let body_text = String::from_utf8_lossy(&body);
+            let session_id = extract_json_string_decoded(&body_text, "sessionId").unwrap_or_default();
+            let phase = extract_json_string_decoded(&body_text, "phase").unwrap_or_default();
+            let message = extract_json_string_decoded(&body_text, "message");
+            if session_id.trim().is_empty() || phase.trim().is_empty() {
+                return write_json(&mut stream, 400, "{\"error\":\"sessionId and phase are required\"}");
+            }
+            let result = registry
+                .lock()
+                .expect("registry lock")
+                .mark_soak_session(&session_id, &phase, message.as_deref());
+            match result {
+                Ok(session) => write_json(&mut stream, 200, &soak_session_to_json(&session)),
+                Err(error) => write_json(&mut stream, 404, &format!("{{\"error\":{}}}", json_string(&error))),
+            }
+        }
+        ("POST", "/soak/sample") => {
+            let body_text = String::from_utf8_lossy(&body);
+            let session_id = extract_json_string_decoded(&body_text, "sessionId").unwrap_or_default();
+            if session_id.trim().is_empty() {
+                return write_json(&mut stream, 400, "{\"error\":\"sessionId is required\"}");
+            }
+            let state = process_state.lock().expect("process state lock").clone();
+            let mut sample = soak_sample_from_json(&body_text).unwrap_or_else(|| SoakSample {
+                sequence: 0,
+                phase: None,
+                sampled_at: now_iso(),
+                ready: false,
+                status: "unknown".to_string(),
+                reason_codes: Vec::new(),
+                rss: 0,
+                heap_used: 0,
+                event_loop_p95_ms: 0,
+                active_requests: 0,
+                sse_clients: 0,
+                preview_sessions: 0,
+                snapshot_watchers: 0,
+                fswatcher_resources: 0,
+                timeout_resources: 0,
+                process_running: state.running,
+                process_ready: state.ready,
+                pid: state.pid,
+                restart_count: state.restart_count,
+                serving_requested_mode: String::new(),
+                serving_effective_mode: String::new(),
+                serving_reason: String::new(),
+                latest_generation_id: None,
+                latest_generation_state: None,
+                stable_failover: false,
+            });
+            sample.process_running = state.running;
+            sample.process_ready = state.ready;
+            sample.pid = state.pid;
+            sample.restart_count = state.restart_count;
+            let result = registry
+                .lock()
+                .expect("registry lock")
+                .record_soak_sample(&session_id, sample);
+            match result {
+                Ok(session) => write_json(&mut stream, 200, &soak_session_to_json(&session)),
+                Err(error) => write_json(&mut stream, 404, &format!("{{\"error\":{}}}", json_string(&error))),
+            }
+        }
+        ("POST", "/soak/complete") => {
+            let body_text = String::from_utf8_lossy(&body);
+            let session_id = extract_json_string_decoded(&body_text, "sessionId").unwrap_or_default();
+            let message = extract_json_string_decoded(&body_text, "message");
+            if session_id.trim().is_empty() {
+                return write_json(&mut stream, 400, "{\"error\":\"sessionId is required\"}");
+            }
+            let result = registry
+                .lock()
+                .expect("registry lock")
+                .complete_soak_session(&session_id, message.as_deref());
+            match result {
+                Ok(session) => write_json(&mut stream, 200, &soak_session_to_json(&session)),
+                Err(error) => write_json(&mut stream, 404, &format!("{{\"error\":{}}}", json_string(&error))),
+            }
+        }
+        ("POST", "/soak/fail") => {
+            let body_text = String::from_utf8_lossy(&body);
+            let session_id = extract_json_string_decoded(&body_text, "sessionId").unwrap_or_default();
+            let message = extract_json_string_decoded(&body_text, "message");
+            if session_id.trim().is_empty() {
+                return write_json(&mut stream, 400, "{\"error\":\"sessionId is required\"}");
+            }
+            let result = registry
+                .lock()
+                .expect("registry lock")
+                .fail_soak_session(&session_id, message.as_deref());
+            match result {
+                Ok(session) => write_json(&mut stream, 200, &soak_session_to_json(&session)),
+                Err(error) => write_json(&mut stream, 404, &format!("{{\"error\":{}}}", json_string(&error))),
+            }
+        }
+        ("POST", "/preview-sessions") => {
+            let document = String::from_utf8_lossy(&body).trim().to_string();
+            let Some(id) = extract_json_string_decoded(&document, "id").or_else(|| extract_json_string(&document, "id")) else {
+                return write_json(&mut stream, 400, "{\"error\":\"preview session id is required\"}");
+            };
+            let stored = registry.lock().expect("registry lock").upsert_preview_session(&id, document);
+            write_json(&mut stream, 200, &stored)
+        }
+        ("GET", p) if p.starts_with("/preview-sessions/") => {
+            let id = p.trim_start_matches("/preview-sessions/").trim_matches('/');
+            let session = registry.lock().expect("registry lock").preview_session(id);
+            match session {
+                Some(document) => write_json(&mut stream, 200, &document),
+                None => write_json(&mut stream, 404, "{\"error\":\"preview session not found\"}"),
+            }
+        }
+        ("PUT", p) if p.starts_with("/preview-sessions/") => {
+            let id = p.trim_start_matches("/preview-sessions/").trim_matches('/');
+            let document = String::from_utf8_lossy(&body).trim().to_string();
+            let body_id = extract_json_string_decoded(&document, "id").or_else(|| extract_json_string(&document, "id"));
+            if body_id.as_deref() != Some(id) {
+                return write_json(&mut stream, 400, "{\"error\":\"preview session id mismatch\"}");
+            }
+            let stored = registry.lock().expect("registry lock").upsert_preview_session(id, document);
+            write_json(&mut stream, 200, &stored)
+        }
+        ("DELETE", p) if p.starts_with("/preview-sessions/") => {
+            let id = p.trim_start_matches("/preview-sessions/").trim_matches('/');
+            let removed = registry.lock().expect("registry lock").delete_preview_session(id);
+            if removed {
+                write_json(&mut stream, 200, "{\"ok\":true}")
+            } else {
+                write_json(&mut stream, 404, "{\"error\":\"preview session not found\"}")
             }
         }
         ("POST", "/generations") => {
@@ -774,6 +1746,142 @@ fn handle_client(
     }
 }
 
+fn process_health_probe_message(probe: &ProcessHealthProbe) -> String {
+    let reasons = if probe.reason_codes.is_empty() {
+        "none".to_string()
+    } else {
+        probe.reason_codes.join(",")
+    };
+    format!(
+        "httpStatus={} status={} ready={} reasons={}",
+        probe.http_status, probe.status, probe.ready, reasons
+    )
+}
+
+fn apply_process_health_probe(
+    process_state: &Arc<Mutex<SupervisedProcessState>>,
+    probe: &ProcessHealthProbe,
+) -> SupervisedProcessState {
+    let mut state = process_state.lock().expect("process state lock");
+    let previous_status = state.status.clone();
+    let sampled_at = probe.sampled_at.clone().unwrap_or_else(now_iso);
+    state.ready = probe.ready && probe.status != "unhealthy";
+    state.last_health_status = Some(probe.status.clone());
+    state.status = Some(probe.status.clone());
+    state.reason_codes = probe.reason_codes.clone();
+    state.last_health_sample_at = Some(sampled_at);
+    match probe.status.as_str() {
+        "healthy" => {
+            state.degraded_streak = 0;
+            state.unhealthy_streak = 0;
+        }
+        "degraded" => {
+            state.degraded_streak = if previous_status.as_deref() == Some("degraded") {
+                state.degraded_streak.saturating_add(1)
+            } else {
+                1
+            };
+            state.unhealthy_streak = 0;
+        }
+        "unhealthy" => {
+            state.degraded_streak = if matches!(previous_status.as_deref(), Some("degraded") | Some("unhealthy")) {
+                state.degraded_streak.saturating_add(1)
+            } else {
+                1
+            };
+            state.unhealthy_streak = if previous_status.as_deref() == Some("unhealthy") {
+                state.unhealthy_streak.saturating_add(1)
+            } else {
+                1
+            };
+        }
+        _ => {}
+    }
+    state.clone()
+}
+
+fn emit_process_health_events(
+    registry: &Arc<Mutex<Registry>>,
+    previous_status: Option<&str>,
+    state: &SupervisedProcessState,
+    probe: &ProcessHealthProbe,
+) {
+    let sample_message = process_health_probe_message(probe);
+    registry.lock().expect("registry lock").emit(CoreEvent {
+        kind: "process.health.sample".to_string(),
+        capability: CAP_NOTIFY_SURFACE.to_string(),
+        generation_id: None,
+        message: Some(sample_message.clone()),
+        generation: None,
+        serving: None,
+        emitted_at: now_iso(),
+    });
+    if probe.status == "healthy" {
+        if matches!(previous_status, Some("degraded") | Some("unhealthy")) {
+            registry.lock().expect("registry lock").emit(CoreEvent {
+                kind: "process.health.recovered".to_string(),
+                capability: CAP_NOTIFY_SURFACE.to_string(),
+                generation_id: None,
+                message: Some(sample_message),
+                generation: None,
+                serving: None,
+                emitted_at: now_iso(),
+            });
+        }
+        return;
+    }
+    if probe.status == "degraded" && state.degraded_streak == 1 {
+        registry.lock().expect("registry lock").emit(CoreEvent {
+            kind: "process.degraded".to_string(),
+            capability: CAP_NOTIFY_SURFACE.to_string(),
+            generation_id: None,
+            message: Some(sample_message),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        return;
+    }
+    if probe.status == "unhealthy" && previous_status != Some("unhealthy") {
+        registry.lock().expect("registry lock").emit(CoreEvent {
+            kind: "process.unhealthy".to_string(),
+            capability: CAP_NOTIFY_SURFACE.to_string(),
+            generation_id: None,
+            message: Some(sample_message),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+    }
+}
+
+fn request_process_restart_with_reason(
+    registry: Arc<Mutex<Registry>>,
+    process_state: Arc<Mutex<SupervisedProcessState>>,
+    reason: &str,
+) -> Result<SupervisedProcessState, String> {
+    {
+        let mut state = process_state.lock().expect("process state lock");
+        if state.command.as_deref().unwrap_or("").trim().is_empty() {
+            return Err("supervised process is not configured".to_string());
+        }
+        state.restart_on_exit = true;
+        state.restart_requested = true;
+        state.stop_requested = false;
+        state.last_restart_reason = Some(reason.to_string());
+    };
+    registry.lock().expect("registry lock").emit(CoreEvent {
+        kind: "process.restart.requested".to_string(),
+        capability: CAP_NOTIFY_SURFACE.to_string(),
+        generation_id: None,
+        message: Some(reason.to_string()),
+        generation: None,
+        serving: None,
+        emitted_at: now_iso(),
+    });
+    Ok(process_state.lock().expect("process state lock").clone())
+}
+
 fn start_supervised_process(
     cwd: PathBuf,
     addr: String,
@@ -806,13 +1914,29 @@ fn start_supervised_process(
                 let mut state = process_state.lock().expect("process state lock");
                 state.restart_requested = false;
                 state.stop_requested = false;
+                state.ready = false;
+                state.last_health_status = None;
+                state.status = None;
+                state.reason_codes.clear();
+                state.last_health_sample_at = None;
+                state.degraded_streak = 0;
+                state.unhealthy_streak = 0;
             }
 
-            let mut child = match shell_command(&command)
-                .current_dir(&working_dir)
-                .env("WITNESS_CORE_URL", format!("http://{}", addr))
-                .spawn()
-            {
+            let spawn_result = if let Some(mut direct) = supervised_command(&command) {
+                direct
+                    .current_dir(&working_dir)
+                    .env("WITNESS_CORE_URL", format!("http://{}", addr))
+                    .spawn()
+            } else {
+                Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "shell command required"))
+            };
+            let mut child = match spawn_result.or_else(|_| {
+                shell_command(&command)
+                    .current_dir(&working_dir)
+                    .env("WITNESS_CORE_URL", format!("http://{}", addr))
+                    .spawn()
+            }) {
                 Ok(child) => child,
                 Err(error) => {
                     let message = format!("failed to spawn supervised process: {}", error);
@@ -822,6 +1946,7 @@ fn start_supervised_process(
                         state.last_exited_at = Some(now_iso());
                         state.running = false;
                         state.pid = None;
+                        state.ready = false;
                     }
                     registry.lock().expect("registry lock").emit(CoreEvent {
                         kind: "process.failed".to_string(),
@@ -829,6 +1954,7 @@ fn start_supervised_process(
                         generation_id: None,
                         message: Some(message),
                         generation: None,
+                        serving: None,
                         emitted_at: now_iso(),
                     });
                     thread::sleep(Duration::from_millis(500));
@@ -840,10 +1966,13 @@ fn start_supervised_process(
                 let mut state = process_state.lock().expect("process state lock");
                 state.command = Some(command.clone());
                 state.working_dir = Some(normalize_path(&working_dir));
+                state.restart_on_unhealthy = config.restart_on_unhealthy;
                 state.running = true;
                 state.pid = Some(child.id());
                 state.last_started_at = Some(now_iso());
                 state.last_error = None;
+                state.ready = false;
+                state.health_url = config.health_url.clone();
             }
             registry.lock().expect("registry lock").emit(CoreEvent {
                 kind: "process.started".to_string(),
@@ -851,10 +1980,139 @@ fn start_supervised_process(
                 generation_id: None,
                 message: Some(format!("command={}", command)),
                 generation: None,
+                serving: None,
                 emitted_at: now_iso(),
             });
 
-            let exit_status = child.wait();
+            if let Some(health_url) = config.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
+                let readiness = wait_for_process_readiness(
+                    health_url,
+                    config.health_interval_ms,
+                    config.health_timeout_ms,
+                );
+                match readiness {
+                    ProcessReadiness::Ready(status) => {
+                        let ready_at = now_iso();
+                        {
+                            let mut state = process_state.lock().expect("process state lock");
+                            state.ready = true;
+                            state.last_ready_at = Some(ready_at);
+                            state.last_health_status = Some("healthy".to_string());
+                            state.status = Some("healthy".to_string());
+                            state.last_error = None;
+                        }
+                        registry.lock().expect("registry lock").emit(CoreEvent {
+                            kind: "process.ready".to_string(),
+                            capability: CAP_NOTIFY_SURFACE.to_string(),
+                            generation_id: None,
+                            message: Some(format!("health_url={} status={}", health_url, status)),
+                            generation: None,
+                            serving: None,
+                            emitted_at: now_iso(),
+                        });
+                    }
+                    ProcessReadiness::Unhealthy(status) => {
+                        {
+                            let mut state = process_state.lock().expect("process state lock");
+                            state.ready = false;
+                            state.last_health_status = Some("unhealthy".to_string());
+                            state.status = Some("unhealthy".to_string());
+                            state.reason_codes = vec!["runtime_not_ready".to_string()];
+                            state.last_error = Some(format!("process readiness failed: {}", status));
+                        }
+                        registry.lock().expect("registry lock").emit(CoreEvent {
+                            kind: "process.unhealthy".to_string(),
+                            capability: CAP_NOTIFY_SURFACE.to_string(),
+                            generation_id: None,
+                            message: Some(format!("health_url={} status={}", health_url, status)),
+                            generation: None,
+                            serving: None,
+                            emitted_at: now_iso(),
+                        });
+                    }
+                }
+            }
+
+            let health_interval = Duration::from_millis(config.health_interval_ms.max(25));
+            let mut next_health_poll_at = Instant::now() + health_interval;
+            let exit_status = loop {
+                if let Some(health_url) = config.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
+                    if Instant::now() >= next_health_poll_at {
+                        let previous_status = {
+                            process_state.lock().expect("process state lock").status.clone()
+                        };
+                        let probe = match probe_process_health(health_url) {
+                            Ok(probe) => probe,
+                            Err(_error) => ProcessHealthProbe {
+                                http_status: 503,
+                                ready: false,
+                                status: "unhealthy".to_string(),
+                                reason_codes: vec!["health_probe_failed".to_string()],
+                                sampled_at: Some(now_iso()),
+                            },
+                        };
+                        let updated_state = apply_process_health_probe(&process_state, &probe);
+                        emit_process_health_events(&registry, previous_status.as_deref(), &updated_state, &probe);
+                        if probe.status == "degraded"
+                            && updated_state.degraded_streak == config.degraded_grace_polls.max(1)
+                        {
+                            registry.lock().expect("registry lock").emit(CoreEvent {
+                                kind: "process.degraded".to_string(),
+                                capability: CAP_NOTIFY_SURFACE.to_string(),
+                                generation_id: None,
+                                message: Some(format!(
+                                    "thresholdReached=true {}",
+                                    process_health_probe_message(&probe)
+                                )),
+                                generation: None,
+                                serving: None,
+                                emitted_at: now_iso(),
+                            });
+                        }
+                        if probe.status == "unhealthy"
+                            && updated_state.unhealthy_streak >= config.unhealthy_grace_polls.max(1)
+                            && updated_state.restart_requested == false
+                            && updated_state.stop_requested == false
+                        {
+                            let reason = if probe.reason_codes.is_empty() {
+                                "policy unhealthy".to_string()
+                            } else {
+                                format!("policy unhealthy: {}", probe.reason_codes.join(","))
+                            };
+                            let serving_status = registry.lock().expect("registry lock").request_serving_mode(ServingMode::Stable);
+                            registry.lock().expect("registry lock").emit(CoreEvent {
+                                kind: "process.restart.policy_triggered".to_string(),
+                                capability: CAP_NOTIFY_SURFACE.to_string(),
+                                generation_id: serving_status.latest_generation_id.clone(),
+                                message: Some(reason.clone()),
+                                generation: None,
+                                serving: None,
+                                emitted_at: now_iso(),
+                            });
+                            if config.restart_on_unhealthy {
+                                let _ = request_process_restart_with_reason(
+                                    Arc::clone(&registry),
+                                    Arc::clone(&process_state),
+                                    &reason,
+                                );
+                            }
+                        }
+                        next_health_poll_at = Instant::now() + health_interval;
+                    }
+                }
+                let should_terminate = {
+                    let state = process_state.lock().expect("process state lock");
+                    state.stop_requested || state.restart_requested
+                };
+                if should_terminate {
+                    let _ = child.kill();
+                }
+                match child.try_wait() {
+                    Ok(Some(status)) => break Ok(status),
+                    Ok(None) => thread::sleep(Duration::from_millis(100)),
+                    Err(error) => break Err(error),
+                }
+            };
             let (exit_code, error_message) = match exit_status {
                 Ok(status) => (status.code(), None),
                 Err(error) => (None, Some(format!("process wait failed: {}", error))),
@@ -863,6 +2121,7 @@ fn start_supervised_process(
                 let mut state = process_state.lock().expect("process state lock");
                 state.running = false;
                 state.pid = None;
+                state.ready = false;
                 state.last_exited_at = Some(now_iso());
                 state.last_exit_code = exit_code;
                 state.last_error = error_message.clone();
@@ -877,6 +2136,7 @@ fn start_supervised_process(
                     _ => "exit_code=unknown".to_string(),
                 }),
                 generation: None,
+                serving: None,
                 emitted_at: now_iso(),
             });
 
@@ -903,6 +2163,7 @@ fn start_supervised_process(
                     generation_id: None,
                     message: Some(format!("command={}", command)),
                     generation: None,
+                    serving: None,
                     emitted_at: now_iso(),
                 });
                 thread::sleep(Duration::from_millis(500));
@@ -911,39 +2172,494 @@ fn start_supervised_process(
     });
 }
 
+fn emit_instance_event(registry: &Arc<Mutex<Registry>>, kind: &str, snapshot: &ManagedProcessInstanceSnapshot, message: Option<String>) {
+    registry.lock().expect("registry lock").emit(CoreEvent {
+        kind: kind.to_string(),
+        capability: CAP_NOTIFY_SURFACE.to_string(),
+        generation_id: None,
+        message: Some(message.unwrap_or_else(|| format!("instance={} state={}", snapshot.id, snapshot.state))),
+        generation: None,
+        serving: None,
+        emitted_at: now_iso(),
+    });
+}
+
+fn spawn_frontdoor_instance(
+    cwd: &Path,
+    control_addr: &str,
+    config: &CoreConfig,
+    role: &str,
+    registry: &Arc<Mutex<Registry>>,
+) -> Result<ManagedProcessInstance, String> {
+    let command_template = config
+        .supervise
+        .command
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "supervised process is not configured".to_string())?;
+    let port = reserve_loopback_port().ok_or_else(|| "failed to reserve runtime port".to_string())?;
+    let instance_id = next_instance_id();
+    let core_url = format!("http://{}", control_addr);
+    let command = interpolate_runtime_template(&command_template, port, &instance_id, &core_url);
+    let working_dir = config
+        .supervise
+        .working_dir
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| cwd.join(value))
+        .unwrap_or_else(|| cwd.to_path_buf());
+    let health_url = config
+        .supervise
+        .health_url
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| interpolate_runtime_template(&value, port, &instance_id, &core_url));
+    let spawn_direct = || {
+        if let Some(mut direct) = supervised_command(&command) {
+            direct
+                .current_dir(&working_dir)
+                .env("WITNESS_CORE_URL", &core_url)
+                .env("WITNESS_RUNTIME_PORT", port.to_string())
+                .env("WITNESS_RUNTIME_INSTANCE_ID", &instance_id)
+                .env("WITNESS_RUNTIME_ROLE", role)
+                .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", if role == "active" { "true" } else { "false" })
+                .env("WITNESS_RUNTIME_WATCHERS_ENABLED", if role == "active" { "true" } else { "false" })
+                .spawn()
+        } else {
+            Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "shell command required"))
+        }
+    };
+    let child = spawn_direct().or_else(|_| {
+        shell_command(&command)
+            .current_dir(&working_dir)
+            .env("WITNESS_CORE_URL", &core_url)
+            .env("WITNESS_RUNTIME_PORT", port.to_string())
+            .env("WITNESS_RUNTIME_INSTANCE_ID", &instance_id)
+            .env("WITNESS_RUNTIME_ROLE", role)
+            .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", if role == "active" { "true" } else { "false" })
+            .env("WITNESS_RUNTIME_WATCHERS_ENABLED", if role == "active" { "true" } else { "false" })
+            .spawn()
+    })
+    .map_err(|error| format!("failed to spawn supervised process: {}", error))?;
+    let snapshot = ManagedProcessInstanceSnapshot {
+        id: instance_id.clone(),
+        state: if role == "active" { "starting".to_string() } else { "standby".to_string() },
+        port,
+        running: true,
+        ready: false,
+        pid: child.id(),
+        last_started_at: now_iso(),
+        last_exited_at: None,
+        last_health_status: None,
+        drain_started_at: None,
+        drain_finished_at: None,
+        role: role.to_string(),
+    };
+    emit_instance_event(
+        registry,
+        "process.instance.started",
+        &snapshot,
+        Some(format!("instance={} port={} role={} command={}", snapshot.id, port, role, command)),
+    );
+    let activation_url = health_url
+        .as_deref()
+        .and_then(|value| replace_http_url_path(value, "/api/runtime/supervision/activate"));
+    let quiesce_url = health_url
+        .as_deref()
+        .and_then(|value| replace_http_url_path(value, "/api/runtime/supervision/quiesce"));
+    Ok(ManagedProcessInstance {
+        snapshot,
+        child,
+        health_url,
+        activation_url,
+        quiesce_url,
+        drain_deadline: None,
+    })
+}
+
+fn wait_for_frontdoor_instance_ready(
+    instance: &mut ManagedProcessInstance,
+    config: &CoreConfig,
+    registry: &Arc<Mutex<Registry>>,
+) -> Result<(), String> {
+    if let Some(health_url) = instance.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
+        match wait_for_process_readiness(
+            health_url,
+            config.supervise.health_interval_ms,
+            config.frontdoor.startup_cutover_timeout_ms.max(config.supervise.health_timeout_ms),
+        ) {
+            ProcessReadiness::Ready(status) => {
+                instance.snapshot.ready = true;
+                instance.snapshot.last_health_status = Some("healthy".to_string());
+                emit_instance_event(
+                    registry,
+                    "process.instance.ready",
+                    &instance.snapshot,
+                    Some(format!("instance={} status={}", instance.snapshot.id, status)),
+                );
+                Ok(())
+            }
+            ProcessReadiness::Unhealthy(status) => {
+                instance.snapshot.last_health_status = Some("unhealthy".to_string());
+                Err(format!("instance readiness failed: {}", status))
+            }
+        }
+    } else {
+        instance.snapshot.ready = true;
+        instance.snapshot.last_health_status = Some("healthy".to_string());
+        emit_instance_event(registry, "process.instance.ready", &instance.snapshot, None);
+        Ok(())
+    }
+}
+
+fn quiesce_frontdoor_instance(instance: &mut ManagedProcessInstance, registry: &Arc<Mutex<Registry>>) {
+    if let Some(url) = instance.quiesce_url.as_deref() {
+        let _ = issue_http_post(url);
+    }
+    instance.snapshot.state = "draining".to_string();
+    instance.snapshot.role = "draining".to_string();
+    instance.snapshot.drain_started_at = Some(now_iso());
+    emit_instance_event(registry, "process.instance.quiesced", &instance.snapshot, None);
+}
+
+fn activate_frontdoor_instance(instance: &mut ManagedProcessInstance, registry: &Arc<Mutex<Registry>>) {
+    if let Some(url) = instance.activation_url.as_deref() {
+        let _ = issue_http_post(url);
+    }
+    instance.snapshot.state = "active".to_string();
+    instance.snapshot.role = "active".to_string();
+    instance.snapshot.ready = true;
+    emit_instance_event(registry, "process.instance.activated", &instance.snapshot, None);
+}
+
+fn terminate_frontdoor_instance(instance: &mut ManagedProcessInstance) {
+    let _ = instance.child.kill();
+}
+
+fn reconcile_frontdoor_exit(instance: &mut ManagedProcessInstance) -> Option<(Option<i32>, Option<String>)> {
+    match instance.child.try_wait() {
+        Ok(Some(status)) => {
+            instance.snapshot.running = false;
+            instance.snapshot.ready = false;
+            instance.snapshot.last_exited_at = Some(now_iso());
+            Some((status.code(), None))
+        }
+        Err(error) => {
+            instance.snapshot.running = false;
+            instance.snapshot.ready = false;
+            instance.snapshot.last_exited_at = Some(now_iso());
+            Some((None, Some(format!("process wait failed: {}", error))))
+        }
+        Ok(None) => None,
+    }
+}
+
+fn start_supervised_process_frontdoor(
+    cwd: PathBuf,
+    addr: String,
+    config: CoreConfig,
+    registry: Arc<Mutex<Registry>>,
+    process_state: Arc<Mutex<SupervisedProcessState>>,
+) {
+    let Some(public_addr) = config.frontdoor.public_addr.clone().filter(|value| !value.trim().is_empty()) else {
+        return;
+    };
+    thread::spawn(move || {
+        let mut active: Option<ManagedProcessInstance> = None;
+        let mut draining: Vec<ManagedProcessInstance> = Vec::new();
+        loop {
+            if process_state.lock().expect("process state lock").stop_requested && active.is_none() && draining.is_empty() {
+                sync_frontdoor_state(&process_state, &public_addr, None, &draining);
+                thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+            if active.is_none() {
+                match spawn_frontdoor_instance(&cwd, &addr, &config, "active", &registry) {
+                    Ok(mut instance) => {
+                        let _ = wait_for_frontdoor_instance_ready(&mut instance, &config, &registry);
+                        instance.snapshot.state = "active".to_string();
+                        active = Some(instance);
+                        sync_frontdoor_state(&process_state, &public_addr, active.as_ref(), &draining);
+                    }
+                    Err(error) => {
+                        {
+                            let mut state = process_state.lock().expect("process state lock");
+                            state.last_error = Some(error.clone());
+                        }
+                        thread::sleep(Duration::from_millis(500));
+                        continue;
+                    }
+                }
+            }
+
+            if let Some(active_instance) = active.as_mut() {
+                if let Some(health_url) = active_instance.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
+                    let previous_status = process_state.lock().expect("process state lock").status.clone();
+                    let probe = match probe_process_health(health_url) {
+                        Ok(probe) => probe,
+                        Err(_error) => ProcessHealthProbe {
+                            http_status: 503,
+                            ready: false,
+                            status: "unhealthy".to_string(),
+                            reason_codes: vec!["health_probe_failed".to_string()],
+                            sampled_at: Some(now_iso()),
+                        },
+                    };
+                    let updated_state = apply_process_health_probe(&process_state, &probe);
+                    if probe.ready && probe.status != "unhealthy" {
+                        active_instance.snapshot.ready = true;
+                    }
+                    active_instance.snapshot.last_health_status = updated_state.status.clone();
+                    emit_process_health_events(&registry, previous_status.as_deref(), &updated_state, &probe);
+                    if probe.status == "unhealthy"
+                        && updated_state.unhealthy_streak >= config.supervise.unhealthy_grace_polls.max(1)
+                        && config.supervise.restart_on_unhealthy
+                        && !process_state.lock().expect("process state lock").restart_requested
+                    {
+                        let reason = if probe.reason_codes.is_empty() {
+                            "policy unhealthy".to_string()
+                        } else {
+                            format!("policy unhealthy: {}", probe.reason_codes.join(","))
+                        };
+                        let serving_status = registry.lock().expect("registry lock").request_serving_mode(ServingMode::Stable);
+                        registry.lock().expect("registry lock").emit(CoreEvent {
+                            kind: "process.restart.policy_triggered".to_string(),
+                            capability: CAP_NOTIFY_SURFACE.to_string(),
+                            generation_id: serving_status.latest_generation_id.clone(),
+                            message: Some(reason.clone()),
+                            generation: None,
+                            serving: None,
+                            emitted_at: now_iso(),
+                        });
+                        let _ = request_process_restart_with_reason(Arc::clone(&registry), Arc::clone(&process_state), &reason);
+                    }
+                }
+            }
+
+            let (do_restart, stop_requested) = {
+                let state = process_state.lock().expect("process state lock");
+                (state.restart_requested, state.stop_requested)
+            };
+            if do_restart && active.is_some() {
+                if let Ok(mut replacement) = spawn_frontdoor_instance(&cwd, &addr, &config, "standby", &registry) {
+                    if wait_for_frontdoor_instance_ready(&mut replacement, &config, &registry).is_ok() {
+                        activate_frontdoor_instance(&mut replacement, &registry);
+                        if let Some(mut prior_active) = active.take() {
+                            quiesce_frontdoor_instance(&mut prior_active, &registry);
+                            prior_active.drain_deadline = Some(Instant::now() + Duration::from_millis(config.frontdoor.drain_timeout_ms.max(1)));
+                            emit_instance_event(
+                                &registry,
+                                "process.instance.cutover",
+                                &replacement.snapshot,
+                                Some(format!("from={} to={}", prior_active.snapshot.id, replacement.snapshot.id)),
+                            );
+                            draining.push(prior_active);
+                        }
+                        {
+                            let mut state = process_state.lock().expect("process state lock");
+                            state.restart_requested = false;
+                            state.restart_count = state.restart_count.saturating_add(1);
+                        }
+                        active = Some(replacement);
+                    }
+                }
+            }
+            if stop_requested {
+                if let Some(active_instance) = active.as_mut() {
+                    terminate_frontdoor_instance(active_instance);
+                }
+                for instance in &mut draining {
+                    terminate_frontdoor_instance(instance);
+                }
+            }
+
+            if let Some(active_instance) = active.as_mut() {
+                if let Some((exit_code, error_message)) = reconcile_frontdoor_exit(active_instance) {
+                    emit_instance_event(
+                        &registry,
+                        "process.instance.terminated",
+                        &active_instance.snapshot,
+                        Some(match (exit_code, error_message.as_deref()) {
+                            (_, Some(message)) => message.to_string(),
+                            (Some(code), _) => format!("exit_code={}", code),
+                            _ => "exit_code=unknown".to_string(),
+                        }),
+                    );
+                    active = None;
+                }
+            }
+            let mut next_draining = Vec::new();
+            for mut instance in draining.drain(..) {
+                let inflight = inflight_connections_for(&process_state, &instance.snapshot.id);
+                let deadline_reached = instance.drain_deadline.is_some_and(|deadline| Instant::now() >= deadline);
+                if inflight == 0 || deadline_reached {
+                    emit_instance_event(&registry, "process.instance.drained", &instance.snapshot, None);
+                    terminate_frontdoor_instance(&mut instance);
+                }
+                if let Some((exit_code, error_message)) = reconcile_frontdoor_exit(&mut instance) {
+                    emit_instance_event(
+                        &registry,
+                        "process.instance.terminated",
+                        &instance.snapshot,
+                        Some(match (exit_code, error_message.as_deref()) {
+                            (_, Some(message)) => message.to_string(),
+                            (Some(code), _) => format!("exit_code={}", code),
+                            _ => "exit_code=unknown".to_string(),
+                        }),
+                    );
+                } else {
+                    next_draining.push(instance);
+                }
+            }
+            draining = next_draining;
+            sync_frontdoor_state(&process_state, &public_addr, active.as_ref(), &draining);
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
+}
+
+enum ProcessReadiness {
+    Ready(String),
+    Unhealthy(String),
+}
+
+#[derive(Clone, Debug)]
+struct ProcessHealthProbe {
+    http_status: u16,
+    ready: bool,
+    status: String,
+    reason_codes: Vec<String>,
+    sampled_at: Option<String>,
+}
+
+fn wait_for_process_readiness(health_url: &str, interval_ms: u64, timeout_ms: u64) -> ProcessReadiness {
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms.max(1));
+    let interval = Duration::from_millis(interval_ms.max(25));
+    let mut last_status = "not checked".to_string();
+    while Instant::now() <= deadline {
+        match probe_process_health(health_url) {
+            Ok(probe) if (200..400).contains(&probe.http_status) && probe.ready && probe.status != "unhealthy" => {
+                return ProcessReadiness::Ready(format!("{} {}", probe.http_status, probe.status));
+            }
+            Ok(probe) => {
+                last_status = format!("{} {} ready={}", probe.http_status, probe.status, probe.ready);
+            }
+            Err(error) => {
+                last_status = error;
+            }
+        }
+        thread::sleep(interval);
+    }
+    ProcessReadiness::Unhealthy(last_status)
+}
+
+fn probe_process_health(health_url: &str) -> Result<ProcessHealthProbe, String> {
+    let Some(target) = parse_http_url(health_url) else {
+        return Err("unsupported health_url".to_string());
+    };
+    let address = target
+        .address
+        .to_socket_addrs()
+        .map_err(|error| format!("invalid health address: {}", error))?
+        .next()
+        .ok_or_else(|| "invalid health address".to_string())?;
+    let stream = TcpStream::connect_timeout(&address, Duration::from_millis(1_000));
+    let mut stream = stream.map_err(|error| format!("connect failed: {}", error))?;
+    stream
+        .set_read_timeout(Some(Duration::from_millis(500)))
+        .map_err(|error| format!("set read timeout failed: {}", error))?;
+    stream
+        .set_write_timeout(Some(Duration::from_millis(500)))
+        .map_err(|error| format!("set write timeout failed: {}", error))?;
+    write!(
+        stream,
+        "GET {} HTTP/1.1\r\nhost: {}\r\nconnection: close\r\n\r\n",
+        target.path, target.host_header
+    )
+    .map_err(|error| format!("health write failed: {}", error))?;
+    let mut reader = BufReader::new(stream);
+    let mut status_line = String::new();
+    reader
+        .read_line(&mut status_line)
+        .map_err(|error| format!("health read failed: {}", error))?;
+    let http_status = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse::<u16>().ok())
+        .ok_or_else(|| "missing health status".to_string())?;
+    loop {
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .map_err(|error| format!("health header read failed: {}", error))?;
+        if line == "\r\n" || line.is_empty() {
+            break;
+        }
+    }
+    let mut body = String::new();
+    reader
+        .read_to_string(&mut body)
+        .map_err(|error| format!("health body read failed: {}", error))?;
+    let ready = extract_json_bool(&body, "ready");
+    let status = extract_json_string(&body, "status").unwrap_or_else(|| {
+        if (200..400).contains(&http_status) {
+            "healthy".to_string()
+        } else {
+            "unhealthy".to_string()
+        }
+    });
+    Ok(ProcessHealthProbe {
+        http_status,
+        ready: if body.trim().is_empty() {
+            (200..400).contains(&http_status)
+        } else {
+            ready
+        },
+        status,
+        reason_codes: extract_json_string_array(&body, "reasonCodes"),
+        sampled_at: extract_json_string(&body, "sampledAt"),
+    })
+}
+
+struct HttpHealthTarget {
+    address: String,
+    host_header: String,
+    path: String,
+}
+
+fn parse_http_url(health_url: &str) -> Option<HttpHealthTarget> {
+    let rest = health_url.strip_prefix("http://")?;
+    let (authority, path) = match rest.split_once('/') {
+        Some((authority, path)) => (authority, format!("/{}", path)),
+        None => (rest, "/".to_string()),
+    };
+    if authority.trim().is_empty() {
+        return None;
+    }
+    let address = if authority.contains(':') {
+        authority.to_string()
+    } else {
+        format!("{}:80", authority)
+    };
+    Some(HttpHealthTarget {
+        address,
+        host_header: authority.to_string(),
+        path,
+    })
+}
+
 fn request_process_restart(
     registry: Arc<Mutex<Registry>>,
     process_state: Arc<Mutex<SupervisedProcessState>>,
 ) -> Result<SupervisedProcessState, String> {
-    let pid = {
-        let mut state = process_state.lock().expect("process state lock");
-        if state.command.as_deref().unwrap_or("").trim().is_empty() {
-            return Err("supervised process is not configured".to_string());
-        }
-        state.restart_on_exit = true;
-        state.restart_requested = true;
-        state.stop_requested = false;
-        state.pid
-    };
-    registry.lock().expect("registry lock").emit(CoreEvent {
-        kind: "process.restart.requested".to_string(),
-        capability: CAP_NOTIFY_SURFACE.to_string(),
-        generation_id: None,
-        message: Some("manual restart requested".to_string()),
-        generation: None,
-        emitted_at: now_iso(),
-    });
-    if let Some(pid) = pid {
-        terminate_process(pid)?;
-    }
-    Ok(process_state.lock().expect("process state lock").clone())
+    request_process_restart_with_reason(registry, process_state, "manual restart requested")
 }
 
 fn request_process_stop(
     registry: Arc<Mutex<Registry>>,
     process_state: Arc<Mutex<SupervisedProcessState>>,
 ) -> Result<SupervisedProcessState, String> {
-    let pid = {
+    {
         let mut state = process_state.lock().expect("process state lock");
         if state.command.as_deref().unwrap_or("").trim().is_empty() {
             return Err("supervised process is not configured".to_string());
@@ -951,7 +2667,6 @@ fn request_process_stop(
         state.restart_on_exit = false;
         state.restart_requested = false;
         state.stop_requested = true;
-        state.pid
     };
     registry.lock().expect("registry lock").emit(CoreEvent {
         kind: "process.stop.requested".to_string(),
@@ -959,36 +2674,301 @@ fn request_process_stop(
         generation_id: None,
         message: Some("manual stop requested".to_string()),
         generation: None,
+        serving: None,
         emitted_at: now_iso(),
     });
-    if let Some(pid) = pid {
-        terminate_process(pid)?;
-    }
     Ok(process_state.lock().expect("process state lock").clone())
 }
 
-fn terminate_process(pid: u32) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        let status = Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/T", "/F"])
-            .status()
-            .map_err(|error| format!("failed to invoke taskkill: {}", error))?;
-        if !status.success() {
-            return Err(format!("taskkill exited with {:?}", status.code()));
+#[derive(Clone, Debug)]
+struct ManagedProcessInstanceSnapshot {
+    id: String,
+    state: String,
+    port: u16,
+    running: bool,
+    ready: bool,
+    pid: u32,
+    last_started_at: String,
+    last_exited_at: Option<String>,
+    last_health_status: Option<String>,
+    drain_started_at: Option<String>,
+    drain_finished_at: Option<String>,
+    role: String,
+}
+
+struct ManagedProcessInstance {
+    snapshot: ManagedProcessInstanceSnapshot,
+    child: std::process::Child,
+    health_url: Option<String>,
+    activation_url: Option<String>,
+    quiesce_url: Option<String>,
+    drain_deadline: Option<Instant>,
+}
+
+fn next_instance_id() -> String {
+    static COUNTER: AtomicU64 = AtomicU64::new(1);
+    let value = COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("runtime-{}", value)
+}
+
+fn reserve_loopback_port() -> Option<u16> {
+    let listener = TcpListener::bind("127.0.0.1:0").ok()?;
+    let port = listener.local_addr().ok()?.port();
+    drop(listener);
+    Some(port)
+}
+
+fn interpolate_runtime_template(template: &str, runtime_port: u16, instance_id: &str, core_url: &str) -> String {
+    template
+        .replace("{runtime_port}", &runtime_port.to_string())
+        .replace("{instance_id}", instance_id)
+        .replace("{core_url}", core_url)
+}
+
+fn replace_http_url_path(url: &str, new_path: &str) -> Option<String> {
+    let rest = url.strip_prefix("http://")?;
+    let authority = rest.split_once('/').map(|(value, _)| value).unwrap_or(rest);
+    Some(format!("http://{}{}", authority, new_path))
+}
+
+fn issue_http_post(url: &str) -> Result<(), String> {
+    let Some(target) = parse_http_url(url) else {
+        return Err("unsupported control url".to_string());
+    };
+    let address = target
+        .address
+        .to_socket_addrs()
+        .map_err(|error| format!("invalid control address: {}", error))?
+        .next()
+        .ok_or_else(|| "invalid control address".to_string())?;
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(1_000))
+        .map_err(|error| format!("connect failed: {}", error))?;
+    stream
+        .set_read_timeout(Some(Duration::from_millis(2_000)))
+        .map_err(|error| format!("set read timeout failed: {}", error))?;
+    write!(
+        stream,
+        "POST {} HTTP/1.1\r\nhost: {}\r\ncontent-length: 2\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n{{}}",
+        target.path, target.host_header
+    )
+    .map_err(|error| format!("control write failed: {}", error))?;
+    let mut reader = BufReader::new(stream);
+    let mut status_line = String::new();
+    reader
+        .read_line(&mut status_line)
+        .map_err(|error| format!("control read failed: {}", error))?;
+    let http_status = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse::<u16>().ok())
+        .ok_or_else(|| "missing control status".to_string())?;
+    if (200..300).contains(&http_status) {
+        Ok(())
+    } else {
+        Err(format!("control request rejected: {}", http_status))
+    }
+}
+
+fn active_target_from_state(state: &SupervisedProcessState) -> Option<(String, String)> {
+    let instance_id = state.frontdoor_active_instance_id.clone()?;
+    let target = state.frontdoor_active_target.clone()?;
+    Some((instance_id, target))
+}
+
+fn update_proxy_connection_count(process_state: &Arc<Mutex<SupervisedProcessState>>, instance_id: &str, delta: i64) {
+    let mut state = process_state.lock().expect("process state lock");
+    if let Some(instance) = state.instances.iter_mut().find(|entry| entry.id == instance_id) {
+        if delta >= 0 {
+            instance.inflight_connections = instance.inflight_connections.saturating_add(delta as u64);
+        } else {
+            instance.inflight_connections = instance.inflight_connections.saturating_sub((-delta) as u64);
+            if instance.state == "draining" && instance.inflight_connections == 0 && instance.drain_finished_at.is_none() {
+                instance.drain_finished_at = Some(now_iso());
+            }
         }
     }
-    #[cfg(not(windows))]
-    {
-        let status = Command::new("kill")
-            .args(["-TERM", &pid.to_string()])
-            .status()
-            .map_err(|error| format!("failed to invoke kill: {}", error))?;
-        if !status.success() {
-            return Err(format!("kill exited with {:?}", status.code()));
-        }
+}
+
+fn inflight_connections_for(process_state: &Arc<Mutex<SupervisedProcessState>>, instance_id: &str) -> u64 {
+    process_state
+        .lock()
+        .expect("process state lock")
+        .instances
+        .iter()
+        .find(|entry| entry.id == instance_id)
+        .map(|entry| entry.inflight_connections)
+        .unwrap_or(0)
+}
+
+fn sync_frontdoor_state(
+    process_state: &Arc<Mutex<SupervisedProcessState>>,
+    public_addr: &str,
+    active: Option<&ManagedProcessInstance>,
+    draining: &[ManagedProcessInstance],
+) {
+    let mut state = process_state.lock().expect("process state lock");
+    let inflight_by_id = state
+        .instances
+        .iter()
+        .map(|entry| (entry.id.clone(), entry.inflight_connections))
+        .collect::<BTreeMap<_, _>>();
+    let mut next_instances = Vec::new();
+    if let Some(active_instance) = active {
+        next_instances.push(SupervisedProcessInstanceState {
+            id: active_instance.snapshot.id.clone(),
+            state: active_instance.snapshot.state.clone(),
+            port: Some(active_instance.snapshot.port),
+            running: active_instance.snapshot.running,
+            ready: active_instance.snapshot.ready,
+            pid: Some(active_instance.snapshot.pid),
+            inflight_connections: *inflight_by_id.get(&active_instance.snapshot.id).unwrap_or(&0),
+            last_started_at: Some(active_instance.snapshot.last_started_at.clone()),
+            last_exited_at: active_instance.snapshot.last_exited_at.clone(),
+            last_health_status: active_instance.snapshot.last_health_status.clone(),
+            drain_started_at: active_instance.snapshot.drain_started_at.clone(),
+            drain_finished_at: active_instance.snapshot.drain_finished_at.clone(),
+            role: Some(active_instance.snapshot.role.clone()),
+        });
     }
-    Ok(())
+    for instance in draining {
+        next_instances.push(SupervisedProcessInstanceState {
+            id: instance.snapshot.id.clone(),
+            state: instance.snapshot.state.clone(),
+            port: Some(instance.snapshot.port),
+            running: instance.snapshot.running,
+            ready: instance.snapshot.ready,
+            pid: Some(instance.snapshot.pid),
+            inflight_connections: *inflight_by_id.get(&instance.snapshot.id).unwrap_or(&0),
+            last_started_at: Some(instance.snapshot.last_started_at.clone()),
+            last_exited_at: instance.snapshot.last_exited_at.clone(),
+            last_health_status: instance.snapshot.last_health_status.clone(),
+            drain_started_at: instance.snapshot.drain_started_at.clone(),
+            drain_finished_at: instance.snapshot.drain_finished_at.clone(),
+            role: Some(instance.snapshot.role.clone()),
+        });
+    }
+    state.frontdoor_enabled = true;
+    state.public_addr = Some(public_addr.to_string());
+    state.instances = next_instances;
+    if let Some(active_instance) = active {
+        state.running = active_instance.snapshot.running;
+        state.pid = Some(active_instance.snapshot.pid);
+        state.ready = active_instance.snapshot.ready;
+        state.last_started_at = Some(active_instance.snapshot.last_started_at.clone());
+        state.last_exited_at = active_instance.snapshot.last_exited_at.clone();
+        state.last_health_status = active_instance.snapshot.last_health_status.clone();
+        state.instance_id = Some(active_instance.snapshot.id.clone());
+        state.role = Some(active_instance.snapshot.role.clone());
+        state.watchers_enabled = active_instance.snapshot.role == "active";
+        state.mutations_enabled = active_instance.snapshot.role == "active";
+        state.frontdoor_active_instance_id = if active_instance.snapshot.ready {
+            Some(active_instance.snapshot.id.clone())
+        } else {
+            None
+        };
+        state.frontdoor_active_target = if active_instance.snapshot.ready {
+            Some(format!("127.0.0.1:{}", active_instance.snapshot.port))
+        } else {
+            None
+        };
+        state.status = active_instance.snapshot.last_health_status.clone();
+    } else {
+        state.running = false;
+        state.pid = None;
+        state.ready = false;
+        state.instance_id = None;
+        state.role = None;
+        state.watchers_enabled = false;
+        state.mutations_enabled = false;
+        state.frontdoor_active_instance_id = None;
+        state.frontdoor_active_target = None;
+    }
+}
+
+fn proxy_unavailable(mut stream: TcpStream) {
+    let _ = write!(
+        stream,
+        "HTTP/1.1 503 Service Unavailable\r\ncontent-type: application/json\r\ncache-control: no-cache\r\nconnection: close\r\ncontent-length: 31\r\n\r\n{{\"error\":\"runtime unavailable\"}}"
+    );
+    let _ = stream.flush();
+}
+
+fn proxy_connection(stream: TcpStream, target: String, process_state: Arc<Mutex<SupervisedProcessState>>, instance_id: String) {
+    let Ok(target_stream) = TcpStream::connect(target) else {
+        update_proxy_connection_count(&process_state, &instance_id, -1);
+        proxy_unavailable(stream);
+        return;
+    };
+    let Ok(mut client_read) = stream.try_clone() else {
+        update_proxy_connection_count(&process_state, &instance_id, -1);
+        proxy_unavailable(stream);
+        return;
+    };
+    let Ok(mut client_write) = stream.try_clone() else {
+        update_proxy_connection_count(&process_state, &instance_id, -1);
+        proxy_unavailable(stream);
+        return;
+    };
+    let Ok(mut target_read) = target_stream.try_clone() else {
+        update_proxy_connection_count(&process_state, &instance_id, -1);
+        proxy_unavailable(stream);
+        return;
+    };
+    let mut target_write = target_stream;
+    let upload = thread::spawn(move || {
+        let _ = std::io::copy(&mut client_read, &mut target_write);
+    });
+    let download = thread::spawn(move || {
+        let _ = std::io::copy(&mut target_read, &mut client_write);
+    });
+    let _ = upload.join();
+    let _ = download.join();
+    update_proxy_connection_count(&process_state, &instance_id, -1);
+}
+
+fn start_frontdoor_proxy(
+    config: FrontDoorConfig,
+    registry: Arc<Mutex<Registry>>,
+    process_state: Arc<Mutex<SupervisedProcessState>>,
+) {
+    let Some(public_addr) = config.public_addr.clone().filter(|value| !value.trim().is_empty()) else {
+        return;
+    };
+    thread::spawn(move || {
+        let Ok(listener) = TcpListener::bind(&public_addr) else {
+            registry.lock().expect("registry lock").emit(CoreEvent {
+                kind: "process.instance.proxy_unavailable".to_string(),
+                capability: CAP_NOTIFY_SURFACE.to_string(),
+                generation_id: None,
+                message: Some(format!("frontdoor_bind_failed={}", public_addr)),
+                generation: None,
+                serving: None,
+                emitted_at: now_iso(),
+            });
+            return;
+        };
+        registry.lock().expect("registry lock").emit(CoreEvent {
+            kind: "process.instance.proxy_started".to_string(),
+            capability: CAP_NOTIFY_SURFACE.to_string(),
+            generation_id: None,
+            message: Some(format!("public_addr={}", public_addr)),
+            generation: None,
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        for incoming in listener.incoming() {
+            let Ok(stream) = incoming else {
+                continue;
+            };
+            let Some((instance_id, target)) = active_target_from_state(&process_state.lock().expect("process state lock").clone()) else {
+                proxy_unavailable(stream);
+                continue;
+            };
+            update_proxy_connection_count(&process_state, &instance_id, 1);
+            let state = Arc::clone(&process_state);
+            thread::spawn(move || proxy_connection(stream, target, state, instance_id));
+        }
+    });
 }
 
 fn write_sse(mut stream: TcpStream, registry: Arc<Mutex<Registry>>) -> std::io::Result<()> {
@@ -1016,12 +2996,386 @@ fn write_json(stream: &mut TcpStream, status: u16, body: &str) -> std::io::Resul
     stream.write_all(response.as_bytes())
 }
 
+#[derive(Clone, Debug)]
+struct CapabilityPath {
+    source_path: String,
+    full_path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+struct CapabilityError {
+    status: u16,
+    message: String,
+    code: Option<String>,
+    actual_hash: Option<String>,
+    expected_hash: Option<String>,
+    size: Option<u64>,
+    modified_at: Option<String>,
+    exists: Option<bool>,
+}
+
+#[derive(Clone, Debug)]
+struct SourceContentResponse {
+    source_path: String,
+    content: String,
+    hash: String,
+    size: u64,
+}
+
+#[derive(Clone, Debug)]
+struct SourceStatResponse {
+    source_path: String,
+    exists: bool,
+    hash: Option<String>,
+    size: Option<u64>,
+    modified_at: Option<String>,
+}
+
+fn capability_error(status: u16, message: impl Into<String>) -> CapabilityError {
+    CapabilityError {
+        status,
+        message: message.into(),
+        code: None,
+        actual_hash: None,
+        expected_hash: None,
+        size: None,
+        modified_at: None,
+        exists: None,
+    }
+}
+
+fn file_snapshot(full_path: &Path) -> (bool, Option<String>, Option<u64>, Option<String>) {
+    let Ok(metadata) = fs::metadata(full_path) else {
+        return (false, None, None, None);
+    };
+    let bytes = fs::read(full_path).unwrap_or_default();
+    (
+        true,
+        Some(format!("sha256:{}", sha256_hex(bytes))),
+        Some(metadata.len()),
+        metadata.modified().ok()
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map(|value| value.as_millis().to_string()),
+    )
+}
+
+fn capability_fs_read(cwd: &Path, config: &CoreConfig, source_path: &str) -> Result<SourceContentResponse, CapabilityError> {
+    let resolved = resolve_capability_path(cwd, config, source_path)?;
+    let bytes = fs::read(&resolved.full_path).map_err(|error| capability_error(404, format!("source read failed: {}", error)))?;
+    let content = String::from_utf8(bytes.clone()).map_err(|error| capability_error(400, format!("source is not utf8: {}", error)))?;
+    Ok(SourceContentResponse {
+        source_path: resolved.source_path,
+        content,
+        hash: format!("sha256:{}", sha256_hex(bytes.clone())),
+        size: bytes.len() as u64,
+    })
+}
+
+fn capability_fs_stat(cwd: &Path, config: &CoreConfig, source_path: &str) -> Result<SourceStatResponse, CapabilityError> {
+    let resolved = resolve_capability_path(cwd, config, source_path)?;
+    let (exists, hash, size, modified_at) = file_snapshot(&resolved.full_path);
+    Ok(SourceStatResponse {
+        source_path: resolved.source_path,
+        exists,
+        hash,
+        size,
+        modified_at,
+    })
+}
+
+fn capability_fs_write(
+    cwd: &Path,
+    config: &CoreConfig,
+    source_path: &str,
+    content: &str,
+    preview_only: bool,
+    expected_hash: Option<&str>,
+) -> Result<SourceContentResponse, CapabilityError> {
+    let resolved = resolve_capability_path(cwd, config, source_path)?;
+    if !preview_only {
+        let (exists, actual_hash, size, modified_at) = file_snapshot(&resolved.full_path);
+        if let Some(expected_hash) = expected_hash.filter(|value| !value.trim().is_empty()) {
+            if actual_hash.as_deref() != Some(expected_hash.trim()) {
+                return Err(CapabilityError {
+                    status: 409,
+                    message: "source baseline hash mismatch".to_string(),
+                    code: Some("WITNESS_CORE_SOURCE_CONFLICT".to_string()),
+                    actual_hash,
+                    expected_hash: Some(expected_hash.trim().to_string()),
+                    size,
+                    modified_at,
+                    exists: Some(exists),
+                });
+            }
+        }
+        if let Some(parent) = resolved.full_path.parent() {
+            if !parent.exists() {
+                return Err(capability_error(404, "source parent directory does not exist"));
+            }
+        }
+        fs::write(&resolved.full_path, content).map_err(|error| capability_error(500, format!("source write failed: {}", error)))?;
+    }
+    let bytes = content.as_bytes().to_vec();
+    Ok(SourceContentResponse {
+        source_path: resolved.source_path,
+        content: content.to_string(),
+        hash: format!("sha256:{}", sha256_hex(bytes.clone())),
+        size: bytes.len() as u64,
+    })
+}
+
+fn resolve_capability_path(cwd: &Path, config: &CoreConfig, requested: &str) -> Result<CapabilityPath, CapabilityError> {
+    let normalized = normalize_source_request_path(requested)?;
+    let direct = cwd.join(&normalized);
+    if is_under_allowed_root(cwd, config, &direct) {
+        return Ok(CapabilityPath {
+            source_path: normalized,
+            full_path: direct,
+        });
+    }
+    for root in &config.watch.roots {
+        let clean_root = normalize_path(Path::new(root));
+        if clean_root.is_empty() {
+            continue;
+        }
+        let candidate = cwd.join(&clean_root).join(&normalized);
+        if is_under_allowed_root(cwd, config, &candidate) {
+            return Ok(CapabilityPath {
+                source_path: normalized,
+                full_path: candidate,
+            });
+        }
+    }
+    Err(capability_error(403, "source path is outside configured witness-core roots"))
+}
+
+fn normalize_source_request_path(requested: &str) -> Result<String, CapabilityError> {
+    let value = requested.trim().replace('\\', "/").trim_start_matches("./").to_string();
+    if value.is_empty() {
+        return Err(capability_error(400, "path is required"));
+    }
+    if value.starts_with('/') || value.contains(':') || value.split('/').any(|part| part == "..") {
+        return Err(capability_error(403, "path is not a scoped source id"));
+    }
+    Ok(value)
+}
+
+fn is_under_allowed_root(cwd: &Path, config: &CoreConfig, candidate: &Path) -> bool {
+    let Ok(candidate_relative) = candidate.strip_prefix(cwd) else {
+        return false;
+    };
+    let candidate_relative = normalize_path(candidate_relative);
+    config.watch.roots.iter().any(|root| {
+        let root = normalize_path(Path::new(root)).trim_matches('/').to_string();
+        !root.is_empty() && (candidate_relative == root || candidate_relative.starts_with(&format!("{}/", root)))
+    }) && package_includes_path(config, &candidate_relative)
+}
+
+fn package_includes_path(config: &CoreConfig, relative: &str) -> bool {
+    if config.package.include.is_empty() {
+        return true;
+    }
+    config.package.include.iter().any(|pattern| {
+        let pattern = pattern.replace('\\', "/");
+        if let Some(prefix) = pattern.strip_suffix("/**") {
+            relative == prefix || relative.starts_with(&format!("{}/", prefix))
+        } else {
+            relative == pattern
+        }
+    })
+}
+
+fn source_content_to_json(response: &SourceContentResponse) -> String {
+    format!(
+        "{{{},{},{},{}}}",
+        json_pair("path", &response.source_path),
+        json_pair("content", &response.content),
+        json_pair("hash", &response.hash),
+        json_number_optional_pair("size", Some(response.size))
+    )
+}
+
+fn source_stat_to_json(response: &SourceStatResponse) -> String {
+    format!(
+        "{{{},{},{},{},{}}}",
+        json_pair("path", &response.source_path),
+        json_bool_pair("exists", response.exists),
+        json_optional_pair("hash", response.hash.as_deref()),
+        json_number_optional_pair("size", response.size),
+        json_optional_pair("modifiedAt", response.modified_at.as_deref())
+    )
+}
+
+fn capability_error_to_json(error: &CapabilityError, source_path: Option<&str>) -> String {
+    let mut pairs = vec![
+        json_pair("error", &error.message),
+        json_optional_pair("code", error.code.as_deref()),
+        json_optional_pair("path", source_path),
+        json_optional_pair("expectedHash", error.expected_hash.as_deref()),
+        json_optional_pair("actualHash", error.actual_hash.as_deref()),
+        json_number_optional_pair("size", error.size),
+        json_optional_pair("modifiedAt", error.modified_at.as_deref()),
+    ];
+    if let Some(exists) = error.exists {
+        pairs.push(json_bool_pair("exists", exists));
+    }
+    format!("{{{}}}", pairs.join(","))
+}
+
+fn capability_correlation_from_params(params: &BTreeMap<String, String>) -> Correlation {
+    Correlation {
+        session_id: params.get("sessionId").filter(|value| !value.trim().is_empty()).cloned(),
+        surface_id: params.get("surfaceId").filter(|value| !value.trim().is_empty()).cloned(),
+        actor: params.get("actor").filter(|value| !value.trim().is_empty()).cloned(),
+    }
+}
+
+fn capability_event_message(source_path: &str, reason: Option<&str>, preview_only: bool, correlation: &Correlation) -> String {
+    format!(
+        "path={} reason={} previewOnly={} sessionId={} surfaceId={} actor={}",
+        source_path,
+        reason.filter(|value| !value.trim().is_empty()).unwrap_or("-"),
+        if preview_only { "true" } else { "false" },
+        correlation.session_id.as_deref().filter(|value| !value.trim().is_empty()).unwrap_or("-"),
+        correlation.surface_id.as_deref().filter(|value| !value.trim().is_empty()).unwrap_or("-"),
+        correlation.actor.as_deref().filter(|value| !value.trim().is_empty()).unwrap_or("-"),
+    )
+}
+
 fn registry_to_json(registry: &Registry) -> String {
     let generations = registry.generations().iter().map(generation_to_json).collect::<Vec<_>>().join(",");
     format!(
-        "{{\"aliases\":{},\"generations\":[{}]}}",
+        "{{\"aliases\":{},\"serving\":{},\"soak\":{},\"generations\":[{}]}}",
         aliases_to_json(&registry.aliases()),
+        serving_status_to_json(&registry.serving_status()),
+        soak_state_to_json(&registry.soak_state()),
         generations
+    )
+}
+
+fn soak_state_to_json(soak: &SoakState) -> String {
+    format!(
+        "{{{},{}}}",
+        json_object_optional_pair("currentSession", soak.current_session.as_ref().map(soak_session_to_json)),
+        json_object_optional_pair("lastSession", soak.last_session.as_ref().map(soak_session_to_json))
+    )
+}
+
+fn soak_session_to_json(session: &SoakSession) -> String {
+    let marks = session.marks.iter().map(soak_mark_json).collect::<Vec<_>>().join(",");
+    format!(
+        "{{{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}}}",
+        json_pair("id", &session.id),
+        json_pair("scenario", &session.scenario),
+        json_pair("status", &session.status),
+        json_pair("startedAt", &session.started_at),
+        json_pair("updatedAt", &session.updated_at),
+        json_optional_pair("completedAt", session.completed_at.as_deref()),
+        json_optional_pair("failureReason", session.failure_reason.as_deref()),
+        json_number_optional_pair("sampleCount", Some(session.sample_count)),
+        json_number_optional_pair("healthySamples", Some(session.healthy_samples)),
+        json_number_optional_pair("degradedSamples", Some(session.degraded_samples)),
+        json_number_optional_pair("unhealthySamples", Some(session.unhealthy_samples)),
+        json_bool_pair("restartObserved", session.restart_observed),
+        json_bool_pair("stableFailoverObserved", session.stable_failover_observed),
+        json_number_optional_pair("startRestartCount", Some(session.start_restart_count)),
+        json_number_optional_pair("latestRestartCount", Some(session.latest_restart_count)),
+        json_optional_pair("currentPhase", session.current_phase.as_deref()),
+        json_object_optional_pair("latestSample", session.latest_sample.as_ref().map(soak_sample_json)),
+        format!("\"marks\":[{}],\"highWater\":{}", marks, soak_high_water_json(&session.high_water))
+    )
+}
+
+fn soak_mark_json(mark: &SoakMark) -> String {
+    format!(
+        "{{{},{},{}}}",
+        json_pair("phase", &mark.phase),
+        json_optional_pair("message", mark.message.as_deref()),
+        json_pair("markedAt", &mark.marked_at)
+    )
+}
+
+fn soak_mark_to_json(session_id: &str, mark: &SoakMark) -> String {
+    format!(
+        "{{{},{},{},{}}}",
+        json_pair("sessionId", session_id),
+        json_pair("phase", &mark.phase),
+        json_optional_pair("message", mark.message.as_deref()),
+        json_pair("markedAt", &mark.marked_at)
+    )
+}
+
+fn soak_high_water_json(high_water: &SoakHighWater) -> String {
+    format!(
+        "{{{},{},{},{},{},{},{},{},{},{}}}",
+        json_number_optional_pair("rss", Some(high_water.rss)),
+        json_number_optional_pair("heapUsed", Some(high_water.heap_used)),
+        json_number_optional_pair("eventLoopP95Ms", Some(high_water.event_loop_p95_ms)),
+        json_number_optional_pair("activeRequests", Some(high_water.active_requests)),
+        json_number_optional_pair("sseClients", Some(high_water.sse_clients)),
+        json_number_optional_pair("previewSessions", Some(high_water.preview_sessions)),
+        json_number_optional_pair("snapshotWatchers", Some(high_water.snapshot_watchers)),
+        json_number_optional_pair("fsWatcherResources", Some(high_water.fswatcher_resources)),
+        json_number_optional_pair("timeoutResources", Some(high_water.timeout_resources)),
+        json_number_optional_pair("restartCount", Some(high_water.restart_count))
+    )
+}
+
+fn soak_sample_json(sample: &SoakSample) -> String {
+    format!(
+        "{{{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}}}",
+        json_number_optional_pair("sequence", Some(sample.sequence)),
+        json_optional_pair("phase", sample.phase.as_deref()),
+        json_pair("sampledAt", &sample.sampled_at),
+        json_bool_pair("ready", sample.ready),
+        json_pair("status", &sample.status),
+        json_string_array_pair("reasonCodes", &sample.reason_codes),
+        json_number_optional_pair("rss", Some(sample.rss)),
+        json_number_optional_pair("heapUsed", Some(sample.heap_used)),
+        json_number_optional_pair("eventLoopP95Ms", Some(sample.event_loop_p95_ms)),
+        json_number_optional_pair("activeRequests", Some(sample.active_requests)),
+        json_number_optional_pair("sseClients", Some(sample.sse_clients)),
+        json_number_optional_pair("previewSessions", Some(sample.preview_sessions)),
+        json_number_optional_pair("snapshotWatchers", Some(sample.snapshot_watchers)),
+        json_number_optional_pair("fsWatcherResources", Some(sample.fswatcher_resources)),
+        json_number_optional_pair("timeoutResources", Some(sample.timeout_resources)),
+        json_bool_pair("processRunning", sample.process_running),
+        json_bool_pair("processReady", sample.process_ready),
+        json_number_optional_pair("pid", sample.pid.map(|value| value as u64)),
+        json_number_optional_pair("restartCount", Some(sample.restart_count)),
+        json_pair("servingRequestedMode", &sample.serving_requested_mode),
+        json_pair("servingEffectiveMode", &sample.serving_effective_mode),
+        json_pair("servingReason", &sample.serving_reason),
+        json_optional_pair("latestGenerationId", sample.latest_generation_id.as_deref()),
+        format!(
+            "{},{}",
+            json_optional_pair("latestGenerationState", sample.latest_generation_state.as_deref()),
+            json_bool_pair("stableFailover", sample.stable_failover)
+        )
+    )
+}
+
+fn soak_sample_payload_to_json(session_id: &str, sample: &SoakSample) -> String {
+    let inner = soak_sample_json(sample);
+    format!(
+        "{{{},{} }}",
+        json_pair("sessionId", session_id),
+        inner.trim_start_matches('{').trim_end_matches('}')
+    )
+}
+
+fn soak_session_finish_to_json(session: &SoakSession, message: Option<&str>) -> String {
+    format!(
+        "{{{},{},{},{}}}",
+        json_pair("id", &session.id),
+        json_pair("status", &session.status),
+        json_pair("updatedAt", &session.updated_at),
+        json_optional_pair(
+            "message",
+            message
+                .filter(|value| !value.trim().is_empty())
+                .or(session.failure_reason.as_deref())
+        )
     )
 }
 
@@ -1064,12 +3418,36 @@ fn aliases_to_json(aliases: &Aliases) -> String {
     )
 }
 
-fn supervised_process_state_to_json(state: &SupervisedProcessState) -> String {
+fn serving_directive_to_json(serving: &ServingDirective) -> String {
     format!(
-        "{{{},{},{},{},{},{},{},{},{},{},{}}}",
+        "{{{},{}}}",
+        json_pair("requestedMode", serving.requested_mode.as_str()),
+        json_pair("updatedAt", &serving.updated_at)
+    )
+}
+
+fn serving_status_to_json(serving: &ServingStatus) -> String {
+    format!(
+        "{{{},{},{},{},{},{},{},{},{}}}",
+        json_pair("requestedMode", serving.requested_mode.as_str()),
+        json_pair("effectiveMode", serving.effective_mode.as_str()),
+        json_pair("reason", &serving.reason),
+        json_pair("updatedAt", &serving.updated_at),
+        json_optional_pair("latestGenerationId", serving.latest_generation_id.as_deref()),
+        json_optional_pair("latestGenerationState", serving.latest_generation_state.as_deref()),
+        json_optional_pair("currentStable", serving.current_stable.as_deref()),
+        json_optional_pair("currentGreenLocal", serving.current_green_local.as_deref()),
+        json_optional_pair("lastGood", serving.last_good.as_deref())
+    )
+}
+
+fn supervised_process_state_to_json(state: &SupervisedProcessState) -> String {
+    let instances = state.instances.iter().map(supervised_process_instance_to_json).collect::<Vec<_>>().join(",");
+    let fields = vec![
         json_optional_pair("command", state.command.as_deref()),
         json_optional_pair("workingDir", state.working_dir.as_deref()),
         json_bool_pair("restartOnExit", state.restart_on_exit),
+        json_bool_pair("restartOnUnhealthy", state.restart_on_unhealthy),
         json_bool_pair("running", state.running),
         json_number_optional_pair("pid", state.pid.map(|value| value as u64)),
         json_number_optional_pair("restartCount", Some(state.restart_count)),
@@ -1077,7 +3455,47 @@ fn supervised_process_state_to_json(state: &SupervisedProcessState) -> String {
         json_optional_pair("lastExitedAt", state.last_exited_at.as_deref()),
         json_number_optional_pair("lastExitCode", state.last_exit_code.map(|value| value as u64)),
         json_optional_pair("lastError", state.last_error.as_deref()),
-        json_bool_pair("restartRequested", state.restart_requested)
+        json_bool_pair("ready", state.ready),
+        json_optional_pair("lastReadyAt", state.last_ready_at.as_deref()),
+        json_optional_pair("lastHealthStatus", state.last_health_status.as_deref()),
+        json_optional_pair("status", state.status.as_deref()),
+        json_string_array_pair("reasonCodes", &state.reason_codes),
+        json_optional_pair("lastHealthSampleAt", state.last_health_sample_at.as_deref()),
+        json_optional_pair("healthUrl", state.health_url.as_deref()),
+        json_number_optional_pair("degradedStreak", Some(state.degraded_streak)),
+        json_number_optional_pair("unhealthyStreak", Some(state.unhealthy_streak)),
+        json_optional_pair("lastRestartReason", state.last_restart_reason.as_deref()),
+        json_bool_pair("stopRequested", state.stop_requested),
+        json_bool_pair("restartRequested", state.restart_requested),
+        json_optional_pair("instanceId", state.instance_id.as_deref()),
+        json_optional_pair("role", state.role.as_deref()),
+        json_bool_pair("mutationsEnabled", state.mutations_enabled),
+        json_bool_pair("watchersEnabled", state.watchers_enabled),
+        json_bool_pair("frontdoorEnabled", state.frontdoor_enabled),
+        json_optional_pair("publicAddr", state.public_addr.as_deref()),
+        json_optional_pair("activeInstanceId", state.frontdoor_active_instance_id.as_deref()),
+        json_optional_pair("activeTarget", state.frontdoor_active_target.as_deref()),
+        format!("\"instances\":[{}]", instances)
+    ];
+    format!("{{{}}}", fields.join(","))
+}
+
+fn supervised_process_instance_to_json(instance: &SupervisedProcessInstanceState) -> String {
+    format!(
+        "{{{},{},{},{},{},{},{},{},{},{},{},{},{}}}",
+        json_pair("id", &instance.id),
+        json_pair("state", &instance.state),
+        json_number_optional_pair("port", instance.port.map(|value| value as u64)),
+        json_bool_pair("running", instance.running),
+        json_bool_pair("ready", instance.ready),
+        json_number_optional_pair("pid", instance.pid.map(|value| value as u64)),
+        json_number_optional_pair("inflightConnections", Some(instance.inflight_connections)),
+        json_optional_pair("lastStartedAt", instance.last_started_at.as_deref()),
+        json_optional_pair("lastExitedAt", instance.last_exited_at.as_deref()),
+        json_optional_pair("lastHealthStatus", instance.last_health_status.as_deref()),
+        json_optional_pair("drainStartedAt", instance.drain_started_at.as_deref()),
+        json_optional_pair("drainFinishedAt", instance.drain_finished_at.as_deref()),
+        json_optional_pair("role", instance.role.as_deref())
     )
 }
 
@@ -1101,6 +3519,13 @@ fn json_optional_pair(key: &str, value: Option<&str>) -> String {
     }
 }
 
+fn json_object_optional_pair(key: &str, value: Option<String>) -> String {
+    match value {
+        Some(value) => format!("\"{}\":{}", key, value),
+        None => format!("\"{}\":null", key),
+    }
+}
+
 fn json_number_optional_pair(key: &str, value: Option<u64>) -> String {
     match value {
         Some(value) => format!("\"{}\":{}", key, value),
@@ -1110,6 +3535,18 @@ fn json_number_optional_pair(key: &str, value: Option<u64>) -> String {
 
 fn json_bool_pair(key: &str, value: bool) -> String {
     format!("\"{}\":{}", key, if value { "true" } else { "false" })
+}
+
+fn json_string_array_pair(key: &str, values: &[String]) -> String {
+    format!(
+        "\"{}\":[{}]",
+        key,
+        values
+            .iter()
+            .map(|value| json_string(value))
+            .collect::<Vec<_>>()
+            .join(",")
+    )
 }
 
 fn json_string(value: &str) -> String {
@@ -1216,6 +3653,17 @@ fn shell_command(command: &str) -> Command {
     }
 }
 
+fn supervised_command(command: &str) -> Option<Command> {
+    if command.contains('>') || command.contains('<') || command.contains('|') || command.contains('&') || command.contains(';') {
+        return None;
+    }
+    let mut parts = command.split_whitespace();
+    let program = parts.next()?;
+    let mut cmd = Command::new(program);
+    cmd.args(parts);
+    Some(cmd)
+}
+
 fn fingerprint_files(cwd: &Path, config: &CoreConfig) -> BTreeMap<String, u128> {
     let mut files = BTreeMap::new();
     for root in &config.watch.roots {
@@ -1316,6 +3764,64 @@ fn extract_json_string(text: &str, key: &str) -> Option<String> {
     None
 }
 
+fn extract_json_string_decoded(text: &str, key: &str) -> Option<String> {
+    let needle = format!("\"{}\":", key);
+    let start = text.find(&needle)? + needle.len();
+    let rest = text[start..].trim_start();
+    if rest.starts_with("null") || !rest.starts_with('"') {
+        return None;
+    }
+    let mut value = String::new();
+    let mut chars = rest[1..].chars();
+    while let Some(ch) = chars.next() {
+        if ch == '"' {
+            return Some(value);
+        }
+        if ch != '\\' {
+            value.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('"') => value.push('"'),
+            Some('\\') => value.push('\\'),
+            Some('/') => value.push('/'),
+            Some('n') => value.push('\n'),
+            Some('r') => value.push('\r'),
+            Some('t') => value.push('\t'),
+            Some('b') => value.push('\u{0008}'),
+            Some('f') => value.push('\u{000c}'),
+            Some(other) => value.push(other),
+            None => return None,
+        }
+    }
+    None
+}
+
+fn extract_json_bool(text: &str, key: &str) -> bool {
+    let needle = format!("\"{}\":", key);
+    let Some(start) = text.find(&needle).map(|value| value + needle.len()) else {
+        return false;
+    };
+    text[start..].trim_start().starts_with("true")
+}
+
+fn extract_json_u64(text: &str, key: &str) -> Option<u64> {
+    let needle = format!("\"{}\":", key);
+    let start = text.find(&needle)? + needle.len();
+    let rest = text[start..].trim_start();
+    if rest.starts_with("null") {
+        return None;
+    }
+    let digits = rest
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect::<String>();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse::<u64>().ok()
+}
+
 fn extract_json_string_array(text: &str, key: &str) -> Vec<String> {
     let needle = format!("\"{}\":[", key);
     let Some(start) = text.find(&needle).map(|value| value + needle.len()) else {
@@ -1329,6 +3835,101 @@ fn extract_json_string_array(text: &str, key: &str) -> Vec<String> {
         .map(|value| value.trim().trim_matches('"').to_string())
         .filter(|value| !value.is_empty())
         .collect()
+}
+
+fn soak_session_from_json(text: &str) -> Option<SoakSession> {
+    Some(SoakSession {
+        id: extract_json_string(text, "id")?,
+        scenario: extract_json_string(text, "scenario").unwrap_or_else(|| "soak".to_string()),
+        status: extract_json_string(text, "status").unwrap_or_else(|| "running".to_string()),
+        started_at: extract_json_string(text, "startedAt").unwrap_or_else(now_iso),
+        updated_at: extract_json_string(text, "updatedAt").unwrap_or_else(now_iso),
+        completed_at: extract_json_string(text, "completedAt"),
+        failure_reason: extract_json_string_decoded(text, "failureReason").or_else(|| extract_json_string(text, "failureReason")),
+        sample_count: extract_json_u64(text, "sampleCount").unwrap_or(0),
+        healthy_samples: extract_json_u64(text, "healthySamples").unwrap_or(0),
+        degraded_samples: extract_json_u64(text, "degradedSamples").unwrap_or(0),
+        unhealthy_samples: extract_json_u64(text, "unhealthySamples").unwrap_or(0),
+        restart_observed: extract_json_bool(text, "restartObserved"),
+        stable_failover_observed: extract_json_bool(text, "stableFailoverObserved"),
+        start_restart_count: extract_json_u64(text, "startRestartCount").unwrap_or(0),
+        latest_restart_count: extract_json_u64(text, "latestRestartCount").unwrap_or(0),
+        current_phase: extract_json_string(text, "currentPhase"),
+        latest_sample: None,
+        marks: Vec::new(),
+        high_water: SoakHighWater::default(),
+    })
+}
+
+fn soak_mark_from_json(text: &str) -> Option<SoakMark> {
+    Some(SoakMark {
+        phase: extract_json_string(text, "phase")?,
+        message: extract_json_string_decoded(text, "message").or_else(|| extract_json_string(text, "message")),
+        marked_at: extract_json_string(text, "markedAt").unwrap_or_else(now_iso),
+    })
+}
+
+fn soak_sample_from_json(text: &str) -> Option<SoakSample> {
+    Some(SoakSample {
+        sequence: extract_json_u64(text, "sequence").unwrap_or(0),
+        phase: extract_json_string(text, "phase"),
+        sampled_at: extract_json_string(text, "sampledAt").unwrap_or_else(now_iso),
+        ready: extract_json_bool(text, "ready"),
+        status: extract_json_string(text, "status").unwrap_or_else(|| "unknown".to_string()),
+        reason_codes: extract_json_string_array(text, "reasonCodes"),
+        rss: extract_json_u64(text, "rss").unwrap_or(0),
+        heap_used: extract_json_u64(text, "heapUsed").unwrap_or(0),
+        event_loop_p95_ms: extract_json_u64(text, "eventLoopP95Ms").unwrap_or(0),
+        active_requests: extract_json_u64(text, "activeRequests").unwrap_or(0),
+        sse_clients: extract_json_u64(text, "sseClients").unwrap_or(0),
+        preview_sessions: extract_json_u64(text, "previewSessions").unwrap_or(0),
+        snapshot_watchers: extract_json_u64(text, "snapshotWatchers").unwrap_or(0),
+        fswatcher_resources: extract_json_u64(text, "fsWatcherResources").unwrap_or(0),
+        timeout_resources: extract_json_u64(text, "timeoutResources").unwrap_or(0),
+        process_running: extract_json_bool(text, "processRunning"),
+        process_ready: extract_json_bool(text, "processReady"),
+        pid: extract_json_u64(text, "pid").map(|value| value as u32),
+        restart_count: extract_json_u64(text, "restartCount").unwrap_or(0),
+        serving_requested_mode: extract_json_string(text, "servingRequestedMode").unwrap_or_default(),
+        serving_effective_mode: extract_json_string(text, "servingEffectiveMode").unwrap_or_default(),
+        serving_reason: extract_json_string_decoded(text, "servingReason")
+            .or_else(|| extract_json_string(text, "servingReason"))
+            .unwrap_or_default(),
+        latest_generation_id: extract_json_string(text, "latestGenerationId"),
+        latest_generation_state: extract_json_string(text, "latestGenerationState"),
+        stable_failover: extract_json_bool(text, "stableFailover"),
+    })
+}
+
+fn soak_finished_session_from_json(text: &str) -> Option<SoakSession> {
+    let id = extract_json_string(text, "id")?;
+    let status = extract_json_string(text, "status").unwrap_or_else(|| "completed".to_string());
+    let updated_at = extract_json_string(text, "updatedAt").unwrap_or_else(now_iso);
+    Some(SoakSession {
+        id,
+        scenario: "soak".to_string(),
+        status: status.clone(),
+        started_at: updated_at.clone(),
+        updated_at: updated_at.clone(),
+        completed_at: Some(updated_at),
+        failure_reason: if status == "failed" {
+            extract_json_string_decoded(text, "message").or_else(|| extract_json_string(text, "message"))
+        } else {
+            None
+        },
+        sample_count: 0,
+        healthy_samples: 0,
+        degraded_samples: 0,
+        unhealthy_samples: 0,
+        restart_observed: false,
+        stable_failover_observed: false,
+        start_restart_count: 0,
+        latest_restart_count: 0,
+        current_phase: None,
+        latest_sample: None,
+        marks: Vec::new(),
+        high_water: SoakHighWater::default(),
+    })
 }
 
 fn sha256_hex(bytes: Vec<u8>) -> String {
@@ -1412,6 +4013,7 @@ fn sha256(input: &[u8]) -> [u8; 32] {
 mod tests {
     use super::*;
     use std::io::Read;
+    use std::sync::OnceLock;
 
     struct MemoryStore {
         events: Mutex<Vec<String>>,
@@ -1448,6 +4050,39 @@ mod tests {
         }
     }
 
+    fn readiness_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn readiness_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        readiness_test_lock().lock().unwrap_or_else(|error| error.into_inner())
+    }
+
+    fn test_root() -> PathBuf {
+        static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(1);
+        let root = std::env::temp_dir().join(format!(
+            "witness-core-test-{}-{}",
+            now_iso(),
+            TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn fixture_config() -> CoreConfig {
+        CoreConfig {
+            watch: WatchConfig {
+                roots: vec!["app".to_string()],
+                ignore: vec![".witness-core".to_string()],
+            },
+            package: PackageConfig {
+                include: vec!["app/**".to_string()],
+            },
+            ..CoreConfig::default()
+        }
+    }
+
     #[test]
     fn config_parser_reads_minimum_shape() {
         let config = parse_config(r#"
@@ -1466,6 +4101,12 @@ include = ["src/**"]
 command = "npm run engentus"
 working_dir = "."
 restart_on_exit = false
+restart_on_unhealthy = false
+health_url = "http://127.0.0.1:3000/api/runtime/process-health"
+health_interval_ms = 50
+health_timeout_ms = 250
+degraded_grace_polls = 7
+unhealthy_grace_polls = 2
 "#);
         assert_eq!(config.watch.roots, vec!["src", "plugins"]);
         assert_eq!(config.watch.ignore, vec!["target"]);
@@ -1475,6 +4116,145 @@ restart_on_exit = false
         assert_eq!(config.supervise.command.as_deref(), Some("npm run engentus"));
         assert_eq!(config.supervise.working_dir.as_deref(), Some("."));
         assert_eq!(config.supervise.restart_on_exit, false);
+        assert_eq!(config.supervise.restart_on_unhealthy, false);
+        assert_eq!(config.supervise.health_url.as_deref(), Some("http://127.0.0.1:3000/api/runtime/process-health"));
+        assert_eq!(config.supervise.health_interval_ms, 50);
+        assert_eq!(config.supervise.health_timeout_ms, 250);
+        assert_eq!(config.supervise.degraded_grace_polls, 7);
+        assert_eq!(config.supervise.unhealthy_grace_polls, 2);
+    }
+
+    #[test]
+    fn capability_path_scope_rejects_absolute_and_parent_paths() {
+        let root = test_root();
+        let config = fixture_config();
+        assert_eq!(resolve_capability_path(&root, &config, "../secrets.txt").unwrap_err().status, 403);
+        assert_eq!(resolve_capability_path(&root, &config, "/tmp/secrets.txt").unwrap_err().status, 403);
+        assert_eq!(resolve_capability_path(&root, &config, "C:/tmp/secrets.txt").unwrap_err().status, 403);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn capability_read_stat_and_patch_are_scoped_to_configured_roots() {
+        let root = test_root();
+        let app_dir = root.join("app");
+        fs::create_dir_all(&app_dir).unwrap();
+        fs::write(app_dir.join("content.wtoml"), "before").unwrap();
+        let config = fixture_config();
+
+        let read = capability_fs_read(&root, &config, "content.wtoml").unwrap();
+        assert_eq!(read.source_path, "content.wtoml");
+        assert_eq!(read.content, "before");
+        assert!(read.hash.starts_with("sha256:"));
+
+        let stat = capability_fs_stat(&root, &config, "content.wtoml").unwrap();
+        assert_eq!(stat.exists, true);
+        assert_eq!(stat.size, Some(6));
+
+        let patched = capability_fs_write(&root, &config, "content.wtoml", "after", false, None).unwrap();
+        assert_eq!(patched.size, 5);
+        assert_eq!(fs::read_to_string(app_dir.join("content.wtoml")).unwrap(), "after");
+
+        let preview = capability_fs_write(&root, &config, "content.wtoml", "preview only", true, None).unwrap();
+        assert_eq!(preview.content, "preview only");
+        assert_eq!(fs::read_to_string(app_dir.join("content.wtoml")).unwrap(), "after");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn capability_write_rejects_stale_expected_hash() {
+        let root = test_root();
+        let app_dir = root.join("app");
+        fs::create_dir_all(&app_dir).unwrap();
+        fs::write(app_dir.join("content.wtoml"), "before").unwrap();
+        let config = fixture_config();
+
+        let error = capability_fs_write(&root, &config, "content.wtoml", "after", false, Some("sha256:stale")).unwrap_err();
+        assert_eq!(error.status, 409);
+        assert_eq!(error.code.as_deref(), Some("WITNESS_CORE_SOURCE_CONFLICT"));
+        assert_eq!(error.exists, Some(true));
+        assert_eq!(fs::read_to_string(app_dir.join("content.wtoml")).unwrap(), "before");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn capability_http_write_emits_journal_event() {
+        let root = test_root();
+        let app_dir = root.join("app");
+        fs::create_dir_all(&app_dir).unwrap();
+        fs::write(app_dir.join("content.wtoml"), "before").unwrap();
+        let config = fixture_config();
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
+        let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_registry = Arc::clone(&registry);
+        let server_process_state = Arc::clone(&process_state);
+        let server_root = root.clone();
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_client(stream, &server_root, &config, server_registry, server_process_state).unwrap();
+        });
+        let body = "{\"path\":\"content.wtoml\",\"content\":\"after\",\"reason\":\"test\"}";
+        let mut client = TcpStream::connect(addr).unwrap();
+        write!(
+            client,
+            "PUT /capabilities/fs/write HTTP/1.1\r\nhost: test\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+        let mut response_reader = BufReader::new(client);
+        let mut response = String::new();
+        response_reader.read_line(&mut response).unwrap();
+        handle.join().unwrap();
+        assert!(response.contains("200 OK"));
+        assert_eq!(fs::read_to_string(app_dir.join("content.wtoml")).unwrap(), "after");
+        let events = store.read_events().unwrap().join("\n");
+        assert!(events.contains("capability.fs.write"));
+        assert!(events.contains("path=content.wtoml"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn capability_http_write_conflict_emits_authoring_conflict_event() {
+        let root = test_root();
+        let app_dir = root.join("app");
+        fs::create_dir_all(&app_dir).unwrap();
+        fs::write(app_dir.join("content.wtoml"), "before").unwrap();
+        let config = fixture_config();
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
+        let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_registry = Arc::clone(&registry);
+        let server_process_state = Arc::clone(&process_state);
+        let server_root = root.clone();
+        let handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_client(stream, &server_root, &config, server_registry, server_process_state).unwrap();
+        });
+        let body = "{\"path\":\"content.wtoml\",\"content\":\"after\",\"expectedHash\":\"sha256:stale\",\"reason\":\"app.source.write\"}";
+        let mut client = TcpStream::connect(addr).unwrap();
+        write!(
+            client,
+            "PUT /capabilities/fs/write HTTP/1.1\r\nhost: test\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+        let mut response_reader = BufReader::new(client);
+        let mut response = String::new();
+        response_reader.read_line(&mut response).unwrap();
+        handle.join().unwrap();
+        assert!(response.contains("409 Error"));
+        assert_eq!(fs::read_to_string(app_dir.join("content.wtoml")).unwrap(), "before");
+        let events = store.read_events().unwrap().join("\n");
+        assert!(events.contains("authoring.write.conflict"));
+        assert!(events.contains("expectedHash=sha256:stale"));
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -1514,6 +4294,73 @@ restart_on_exit = false
     }
 
     #[test]
+    fn registry_replays_preview_sessions_after_restart() {
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let mut registry = Registry::new(Arc::clone(&store));
+        let session = "{\"id\":\"preview-1\",\"baseAppRevision\":7,\"previewRevision\":1,\"status\":\"active\",\"overlaySources\":[{\"file\":\"C:/tmp/app/content.wtoml\",\"content\":\"text = \\\"Preview\\\"\"}],\"generationHistory\":[]}".to_string();
+        registry.upsert_preview_session("preview-1", session.clone());
+
+        let restored = Registry::new(Arc::clone(&store));
+        assert_eq!(restored.preview_session("preview-1").as_deref(), Some(session.as_str()));
+
+        let mut deleted = Registry::new(Arc::clone(&store));
+        assert_eq!(deleted.delete_preview_session("preview-1"), true);
+        let restored_deleted = Registry::new(Arc::clone(&store));
+        assert_eq!(restored_deleted.preview_session("preview-1"), None);
+    }
+
+    #[test]
+    fn serving_mode_defaults_live_and_fails_over_on_failed_latest_generation() {
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let mut registry = Registry::new(store);
+        assert_eq!(registry.serving_status().requested_mode, ServingMode::Live);
+        assert_eq!(registry.serving_status().effective_mode, ServingMode::Live);
+
+        registry.upsert_generation(sample_generation("gen_green", GenerationState::GreenLocal), "generation.green_local", CAP_STORAGE_WRITE);
+        assert_eq!(registry.serving_status().effective_mode, ServingMode::Live);
+
+        let mut failed = sample_generation("gen_failed", GenerationState::ProofFailed);
+        failed.created_at = "2".to_string();
+        registry.upsert_generation(failed, "proof.failed", CAP_PROOF_RUN);
+        let status = registry.serving_status();
+        assert_eq!(status.requested_mode, ServingMode::Live);
+        assert_eq!(status.effective_mode, ServingMode::Stable);
+        assert_eq!(status.reason, "latest-failed");
+    }
+
+    #[test]
+    fn serving_mode_pin_and_replay_persist_requested_mode() {
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let mut registry = Registry::new(Arc::clone(&store));
+        registry.request_serving_mode(ServingMode::Stable);
+        let pinned = registry.serving_status();
+        assert_eq!(pinned.requested_mode, ServingMode::Stable);
+        assert_eq!(pinned.effective_mode, ServingMode::Stable);
+        assert_eq!(pinned.reason, "requested-stable");
+
+        let restored = Registry::new(Arc::clone(&store));
+        let restored_status = restored.serving_status();
+        assert_eq!(restored_status.requested_mode, ServingMode::Stable);
+        assert_eq!(restored_status.effective_mode, ServingMode::Stable);
+        assert_eq!(restored_status.reason, "requested-stable");
+    }
+
+    #[test]
+    fn rollback_sets_requested_serving_mode_to_stable() {
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let mut registry = Registry::new(store);
+        registry.upsert_generation(sample_generation("gen_green", GenerationState::GreenLocal), "generation.green_local", CAP_STORAGE_WRITE);
+        registry.promote("gen_green").unwrap();
+        registry.request_serving_mode(ServingMode::Live);
+        let rolled_back = registry.rollback("gen_green").unwrap();
+        assert_eq!(rolled_back.state, GenerationState::Stable);
+        let status = registry.serving_status();
+        assert_eq!(status.requested_mode, ServingMode::Stable);
+        assert_eq!(status.effective_mode, ServingMode::Stable);
+        assert_eq!(status.reason, "requested-stable");
+    }
+
+    #[test]
     fn sha256_matches_empty_digest() {
         assert_eq!(
             sha256_hex(Vec::new()),
@@ -1541,16 +4388,125 @@ restart_on_exit = false
         let server_process_state = Arc::clone(&process_state);
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, server_registry, server_process_state).unwrap();
+            handle_client(stream, Path::new("."), &CoreConfig::default(), server_registry, server_process_state).unwrap();
         });
         let mut client = TcpStream::connect(addr).unwrap();
         client.write_all(b"GET /health HTTP/1.1\r\nhost: test\r\n\r\n").unwrap();
         let mut response = String::new();
-        client.read_to_string(&mut response).unwrap();
+        match client.read_to_string(&mut response) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => {}
+            Err(error) => panic!("unexpected health read error: {error}"),
+        }
         handle.join().unwrap();
         assert!(response.contains("200 OK"));
         assert!(response.contains("\"service\":\"witness-core\""));
         assert!(response.contains("\"process\""));
+        assert!(response.contains("\"ready\":false"));
+        assert!(response.contains("\"healthUrl\":null"));
+    }
+
+    #[test]
+    fn supervised_process_state_json_includes_readiness_fields() {
+        let state = SupervisedProcessState {
+            running: true,
+            pid: Some(42),
+            ready: true,
+            last_ready_at: Some("now".to_string()),
+            last_health_status: Some("healthy".to_string()),
+            status: Some("healthy".to_string()),
+            reason_codes: vec!["rss_over_budget".to_string()],
+            last_health_sample_at: Some("sampled".to_string()),
+            health_url: Some("http://127.0.0.1:3000/api/runtime/process-health".to_string()),
+            last_restart_reason: Some("policy unhealthy: sse_clients_over_budget".to_string()),
+            ..SupervisedProcessState::default()
+        };
+        let json = supervised_process_state_to_json(&state);
+        assert!(json.contains("\"ready\":true"));
+        assert!(json.contains("\"lastReadyAt\":\"now\""));
+        assert!(json.contains("\"lastHealthStatus\":\"healthy\""));
+        assert!(json.contains("\"status\":\"healthy\""));
+        assert!(json.contains("\"reasonCodes\":[\"rss_over_budget\"]"));
+        assert!(json.contains("\"lastHealthSampleAt\":\"sampled\""));
+        assert!(json.contains("\"healthUrl\":\"http://127.0.0.1:3000/api/runtime/process-health\""));
+        assert!(json.contains("\"lastRestartReason\":\"policy unhealthy: sse_clients_over_budget\""));
+    }
+
+    #[cfg_attr(windows, ignore = "flaky on windows localhost readiness timing")]
+    #[test]
+    fn readiness_probe_accepts_successful_http_status() {
+        let _guard = readiness_test_guard();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/api/runtime/process-health", listener.local_addr().unwrap());
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0u8; 256];
+            let _ = stream.read(&mut request);
+            let _ = stream.write_all(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n");
+        });
+        match wait_for_process_readiness(&url, 25, 15_000) {
+            ProcessReadiness::Ready(status) => assert_eq!(status, "204 healthy"),
+            ProcessReadiness::Unhealthy(status) => panic!("expected ready, got {status}"),
+        }
+        handle.join().unwrap();
+    }
+
+    #[cfg_attr(windows, ignore = "flaky on windows localhost readiness timing")]
+    #[test]
+    fn supervised_process_readiness_transition_emits_ready_event() {
+        let _guard = readiness_test_guard();
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
+        let process_state = Arc::new(Mutex::new(SupervisedProcessState::default()));
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let health_url = format!("http://{}/api/runtime/process-health", listener.local_addr().unwrap());
+        let health_handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0u8; 256];
+            let _ = stream.read(&mut request);
+            let body = "{\"ok\":true,\"ready\":true,\"status\":\"healthy\",\"reasonCodes\":[],\"sampledAt\":\"now\"}";
+            let _ = stream.write_all(format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            ).as_bytes());
+        });
+        #[cfg(windows)]
+        let command = "ping -n 8 127.0.0.1 > NUL".to_string();
+        #[cfg(not(windows))]
+        let command = "sleep 2".to_string();
+
+        start_supervised_process(
+            PathBuf::from("."),
+            "127.0.0.1:8788".to_string(),
+            SuperviseConfig {
+                command: Some(command),
+                working_dir: None,
+                restart_on_exit: false,
+                restart_on_unhealthy: true,
+                health_url: Some(health_url),
+                health_interval_ms: 25,
+                health_timeout_ms: 5_000,
+                degraded_grace_polls: 10,
+                unhealthy_grace_polls: 3,
+            },
+            Arc::clone(&registry),
+            Arc::clone(&process_state),
+        );
+        let deadline = Instant::now() + Duration::from_millis(20_000);
+        let mut saw_ready_event = false;
+        while Instant::now() < deadline {
+            let events = store.read_events().unwrap().join("\n");
+            if events.contains("process.ready") {
+                saw_ready_event = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        health_handle.join().unwrap();
+        let events = store.read_events().unwrap().join("\n");
+        assert!(saw_ready_event);
+        assert!(events.contains("process.ready"));
     }
 
     #[test]
@@ -1564,7 +4520,7 @@ restart_on_exit = false
         let server_process_state = Arc::clone(&process_state);
         let handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            handle_client(stream, server_registry, server_process_state).unwrap();
+            handle_client(stream, Path::new("."), &CoreConfig::default(), server_registry, server_process_state).unwrap();
         });
         let body = "id=preview-1&state=green_local&contentHash=sha256%3Atest&sourcePaths=%5B%22app%2Fshell.rvm%22%5D&sessionId=user-session&surfaceId=route.goodman&actor=alice";
         let mut client = TcpStream::connect(addr).unwrap();
@@ -1603,6 +4559,12 @@ restart_on_exit = false
                 command: Some("exit 0".to_string()),
                 working_dir: None,
                 restart_on_exit: false,
+                restart_on_unhealthy: true,
+                health_url: None,
+                health_interval_ms: 500,
+                health_timeout_ms: 10_000,
+                degraded_grace_polls: 10,
+                unhealthy_grace_polls: 3,
             },
             Arc::clone(&registry),
             Arc::clone(&process_state),

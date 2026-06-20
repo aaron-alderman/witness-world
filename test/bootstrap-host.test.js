@@ -2239,7 +2239,8 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     assert.equal(state.contextNameResolutions.some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.resolution === "resolved"), true);
     assert.equal((state.contextNameConflicts || []).length, 0);
     assert.equal(state.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget" && row.policyStatus === "allowed-transitional"), true);
-    assert.deepEqual(state.canonicalIdPolicyClasses, ["same-context-convenience", "imported-target-reference", "legacy-only-path"]);
+    assert.equal(state.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.unscopedLegacyTarget" && row.policyStatus === "migration-required"), true);
+    assert.deepEqual(state.canonicalIdPolicyClasses, ["same-context-convenience", "imported-target-reference"]);
     assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "backendAlias" && row.target === backendHost && row.sourceKind === "import"), true);
     assert.equal(state.widgets.some(row => row.id === "shell_child" && row.context === "ctx.target"), true);
     assert.equal(state.widgets.some(row => row.id === "legacy_child" && row.context === "ctx.target"), true);

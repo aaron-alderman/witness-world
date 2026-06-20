@@ -76,7 +76,7 @@ test("active bundle handler composition filters inactive implementations and rep
   const summary = runtimeBundleSummaryForProfile("minimal", options);
   const availableHandlers = {
     __sessionStore: new Map(),
-    "page.home": () => {},
+    "page.surface": () => {},
     "page.world": () => {},
     "events.stream": () => {},
     "db.sql.query": () => {}

@@ -535,7 +535,7 @@ name = "activeRoute"
   assert.match(hiddenCanonical.error, /route root surface id targets HiddenRoot.*not visible in authoring context ctx\.target/);
 });
 
-test("route.create lowers page.home frontend-program, default-root-widget, and route-state refs", () => {
+test("route.create rejects retired page.home authoring even when legacy refs are visible", () => {
   const world = createWorld();
   applyWitnessToml(world, `
 [[context]]
@@ -681,36 +681,7 @@ name = "activeRoute"
       }
     }
   });
-  assert.equal(okRoute.ok, true);
-  assert.equal(okRoute.route.serves, "landing_program");
-  assert.equal(okRoute.route.params.rootWidget, "page_root");
-  assert.equal(okRoute.route.params.frontendProgram, "landing_program");
-  assert.deepEqual(okRoute.route.params.routeState, {
-    process: "ReplayFlow",
-    state: "ReplayActiveRoute"
-  });
-
-  const hiddenCanonical = requestBootstrapRouteDefine(world, {
-    actor: "aaron",
-    backendHost: "backendHost",
-    body: {
-      id: "hidden_landing_route",
-      context: "ctx.target",
-      path: "/hidden-landing",
-      method: "GET",
-      handler: "page.home",
-      servesRef: "landingProgram",
-      defaultRootWidget: "secret_page"
-    },
-    allowedHandlers: ["page.home"],
-    handlerMetadataById: {
-      "page.home": {
-        routeKind: "page",
-        methods: ["GET"]
-      }
-    }
-  });
-  assert.equal(hiddenCanonical.ok, false);
-  assert.equal(hiddenCanonical.status, 400);
-  assert.match(hiddenCanonical.error, /route default root widget id targets secret_page.*not visible in authoring context ctx\.target/);
+  assert.equal(okRoute.ok, false);
+  assert.equal(okRoute.status, 400);
+  assert.match(okRoute.error, /page\.home is retired; use page\.surface and frontend\.upliftLegacy/);
 });

@@ -180,6 +180,96 @@ test("process runtime command rules can invoke bound adapter routes", async () =
   assert.match(runtime.value("LoadSummary"), /"ok": true/);
 });
 
+test("process runtime ignores stale route results instead of applying success or failure writes", async () => {
+  const runtime = createProcessRuntime([
+    {
+      process: "desire.defineType",
+      body: { id: "LoadBusy", role: "state", initial: false, valueType: "bool" }
+    },
+    {
+      process: "desire.defineType",
+      body: { id: "LoadNotice", role: "state", initial: "", valueType: "text" }
+    },
+    {
+      process: "desire.defineMessage",
+      body: { id: "RefreshRequested", role: "event", writes: {} }
+    },
+    {
+      process: "desire.defineMessage",
+      body: {
+        id: "LoadSucceeded",
+        role: "event",
+        fields: [{ name: "message", type: "LoadNotice" }],
+        writes: { LoadBusy: false }
+      }
+    },
+    {
+      process: "desire.defineMessage",
+      body: {
+        id: "LoadFailed",
+        role: "event",
+        fields: [{ name: "message", type: "LoadNotice" }],
+        writes: { LoadBusy: false }
+      }
+    },
+    {
+      process: "desire.defineMessage",
+      body: { id: "LoadRemote", role: "command", fields: [] }
+    },
+    {
+      process: "desire.defineBoundary",
+      body: {
+        id: "LoadRemoteHttp",
+        operations: [{
+          kind: "adapter",
+          command: "LoadRemote",
+          method: "GET",
+          route: "/api/demo",
+          loadingState: "LoadBusy",
+          successEvent: "LoadSucceeded",
+          failureEvent: "LoadFailed"
+        }]
+      }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "LoadProcess",
+        state: ["LoadBusy", "LoadNotice"],
+        handles: ["RefreshRequested", "LoadSucceeded", "LoadFailed"],
+        emits: ["LoadRemote"],
+        rules: [
+          {
+            trigger: "RefreshRequested",
+            steps: [{ kind: "command", command: "LoadRemote" }]
+          }
+        ]
+      }
+    }
+  ], {
+    routeInvoker: async request => {
+      assert.equal(Boolean(request.requestContext), true);
+      return {
+        status: "ignored",
+        ignored: true,
+        payload: { message: "stale" }
+      };
+    }
+  });
+
+  await runtime.deliverAuthored("RefreshRequested", null, {
+    routeRequestContext: {
+      isCurrent() {
+        return false;
+      }
+    }
+  });
+
+  assert.equal(runtime.value("LoadBusy"), true);
+  assert.equal(runtime.value("LoadNotice"), "");
+  assert.equal(runtime.trace.some(entry => entry.kind === "route.ignore" && entry.outcome === "ignored"), true);
+});
+
 test("process runtime option rules branch from runtime config truthiness", async () => {
   const world = [
     {

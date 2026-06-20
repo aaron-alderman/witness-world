@@ -1,5 +1,5 @@
 import {
-  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
+  TRANSITIONAL_CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
   moduleProjectors
 } from "./modules.js";
 
@@ -274,7 +274,7 @@ export function contextNamingStateFromProject(project, {
   };
   return {
     ...scoped,
-    canonicalIdPolicyClasses: [...CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES],
+    canonicalIdPolicyClasses: [...TRANSITIONAL_CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES],
     nameExplanation: trimString(context) && trimString(name)
       ? explainProjectedContextualName(state, { context, name })
       : null,

@@ -101,8 +101,9 @@ Current truth:
 - it can project authored surface trees, route-selected alternate output, and
   native repeated collection content
 - it now claims canonical route/state equivalence, query synchronization,
-  route-enter preload behavior, and interactive execution through authored
-  process rules
+  route-enter preload behavior, same-origin route-backed `click` / `change` /
+  `submit` effects, timed same-origin input-read effects through authored
+  interaction `timing`, and interactive execution through authored process rules
 - it now claims native `surface + process + projection + collection + boundary
   + policy + capability` runtime support
 - it no longer treats `dispatchDomEvent` or `witness:*` host-event bridges as
@@ -110,6 +111,9 @@ Current truth:
 - public/operator legacy frontend-program and frontend-step authoring endpoints
   are retired; `/api/frontend-programs` and `/api/frontend-steps` now return
   explicit `410` retirement truth instead of acting as a supported app lane
+- same-context and imported canonical-id sugar remain explicitly transitional,
+  while unscoped canonical-id authoring is now retired from covered public
+  authoring seams and survives only as historical diagnostics
 
 The next honest work does not begin from the old shell host. It begins from the
 clean floor proved by the canonical authoring pathway probe.
@@ -146,13 +150,15 @@ clean floor proved by the canonical authoring pathway probe.
 - retired legacy app-serving routes that have not yet been uplifted; they are
   now inspectable but unservable until `frontend.upliftLegacy` succeeds
 - historical legacy frontend records still exist for inspect and uplift input,
-  but maintained starter/bootstrap app creation no longer seeds a live
-  `page.home` app and then uplifts it; the starter path is natively authored
-  on `page.surface`, and the maintained tutorial now teaches that same native
-  starter path instead of `widget` + `frontendProgram` + `frontendStep`
-  construction as the default app-building lane
+  but maintained starter/bootstrap app creation no longer seeds retired
+  `page.home` material or performs post-seed uplift; the starter path is
+  natively authored on `page.surface`, and the maintained tutorial now teaches
+  that same native starter path instead of `widget` + `frontendProgram` +
+  `frontendStep` construction as the default app-building lane
 - arbitrary external network targets or host-only legacy behavior that still
   lacks a first-class native expression
+- input-driven write effects that still need a native timed write lane before
+  they can leave structured `frontendLegacyUplift.blocked[]`
 
 ### Newly proved
 
@@ -168,6 +174,8 @@ clean floor proved by the canonical authoring pathway probe.
 - canonical interactive `page.surface` execution
 - native collection repeat rendering on canonical `page.surface`
 - route-authored preload execution on canonical `page.surface`
+- same-origin route-backed `click` / `change` / `submit` effects on canonical
+  `page.surface`
 - native query-state bindings on canonical `page.surface`
 - faithful live Engentus shell behavior through the constrained pathway
 - route-local runtime transport for served `page.surface` output, so an active

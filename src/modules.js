@@ -2737,6 +2737,11 @@ export const CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES = Object.freeze([
   "legacy-only-path"
 ]);
 
+export const TRANSITIONAL_CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES = Object.freeze([
+  "same-context-convenience",
+  "imported-target-reference"
+]);
+
 const CONTEXTUAL_CANONICAL_ID_POLICY_CLASS_SET = new Set(CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES);
 
 function normalizeCanonicalIdPolicyClasses(values = null) {
@@ -2923,14 +2928,14 @@ export function resolveContextualRefInWorld(world, {
 export function resolveCoveredContextualRef(witnesses, options = {}) {
   return resolveContextualRef(witnesses, {
     ...options,
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    allowedCanonicalIdPolicyClasses: TRANSITIONAL_CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
 }
 
 export function resolveCoveredContextualRefInWorld(world, options = {}) {
   return resolveContextualRefInWorld(world, {
     ...options,
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    allowedCanonicalIdPolicyClasses: TRANSITIONAL_CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
   });
 }
 

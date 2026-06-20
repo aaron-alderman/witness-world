@@ -377,6 +377,14 @@ test("contextual ref resolution classifies canonical-id compatibility and enforc
   assert.equal(coveredImported.ok, true);
   assert.equal(coveredImported.canonicalIdPolicyClass, "imported-target-reference");
 
+  const coveredLegacy = resolveCoveredContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "legacy.shell",
+    label: "proposal target"
+  });
+  assert.equal(coveredLegacy.ok, false);
+  assert.match(coveredLegacy.error, /legacy-only-path/);
+
   const blockedHidden = resolveCoveredContextualRef(world.allWitnesses(), {
     context: "ctx.target",
     id: "page.hidden",

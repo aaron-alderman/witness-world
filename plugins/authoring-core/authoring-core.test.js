@@ -111,6 +111,42 @@ id = "ctx.target"
 actor = "system"
 id = "ctx.hidden"
 
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "frontendHost"
+target = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "frontendHost"
+target = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.hidden"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.hidden"
+name = "frontendHost"
+target = "frontendHost"
+
 [[serverRunner]]
 actor = "system"
 id = "local_server"
@@ -129,6 +165,12 @@ frontendHost = "frontendHost"
 actor = "system"
 id = "hidden_server"
 context = "ctx.hidden"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "legacy_server"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
 
@@ -467,11 +509,10 @@ test("stewardship target resolution explicitly classifies covered canonical-id s
 
   const legacy = resolveStewardshipTargetInput(world, {
     context: "ctx.target",
-    target: "backendHost"
+    target: "legacy_server"
   });
-  assert.equal(legacy.ok, true);
-  assert.equal(legacy.target, "backendHost");
-  assert.equal(legacy.canonicalIdPolicyClass, "legacy-only-path");
+  assert.equal(legacy.ok, false);
+  assert.match(legacy.error, /legacy-only-path/);
 
   const hidden = resolveStewardshipTargetInput(world, {
     context: "ctx.target",
@@ -499,6 +540,30 @@ id = "ctx.source"
 [[context]]
 actor = "system"
 id = "ctx.target"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "frontendHost"
+target = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "frontendHost"
+target = "frontendHost"
 
 [[serverRunner]]
 actor = "system"
@@ -586,6 +651,30 @@ id = "ctx.source"
 [[context]]
 actor = "system"
 id = "ctx.target"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "frontendHost"
+target = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "frontendHost"
+target = "frontendHost"
 
 [[serverRunner]]
 actor = "system"
@@ -1698,6 +1787,18 @@ id = "frontendHost"
 [[context]]
 actor = "system"
 id = "ctx.shared"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.shared"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.shared"
+name = "frontendHost"
+target = "frontendHost"
 
 [[serverRunner]]
 actor = "system"

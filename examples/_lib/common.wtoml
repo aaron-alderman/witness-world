@@ -14,6 +14,30 @@ actor = "frontendHost"
 initialStewards = ["aaron"]
 capabilities = ["dom.render", "http.fetch"]
 
+[[contextBinding]]
+actor = "system"
+context = "backend"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "backend"
+name = "frontendHost"
+target = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "frontend"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "frontend"
+name = "frontendHost"
+target = "frontendHost"
+
 [[identity]]
 context = "common"
 id = "identity.aaron"

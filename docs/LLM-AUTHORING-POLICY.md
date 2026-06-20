@@ -23,7 +23,8 @@ The canonical public frontend model in constrained mode is:
 
 Canonical page hosting is `page.surface`.
 Legacy `page.home`, `widget`, `frontendProgram`, and `frontendStep` remain
-historical compatibility records only and are not the forward authoring lane.
+historical compatibility records only and are not a live app-authoring or
+app-serving lane.
 Direct public/operator writes to `/api/frontend-programs` and
 `/api/frontend-steps` are retired and return explicit `410` guidance toward
 canonical `page.surface` nouns plus `frontend.upliftLegacy`.
@@ -99,7 +100,9 @@ Current constrained truth is:
   `surface + process + projection + collection + boundary + policy + capability`
 - canonical `page.surface` supports route-selected authored surface output,
   process-driven interaction flow, native collection repeat rendering,
-  route-enter preload authoring, and route/query synchronization
+  route-enter preload authoring, same-origin route-backed interactive effects
+  on `click` / `change` / `submit`, timed same-origin input-read effects through
+  authored interaction `timing`, and route/query synchronization
 - served runtime transport is sliced to the reachable fragment used by the
   active authored route subtree instead of serializing the whole broad process
   closure by default
@@ -109,12 +112,16 @@ Current constrained truth is:
 - maintained starter/bootstrap app creation now authors native
   `surface + process + projection + collection + boundary + policy` material
   directly instead of seeding a legacy app and uplifting it as a post-step
+- same-context and imported canonical ids remain transitional compatibility
+  sugar on covered surfaces, but unscoped canonical-id authoring is retired;
+  `legacy-only-path` remains a diagnostic classification only
 - legacy widget/program CRUD remains compatibility-only and is intentionally
   hidden from constrained MCP write surfaces
 - `dispatchDomEvent` and the old `witness:*` page bridge lane are retired from
   the supported public frontend model
 - the remaining honest gaps are blocked legacy semantics that still lack a
-  first-class native expression, not permission to reintroduce hidden host JS
+  first-class native expression, including input-driven write effects and other
+  unsupported legacy behavior, not permission to reintroduce hidden host JS
 
 Any future claim beyond that must be pathway-proven first.
 

@@ -7,25 +7,33 @@ import {
   syncUrlToQueryState
 } from "../src/runtime-surface-route-runtime.js";
 
+function createRouteInvokerWindow(fetch) {
+  return {
+    fetch,
+    location: {
+      href: "http://127.0.0.1:3000/",
+      origin: "http://127.0.0.1:3000"
+    }
+  };
+}
+
 test("createBrowserRouteInvoker interpolates route templates and normalizes the response payload", async () => {
   const calls = [];
-  const invoke = createBrowserRouteInvoker({
-    async fetch(url, init) {
-      calls.push({ url, init });
-      return {
-        ok: true,
-        status: 200,
-        headers: {
-          get(name) {
-            return String(name).toLowerCase() === "content-type" ? "application/json" : null;
-          }
-        },
-        async text() {
-          return JSON.stringify({ ok: true, value: 42 });
+  const invoke = createBrowserRouteInvoker(createRouteInvokerWindow(async (url, init) => {
+    calls.push({ url, init });
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get(name) {
+          return String(name).toLowerCase() === "content-type" ? "application/json" : null;
         }
-      };
-    }
-  });
+      },
+      async text() {
+        return JSON.stringify({ ok: true, value: 42 });
+      }
+    };
+  }));
 
   const result = await invoke({
     route: "/api/widgets/${id}",
@@ -34,7 +42,7 @@ test("createBrowserRouteInvoker interpolates route templates and normalizes the 
   });
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, "/api/widgets/alpha");
+  assert.equal(calls[0].url, "http://127.0.0.1:3000/api/widgets/alpha");
   assert.equal(calls[0].init.method, "POST");
   assert.equal(result.status, "success");
   assert.equal(result.payload.statusCode, 200);
@@ -44,27 +52,25 @@ test("createBrowserRouteInvoker interpolates route templates and normalizes the 
 test("createBrowserRouteInvoker maps successful response collections into the runtime collection store", async () => {
   const calls = [];
   const collectionWrites = [];
-  const invoke = createBrowserRouteInvoker({
-    async fetch(url, init) {
-      calls.push({ url, init });
-      return {
-        ok: true,
-        status: 200,
-        headers: {
-          get(name) {
-            return String(name).toLowerCase() === "content-type" ? "application/json" : null;
-          }
-        },
-        async text() {
-          return JSON.stringify({
-            message: "Snapshot loaded",
-            secrets: [{ id: "sec_1", title: "Primary password" }],
-            datasources: [{ id: "ds_1", title: "Main postgres" }]
-          });
+  const invoke = createBrowserRouteInvoker(createRouteInvokerWindow(async (url, init) => {
+    calls.push({ url, init });
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get(name) {
+          return String(name).toLowerCase() === "content-type" ? "application/json" : null;
         }
-      };
-    }
-  }, {
+      },
+      async text() {
+        return JSON.stringify({
+          message: "Snapshot loaded",
+          secrets: [{ id: "sec_1", title: "Primary password" }],
+          datasources: [{ id: "ds_1", title: "Main postgres" }]
+        });
+      }
+    };
+  }), {
     collectionStore: {
       replaceMany(entries) {
         collectionWrites.push(entries);
@@ -95,25 +101,23 @@ test("createBrowserRouteInvoker maps successful response collections into the ru
 
 test("createBrowserRouteInvoker leaves collections unchanged on failed responses", async () => {
   const collectionWrites = [];
-  const invoke = createBrowserRouteInvoker({
-    async fetch() {
-      return {
-        ok: false,
-        status: 500,
-        headers: {
-          get(name) {
-            return String(name).toLowerCase() === "content-type" ? "application/json" : null;
-          }
-        },
-        async text() {
-          return JSON.stringify({
-            message: "Snapshot failed",
-            secrets: [{ id: "sec_2", title: "Should not apply" }]
-          });
+  const invoke = createBrowserRouteInvoker(createRouteInvokerWindow(async () => {
+    return {
+      ok: false,
+      status: 500,
+      headers: {
+        get(name) {
+          return String(name).toLowerCase() === "content-type" ? "application/json" : null;
         }
-      };
-    }
-  }, {
+      },
+      async text() {
+        return JSON.stringify({
+          message: "Snapshot failed",
+          secrets: [{ id: "sec_2", title: "Should not apply" }]
+        });
+      }
+    };
+  }), {
     collectionStore: {
       replaceMany(entries) {
         collectionWrites.push(entries);
@@ -140,25 +144,23 @@ test("createBrowserRouteInvoker leaves collections unchanged on failed responses
 
 test("createBrowserRouteInvoker ignores missing collection paths instead of clearing collections", async () => {
   const collectionWrites = [];
-  const invoke = createBrowserRouteInvoker({
-    async fetch() {
-      return {
-        ok: true,
-        status: 200,
-        headers: {
-          get(name) {
-            return String(name).toLowerCase() === "content-type" ? "application/json" : null;
-          }
-        },
-        async text() {
-          return JSON.stringify({
-            message: "Session opened",
-            resumeRouteKey: "platform-config-access"
-          });
+  const invoke = createBrowserRouteInvoker(createRouteInvokerWindow(async () => {
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get(name) {
+          return String(name).toLowerCase() === "content-type" ? "application/json" : null;
         }
-      };
-    }
-  }, {
+      },
+      async text() {
+        return JSON.stringify({
+          message: "Session opened",
+          resumeRouteKey: "platform-config-access"
+        });
+      }
+    };
+  }), {
     collectionStore: {
       replaceMany(entries) {
         collectionWrites.push(entries);
@@ -180,6 +182,59 @@ test("createBrowserRouteInvoker ignores missing collection paths instead of clea
   });
 
   assert.equal(result.status, "success");
+  assert.equal(result.collections, null);
+  assert.deepEqual(collectionWrites, []);
+});
+
+test("createBrowserRouteInvoker suppresses stale latest-wins responses before they touch collections", async () => {
+  const collectionWrites = [];
+  let currentVersion = 0;
+  const invoke = createBrowserRouteInvoker(createRouteInvokerWindow(async () => {
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get(name) {
+          return String(name).toLowerCase() === "content-type" ? "application/json" : null;
+        }
+      },
+      async text() {
+        return JSON.stringify({
+          message: "Search loaded",
+          results: [{ id: "res_1", title: "Latest only" }]
+        });
+      }
+    };
+  }), {
+    collectionStore: {
+      replaceMany(entries) {
+        collectionWrites.push(entries);
+      }
+    }
+  });
+
+  const staleVersion = ++currentVersion;
+  const staleContext = {
+    isCurrent() {
+      return staleVersion === currentVersion;
+    }
+  };
+  currentVersion += 1;
+  const result = await invoke({
+    route: "/api/search",
+    method: "get",
+    requestContext: staleContext,
+    binding: {
+      op: {
+        collectionOutputs: {
+          SearchResults: "results"
+        }
+      }
+    }
+  });
+
+  assert.equal(result.status, "ignored");
+  assert.equal(result.ignored, true);
   assert.equal(result.collections, null);
   assert.deepEqual(collectionWrites, []);
 });

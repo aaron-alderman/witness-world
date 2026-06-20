@@ -41,6 +41,15 @@ export function normalizeCapabilityAssets(value) {
   };
 }
 
+export function normalizeInteractionTiming(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const mode = trimString(value.mode);
+  const ms = Number(value.ms);
+  if (!["debounce", "throttle"].includes(mode)) return null;
+  if (!Number.isInteger(ms) || ms <= 0) return null;
+  return { mode, ms };
+}
+
 export function runtimeSpecForSurface(surface) {
   return {
     processRef: trimString(surface?.processRef),

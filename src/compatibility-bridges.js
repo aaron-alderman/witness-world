@@ -113,9 +113,9 @@ const COMPATIBILITY_BRIDGE_CATALOG = Object.freeze([
     bridgeClass: "canonical-id-sugar",
     owner: "context.naming",
     activationMode: "policy",
-    policyStatus: "allowed-transitional",
+    policyStatus: "migration-required",
     migrationTarget: "Migrate unscoped legacy objects onto explicit contexts and contextual refs.",
-    notes: "Covered authoring flows still allow canonical ids for legacy unscoped targets while contextual migration is incomplete.",
+    notes: "Historical diagnostics may still classify legacy unscoped targets, but covered authoring now rejects them until they move onto explicit contexts and contextual refs.",
     surfaces: Object.freeze([
       "src/modules.js",
       "plugins/authoring-core/authoring-core-processes.js",

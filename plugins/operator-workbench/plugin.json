@@ -1,0 +1,11 @@
+{
+  "id": "plugin.operator-workbench",
+  "version": "0.1.0",
+  "displayName": "Operator Workbench Specs",
+  "description": "Plugin-owned RVM forms for authored operator screens and setup.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "contributes": {}
+}

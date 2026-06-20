@@ -51,6 +51,37 @@ function hashContent(text) {
   return crypto.createHash("sha256").update(String(text ?? ""), "utf8").digest("hex");
 }
 
+function normalizeExpectedSourceHash(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function createAppSnapshotError(message, {
+  status = 400,
+  code = null,
+  details = null,
+  cause = null
+} = {}) {
+  const error = new Error(message);
+  error.status = Number(status || 400);
+  if (code) error.code = String(code);
+  if (cause) error.cause = cause;
+  if (details && typeof details === "object") Object.assign(error, details);
+  return error;
+}
+
+function witnessCoreServingMode(status = null) {
+  const requestedMode = typeof status?.serving?.requestedMode === "string"
+    ? status.serving.requestedMode
+    : null;
+  const effectiveMode = typeof status?.serving?.effectiveMode === "string"
+    ? status.serving.effectiveMode
+    : null;
+  return {
+    requestedMode,
+    effectiveMode
+  };
+}
+
 function snapshotIdentity(snapshot = null) {
   if (!snapshot?.sourceIndex?.length) return "";
   return snapshot.sourceIndex
@@ -465,8 +496,11 @@ export class AppSnapshotManager {
     cacheCwd = process.cwd(),
     devMode = false,
     logger = null,
+    generationBridge = null,
     fsModule = fs,
-    fsWatchModule = fsWatch
+    fsWatchModule = fsWatch,
+    watchEnabled = devMode,
+    requireGenerationBridgeForPublishedWrites = false
   }) {
     this.manifestPath = path.resolve(manifestPath);
     this.appRoot = path.resolve(appRoot);
@@ -476,8 +510,11 @@ export class AppSnapshotManager {
     this.cacheCwd = path.resolve(String(cacheCwd || process.cwd()));
     this.devMode = devMode;
     this.logger = logger;
+    this.generationBridge = generationBridge ?? null;
+    this.requireGenerationBridgeForPublishedWrites = requireGenerationBridgeForPublishedWrites === true;
     this.fs = fsModule;
     this.fsWatch = fsWatchModule;
+    this.watchEnabled = watchEnabled === true;
     this.activeSnapshot = null;
     this.lastGoodSnapshot = null;
     this.stableSnapshot = null;
@@ -510,8 +547,11 @@ export class AppSnapshotManager {
     cacheCwd = process.cwd(),
     devMode = false,
     logger = null,
+    generationBridge = null,
     fsModule = fs,
-    fsWatchModule = fsWatch
+    fsWatchModule = fsWatch,
+    watchEnabled = devMode,
+    requireGenerationBridgeForPublishedWrites = false
   }) {
     const manager = new AppSnapshotManager({
       manifestPath: appProject.manifestPath,
@@ -522,8 +562,11 @@ export class AppSnapshotManager {
       cacheCwd,
       devMode,
       logger,
+      generationBridge,
       fsModule,
-      fsWatchModule
+      fsWatchModule,
+      watchEnabled,
+      requireGenerationBridgeForPublishedWrites
     });
     await manager.loadStableSnapshotFromCache();
     await manager.rebuildFromProject({
@@ -536,7 +579,7 @@ export class AppSnapshotManager {
       manager.activeSnapshot = manager.stableSnapshot;
       manager.appRevision = Number(manager.activeSnapshot?.appRevision || manager.appRevision || 0);
     }
-    if (devMode) manager.startWatchers();
+    if (devMode && manager.watchEnabled) manager.startWatchers();
     return manager;
   }
 
@@ -557,6 +600,13 @@ export class AppSnapshotManager {
   getServingSnapshot({
     witnessCoreStatus = null
   } = {}) {
+    const servingMode = witnessCoreServingMode(witnessCoreStatus);
+    if (servingMode.effectiveMode === "stable" && this.stableSnapshot) {
+      return this.stableSnapshot;
+    }
+    if (servingMode.effectiveMode === "live") {
+      return this.activeSnapshot ?? this.stableSnapshot ?? null;
+    }
     const latestState = typeof witnessCoreStatus?.latestState === "string"
       ? witnessCoreStatus.latestState
       : (typeof witnessCoreStatus?.state === "string" ? witnessCoreStatus.state : null);
@@ -573,9 +623,15 @@ export class AppSnapshotManager {
     const latestState = typeof witnessCoreStatus?.latestState === "string"
       ? witnessCoreStatus.latestState
       : (typeof witnessCoreStatus?.state === "string" ? witnessCoreStatus.state : null);
+    const servingMode = witnessCoreServingMode(witnessCoreStatus);
     return {
       mode: servingSnapshot?.appRevision === this.stableSnapshot?.appRevision ? "stable" : "live",
       preference: this.servingPreference,
+      requestedMode: servingMode.requestedMode,
+      effectiveMode: servingMode.effectiveMode,
+      servingReason: typeof witnessCoreStatus?.serving?.reason === "string"
+        ? witnessCoreStatus.serving.reason
+        : null,
       latestWitnessCoreState: latestState,
       activeRevision: Number(this.activeSnapshot?.appRevision || 0),
       stableRevision: Number(this.stableSnapshot?.appRevision || 0),
@@ -606,6 +662,16 @@ export class AppSnapshotManager {
     };
   }
 
+  requestServeLive() {
+    this.servingPreference = "live";
+    const servingSnapshot = this.getServingSnapshot();
+    return {
+      appRevision: Number(servingSnapshot?.appRevision || this.activeSnapshot?.appRevision || 0),
+      changedSources: [...(servingSnapshot?.changedSources ?? [])],
+      mode: "live"
+    };
+  }
+
   getLastRevisionEvent() {
     return {
       ...this.lastRevisionEvent,
@@ -620,6 +686,9 @@ export class AppSnapshotManager {
       pendingDirtySources: [...this.pendingDirtySources].map(filePath => sourceIdForPath(this.appRoot, filePath)),
       sourceCount: this.activeSnapshot?.appProject?.sourceFiles?.length ?? 0,
       devMode: this.devMode,
+      watchEnabled: this.watchEnabled,
+      watcherCount: this.watchers.length,
+      listenerCount: this.listeners.size,
       stableAppRevision: Number(this.stableSnapshot?.appRevision || 0),
       servingPreference: this.servingPreference,
       lastRevisionEvent: this.getLastRevisionEvent()
@@ -699,7 +768,79 @@ export class AppSnapshotManager {
     });
   }
 
-  async applySourceEdits(edits = [], { persist = true, trigger = "post", branchId = null, changeSetId = null, status = null } = {}) {
+  async persistSourceEdit(edit, {
+    reason = "app.source.write",
+    correlation = null,
+    expectedHash = null
+  } = {}) {
+    if (typeof this.generationBridge?.writeSource === "function") {
+      try {
+        await this.generationBridge.writeSource({
+          path: edit.sourceId,
+          content: edit.content,
+          expectedHash: normalizeExpectedSourceHash(expectedHash),
+          reason,
+          previewOnly: false,
+          correlation
+        });
+        return;
+      } catch (error) {
+        if (this.requireGenerationBridgeForPublishedWrites) throw error;
+        this.logger?.warn?.("witness core published source write failed; falling back to local fs", {
+          sourceId: edit.sourceId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+    if (this.requireGenerationBridgeForPublishedWrites) {
+      throw createAppSnapshotError("witness core published source writes are required but unavailable", {
+        status: 503,
+        code: "WITNESS_CORE_UNAVAILABLE"
+      });
+    }
+    await this.fs.mkdir(path.dirname(edit.path), { recursive: true });
+    await this.fs.writeFile(edit.path, edit.content, "utf8");
+  }
+
+  async resolvePersistedSourceExpectedHash(edit, {
+    correlation = null
+  } = {}) {
+    const explicitExpectedHash = normalizeExpectedSourceHash(edit?.expectedHash);
+    if (explicitExpectedHash) return explicitExpectedHash;
+    if (typeof this.generationBridge?.statSource !== "function") {
+      if (this.requireGenerationBridgeForPublishedWrites) {
+        throw createAppSnapshotError("witness core published source stat is required but unavailable", {
+          status: 503,
+          code: "WITNESS_CORE_UNAVAILABLE"
+        });
+      }
+      return null;
+    }
+    try {
+      const stat = await this.generationBridge.statSource({
+        path: edit.sourceId,
+        correlation
+      });
+      return normalizeExpectedSourceHash(stat?.hash);
+    } catch (error) {
+      if (this.requireGenerationBridgeForPublishedWrites) throw error;
+      this.logger?.warn?.("witness core published source stat failed; continuing without expected hash", {
+        sourceId: edit.sourceId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return null;
+    }
+  }
+
+  async applySourceEdits(edits = [], {
+    persist = true,
+    trigger = "post",
+    branchId = null,
+    changeSetId = null,
+    status = null,
+    reason = "app.source.write",
+    correlation = null
+  } = {}) {
     return this.runExclusive(async () => {
       if (!Array.isArray(edits) || !edits.length) {
         return { ok: false, appRevision: this.appRevision, buildErrors: [{ message: "edits are required", stack: "", code: "APP_SOURCE_EDITS_REQUIRED" }] };
@@ -715,13 +856,20 @@ export class AppSnapshotManager {
         return {
           path: resolvedPath,
           sourceId: sourceIdForPath(this.appRoot, resolvedPath),
-          content: edit.content
+          content: edit.content,
+          expectedHash: normalizeExpectedSourceHash(edit?.expectedHash)
         };
       });
       if (persist) {
         for (const edit of resolvedEdits) {
-          await this.fs.mkdir(path.dirname(edit.path), { recursive: true });
-          await this.fs.writeFile(edit.path, edit.content, "utf8");
+          const expectedHash = await this.resolvePersistedSourceExpectedHash(edit, {
+            correlation
+          });
+          await this.persistSourceEdit(edit, {
+            reason,
+            correlation,
+            expectedHash
+          });
         }
       }
       for (const edit of resolvedEdits) this.pendingDirtySources.add(edit.path);
@@ -836,7 +984,7 @@ export class AppSnapshotManager {
   }
 
   refreshWatchRoots() {
-    if (!this.devMode) return;
+    if (!this.devMode || !this.watchEnabled) return;
     const nextRoots = uniquePaths(allowedRootsFor(this.appRoot));
     if (JSON.stringify(nextRoots) === JSON.stringify(this.watcherRoots)) return;
     this.close();
@@ -845,7 +993,7 @@ export class AppSnapshotManager {
   }
 
   startWatchers() {
-    if (!this.devMode || this.watchers.length) return;
+    if (!this.devMode || !this.watchEnabled || this.watchers.length) return;
     const recursiveSupported = process.platform === "win32" || process.platform === "darwin";
     for (const root of this.watcherRoots.length ? this.watcherRoots : uniquePaths(allowedRootsFor(this.appRoot))) {
       try {
@@ -869,6 +1017,17 @@ export class AppSnapshotManager {
         }
       }
     }
+  }
+
+  setWatcherMode(enabled) {
+    const nextEnabled = enabled === true;
+    this.watchEnabled = nextEnabled;
+    if (!nextEnabled) {
+      this.close();
+      return;
+    }
+    this.refreshWatchRoots();
+    this.startWatchers();
   }
 }
 
@@ -1782,10 +1941,207 @@ export class AppPreviewSessionManager {
     this.logger = logger;
     this.fs = fsModule;
     this.sessions = new Map();
+    this.pendingPersistence = new Map();
   }
 
   currentActiveSnapshot() {
     return this.appSnapshotManager?.getActiveSnapshot?.() ?? null;
+  }
+
+  async readPreviewSourceText(filePath, overlaySources = null, session = null) {
+    const resolvedPath = path.resolve(String(filePath || ""));
+    if (overlaySources?.has?.(resolvedPath)) {
+      return overlaySources.get(resolvedPath);
+    }
+    if (typeof this.generationBridge?.readSource === "function") {
+      try {
+        const sourceId = sourceIdForPath(this.appSnapshotManager?.appRoot ?? path.dirname(resolvedPath), resolvedPath);
+        const payload = await this.generationBridge.readSource({
+          path: sourceId,
+          correlation: session?.correlation ?? null
+        });
+        if (typeof payload?.content === "string") return payload.content;
+      } catch (error) {
+        this.logger?.warn?.("witness core preview source read failed; falling back to local fs", {
+          filePath: resolvedPath,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+    return await readSourceText(resolvedPath, this.fs, overlaySources, "utf8");
+  }
+
+  async recordPreviewOverlayPatch(session, edit) {
+    if (typeof this.generationBridge?.patchSource !== "function") return null;
+    try {
+      return await this.generationBridge.patchSource({
+        path: edit.sourceId,
+        content: edit.content,
+        reason: "preview.overlay.patch",
+        previewOnly: true,
+        correlation: session?.correlation ?? null
+      });
+    } catch (error) {
+      this.logger?.warn?.("witness core preview overlay patch failed; keeping in-memory preview overlay", {
+        previewSessionId: session?.id ?? null,
+        sourceId: edit.sourceId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return null;
+    }
+  }
+
+  normalizeSessionCorrelation(correlation = null) {
+    return {
+      sessionId: typeof correlation?.sessionId === "string" && correlation.sessionId.trim() ? correlation.sessionId.trim() : null,
+      surfaceId: typeof correlation?.surfaceId === "string" && correlation.surfaceId.trim() ? correlation.surfaceId.trim() : null,
+      actor: typeof correlation?.actor === "string" && correlation.actor.trim() ? correlation.actor.trim() : null
+    };
+  }
+
+  attachPreviewSessionRuntime(sessionLike = {}) {
+    return {
+      ...sessionLike,
+      overlaySources: sessionLike?.overlaySources instanceof Map
+        ? sessionLike.overlaySources
+        : new Map(sessionLike?.overlaySources ?? []),
+      candidates: Array.isArray(sessionLike?.candidates)
+        ? sessionLike.candidates.map(candidate => clonePreviewCandidate(candidate))
+        : [],
+      candidateResults: Array.isArray(sessionLike?.candidateResults)
+        ? structuredClone(sessionLike.candidateResults)
+        : [],
+      generationHistory: Array.isArray(sessionLike?.generationHistory)
+        ? structuredClone(sessionLike.generationHistory)
+        : [],
+      listeners: sessionLike?.listeners instanceof Set ? sessionLike.listeners : new Set(),
+      snapshot: sessionLike?.snapshot ?? null
+    };
+  }
+
+  previewSessionDocument(session) {
+    return {
+      id: session.id,
+      baseAppRevision: Number(session.baseAppRevision || 0),
+      previewRevision: Number(session.previewRevision || 0),
+      status: String(session.status || "active"),
+      invalidReason: session.invalidReason ?? null,
+      createdAt: session.createdAt ?? null,
+      updatedAt: session.updatedAt ?? null,
+      changedSources: [...(session.changedSources ?? [])],
+      overlaySources: [...(session.overlaySources ?? new Map()).entries()].map(([file, content]) => ({
+        file,
+        content: String(content ?? "")
+      })),
+      candidates: (session.candidates ?? []).map(candidate => clonePreviewCandidate(candidate)),
+      candidateResults: Array.isArray(session.candidateResults) ? structuredClone(session.candidateResults) : [],
+      correlation: this.normalizeSessionCorrelation(session.correlation),
+      generationSequence: Number(session.generationSequence || 0),
+      currentGenerationId: session.currentGenerationId ?? null,
+      lastGoodGenerationId: session.lastGoodGenerationId ?? null,
+      latestGenerationId: session.latestGenerationId ?? null,
+      latestGenerationState: session.latestGenerationState ?? null,
+      generationHistory: Array.isArray(session.generationHistory) ? structuredClone(session.generationHistory) : []
+    };
+  }
+
+  previewSessionFromDocument(document = null, existingSession = null) {
+    if (!document || typeof document !== "object") return null;
+    return this.attachPreviewSessionRuntime({
+      id: String(document.id || ""),
+      baseAppRevision: Number(document.baseAppRevision || 0),
+      previewRevision: Number(document.previewRevision || 0),
+      status: String(document.status || "active"),
+      invalidReason: document.invalidReason ?? null,
+      createdAt: document.createdAt ?? null,
+      updatedAt: document.updatedAt ?? null,
+      changedSources: [...new Set((Array.isArray(document.changedSources) ? document.changedSources : [])
+        .map(sourceId => String(sourceId ?? "").trim())
+        .filter(Boolean))],
+      overlaySources: new Map((Array.isArray(document.overlaySources) ? document.overlaySources : [])
+        .map(entry => {
+          const file = path.resolve(String(entry?.file || ""));
+          return [file, String(entry?.content ?? "")];
+        })
+        .filter(([file]) => Boolean(file))),
+      candidates: Array.isArray(document.candidates) ? document.candidates : [],
+      candidateResults: Array.isArray(document.candidateResults) ? document.candidateResults : [],
+      correlation: this.normalizeSessionCorrelation(document.correlation),
+      generationSequence: Number(document.generationSequence || 0),
+      currentGenerationId: document.currentGenerationId ?? null,
+      lastGoodGenerationId: document.lastGoodGenerationId ?? null,
+      latestGenerationId: document.latestGenerationId ?? null,
+      latestGenerationState: document.latestGenerationState ?? null,
+      generationHistory: Array.isArray(document.generationHistory) ? document.generationHistory : [],
+      listeners: existingSession?.listeners ?? new Set(),
+      snapshot: existingSession?.snapshot ?? null
+    });
+  }
+
+  persistSession(session) {
+    if (!session?.id || typeof this.generationBridge?.writePreviewSession !== "function") {
+      return Promise.resolve(this.previewSessionDocument(session));
+    }
+    const promise = this.generationBridge.writePreviewSession({
+      id: session.id,
+      session: this.previewSessionDocument(session)
+    }).catch(error => {
+      this.logger?.warn?.("witness core preview session persistence failed", {
+        previewSessionId: session.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
+    }).finally(() => {
+      if (this.pendingPersistence.get(session.id) === promise) {
+        this.pendingPersistence.delete(session.id);
+      }
+    });
+    this.pendingPersistence.set(session.id, promise);
+    return promise;
+  }
+
+  async flushSessionPersistence(sessionId) {
+    const promise = this.pendingPersistence.get(String(sessionId || ""));
+    if (!promise) return null;
+    return await promise;
+  }
+
+  async hydrateSession(sessionId, { rebuild = true } = {}) {
+    const key = String(sessionId || "");
+    if (!key) return null;
+    let session = this.sessions.get(key) ?? null;
+    if (!session && typeof this.generationBridge?.readPreviewSession === "function") {
+      let document = null;
+      try {
+        document = await this.generationBridge.readPreviewSession({ id: key });
+      } catch (error) {
+        this.logger?.warn?.("witness core preview session hydrate failed", {
+          previewSessionId: key,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      if (!document) return null;
+      session = this.previewSessionFromDocument(document);
+      if (!session?.id) return null;
+      this.sessions.set(key, session);
+    }
+    if (!session) return null;
+    const refreshed = this.refreshSessionState(session);
+    if (refreshed?.status === "stale" && typeof this.generationBridge?.writePreviewSession === "function") {
+      void this.persistSession(refreshed).catch(() => {});
+    }
+    if (!rebuild || refreshed?.status === "stale" || refreshed?.status === "deleted") {
+      return refreshed;
+    }
+    if (!refreshed.snapshot && (refreshed.overlaySources.size || refreshed.candidates.length)) {
+      const rebuilt = await this.rebuildPreviewSnapshot(refreshed, {
+        overlaySources: refreshed.overlaySources,
+        previewRevision: refreshed.previewRevision
+      });
+      refreshed.snapshot = rebuilt;
+      refreshed.candidateResults = structuredClone(rebuilt?.candidateResults ?? refreshed.candidateResults ?? []);
+    }
+    return refreshed;
   }
 
   createSession({
@@ -1810,11 +2166,7 @@ export class AppPreviewSessionManager {
       candidates: [],
       candidateResults: [],
       snapshot: null,
-      correlation: {
-        sessionId: typeof correlation?.sessionId === "string" && correlation.sessionId.trim() ? correlation.sessionId.trim() : null,
-        surfaceId: typeof correlation?.surfaceId === "string" && correlation.surfaceId.trim() ? correlation.surfaceId.trim() : null,
-        actor: typeof correlation?.actor === "string" && correlation.actor.trim() ? correlation.actor.trim() : null
-      },
+      correlation: this.normalizeSessionCorrelation(correlation),
       generationSequence: 0,
       currentGenerationId: null,
       lastGoodGenerationId: null,
@@ -1824,6 +2176,7 @@ export class AppPreviewSessionManager {
       listeners: new Set()
     };
     this.sessions.set(id, session);
+    void this.persistSession(session).catch(() => {});
     return this.readSession(id);
   }
 
@@ -1895,6 +2248,17 @@ export class AppPreviewSessionManager {
     return this.sessionShape(session);
   }
 
+  diagnostics() {
+    let listenerCount = 0;
+    for (const session of this.sessions.values()) {
+      listenerCount += session?.listeners instanceof Set ? session.listeners.size : 0;
+    }
+    return {
+      sessionCount: this.sessions.size,
+      listenerCount
+    };
+  }
+
   resolveRenderSession(sessionId) {
     const session = this.sessions.get(String(sessionId || ""));
     if (!session) return { ok: false, reason: "missing" };
@@ -1924,7 +2288,12 @@ export class AppPreviewSessionManager {
     let compiled = activeSnapshot;
     if (effectiveOverlaySources.size) {
       const appProject = await loadAppProject(this.appSnapshotManager.manifestPath, {
-        readFile: (target, encoding) => readSourceText(target, this.fs, effectiveOverlaySources, encoding)
+        readFile: async (target, encoding) => {
+          if (encoding && encoding !== "utf8") {
+            return readSourceText(target, this.fs, effectiveOverlaySources, encoding);
+          }
+          return await this.readPreviewSourceText(target, effectiveOverlaySources, session);
+        }
       });
       compiled = await buildCompiledSnapshot({
         manifestPath: this.appSnapshotManager.manifestPath,
@@ -2011,8 +2380,9 @@ export class AppPreviewSessionManager {
   }
 
   async patchSources(sessionId, edits = []) {
-    const session = this.sessions.get(String(sessionId || ""));
+    const session = await this.hydrateSession(sessionId, { rebuild: false });
     if (!session) throw new Error("preview session not found");
+    await this.flushSessionPersistence(session.id);
     this.refreshSessionState(session, { notify: true });
     if (session.status === "stale") return this.sessionShape(session);
     if (!Array.isArray(edits) || !edits.length) throw new Error("preview source edits are required");
@@ -2031,6 +2401,9 @@ export class AppPreviewSessionManager {
       };
     });
     const nextOverlaySources = new Map(session.overlaySources);
+    for (const edit of resolvedEdits) {
+      await this.recordPreviewOverlayPatch(session, edit);
+    }
     for (const edit of resolvedEdits) nextOverlaySources.set(edit.filePath, edit.content);
     const nextPreviewRevision = Number(session.previewRevision || 0) + 1;
     let nextSnapshot = null;
@@ -2058,6 +2431,7 @@ export class AppPreviewSessionManager {
     session.candidateResults = structuredClone(nextSnapshot?.candidateResults ?? []);
     session.status = "active";
     session.invalidReason = null;
+    await this.persistSession(session);
     await this.publishPreviewGeneration(session, {
       state: "green_local",
       overlaySources: session.overlaySources,
@@ -2070,8 +2444,9 @@ export class AppPreviewSessionManager {
   }
 
   async patchCandidates(sessionId, candidates = []) {
-    const session = this.sessions.get(String(sessionId || ""));
+    const session = await this.hydrateSession(sessionId, { rebuild: false });
     if (!session) throw new Error("preview session not found");
+    await this.flushSessionPersistence(session.id);
     this.refreshSessionState(session, { notify: true });
     if (session.status === "stale") {
       return {
@@ -2119,6 +2494,7 @@ export class AppPreviewSessionManager {
     }
     session.status = "active";
     session.invalidReason = null;
+    await this.persistSession(session);
     await this.publishPreviewGeneration(session, {
       state: "green_local",
       overlaySources: session.overlaySources,
@@ -2135,8 +2511,9 @@ export class AppPreviewSessionManager {
 
   async deleteSession(sessionId) {
     const key = String(sessionId || "");
-    const session = this.sessions.get(key);
+    const session = await this.hydrateSession(key, { rebuild: false });
     if (!session) return false;
+    await this.flushSessionPersistence(session.id);
     if (session.currentGenerationId) {
       await this.publishPreviewGeneration(session, {
         state: "retired",
@@ -2152,17 +2529,22 @@ export class AppPreviewSessionManager {
     session.updatedAt = isoNow();
     this.emitSession(session);
     this.sessions.delete(key);
+    this.pendingPersistence.delete(key);
+    if (typeof this.generationBridge?.deletePreviewSession === "function") {
+      await this.generationBridge.deletePreviewSession({ id: key });
+    }
     return true;
   }
 
   async readSource(sessionId, filePath) {
+    await this.hydrateSession(sessionId);
     const resolved = this.resolveRenderSession(sessionId);
     if (!resolved.ok || !resolved.world) return null;
     const requestedFile = path.resolve(String(filePath || ""));
     const allowed = previewAllowedFiles(resolved.world);
     if (!allowed.has(requestedFile)) return null;
     const session = this.sessions.get(String(sessionId || ""));
-    const text = await readSourceText(requestedFile, this.fs, session?.overlaySources ?? null);
+    const text = await this.readPreviewSourceText(requestedFile, session?.overlaySources ?? null, session);
     const annotations = previewAnnotationRows(resolved.world, requestedFile);
     return {
       file: requestedFile,
@@ -2207,6 +2589,7 @@ export class AppPreviewSessionManager {
   }
 
   async inspectTarget(sessionId, targetQuery, options = {}) {
+    await this.hydrateSession(sessionId);
     const resolved = this.resolveRenderSession(sessionId);
     if (!resolved.ok || !resolved.world) return null;
     const matchResult = this.readTargetSources(sessionId, targetQuery, options);
@@ -2233,7 +2616,7 @@ export class AppPreviewSessionManager {
     let authoredProps = {};
     if (editableSource?.file && sourceLanguage) {
       const session = this.sessions.get(String(sessionId || ""));
-      const text = await readSourceText(editableSource.file, this.fs, session?.overlaySources ?? null);
+      const text = await this.readPreviewSourceText(editableSource.file, session?.overlaySources ?? null, session);
       const snapshot = this.currentActiveSnapshot();
       const rvmFormRegistry =
         session?.snapshot?.appProject?.runtimePluginRegistries?.rvmFormRegistry
@@ -2300,8 +2683,8 @@ export class AppPreviewSessionManager {
       key: propertyName,
       valueType: previewPropertyValueType(inspection.authoredProps?.[propertyName], propertyName)
     };
-    const session = this.sessions.get(String(sessionId || ""));
-    const text = await readSourceText(inspection.editableSource.file, this.fs, session?.overlaySources ?? null);
+    const session = await this.hydrateSession(sessionId);
+    const text = await this.readPreviewSourceText(inspection.editableSource.file, session?.overlaySources ?? null, session);
     const snapshot = this.currentActiveSnapshot();
     const rvmFormRegistry =
       session?.snapshot?.appProject?.runtimePluginRegistries?.rvmFormRegistry

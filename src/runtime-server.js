@@ -68,6 +68,7 @@ import { buildRuntimeOperatorContract } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService } from "./runtime-operator-service.js";
 import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.js";
 import { createStartupTelemetry } from "./startup-telemetry.js";
+import { createRuntimeProcessHealthMonitor } from "./runtime-process-health.js";
 import { createWitnessCoreBridge, createWitnessCoreStatusStore } from "./witness-core-bridge.js";
 import { retiredLegacyFrontendRouteState } from "./legacy-frontend-bridge.js";
 
@@ -739,6 +740,19 @@ export async function startRuntimeServer(world, {
     appContext.handlerSet = runner.handlerSet ?? null;
     appContext.bootstrapOnly = runner.bootstrapOnly === true;
     appContext.devMode = activeDevMode === true;
+    appContext.runtimeSupervision = {
+      instanceId: typeof env.WITNESS_RUNTIME_INSTANCE_ID === "string" && env.WITNESS_RUNTIME_INSTANCE_ID.trim()
+        ? env.WITNESS_RUNTIME_INSTANCE_ID.trim()
+        : null,
+      role: typeof env.WITNESS_RUNTIME_ROLE === "string" && env.WITNESS_RUNTIME_ROLE.trim()
+        ? env.WITNESS_RUNTIME_ROLE.trim()
+        : "active",
+      mutationsEnabled: env.WITNESS_RUNTIME_MUTATIONS_ENABLED === "false" ? false : true,
+      watchersEnabled: env.WITNESS_RUNTIME_WATCHERS_ENABLED === "false"
+        ? false
+        : (activeDevMode === true),
+      lastStateAt: new Date().toISOString()
+    };
     appContext.appSnapshotManager = null;
     appContext.appPreviewSessionManager = null;
     appContext.appSnapshotManagerReady = null;
@@ -857,6 +871,8 @@ export async function startRuntimeServer(world, {
   let serverClosing = false;
   let activeRequestCount = 0;
   let lastRequestActivityAt = Date.now();
+  let runtimeContexts = new Map();
+  let resolveActiveRuntime = null;
   const registerDeferredCloser = closer => {
     if (typeof closer === "function") deferredClosers.push(closer);
   };
@@ -974,7 +990,7 @@ export async function startRuntimeServer(world, {
     mountedRoutesCache.set(routeWorld, { witnessCount, byRunner });
     return table;
   };
-  const { runtimeContexts, resolveActiveRuntime } = createRuntimeContextResolverImpl({
+  ({ runtimeContexts, resolveActiveRuntime } = createRuntimeContextResolverImpl({
     bootstrapRunner: serverRunner,
     bootstrapContext: appContext,
     resolveLiveRunner: requestHost => (
@@ -1000,7 +1016,7 @@ export async function startRuntimeServer(world, {
       reason,
       identities: world.project(moduleProjectors.identityIndex).rows
     })
-  });
+  }));
   const staticPluginFiles = unionRuntimeContributions.staticAssetFiles ?? new Map();
   const sseClients = new Set();
   const appStaticRoot = appContext.appRoot;
@@ -1095,9 +1111,48 @@ export async function startRuntimeServer(world, {
   }, 250);
   sseWatcher.unref?.();
 
+  const runtimeProcessHealthMonitor = createRuntimeProcessHealthMonitor({
+    runtimeConfig: appContext.runtimeConfig,
+    probeCollector: appContext.resourceProbes,
+    getRuntimeCounts: () => ({
+      activeRequests: activeRequestCount,
+      sseClients: sseClients.size,
+      runtimeContexts: runtimeContexts.size,
+      previewSessions: appContext.appPreviewSessionManager?.diagnostics?.().sessionCount ?? 0,
+      snapshotWatchers: appContext.appSnapshotManager?.diagnostics?.().watcherCount ?? 0
+    }),
+    getServingState: () => {
+      const witnessCoreStatus = appContext.witnessCoreStatusStore?.getStatus?.()
+        ? {
+            ...(appContext.witnessCoreStatusStore.getStatus() ?? {}),
+            latestState: appContext.witnessCoreStatusStore.getLatestState?.() ?? null
+          }
+        : null;
+      return appContext.appSnapshotManager?.servingState?.({ witnessCoreStatus }) ?? null;
+    },
+    getReadyState: () => {
+      if (serverClosing) return false;
+      if (appProject && !appContext.appSnapshotManager) return false;
+      return appContext.startupTelemetry?.snapshot?.().meaningfulReadyAtMs != null;
+    }
+  });
+  appContext.runtimeProcessHealthMonitor = runtimeProcessHealthMonitor;
+
+  const supervisionPayload = supervision => ({
+    ok: true,
+    instanceId: supervision?.instanceId ?? null,
+    role: supervision?.role ?? "active",
+    mutationsEnabled: supervision?.mutationsEnabled !== false,
+    watchersEnabled: supervision?.watchersEnabled === true
+  });
+
   const server = httpModule.createServer(async (req, res) => {
-    activeRequestCount += 1;
-    lastRequestActivityAt = Date.now();
+    const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
+    const countTowardRequestPressure = !(req.method === "GET" && requestUrl.pathname === "/api/runtime/process-health");
+    if (countTowardRequestPressure) {
+      activeRequestCount += 1;
+      lastRequestActivityAt = Date.now();
+    }
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const runtime = await resolveActiveRuntime(req.headers?.host ?? null);
@@ -1107,7 +1162,44 @@ export async function startRuntimeServer(world, {
     }
     attachEventsStream(runtime.context);
     const requestContext = resolveRequestContext(req, sessionStore, { allowActorHeader: runtime.runner.allowActorHeader === true });
-    const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
+    if (req.method === "GET" && requestUrl.pathname === "/api/runtime/process-health") {
+      sendJson(res, 200, {
+        ...runtimeProcessHealthMonitor.snapshot(),
+        instanceId: runtime.context?.runtimeSupervision?.instanceId ?? null,
+        role: runtime.context?.runtimeSupervision?.role ?? "active",
+        mutationsEnabled: runtime.context?.runtimeSupervision?.mutationsEnabled !== false,
+        watchersEnabled: runtime.context?.runtimeSupervision?.watchersEnabled === true
+      });
+      return;
+    }
+    if (req.method === "POST" && requestUrl.pathname === "/api/runtime/supervision/activate") {
+      const supervision = runtime.context?.runtimeSupervision ?? appContext.runtimeSupervision ?? null;
+      if (!supervision) {
+        sendJson(res, 404, { error: "runtime supervision unavailable" });
+        return;
+      }
+      supervision.role = "active";
+      supervision.mutationsEnabled = true;
+      supervision.watchersEnabled = runtime.context?.devMode === true;
+      supervision.lastStateAt = new Date().toISOString();
+      runtime.context?.appSnapshotManager?.setWatcherMode?.(supervision.watchersEnabled);
+      sendJson(res, 200, supervisionPayload(supervision));
+      return;
+    }
+    if (req.method === "POST" && requestUrl.pathname === "/api/runtime/supervision/quiesce") {
+      const supervision = runtime.context?.runtimeSupervision ?? appContext.runtimeSupervision ?? null;
+      if (!supervision) {
+        sendJson(res, 404, { error: "runtime supervision unavailable" });
+        return;
+      }
+      supervision.role = "draining";
+      supervision.mutationsEnabled = false;
+      supervision.watchersEnabled = false;
+      supervision.lastStateAt = new Date().toISOString();
+      runtime.context?.appSnapshotManager?.setWatcherMode?.(false);
+      sendJson(res, 200, supervisionPayload(supervision));
+      return;
+    }
     let matchedRoute = null;
     const witnessCountBefore = currentWitnessCount();
     logInfo("http.request.start", { requestId, method: req.method, url: req.url, actor: requestContext.actor });
@@ -1149,7 +1241,11 @@ export async function startRuntimeServer(world, {
         return;
       }
 
-      if (runtime.context?.devMode && runtime.context?.appSnapshotManager) {
+      if (
+        runtime.context?.devMode
+        && runtime.context?.appSnapshotManager
+        && runtime.context?.runtimeSupervision?.watchersEnabled !== false
+      ) {
         await runtime.context.appSnapshotManager.ensureFresh({ trigger: "request" });
       }
       const activeAppContext = requestScopedAppContext(runtime.context);
@@ -1413,8 +1509,10 @@ export async function startRuntimeServer(world, {
       });
       sendJson(res, 500, { error: "internal error", requestId });
     } finally {
-      activeRequestCount = Math.max(0, activeRequestCount - 1);
-      lastRequestActivityAt = Date.now();
+      if (countTowardRequestPressure) {
+        activeRequestCount = Math.max(0, activeRequestCount - 1);
+        lastRequestActivityAt = Date.now();
+      }
       const emittedWitnesses = witnessesSince(witnessCountBefore);
       const failedWitnesses = emittedWitnesses.filter(witness => witness.process.endsWith(".failed") || witness.process.endsWith(".blocked"));
       world.observe({
@@ -1522,7 +1620,10 @@ export async function startRuntimeServer(world, {
           env,
           devMode: activeDevMode === true,
           logger,
-          fsModule
+          generationBridge: appContext.witnessCoreBridge,
+          fsModule,
+          watchEnabled: appContext.runtimeSupervision?.watchersEnabled !== false,
+          requireGenerationBridgeForPublishedWrites: Boolean(appContext.witnessCoreUrl)
         });
         if (serverClosing) {
           appSnapshotManager.close();
@@ -1579,6 +1680,7 @@ export async function startRuntimeServer(world, {
     startupReady,
     close: async () => {
       serverClosing = true;
+      runtimeProcessHealthMonitor.close();
       clearInterval(sseWatcher);
       for (const client of sseClients) client.end();
       sseClients.clear();

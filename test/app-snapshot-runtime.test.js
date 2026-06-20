@@ -178,6 +178,47 @@ function waitForSnapshotEvent(server, {
   });
 }
 
+async function waitForSnapshotManagerReady(server) {
+  const ready = server.server.runtimeContext?.appSnapshotManagerReady;
+  if (ready && typeof ready.then === "function") {
+    await ready;
+  }
+  assert.ok(server.server.runtimeContext?.appSnapshotManager, "expected app snapshot manager to be ready");
+}
+
+async function waitForText(url, pattern, {
+  timeout = 15000
+} = {}) {
+  const deadline = Date.now() + timeout;
+  let last = "";
+  while (Date.now() < deadline) {
+    last = await fetch(url).then(response => response.text());
+    if (pattern.test(last)) return last;
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  assert.match(last, pattern);
+  return last;
+}
+
+async function postJsonWithRetry(url, body, {
+  timeout = 10000,
+  retryStatuses = [404]
+} = {}) {
+  const deadline = Date.now() + timeout;
+  let last = null;
+  while (Date.now() < deadline) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!retryStatuses.includes(response.status)) return response;
+    last = response;
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  return last;
+}
+
 async function createValidatedSubtitleChangeSet(server, app, subtitleText) {
   const platform = createDirectPlatformHandlers(server);
   const original = await readShell(app.authShellPath);
@@ -224,6 +265,7 @@ test("dev-mode request refresh picks up authored source edits without restart", 
     serverRunnerId: "engentus_server"
   });
   try {
+    await waitForSnapshotManagerReady(server);
     const initial = await fetch(`${server.url}/engentus/login`).then(response => response.text());
     assert.match(initial, /Demo sign-in uses the seeded local identities below\./);
 
@@ -233,7 +275,7 @@ test("dev-mode request refresh picks up authored source edits without restart", 
       'prop text = "Dev refresh subtitle."'
     );
 
-    const refreshed = await fetch(`${server.url}/engentus/login`).then(response => response.text());
+    const refreshed = await waitForText(`${server.url}/engentus/login`, /Dev refresh subtitle/);
     assert.match(refreshed, /Dev refresh subtitle/);
   } finally {
     await server.close();
@@ -248,6 +290,7 @@ test("POST source edits persist to disk and rebuild the active snapshot", async 
     serverRunnerId: "engentus_server"
   });
   try {
+    await waitForSnapshotManagerReady(server);
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
     assert.equal(diagnostics.authoringPolicy.mode, "unconstrained");
 
@@ -258,24 +301,22 @@ test("POST source edits persist to disk and rebuild the active snapshot", async 
     );
     assert.notEqual(updated, original);
 
-    const response = await fetch(`${server.url}/api/runtime/app-sources`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        edits: [
-          {
-            path: "app/shell-auth.rvm",
-            content: updated
-          }
-        ]
-      })
-    }).then(result => result.json());
+    const response = await postJsonWithRetry(`${server.url}/api/runtime/app-sources`, {
+      edits: [
+        {
+          path: "app/shell-auth.rvm",
+          content: updated
+        }
+      ]
+    });
+    assert.equal(response.status, 200);
+    const responseBody = await response.json();
 
-    assert.equal(response.ok, true);
-    assert.equal(typeof response.appRevision, "number");
+    assert.equal(responseBody.ok, true);
+    assert.equal(typeof responseBody.appRevision, "number");
     assert.match(await readShell(app.authShellPath), /POST updated subtitle/);
 
-    const refreshed = await fetch(`${server.url}/engentus/login`).then(result => result.text());
+    const refreshed = await waitForText(`${server.url}/engentus/login`, /POST updated subtitle/);
     assert.match(refreshed, /POST updated subtitle/);
   } finally {
     await server.close();

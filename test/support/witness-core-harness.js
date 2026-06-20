@@ -69,9 +69,24 @@ function tomlString(value) {
   return JSON.stringify(String(value ?? ""));
 }
 
+function serializeRuntimeConfigEntries(entries = null) {
+  if (!entries || typeof entries !== "object") return "";
+  const rows = Object.entries(entries)
+    .filter(([key]) => typeof key === "string" && key.trim())
+    .map(([key, value]) => {
+      if (typeof value === "boolean") return `${JSON.stringify(key)} = ${value ? "true" : "false"}`;
+      if (typeof value === "number" && Number.isFinite(value)) return `${JSON.stringify(key)} = ${value}`;
+      return `${JSON.stringify(key)} = ${tomlString(value)}`;
+    });
+  return rows.length ? `runtimeConfig = { ${rows.join(", ")} }\n` : "";
+}
+
 export async function createLiveCoreWorkspace({
   fixtureRoot = LIVE_CORE_FIXTURE_ROOT,
-  proofDelayMs = 1000
+  proofDelayMs = 1000,
+  supervise = null,
+  runtimeConfig = null,
+  frontdoor = null
 } = {}) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-core-fixture-"));
   const appDirName = path.basename(fixtureRoot);
@@ -82,6 +97,21 @@ export async function createLiveCoreWorkspace({
   const configPath = path.join(tempRoot, "witness-core.toml");
   const journalPath = path.join(tempRoot, ".witness-core", "events.jsonl");
   await fs.cp(fixtureRoot, appRoot, { recursive: true });
+  if (runtimeConfig && typeof runtimeConfig === "object") {
+    const manifestText = await fs.readFile(manifestPath, "utf8");
+    const runtimeConfigLine = serializeRuntimeConfigEntries(runtimeConfig);
+    await fs.writeFile(
+      manifestPath,
+      manifestText.replace("allowActorHeader = false\n", `allowActorHeader = false\n${runtimeConfigLine}`),
+      "utf8"
+    );
+  }
+  const superviseConfig = typeof supervise === "function"
+    ? supervise({ tempRoot, appRoot, appDirName, manifestPath, watchedSourcePath, configPath, journalPath })
+    : supervise;
+  const frontdoorConfig = typeof frontdoor === "function"
+    ? frontdoor({ tempRoot, appRoot, appDirName, manifestPath, watchedSourcePath, configPath, journalPath })
+    : frontdoor;
 
   const proofCommand = `${process.execPath} proof-check.mjs`;
   await fs.writeFile(proofScriptPath, `
@@ -94,6 +124,19 @@ const text = await fs.readFile(target, "utf8");
 if (text.includes("FAIL_PROOF_TOKEN")) process.exit(1);
 process.exit(0);
 `.trimStart(), "utf8");
+  const superviseToml = superviseConfig ? `
+
+[supervise]
+command = ${tomlString(superviseConfig.command)}
+working_dir = ${tomlString(superviseConfig.workingDir ?? ".")}
+restart_on_exit = ${superviseConfig.restartOnExit === false ? "false" : "true"}
+${superviseConfig.healthUrl ? `health_url = ${tomlString(superviseConfig.healthUrl)}\n` : ""}${Number.isFinite(superviseConfig.healthIntervalMs) ? `health_interval_ms = ${Number(superviseConfig.healthIntervalMs)}\n` : ""}${Number.isFinite(superviseConfig.healthTimeoutMs) ? `health_timeout_ms = ${Number(superviseConfig.healthTimeoutMs)}\n` : ""}${superviseConfig.restartOnUnhealthy === true ? "restart_on_unhealthy = true\n" : superviseConfig.restartOnUnhealthy === false ? "restart_on_unhealthy = false\n" : ""}${Number.isFinite(superviseConfig.degradedGracePolls) ? `degraded_grace_polls = ${Number(superviseConfig.degradedGracePolls)}\n` : ""}${Number.isFinite(superviseConfig.unhealthyGracePolls) ? `unhealthy_grace_polls = ${Number(superviseConfig.unhealthyGracePolls)}\n` : ""}` : "";
+  const frontdoorToml = frontdoorConfig ? `
+
+[frontdoor]
+public_addr = ${tomlString(frontdoorConfig.publicAddr)}
+${Number.isFinite(frontdoorConfig.drainTimeoutMs) ? `drain_timeout_ms = ${Number(frontdoorConfig.drainTimeoutMs)}\n` : ""}${Number.isFinite(frontdoorConfig.startupCutoverTimeoutMs) ? `startup_cutover_timeout_ms = ${Number(frontdoorConfig.startupCutoverTimeoutMs)}\n` : ""}` : "";
+
   await fs.writeFile(configPath, `
 [watch]
 roots = [${tomlString(appDirName)}]
@@ -105,6 +148,7 @@ slow_ms = 250
 
 [package]
 include = [${tomlString(`${appDirName}/**`)}]
+${superviseToml}${frontdoorToml}
 `.trimStart(), "utf8");
 
   return {
@@ -187,10 +231,53 @@ export async function waitForWitnessCoreHealth(coreUrl, { timeoutMs = 20000, log
   throw new Error(`witness-core did not become healthy at ${coreUrl}\n${logs.join("")}`);
 }
 
+export async function readWitnessCoreHealth(coreUrl) {
+  const response = await fetch(`${coreUrl}/health`, { cache: "no-store" });
+  assert.equal(response.status, 200);
+  return await response.json();
+}
+
+export async function waitForWitnessCoreHealthState(coreUrl, predicate, {
+  timeoutMs = 20000,
+  description = "witness core health condition"
+} = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null;
+  while (Date.now() < deadline) {
+    try {
+      last = await readWitnessCoreHealth(coreUrl);
+      if (await predicate(last)) return last;
+    } catch {}
+    await delay(100);
+  }
+  assert.fail(`${description} not met\n${JSON.stringify(last, null, 2)}`);
+}
+
 export async function readWitnessCoreStatus(coreUrl) {
   const response = await fetch(`${coreUrl}/generations`, { cache: "no-store" });
   assert.equal(response.status, 200);
   return await response.json();
+}
+
+export async function killPid(pid) {
+  assert.equal(Number.isInteger(pid), true, `expected integer pid, got ${pid}`);
+  await new Promise((resolve, reject) => {
+    const child = process.platform === "win32"
+      ? spawn("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: ["ignore", "pipe", "pipe"] })
+      : spawn("kill", ["-TERM", String(pid)], { stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    child.stdout.on("data", chunk => {
+      output += String(chunk);
+    });
+    child.stderr.on("data", chunk => {
+      output += String(chunk);
+    });
+    child.once("error", reject);
+    child.once("exit", code => {
+      if (code === 0) resolve();
+      else reject(new Error(`failed to kill pid ${pid} (exit ${code ?? "unknown"})\n${output}`));
+    });
+  });
 }
 
 export async function waitForWitnessCoreStatus(coreUrl, predicate, {

@@ -212,6 +212,18 @@ function sourceryMutedForContext(rules = [], {
   return false;
 }
 
+function runtimeMutationsBlocked(appContext) {
+  return appContext?.runtimeSupervision?.mutationsEnabled === false;
+}
+
+function runtimeDrainingPayload(appContext) {
+  return {
+    error: "runtime draining",
+    instanceId: appContext?.runtimeSupervision?.instanceId ?? null,
+    role: appContext?.runtimeSupervision?.role ?? null
+  };
+}
+
 export function createCoreRuntimeBundleHandlers({
   world,
   backendHost,
@@ -428,6 +440,40 @@ export function createCoreRuntimeBundleHandlers({
     }
     return currentPreviewManager(appContext);
   };
+  const withLatestWitnessCoreState = status => {
+    if (!status || typeof status !== "object") return null;
+    const latestState = typeof status?.serving?.latestGenerationState === "string"
+      ? status.serving.latestGenerationState
+      : (typeof status?.latestState === "string"
+          ? status.latestState
+          : (typeof status?.state === "string" ? status.state : null));
+    return {
+      ...status,
+      latestState
+    };
+  };
+  const currentWitnessCoreStatus = async appContext => {
+    const store = appContext?.witnessCoreStatusStore ?? null;
+    if (typeof store?.refresh === "function") {
+      try {
+        return withLatestWitnessCoreState(await store.refresh());
+      } catch {}
+    }
+    if (typeof store?.getStatus === "function") {
+      return withLatestWitnessCoreState(store.getStatus());
+    }
+    return null;
+  };
+  const latestPublishedGreenGenerationId = status => {
+    const generations = Array.isArray(status?.generations) ? status.generations : [];
+    for (let index = generations.length - 1; index >= 0; index -= 1) {
+      const generation = generations[index];
+      const id = typeof generation?.id === "string" ? generation.id.trim() : "";
+      if (!id || id.startsWith("preview-")) continue;
+      if (generation?.state === "green_local") return id;
+    }
+    return null;
+  };
   const maybeInjectDevClient = (html, appContext) => {
     const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
     if (!snapshotManager || appContext?.devMode !== true) return html;
@@ -525,6 +571,11 @@ export function createCoreRuntimeBundleHandlers({
     requestSession,
     appContext
   }) => {
+    const previewSessionId = requestUrl?.searchParams?.get("previewSessionId")?.trim() || null;
+    const previewManager = await resolvePreviewManager(appContext);
+    if (previewManager && previewSessionId && typeof previewManager.hydrateSession === "function") {
+      await previewManager.hydrateSession(previewSessionId);
+    }
     const previewRequest = resolvePreviewSessionRequest({ appContext, requestUrl });
     if (!previewRequest.ok && previewRequest.reason === "stale") {
       sendJson(res, 409, {
@@ -1171,6 +1222,10 @@ export function createCoreRuntimeBundleHandlers({
         return;
       }
       const previewSessionId = requestUrl?.searchParams?.get("previewSessionId")?.trim() || null;
+      const previewManager = await resolvePreviewManager(appContext);
+      if (previewManager && previewSessionId && typeof previewManager.hydrateSession === "function") {
+        await previewManager.hydrateSession(previewSessionId);
+      }
       const previewResolution = resolvePreviewSessionRequest({ appContext, requestUrl });
       if (!previewResolution.ok && previewResolution.reason === "stale") {
         send(
@@ -1310,10 +1365,37 @@ export function createCoreRuntimeBundleHandlers({
     },
 
     "app.snapshot.promoteCurrent": async ({ res, appContext }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
       const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
       if (!snapshotManager) {
         sendJson(res, 503, { error: "app snapshot manager unavailable" });
         return;
+      }
+      if (!snapshotManager.getActiveSnapshot?.()) {
+        sendJson(res, 409, { error: "active snapshot unavailable" });
+        return;
+      }
+      const witnessCoreBridge = appContext?.witnessCoreBridge ?? null;
+      let witnessCoreStatus = await currentWitnessCoreStatus(appContext);
+      let witnessCoreGenerationId = null;
+      if (witnessCoreBridge) {
+        witnessCoreGenerationId = latestPublishedGreenGenerationId(witnessCoreStatus);
+        if (!witnessCoreGenerationId) {
+          sendJson(res, 409, { error: "published green generation unavailable" });
+          return;
+        }
+        try {
+          await witnessCoreBridge.promoteGeneration({ id: witnessCoreGenerationId });
+          witnessCoreStatus = await currentWitnessCoreStatus(appContext);
+        } catch (error) {
+          sendJson(res, 502, {
+            error: error instanceof Error ? error.message : String(error)
+          });
+          return;
+        }
       }
       const promoted = snapshotManager.promoteActiveSnapshot?.() ?? null;
       if (!promoted) {
@@ -1323,22 +1405,48 @@ export function createCoreRuntimeBundleHandlers({
       sendJson(res, 200, {
         ok: true,
         snapshot: promoted,
+        witnessCoreGenerationId,
+        witnessCoreServing: witnessCoreStatus?.serving ?? null,
         servingState: snapshotManager.servingState?.({
-          witnessCoreStatus: appContext?.witnessCoreStatusStore?.getStatus?.()
-            ? {
-                ...(appContext.witnessCoreStatusStore.getStatus() ?? {}),
-                latestState: appContext.witnessCoreStatusStore.getLatestState?.() ?? null
-              }
-            : null
+          witnessCoreStatus
         }) ?? null
       });
     },
 
     "app.snapshot.rollbackStable": async ({ res, appContext }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
       const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
       if (!snapshotManager) {
         sendJson(res, 503, { error: "app snapshot manager unavailable" });
         return;
+      }
+      if (!snapshotManager.getStableSnapshot?.()) {
+        sendJson(res, 409, { error: "stable snapshot unavailable" });
+        return;
+      }
+      const witnessCoreBridge = appContext?.witnessCoreBridge ?? null;
+      let witnessCoreStatus = await currentWitnessCoreStatus(appContext);
+      let witnessCoreGenerationId = null;
+      if (witnessCoreBridge) {
+        witnessCoreGenerationId = typeof witnessCoreStatus?.aliases?.last_good === "string" && witnessCoreStatus.aliases.last_good.trim()
+          ? witnessCoreStatus.aliases.last_good.trim()
+          : null;
+        if (!witnessCoreGenerationId) {
+          sendJson(res, 409, { error: "last good generation unavailable" });
+          return;
+        }
+        try {
+          await witnessCoreBridge.rollbackGeneration({ id: witnessCoreGenerationId });
+          witnessCoreStatus = await currentWitnessCoreStatus(appContext);
+        } catch (error) {
+          sendJson(res, 502, {
+            error: error instanceof Error ? error.message : String(error)
+          });
+          return;
+        }
       }
       const rolledBack = snapshotManager.rollbackToStable?.() ?? null;
       if (!rolledBack) {
@@ -1348,18 +1456,53 @@ export function createCoreRuntimeBundleHandlers({
       sendJson(res, 200, {
         ok: true,
         snapshot: rolledBack,
+        witnessCoreGenerationId,
+        witnessCoreServing: witnessCoreStatus?.serving ?? null,
         servingState: snapshotManager.servingState?.({
-          witnessCoreStatus: appContext?.witnessCoreStatusStore?.getStatus?.()
-            ? {
-                ...(appContext.witnessCoreStatusStore.getStatus() ?? {}),
-                latestState: appContext.witnessCoreStatusStore.getLatestState?.() ?? null
-              }
-            : null
+          witnessCoreStatus
+        }) ?? null
+      });
+    },
+
+    "app.snapshot.serveLive": async ({ res, appContext }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
+      const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
+      if (!snapshotManager) {
+        sendJson(res, 503, { error: "app snapshot manager unavailable" });
+        return;
+      }
+      const witnessCoreBridge = appContext?.witnessCoreBridge ?? null;
+      let witnessCoreStatus = await currentWitnessCoreStatus(appContext);
+      if (witnessCoreBridge) {
+        try {
+          await witnessCoreBridge.requestServeLive();
+          witnessCoreStatus = await currentWitnessCoreStatus(appContext);
+        } catch (error) {
+          sendJson(res, 502, {
+            error: error instanceof Error ? error.message : String(error)
+          });
+          return;
+        }
+      }
+      const servingLive = snapshotManager.requestServeLive?.() ?? null;
+      sendJson(res, 200, {
+        ok: true,
+        snapshot: servingLive,
+        witnessCoreServing: witnessCoreStatus?.serving ?? null,
+        servingState: snapshotManager.servingState?.({
+          witnessCoreStatus
         }) ?? null
       });
     },
 
     "app.preview.session.create": async ({ res, appContext, requestActor, requestSession }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
       const previewManager = await resolvePreviewManager(appContext);
       if (!previewManager) {
         sendJson(res, 503, { error: "app preview sessions unavailable" });
@@ -1373,6 +1516,9 @@ export function createCoreRuntimeBundleHandlers({
             actor: requestActor ?? null
           }
         });
+        if (typeof previewManager.flushSessionPersistence === "function") {
+          await previewManager.flushSessionPersistence(previewSession?.id ?? "");
+        }
         sendJson(res, 201, { previewSession });
       } catch (error) {
         sendJson(res, 409, {
@@ -1387,6 +1533,9 @@ export function createCoreRuntimeBundleHandlers({
         sendJson(res, 503, { error: "app preview sessions unavailable" });
         return;
       }
+      if (typeof previewManager.hydrateSession === "function") {
+        await previewManager.hydrateSession(params?.id ?? "");
+      }
       const previewSession = previewManager.readSession(params?.id ?? "");
       if (!previewSession) {
         sendJson(res, 404, { error: "preview session not found" });
@@ -1396,6 +1545,10 @@ export function createCoreRuntimeBundleHandlers({
     },
 
     "app.preview.session.patchSources": async ({ req, res, params, appContext }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
       const previewManager = await resolvePreviewManager(appContext);
       if (!previewManager) {
         sendJson(res, 503, { error: "app preview sessions unavailable" });
@@ -1414,6 +1567,10 @@ export function createCoreRuntimeBundleHandlers({
     },
 
     "app.preview.session.patchCandidates": async ({ req, res, params, appContext }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
       const previewManager = await resolvePreviewManager(appContext);
       if (!previewManager) {
         sendJson(res, 503, { error: "app preview sessions unavailable" });
@@ -1434,6 +1591,10 @@ export function createCoreRuntimeBundleHandlers({
     },
 
     "app.preview.session.delete": async ({ res, params, appContext }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
       const previewManager = await resolvePreviewManager(appContext);
       if (!previewManager) {
         sendJson(res, 503, { error: "app preview sessions unavailable" });
@@ -1451,6 +1612,9 @@ export function createCoreRuntimeBundleHandlers({
       if (!previewManager) {
         sendJson(res, 503, { error: "app preview sessions unavailable" });
         return;
+      }
+      if (typeof previewManager.hydrateSession === "function") {
+        await previewManager.hydrateSession(params?.id ?? "");
       }
       const previewSession = previewManager.readSession(params?.id ?? "");
       if (!previewSession) {
@@ -1492,6 +1656,9 @@ export function createCoreRuntimeBundleHandlers({
       if (!previewManager) {
         sendJson(res, 503, { error: "app preview sessions unavailable" });
         return;
+      }
+      if (typeof previewManager.hydrateSession === "function") {
+        await previewManager.hydrateSession(params?.id ?? "");
       }
       const query = requestUrl?.searchParams?.get("query")?.trim() || "";
       const descriptorJson = requestUrl?.searchParams?.get("descriptor")?.trim() || "";
@@ -1546,6 +1713,10 @@ export function createCoreRuntimeBundleHandlers({
     },
 
     "app.preview.session.properties.patch": async ({ req, res, params, appContext }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
       const previewManager = await resolvePreviewManager(appContext);
       if (!previewManager) {
         sendJson(res, 503, { error: "app preview sessions unavailable" });
@@ -1566,7 +1737,11 @@ export function createCoreRuntimeBundleHandlers({
       }
     },
 
-    "app.source.write": async ({ req, res, appContext }) => {
+    "app.source.write": async ({ req, res, appContext, requestActor, requestSession }) => {
+      if (runtimeMutationsBlocked(appContext)) {
+        sendJson(res, 409, runtimeDrainingPayload(appContext));
+        return;
+      }
       const authoringPolicy = currentAuthoringPolicy(appContext);
       if (authoringPolicy.mode === AUTHORING_MODE_MCP_ONLY) {
         sendJson(res, 403, blockedDirectMutationResponse({
@@ -1587,17 +1762,72 @@ export function createCoreRuntimeBundleHandlers({
       }
       const body = await readJson(req);
       try {
-        const result = await snapshotManager.applySourceEdits(body?.edits ?? [], { persist: true, trigger: "post" });
+        const result = await snapshotManager.applySourceEdits(body?.edits ?? [], {
+          persist: true,
+          trigger: "post",
+          reason: "app.source.write",
+          correlation: {
+            sessionId: requestSession?.id ?? null,
+            surfaceId: appContext?.serverRunnerId ?? null,
+            actor: requestActor ?? null
+          }
+        });
         sendJson(res, 200, {
           ...result,
           endpoint: APP_SOURCE_WRITE_PATH
         });
       } catch (error) {
-        sendJson(res, 400, {
+        const status = Number(error?.status || error?.httpStatus || 400);
+        const payload = {
           ok: false,
           error: error instanceof Error ? error.message : String(error)
-        });
+        };
+        if (typeof error?.code === "string" && error.code) payload.code = error.code;
+        for (const key of ["path", "expectedHash", "actualHash", "size", "modifiedAt", "exists"]) {
+          if (error?.[key] !== undefined) payload[key] = error[key];
+        }
+        sendJson(res, status, payload);
       }
+    },
+
+    "runtime.supervision.activate": async ({ res, appContext }) => {
+      const supervision = appContext?.runtimeSupervision ?? null;
+      if (!supervision) {
+        sendJson(res, 404, { error: "runtime supervision unavailable" });
+        return;
+      }
+      supervision.role = "active";
+      supervision.mutationsEnabled = true;
+      supervision.watchersEnabled = appContext?.devMode === true;
+      supervision.lastStateAt = new Date().toISOString();
+      appContext?.appSnapshotManager?.setWatcherMode?.(supervision.watchersEnabled);
+      sendJson(res, 200, {
+        ok: true,
+        instanceId: supervision.instanceId ?? null,
+        role: supervision.role,
+        mutationsEnabled: supervision.mutationsEnabled,
+        watchersEnabled: supervision.watchersEnabled
+      });
+    },
+
+    "runtime.supervision.quiesce": async ({ res, appContext }) => {
+      const supervision = appContext?.runtimeSupervision ?? null;
+      if (!supervision) {
+        sendJson(res, 404, { error: "runtime supervision unavailable" });
+        return;
+      }
+      supervision.role = "draining";
+      supervision.mutationsEnabled = false;
+      supervision.watchersEnabled = false;
+      supervision.lastStateAt = new Date().toISOString();
+      appContext?.appSnapshotManager?.setWatcherMode?.(false);
+      sendJson(res, 200, {
+        ok: true,
+        instanceId: supervision.instanceId ?? null,
+        role: supervision.role,
+        mutationsEnabled: supervision.mutationsEnabled,
+        watchersEnabled: supervision.watchersEnabled
+      });
     },
 
     "runtime.diagnostics.read": async ({ res, appContext }) => {

@@ -1554,7 +1554,7 @@ rootSurface = "HiddenRoot"
   }, /root surface id targets HiddenRoot in context ctx\.source and is not visible in authoring context ctx\.target/);
 });
 
-test("context composition DSL lowers page-home frontend-program, default-root-widget, and route-state refs", () => {
+test("historical legacy page.home route docs still lower contextual refs for uplift input", () => {
   const world = createWorld();
   applyWitnessToml(world, `
 [[context]]

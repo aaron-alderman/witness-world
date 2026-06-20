@@ -38,6 +38,7 @@ import {
 import { createCanonicalPackagePatch } from "../../src/package-authorship.js";
 import { applyLegacyFrontendUplift } from "../../src/frontend-legacy-uplift.js";
 import { defineFrontendProgram, defineFrontendStep, defineWidget, updateWidget, attachWidget, widgetDefinitions, widgetVersions } from "../../src/widgets.js";
+import { normalizeInteractionTiming } from "../../src/runtime-surface-runtime-shared.js";
 import {
   defineBackendProgram,
   defineBackendProgramVersion,
@@ -275,6 +276,21 @@ function trimOptionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function validateSurfaceInteractionTiming(interaction, docId, index) {
+  const normalized = interaction && typeof interaction === "object" && !Array.isArray(interaction)
+    ? interaction
+    : null;
+  if (!normalized || !Object.prototype.hasOwnProperty.call(normalized, "timing")) return;
+  const timing = normalizeInteractionTiming(normalized.timing);
+  if (!timing) {
+    throw new Error(`surface ${docId} interaction ${index + 1} has invalid timing; expected { mode = "debounce" | "throttle", ms = positive integer }`);
+  }
+  const actionKind = trimOptionalString(normalized?.action?.kind);
+  if (actionKind !== "deliver") {
+    throw new Error(`surface ${docId} interaction ${index + 1} timing is only supported for deliver actions`);
+  }
+}
+
 function surfaceCreateDocAt(body, index) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error(`surface doc ${index + 1} must be an object`);
@@ -320,6 +336,9 @@ function validateSurfaceCreateDocs(world, docs) {
       if (!existing.has(childId) && !batchIds.has(childId)) {
         throw new Error(`surface ${doc.id} references unknown child surface: ${childId}`);
       }
+    }
+    for (let index = 0; index < doc.interactions.length; index += 1) {
+      validateSurfaceInteractionTiming(doc.interactions[index], doc.id, index);
     }
   }
   return normalized;

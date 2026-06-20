@@ -59,7 +59,7 @@ export function legacyFrontendBridgeSurfaceForRoute(route = {}) {
   const routeId = trimString(route?.id);
   const bridge = legacyFrontendBridgeConfigFromRoute(route);
   if (!routeId || !bridge) {
-    throw new Error("legacy frontend bridge surface requires a page.home route with rootWidget");
+    throw new Error("legacy frontend bridge surface requires a retired legacy frontend route with rootWidget");
   }
   return {
     id: legacySurfaceIdForRoute(routeId),

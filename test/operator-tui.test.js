@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { createWorld, relation } from "../src/kernel.js";
 import {
+  buildOperatorWorkbenchSnapshot,
   buildTuiAutocompleteCandidates,
   buildTuiAutocompletePreview,
   buildTuiPrompt,
@@ -90,6 +91,86 @@ function makeStubState(options = {}) {
     raw: {},
     metadata: {
       context: "ctx.types",
+      surfaceTier: null,
+      surfaceLabel: null,
+      badges: [],
+      properties: [],
+      values: [],
+      recentWitnesses: [],
+      processEvents: [],
+      processSelection: null
+    },
+    sourceHints: []
+  };
+  const backendRuntimeContextRecord = {
+    scope: "world",
+    id: "backend/runtime",
+    kind: "context",
+    title: "backend/runtime",
+    summary: "backend/runtime",
+    raw: {},
+    metadata: {
+      context: "backend/runtime",
+      surfaceTier: null,
+      surfaceLabel: null,
+      badges: [],
+      properties: [],
+      values: [],
+      recentWitnesses: [],
+      processEvents: [],
+      processSelection: null
+    },
+    sourceHints: []
+  };
+  const backendRoutesContextRecord = {
+    scope: "world",
+    id: "backend/routes",
+    kind: "context",
+    title: "backend/routes",
+    summary: "backend/routes",
+    raw: {},
+    metadata: {
+      context: "backend/routes",
+      surfaceTier: null,
+      surfaceLabel: null,
+      badges: [],
+      properties: [],
+      values: [],
+      recentWitnesses: [],
+      processEvents: [],
+      processSelection: null
+    },
+    sourceHints: []
+  };
+  const backendHostRecord = {
+    scope: "world",
+    id: "backendHost",
+    kind: "thing",
+    title: "backendHost",
+    summary: "backend/runtime",
+    raw: {},
+    metadata: {
+      context: "backend/runtime",
+      surfaceTier: null,
+      surfaceLabel: null,
+      badges: [],
+      properties: [],
+      values: [],
+      recentWitnesses: [],
+      processEvents: [],
+      processSelection: null
+    },
+    sourceHints: []
+  };
+  const serveProcessRecord = {
+    scope: "world",
+    id: "process.serve",
+    kind: "process",
+    title: "Serve",
+    summary: "backend/runtime",
+    raw: {},
+    metadata: {
+      context: "backend/runtime",
       surfaceTier: null,
       surfaceLabel: null,
       badges: [],
@@ -198,7 +279,17 @@ function makeStubState(options = {}) {
       }]
     });
   }
-  const worldRecords = [worldRecord, worldPrefixRecord, worldLooseRecord, worldValueTypeRecord, ...extraWorldRecords];
+  const worldRecords = [
+    worldRecord,
+    worldPrefixRecord,
+    worldLooseRecord,
+    worldValueTypeRecord,
+    backendRuntimeContextRecord,
+    backendRoutesContextRecord,
+    backendHostRecord,
+    serveProcessRecord,
+    ...extraWorldRecords
+  ];
   const platformRecords = [platformRecord, platformLooseRecord, ...extraPlatformRecords];
   const recordIndex = new Map([
     [worldRecord.id, worldRecord],
@@ -209,6 +300,14 @@ function makeStubState(options = {}) {
     [`world:${worldLooseRecord.id}`, worldLooseRecord],
     [worldValueTypeRecord.id, worldValueTypeRecord],
     [`world:${worldValueTypeRecord.id}`, worldValueTypeRecord],
+    [backendRuntimeContextRecord.id, backendRuntimeContextRecord],
+    [`world:${backendRuntimeContextRecord.id}`, backendRuntimeContextRecord],
+    [backendRoutesContextRecord.id, backendRoutesContextRecord],
+    [`world:${backendRoutesContextRecord.id}`, backendRoutesContextRecord],
+    [backendHostRecord.id, backendHostRecord],
+    [`world:${backendHostRecord.id}`, backendHostRecord],
+    [serveProcessRecord.id, serveProcessRecord],
+    [`world:${serveProcessRecord.id}`, serveProcessRecord],
     [platformRecord.id, platformRecord],
     [`platform:${platformRecord.id}`, platformRecord],
     [platformLooseRecord.id, platformLooseRecord],
@@ -245,8 +344,12 @@ function createPreviewHarness() {
   let activeRevision = 7;
   let nextSessionId = 1;
   const sessions = new Map();
+  const patchCalls = [];
   const propertyValues = new Map([
-    ["thing.alpha\u0000fill", "blue"]
+    ["thing.alpha\u0000fill", "blue"],
+    ["thing.alpha\u0000enabled", false],
+    ["thing.alpha\u0000count", 1],
+    ["thing.alpha\u0000config", { accent: "blue" }]
   ]);
   const world = createWorld({
     genesis: { system: "witness-world", mode: "preview-harness" }
@@ -304,6 +407,9 @@ function createPreviewHarness() {
       if (!sessionShape || sessionShape.status === "stale") return null;
       const resolvedTarget = options?.preferredTarget || target || "thing.alpha";
       const fill = propertyValues.get(`${resolvedTarget}\u0000fill`);
+      const enabled = propertyValues.get(`${resolvedTarget}\u0000enabled`);
+      const count = propertyValues.get(`${resolvedTarget}\u0000count`);
+      const config = propertyValues.get(`${resolvedTarget}\u0000config`);
       return {
         query: target,
         resolvedFrom: target,
@@ -315,12 +421,18 @@ function createPreviewHarness() {
           sourceId: "app/alpha.rvm",
           sourceLanguage: "rvm"
         },
-        authoredProps: { fill },
+        authoredProps: { fill, enabled, count, config },
         runtimeProps: {
           surfaceKind: "leaf",
-          props: { fill }
+          props: { fill, enabled, count, config }
         },
-        validProps: [{ key: "fill", valueType: "string" }],
+        validProps: [
+          { key: "fill", valueType: "string" },
+          { key: "enabled", valueType: "boolean" },
+          { key: "count", valueType: "number" },
+          { key: "config", valueType: "object" },
+          { key: "inputType", valueType: "string", options: ["text", "password"] }
+        ],
         breadcrumbs: [{ label: "App Root" }, { label: "Alpha Surface" }],
         provenance: {
           reasons: [{ kind: "surface-id", value: resolvedTarget }]
@@ -346,6 +458,12 @@ function createPreviewHarness() {
       if (!session || sessionShape?.status === "stale") {
         throw new Error(sessionShape?.invalidReason ?? "preview session not found");
       }
+      patchCalls.push({
+        id,
+        target,
+        property,
+        value: structuredClone(value)
+      });
       propertyValues.set(`${target}\u0000${property}`, value);
       session.previewRevision += 1;
       return {
@@ -369,6 +487,7 @@ function createPreviewHarness() {
   return {
     previewManager,
     snapshotManager,
+    patchCalls,
     setActiveRevision(value) {
       activeRevision = Number(value);
     }
@@ -460,8 +579,10 @@ test("operator TUI autocomplete suggests commands, containers, and column helper
   let candidates = buildTuiAutocompleteCandidates(engine.state, engine.session);
   assert.equal(candidates.includes("look"), true);
   assert.equal(candidates.includes("open world"), true);
+  assert.equal(candidates.includes("use context backend/runtime"), true);
   assert.equal(buildTuiAutocompletePreview(engine.state, engine.session, "lo"), "ok");
   assert.equal(buildTuiAutocompletePreview(engine.state, engine.session, "open w"), "orld");
+  assert.equal(buildTuiAutocompletePreview(engine.state, engine.session, "use con"), "text ");
 
   await engine.execute("open world");
   candidates = buildTuiAutocompleteCandidates(engine.state, engine.session);
@@ -474,6 +595,98 @@ test("operator TUI autocomplete suggests commands, containers, and column helper
   assert.equal(candidates.includes("values kind"), true);
   assert.equal(candidates.includes("filter scope="), true);
   assert.equal(buildTuiAutocompletePreview(engine.state, engine.session, "valu"), "es ");
+});
+
+test("operator TUI supports context focus roots with use leave and scoped look/search", async () => {
+  const engine = createOperatorTuiEngine(makeStubState());
+
+  await engine.execute("open world");
+  await engine.execute("open contexts");
+  const used = await engine.execute("use 1");
+  assert.match(used.output, /^context:backend\/routes$/m);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/routes> ");
+
+  const leave = await engine.execute("leave");
+  assert.match(leave.output, /^Contexts$/m);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "World/Contexts> ");
+
+  const useRuntime = await engine.execute("use context backend/runtime");
+  assert.match(useRuntime.output, /^context:backend\/runtime$/m);
+  assert.match(useRuntime.output, /Things \(1\)/);
+  assert.match(useRuntime.output, /Processes \(1\)/);
+  assert.doesNotMatch(useRuntime.output, /Contexts \(/);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime> ");
+
+  const pwd = await engine.execute("pwd");
+  assert.equal(pwd.output, "context:backend/runtime");
+
+  const openThings = await engine.execute("open things");
+  assert.match(openThings.output, /^Things$/m);
+  assert.match(openThings.output, /backendHost <thing> - backend\/runtime/);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime/Things> ");
+
+  const close = await engine.execute("close");
+  assert.match(close.output, /^context:backend\/runtime$/m);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime> ");
+
+  const home = await engine.execute("home");
+  assert.match(home.output, /^context:backend\/runtime$/m);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime> ");
+
+  const focusedSearch = await engine.execute("search host");
+  assert.match(focusedSearch.output, /scope=context/);
+  assert.match(focusedSearch.output, /focus=context:backend\/runtime/);
+  assert.match(focusedSearch.output, /backendHost\s+thing\s+world\s+backendHost/);
+
+  const valuesContext = await engine.execute("values context");
+  assert.equal(valuesContext.output, [
+    "values context (1 row)",
+    "1. backend/runtime (1)"
+  ].join("\n"));
+
+  const globalWorldSearch = await engine.execute("search --scope world runtime");
+  assert.match(globalWorldSearch.output, /scope=world/);
+  assert.match(globalWorldSearch.output, /backend\/runtime\s+context\s+world\s+backend\/runtime/);
+
+  const globalAllSearch = await engine.execute("search --scope all platform");
+  assert.match(globalAllSearch.output, /scope=all/);
+  assert.match(globalAllSearch.output, /Platform Plugin/);
+
+  const platformSearch = await engine.execute("search --scope platform plugin");
+  assert.match(platformSearch.output, /scope=platform/);
+  assert.match(platformSearch.output, /Platform Plugin/);
+
+  await engine.execute("search host");
+  const inspect = await engine.execute("inspect 1");
+  assert.match(inspect.output, /^backendHost/m);
+
+  const link = await engine.execute("link 1");
+  assert.match(link.output, /RECORD world:backendHost/);
+  assert.match(link.output, /target: backendHost/);
+
+  const leaveAfterSearch = await engine.execute("leave");
+  assert.match(leaveAfterSearch.output, /^Contexts$/m);
+  const columnsAfterLeave = await engine.execute("columns");
+  assert.equal(columnsAfterLeave.output, "no active result view.");
+});
+
+test("operator TUI use this works for selected contexts and rejects non-context records", async () => {
+  const engine = createOperatorTuiEngine(makeStubState());
+
+  await engine.execute("open world");
+  await engine.execute("open contexts");
+  await engine.execute("select 2");
+  const useThis = await engine.execute("use this");
+  assert.match(useThis.output, /^context:backend\/runtime$/m);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime> ");
+
+  const status = await engine.execute("status");
+  assert.match(status.output, /focus kind: context/);
+  assert.match(status.output, /focus id: backend\/runtime/);
+
+  await engine.execute("leave");
+  const useThing = await engine.execute("use thing.alpha");
+  assert.equal(useThing.output, "use is context-only in this tranche.");
 });
 
 test("operator TUI search renders a windowed result table and keeps exact matches first", async () => {
@@ -503,7 +716,7 @@ test("operator TUI search supports scope filtering and plain-text empty or malfo
   assert.equal(empty.output, "(no matches for \"zzzzzz\")");
 
   const malformed = await engine.execute("search --scope");
-  assert.equal(malformed.output, "usage: search <text> or search --scope world|platform <text>");
+  assert.equal(malformed.output, "usage: search <text> or search --scope all|world|platform <text>");
 });
 
 test("operator TUI result views support columns filters sorting paging and numeric follow-ups", async () => {
@@ -556,7 +769,8 @@ test("operator TUI result views support columns filters sorting paging and numer
   assert.match(inspect.output, /^Alpha World 27/m);
 
   const link = await engine.execute("link 3");
-  assert.match(link.output, /target: world:thing\.alpha-27/);
+  assert.match(link.output, /RECORD world:thing\.alpha-27/);
+  assert.match(link.output, /target: thing\.alpha-27/);
 
   const prev = await engine.execute("prev");
   assert.match(prev.output, /rows=1-25 of 33/);
@@ -665,7 +879,88 @@ test("operator TUI lazily creates a preview session on inspect and renders previ
   assert.match(previewInspect.output, /runtime props:/);
 });
 
-test("operator TUI preview reuses the same lazy-created session and stays read-only", async () => {
+test("operator TUI link and refs expose typed deep-link summaries", async () => {
+  const harness = createPreviewHarness();
+  const state = makeStubState();
+  state.runtimeContext.appProject = { appRoot: "C:/tmp/app" };
+  state.runtimeContext.appSnapshotManager = harness.snapshotManager;
+  state.runtimeContext.appPreviewSessionManager = harness.previewManager;
+  const engine = createOperatorTuiEngine(state);
+
+  await engine.execute("select thing.alpha");
+
+  const link = await engine.execute("link this");
+  assert.match(link.output, /RECORD world:thing\.alpha/);
+  assert.match(link.output, /target: thing\.alpha/);
+  assert.match(link.output, /source: C:\/tmp\/world\/alpha\.rvm:3/);
+
+  const refs = await engine.execute("refs this");
+  assert.match(refs.output, /\[1\] PREVIEW-SESSION preview-1 \[open\]/);
+  assert.match(refs.output, /SOURCE C:\/tmp\/app\/alpha\.rvm:3 \[open\]/);
+
+  const source = await engine.execute("source this");
+  assert.match(source.output, /kind: source/);
+  assert.match(source.output, /path: C:\/tmp\/app\/alpha\.rvm/);
+  assert.match(source.output, /line: 3/);
+
+  const provenance = await engine.execute("provenance this");
+  assert.match(provenance.output, /kind: provenance/);
+  assert.match(provenance.output, /preview session: preview-1/);
+  assert.match(provenance.output, /entries:/);
+  assert.match(provenance.output, /\* 1\. \[BREADCRUMB\] App Root \[open\]/);
+  assert.match(provenance.output, /4\. \[PREVIEW\] preview-1 \[open\]/);
+  assert.match(provenance.output, /5\. \[REASON\] surface-id: thing\.alpha \[info\]/);
+
+  const provenanceNext = await engine.execute("provenance next");
+  assert.match(provenanceNext.output, /\* 2\. \[BREADCRUMB\] Alpha Surface \[open\]/);
+  assert.match(provenanceNext.output, /label: Alpha Surface/);
+
+  const provenanceOpenSource = await engine.execute("provenance open 3");
+  assert.match(provenanceOpenSource.output, /kind: source/);
+  assert.match(provenanceOpenSource.output, /path: C:\/tmp\/app\/alpha\.rvm/);
+
+  await engine.execute("provenance this");
+  const provenanceReason = await engine.execute("provenance open 5");
+  assert.equal(provenanceReason.status, "error");
+  assert.equal(provenanceReason.output, "reason rows are informational only.");
+});
+
+test("operator TUI sources lists and switches between multiple source entries", async () => {
+  const state = makeStubState();
+  const record = state.recordIndex.get("thing.alpha");
+  record.sourceHints = [
+    {
+      file: "C:/tmp/world/alpha-one.rvm",
+      line: 3,
+      section: "view",
+      sourceLanguage: "rvm"
+    },
+    {
+      file: "C:/tmp/world/alpha-two.rvm",
+      line: 19,
+      section: "trait",
+      sourceLanguage: "rvm"
+    }
+  ];
+  const engine = createOperatorTuiEngine(state);
+
+  await engine.execute("select thing.alpha");
+
+  const sources = await engine.execute("sources this");
+  assert.match(sources.output, /sources:/);
+  assert.match(sources.output, /\* 1\. C:\/tmp\/world\/alpha-one\.rvm:3/);
+  assert.match(sources.output, /2\. C:\/tmp\/world\/alpha-two\.rvm:19/);
+
+  const second = await engine.execute("source open 2");
+  assert.match(second.output, /path: C:\/tmp\/world\/alpha-two\.rvm/);
+  assert.match(second.output, /line: 19/);
+
+  const previous = await engine.execute("source prev");
+  assert.match(previous.output, /path: C:\/tmp\/world\/alpha-one\.rvm/);
+  assert.match(previous.output, /line: 3/);
+});
+
+test("operator TUI preview reuses the same lazy-created session and reports writable preview state", async () => {
   const harness = createPreviewHarness();
   const state = makeStubState();
   state.runtimeContext.appProject = { appRoot: "C:/tmp/app" };
@@ -676,7 +971,7 @@ test("operator TUI preview reuses the same lazy-created session and stays read-o
   await engine.execute("status");
   const preview = await engine.execute("preview");
   assert.match(preview.output, /session: preview-1/);
-  assert.match(preview.output, /\(read-only preview session; no property edits in this tranche\)/);
+  assert.match(preview.output, /writes: preview-only authored property edits/);
 
   const previewAgain = await engine.execute("preview");
   assert.match(previewAgain.output, /session: preview-1/);
@@ -701,6 +996,10 @@ test("operator TUI marks stale preview sessions and refresh clears them determin
   await engine.execute("select thing.alpha");
   const staleInspect = await engine.execute("inspect this");
   assert.match(staleInspect.output, /preview session stale: preview no longer matches active snapshot/);
+
+  const staleSet = await engine.execute('set fill "teal"');
+  assert.match(staleSet.output, /preview session stale:/);
+  assert.equal(staleSet.status, "error");
 
   const refresh = await engine.execute("refresh");
   assert.match(refresh.output, /stale preview session cleared/);
@@ -736,7 +1035,7 @@ test("operator TUI reports preview-session unavailability in repo self-model mod
   assert.match(preview.output, /preview sessions unavailable in detached repo self-model mode/);
 });
 
-test("operator TUI disables set in the read-only preview tranche", async () => {
+test("operator TUI props commands expose authored runtime and valid property views", async () => {
   const harness = createPreviewHarness();
   const state = makeStubState();
   state.runtimeContext.appProject = { appRoot: "C:/tmp/app" };
@@ -744,8 +1043,134 @@ test("operator TUI disables set in the read-only preview tranche", async () => {
   state.runtimeContext.appPreviewSessionManager = harness.previewManager;
   const engine = createOperatorTuiEngine(state);
   await engine.execute("select thing.alpha");
-  const result = await engine.execute('set fill "#22c55e"');
-  assert.equal(result.output, "set is disabled in this read-only preview tranche.");
+
+  const authored = await engine.execute("props this");
+  assert.match(authored.output, /authored props:/);
+  assert.match(authored.output, /fill: blue/);
+
+  const runtime = await engine.execute("props runtime this");
+  assert.match(runtime.output, /runtime props:/);
+  assert.match(runtime.output, /enabled: false/);
+
+  const valid = await engine.execute("props valid this");
+  assert.match(valid.output, /valid props:/);
+  assert.match(valid.output, /fill \(string\)/);
+  assert.match(valid.output, /inputType \(string\) \[text, password\]/);
+});
+
+test("operator TUI set applies preview property edits with typed values and supports alias targets", async () => {
+  const harness = createPreviewHarness();
+  const state = makeStubState();
+  state.runtimeContext.appProject = { appRoot: "C:/tmp/app" };
+  state.runtimeContext.appSnapshotManager = harness.snapshotManager;
+  state.runtimeContext.appPreviewSessionManager = harness.previewManager;
+  const engine = createOperatorTuiEngine(state);
+
+  await engine.execute("select thing.alpha");
+  await engine.execute("a = this");
+
+  const stringResult = await engine.execute('set fill "#22c55e"');
+  assert.match(stringResult.output, /updated preview property: fill/);
+  assert.match(stringResult.output, /current: #22c55e/);
+
+  const boolResult = await engine.execute("set a enabled true");
+  assert.match(boolResult.output, /updated preview property: enabled/);
+  assert.match(boolResult.output, /current: true/);
+
+  const numberResult = await engine.execute("set count 42");
+  assert.match(numberResult.output, /updated preview property: count/);
+  assert.match(numberResult.output, /current: 42/);
+
+  const objectResult = await engine.execute('set config {"accent":"green"}');
+  assert.match(objectResult.output, /updated preview property: config/);
+  assert.equal(harness.patchCalls[0].value, "#22c55e");
+  assert.equal(harness.patchCalls[1].value, true);
+  assert.equal(harness.patchCalls[2].value, 42);
+  assert.deepEqual(harness.patchCalls[3].value, { accent: "green" });
+
+  const authored = await engine.execute("props this");
+  assert.match(authored.output, /fill: #22c55e/);
+  assert.match(authored.output, /enabled: true/);
+  assert.match(authored.output, /count: 42/);
+  assert.match(authored.output, /config: {"accent":"green"}/);
+});
+
+test("operator TUI undo and redo replay preview property edits through the preview session", async () => {
+  const harness = createPreviewHarness();
+  const state = makeStubState();
+  state.runtimeContext.appProject = { appRoot: "C:/tmp/app" };
+  state.runtimeContext.appSnapshotManager = harness.snapshotManager;
+  state.runtimeContext.appPreviewSessionManager = harness.previewManager;
+  const engine = createOperatorTuiEngine(state);
+
+  await engine.execute("select thing.alpha");
+  await engine.execute('set fill "orange"');
+
+  const undone = await engine.execute("undo");
+  assert.equal(undone.output, "undid set thing.alpha fill.");
+
+  const afterUndo = await engine.execute("props this");
+  assert.match(afterUndo.output, /fill: blue/);
+
+  const redone = await engine.execute("redo");
+  assert.equal(redone.output, "redid set thing.alpha fill.");
+
+  const afterRedo = await engine.execute("props this");
+  assert.match(afterRedo.output, /fill: orange/);
+});
+
+test("operator TUI undo leaves preview history intact when the preview session is stale", async () => {
+  const harness = createPreviewHarness();
+  const state = makeStubState();
+  state.runtimeContext.appProject = { appRoot: "C:/tmp/app" };
+  state.runtimeContext.appSnapshotManager = harness.snapshotManager;
+  state.runtimeContext.appPreviewSessionManager = harness.previewManager;
+  const engine = createOperatorTuiEngine(state);
+
+  await engine.execute("select thing.alpha");
+  await engine.execute('set fill "orange"');
+  harness.setActiveRevision(8);
+
+  const undo = await engine.execute("undo");
+  assert.match(undo.output, /preview session stale:/);
+  assert.equal(undo.status, "error");
+
+  const refresh = await engine.execute("refresh");
+  assert.match(refresh.output, /stale preview session cleared/);
+});
+
+test("operator TUI workbench snapshot exposes structured preview inspection and last mutation state", async () => {
+  const harness = createPreviewHarness();
+  const state = makeStubState();
+  state.runtimeContext.appProject = { appRoot: "C:/tmp/app" };
+  state.runtimeContext.appSnapshotManager = harness.snapshotManager;
+  state.runtimeContext.appPreviewSessionManager = harness.previewManager;
+  const engine = createOperatorTuiEngine(state);
+
+  await engine.execute("select thing.alpha");
+  await engine.execute('set fill "violet"');
+
+  const snapshot = await buildOperatorWorkbenchSnapshot(state, engine.session, {});
+  assert.equal(snapshot.preview.writable, true);
+  assert.equal(snapshot.preview.lastMutation?.property, "fill");
+  assert.equal(snapshot.rightPane.previewInspection?.target, "thing.alpha");
+  assert.equal(snapshot.rightPane.previewInspection?.authoredProps?.fill, "violet");
+  assert.equal(snapshot.rightPane.previewInspection?.previewStatus, "active");
+});
+
+test("operator TUI reports invalid JSON values before mutating the preview session", async () => {
+  const harness = createPreviewHarness();
+  const state = makeStubState();
+  state.runtimeContext.appProject = { appRoot: "C:/tmp/app" };
+  state.runtimeContext.appSnapshotManager = harness.snapshotManager;
+  state.runtimeContext.appPreviewSessionManager = harness.previewManager;
+  const engine = createOperatorTuiEngine(state);
+
+  await engine.execute("select thing.alpha");
+  const result = await engine.execute('set config {"accent": }');
+  assert.match(result.output, /invalid value:/);
+  assert.equal(result.status, "error");
+  assert.equal(harness.patchCalls.length, 0);
 });
 
 test("operator TUI runtime context hydrates persisted world-home witnesses", async () => {
@@ -827,8 +1252,54 @@ test("tui CLI batch mode runs preview-aware reads and windowed search commands c
   assert.match(stdout, /> status/);
   assert.match(stdout, /preview session:/);
   assert.match(stdout, /> preview/);
-  assert.match(stdout, /read-only preview session/);
+  assert.match(stdout, /writes: preview-only authored property edits/);
   assert.match(stdout, /> quit/);
+  assert.match(stdout, /bye\./);
+});
+
+test("tui CLI batch mode runs context focus flows cleanly", async () => {
+  const child = spawn(process.execPath, [
+    "src/cli.js",
+    "tui",
+    "--command", "open world",
+    "--command", "open contexts",
+    "--command", "use 4",
+    "--command", "look",
+    "--command", "open things",
+    "--command", "close",
+    "--command", "search host",
+    "--command", "values context",
+    "--command", "leave",
+    "--command", "quit"
+  ], {
+    cwd: process.cwd(),
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", chunk => { stdout += chunk; });
+  child.stderr.on("data", chunk => { stderr += chunk; });
+
+  const code = await onceExitCode(child);
+
+  assert.equal(code, 0);
+  assert.equal(normalizeStderr(stderr), "");
+  assert.match(stdout, /> use 4/);
+  assert.match(stdout, /^context:backend\/runtime$/m);
+  assert.match(stdout, /Things \(\d+\)/);
+  assert.match(stdout, /> look/);
+  assert.match(stdout, /> open things/);
+  assert.match(stdout, /backendHost <thing> - backend\/runtime/);
+  assert.match(stdout, /> search host/);
+  assert.match(stdout, /scope=context/);
+  assert.match(stdout, /focus=context:backend\/runtime/);
+  assert.match(stdout, /> values context/);
+  assert.match(stdout, /1\. backend\/runtime \(\d+\)/);
+  assert.match(stdout, /> leave/);
+  assert.match(stdout, /^Contexts$/m);
   assert.match(stdout, /bye\./);
 });
 

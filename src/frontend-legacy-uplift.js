@@ -8,6 +8,8 @@ import {
 } from "./legacy-frontend-bridge.js";
 import { frontendProgram, widgetTree } from "./widgets.js";
 
+const INPUT_INTERACTION_TIMING_MS = 300;
+
 function trimString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
@@ -278,6 +280,7 @@ function analyzeRouteSource(world, source) {
   const preloadPolicies = [];
   const handledLoadSteps = new Set();
   const queryBindings = [];
+  const interactiveCollectionOutputsByOrder = new Map();
 
   function ensureSurface(surfaceId) {
     if (!surfaceBindings.has(surfaceId)) surfaceBindings.set(surfaceId, []);
@@ -358,28 +361,29 @@ function analyzeRouteSource(world, source) {
     return id;
   }
 
-  function ensurePreloadRouteCommand({
-    preloadName,
+  function ensureRouteCommand({
+    name,
     route,
     method,
     into = null,
     collectionOutputs = null,
     successWrites = {},
-    requestFields = []
+    requestFields = [],
+    preloadWhen = null
   } = {}) {
-    const commandId = commandMessageId(routeId, preloadName);
-    const successId = successMessageId(routeId, preloadName);
-    const failureId = failureMessageId(routeId, preloadName);
-    const boundaryId = boundaryIdFor(routeId, preloadName);
-    const statusEnumId = enumIdFor(routeId, `${preloadName}.status`);
-    const statusStateId = ensureState(`${preloadName}.status`, { valueType: statusEnumId, initial: "idle" });
-    const loadingStateId = ensureState(`${preloadName}.loading`, { valueType: "bool", initial: false });
-    ids.messages[`command:${preloadName}`] = commandId;
-    ids.messages[`success:${preloadName}`] = successId;
-    ids.messages[`failure:${preloadName}`] = failureId;
-    ids.boundaries[preloadName] = boundaryId;
-    ids.policies[preloadName] = policyIdFor(routeId, preloadName);
-    ids.enums[`${preloadName}.status`] = statusEnumId;
+    const commandId = commandMessageId(routeId, name);
+    const successId = successMessageId(routeId, name);
+    const failureId = failureMessageId(routeId, name);
+    const boundaryId = boundaryIdFor(routeId, name);
+    const statusEnumId = enumIdFor(routeId, `${name}.status`);
+    const statusStateId = ensureState(`${name}.status`, { valueType: statusEnumId, initial: "idle" });
+    const loadingStateId = ensureState(`${name}.loading`, { valueType: "bool", initial: false });
+    ids.messages[`command:${name}`] = commandId;
+    ids.messages[`success:${name}`] = successId;
+    ids.messages[`failure:${name}`] = failureId;
+    ids.boundaries[name] = boundaryId;
+    ids.policies[name] = policyIdFor(routeId, name);
+    ids.enums[`${name}.status`] = statusEnumId;
     enumDocs.set(statusEnumId, {
       id: statusEnumId,
       role: "enum",
@@ -412,7 +416,7 @@ function analyzeRouteSource(world, source) {
       id: boundaryId,
       capabilities: [],
       operations: [{
-        name: preloadName,
+        name,
         kind: "adapter",
         command: commandId,
         route,
@@ -424,8 +428,8 @@ function analyzeRouteSource(world, source) {
         ...(collectionOutputs ? { collectionOutputs } : {})
       }]
     });
-    policyDocs.set(ids.policies[preloadName], {
-      id: ids.policies[preloadName],
+    policyDocs.set(ids.policies[name], {
+      id: ids.policies[name],
       subject: ids.process,
       initialState: "idle",
       stateField: statusStateId,
@@ -435,19 +439,29 @@ function analyzeRouteSource(world, source) {
         ready: "ready",
         repair_required: "repair_required"
       },
-      disagreementOutcomes: {}
-    });
-    preloadPolicies.push({
-      id: preloadPolicyIdFor(routeId, preloadName),
-      when: { kind: "routeEnter", route: routeEntryKey() },
-      targets: [{
-        kind: "route",
-        route: routeEntryKey(),
-        command: commandId,
-        load: ["command"]
-      }]
-    });
+        disagreementOutcomes: {}
+      });
+    if (preloadWhen?.kind === "routeEnter") {
+      preloadPolicies.push({
+        id: preloadPolicyIdFor(routeId, name),
+        when: { kind: "routeEnter", route: preloadWhen.route ?? routeEntryKey() },
+        targets: [{
+          kind: "route",
+          route: preloadWhen.route ?? routeEntryKey(),
+          command: commandId,
+          load: ["command"]
+        }]
+      });
+    }
     return { commandId, successId, failureId, boundaryId };
+  }
+
+  function ensurePreloadRouteCommand(options = {}) {
+    return ensureRouteCommand({
+      ...options,
+      name: options.preloadName,
+      preloadWhen: { kind: "routeEnter", route: routeEntryKey() }
+    });
   }
 
   function addSurfaceInteraction(surfaceId, interaction) {
@@ -580,19 +594,6 @@ function analyzeRouteSource(world, source) {
       });
       continue;
     }
-    if ((step?.op === "fetchJson" || step?.op === "initSession") && trimString(step?.event) !== "load") {
-      blocked.push({
-        id: `legacyFrontendUplift:blocked:${routeId}:${step.op}:${step.order}`,
-        routeId,
-        limitationType: "missing-primitive",
-        goal: `uplift ${step.op} on ${routeId}`,
-        attemptedAuthoringPath: "native page.surface command/boundary/policy authoring",
-        missingPrimitive: "route-enter preload authoring is only supported for legacy load semantics in this tranche",
-        minimumHumanAction: "move the effect to route load semantics or keep the route on the compatibility bridge",
-        proof: [`step ${step.event}#${step.order} uses ${step.op}`]
-      });
-      continue;
-    }
     if (["postJson", "patchJson", "deleteJson", "setSession"].includes(step?.op)) {
       const route = trimString(step?.params?.url) || (step?.op === "setSession" ? "/api/session" : "");
       if (!sameOriginRoute(route)) {
@@ -676,26 +677,34 @@ function analyzeRouteSource(world, source) {
       && trimString(candidate?.params?.into) === sourceName
     );
     if (loadFetch) {
-      const route = trimString(loadFetch?.params?.url);
-      if (!sameOriginRoute(route)) {
-        blocked.push({
-          id: `legacyFrontendUplift:blocked:${routeId}:fetchJson:${loadFetch.order}`,
-          routeId,
-          limitationType: "missing-primitive",
-          goal: `uplift fetchJson on ${routeId}`,
-          attemptedAuthoringPath: "route-enter preload boundary operation",
-          missingPrimitive: "external or non-route-backed network targets are not supported for native preload uplift",
-          minimumHumanAction: "replace the target with a same-origin runtime route before uplift",
-          proof: [`step ${loadFetch.event}#${loadFetch.order} targets ${route || "(missing route)"}`]
-        });
+      if (trimString(loadFetch?.event) === "load") {
+        const route = trimString(loadFetch?.params?.url);
+        if (!sameOriginRoute(route)) {
+          blocked.push({
+            id: `legacyFrontendUplift:blocked:${routeId}:fetchJson:${loadFetch.order}`,
+            routeId,
+            limitationType: "missing-primitive",
+            goal: `uplift fetchJson on ${routeId}`,
+            attemptedAuthoringPath: "route-enter preload boundary operation",
+            missingPrimitive: "external or non-route-backed network targets are not supported for native preload uplift",
+            minimumHumanAction: "replace the target with a same-origin runtime route before uplift",
+            proof: [`step ${loadFetch.event}#${loadFetch.order} targets ${route || "(missing route)"}`]
+          });
+        } else {
+          ensurePreloadRouteCommand({
+            preloadName: `${sanitizeIdPart(loadFetch.event)}.${sanitizeIdPart(loadFetch.op)}.${loadFetch.order}`,
+            route,
+            method: "GET",
+            collectionOutputs: { [collectionId]: responsePath }
+          });
+          handledLoadSteps.add(loadFetch.order);
+        }
       } else {
-        ensurePreloadRouteCommand({
-          preloadName: `${sanitizeIdPart(loadFetch.event)}.${sanitizeIdPart(loadFetch.op)}.${loadFetch.order}`,
-          route,
-          method: "GET",
-          collectionOutputs: { [collectionId]: responsePath }
+        interactiveCollectionOutputsByOrder.set(loadFetch.order, {
+          ...(interactiveCollectionOutputsByOrder.get(loadFetch.order) ?? {}),
+          [collectionId]: responsePath
         });
-        handledLoadSteps.add(loadFetch.order);
+        continue;
       }
     }
   }
@@ -811,7 +820,7 @@ function analyzeRouteSource(world, source) {
       continue;
     }
 
-    const asyncIndex = steps.findIndex(step => ["postJson", "patchJson", "deleteJson", "setSession", "logout"].includes(step?.op));
+    const asyncIndex = steps.findIndex(step => ["fetchJson", "initSession", "postJson", "patchJson", "deleteJson", "setSession", "logout"].includes(step?.op));
     const directEventMessageId = ensureTriggerMessage(eventName);
     const targetSurfaceId = eventTarget ? widgetSurfaceId(routeId, eventTarget) : ids.surfaces.root;
     ensureSurface(targetSurfaceId);
@@ -1001,52 +1010,30 @@ function analyzeRouteSource(world, source) {
 
     if (asyncIndex >= 0) {
       const step = steps[asyncIndex];
+      const inputReadSupported = eventKind === "input" && ["fetchJson", "initSession"].includes(step?.op);
+      if (eventKind === "input" && !inputReadSupported) {
+        blocked.push({
+          id: `legacyFrontendUplift:blocked:${routeId}:inputNetwork:${step.order}`,
+          routeId,
+          limitationType: "missing-primitive",
+          goal: `uplift input-driven ${step?.op} on ${routeId}`,
+          attemptedAuthoringPath: "native surface interaction + boundary route operation",
+          missingPrimitive: "input-driven write or unsupported network effects remain outside the native timing subset",
+          minimumHumanAction: "move the effect to click/change/submit or wait for a native timed write lane before uplift",
+          proof: [`step ${eventName}#${step.order} uses ${step?.op}`]
+        });
+        continue;
+      }
       const commandName = `${sanitizeIdPart(eventName)}.${sanitizeIdPart(step.op)}.${step.order}`;
-      const commandId = commandMessageId(routeId, commandName);
-      const successId = successMessageId(routeId, commandName);
-      const failureId = failureMessageId(routeId, commandName);
-      const boundaryId = boundaryIdFor(routeId, commandName);
-      const statusEnumId = enumIdFor(routeId, `${commandName}.status`);
-      const statusStateId = ensureState(`${commandName}.status`, { valueType: statusEnumId, initial: "idle" });
-      const loadingStateId = ensureState(`${commandName}.loading`, { valueType: "bool", initial: false });
-      ids.messages[`command:${commandName}`] = commandId;
-      ids.messages[`success:${commandName}`] = successId;
-      ids.messages[`failure:${commandName}`] = failureId;
-      ids.boundaries[commandName] = boundaryId;
-      ids.policies[commandName] = policyIdFor(routeId, commandName);
-      ids.enums[`${commandName}.status`] = statusEnumId;
-      enumDocs.set(statusEnumId, {
-        id: statusEnumId,
-        role: "enum",
-        cases: ["idle", "running", "ready", "repair_required"]
-      });
-      messages.set(commandId, { id: commandId, role: "command", fields: [], writes: {} });
-      messages.set(successId, {
-        id: successId,
-        role: "event",
-        fields: [],
-        writes: {
-          [loadingStateId]: false,
-          [statusStateId]: "ready"
-        }
-      });
-      messages.set(failureId, {
-        id: failureId,
-        role: "event",
-        fields: [],
-        writes: {
-          [loadingStateId]: false,
-          [statusStateId]: "repair_required"
-        }
-      });
-      processHandles.add(directEventMessageId);
-      processHandles.add(successId);
-      processHandles.add(failureId);
-      processEmits.add(commandId);
-
       let route = "";
       let method = "POST";
-      if (step.op === "setSession") {
+      if (step.op === "fetchJson") {
+        route = trimString(step?.params?.url);
+        method = "GET";
+      } else if (step.op === "initSession") {
+        route = "/api/session";
+        method = "GET";
+      } else if (step.op === "setSession") {
         route = "/api/session";
         method = "POST";
       } else if (step.op === "logout") {
@@ -1070,6 +1057,33 @@ function analyzeRouteSource(world, source) {
         continue;
       }
 
+      const collectionOutputs = step.op === "fetchJson"
+        ? (interactiveCollectionOutputsByOrder.get(step.order) ?? null)
+        : null;
+      let intoState = null;
+      if (step.op === "fetchJson") {
+        const into = trimString(step?.params?.into);
+        if (!into && !collectionOutputs) {
+          blocked.push({
+            id: `legacyFrontendUplift:blocked:${routeId}:fetchJsonInto:${step.order}`,
+            routeId,
+            limitationType: "missing-primitive",
+            goal: `uplift fetchJson on ${routeId}`,
+            attemptedAuthoringPath: "interactive boundary route operation",
+            missingPrimitive: "interactive fetchJson requires a declared scalar into target or paired renderCollection output",
+            minimumHumanAction: "rewrite the fetch to assign into a named scalar state or pair it with renderCollection before uplift",
+            proof: [`step ${eventName}#${step.order} into=${into || "(missing)"}`]
+          });
+          continue;
+        }
+        if (into && !collectionOutputs) {
+          intoState = ensureState(into, { valueType: "text", initial: "" });
+        }
+      } else if (step.op === "initSession") {
+        intoState = ids.types.session ?? ensureState("session", { valueType: "text", initial: "" });
+      }
+
+      const requestFields = [];
       const fromAlias = trimString(step?.params?.from);
       if (fromAlias) {
         const form = aliasForms.get(fromAlias) ?? null;
@@ -1089,45 +1103,32 @@ function analyzeRouteSource(world, source) {
         for (const [key, stateId] of fieldStates.entries()) {
           if (!key.startsWith(`${fromAlias}.`)) continue;
           const fieldName = key.slice(fromAlias.length + 1);
-          messages.get(commandId).fields.push({ name: fieldName, type: stateId });
+          requestFields.push({ name: fieldName, type: stateId });
         }
       }
 
-      boundaryDocs.set(boundaryId, {
-        id: boundaryId,
-        capabilities: [],
-        operations: [{
-          name: commandName,
-          kind: "adapter",
-          command: commandId,
-          route,
-          method,
-          loadingState: loadingStateId,
-          successEvent: successId,
-          failureEvent: failureId,
-          refreshRuntime: true
-        }]
+      const {
+        commandId,
+        successId
+      } = ensureRouteCommand({
+        name: commandName,
+        route,
+        method,
+        into: intoState,
+        collectionOutputs,
+        requestFields
       });
-      policyDocs.set(ids.policies[commandName], {
-        id: ids.policies[commandName],
-        subject: ids.process,
-        initialState: "idle",
-        stateField: statusStateId,
-        readyState: "ready",
-        disagreementState: "repair_required",
-        policyOutcomes: {
-          ready: "ready",
-          repair_required: "repair_required"
-        },
-        disagreementOutcomes: {}
-      });
+      processHandles.add(directEventMessageId);
 
       const triggerSteps = [];
       if (directActionEmitted !== true) {
         addSurfaceInteraction(targetSurfaceId, {
           target: "self",
           event: eventKind,
-          action: { kind: "deliver", message: directEventMessageId }
+          action: { kind: "deliver", message: directEventMessageId },
+          ...(inputReadSupported
+            ? { timing: { mode: "debounce", ms: INPUT_INTERACTION_TIMING_MS } }
+            : {})
         });
       }
       triggerSteps.push({ kind: "command", command: commandId });
@@ -1135,6 +1136,9 @@ function analyzeRouteSource(world, source) {
 
       const successSteps = [];
       for (const stepAfter of postCommandSteps) {
+        if (stepAfter?.op === "renderCollection") {
+          continue;
+        }
         if (stepAfter?.op === "clearForm") {
           const widgetId = trimString(stepAfter?.params?.widget);
           const alias = [...aliasForms.entries()].find(([, form]) => form.widgetId === widgetId)?.[0] ?? null;

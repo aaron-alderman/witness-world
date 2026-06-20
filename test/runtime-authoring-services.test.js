@@ -12,6 +12,7 @@ import {
   createAuthoringBundleServices,
   createRuntimeAuthorityServices
 } from "../src/runtime-authoring-services.js";
+import { createAuthoringProposalExecutor } from "../plugins/proposals/proposal-executor.js";
 import { todoState } from "../plugins/demo/projections.js";
 
 test("runtime authority services expose bootstrap access and target/context gates independently of bundle proposal execution", () => {
@@ -68,6 +69,7 @@ test("authoring bundle services approve todo proposals through the shared propos
     supportedHandlerSets: [],
     supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
+    createAuthoringProposalExecutor,
     mcpToolNames: () => []
   });
 
@@ -156,7 +158,9 @@ test("authoring bundle services approve asset attachment proposals through the s
     claims: [
       relation("asset.shared", "hasModuleKind", "asset"),
       relation("asset.shared", "inContext", "ctx.shared"),
-      relation("thing.shared", "inContext", "ctx.shared")
+      relation("thing.shared", "inContext", "ctx.shared"),
+      relation("aaron", "owns", "asset.shared"),
+      relation("aaron", "owns", "thing.shared")
     ],
     body: {}
   });
@@ -175,6 +179,7 @@ test("authoring bundle services approve asset attachment proposals through the s
     supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
+    createAuthoringProposalExecutor,
     mcpToolNames: () => []
   });
 
@@ -196,7 +201,12 @@ test("authoring bundle services approve asset attachment proposals through the s
     proposalId: "proposal.asset.attach.1",
     executeTarget: services.executeBootstrapProposal("aaron")
   });
-  assert.deepEqual(world.project(moduleProjectors.assets).find(row => row.id === "asset.shared")?.attachedTo, ["thing.shared"]);
+  assert.equal(
+    world.project(projectors.currentRelations).some(
+      row => row.from === "thing.shared" && row.rel === "attachedAsset" && row.to === "asset.shared"
+    ),
+    true
+  );
 
   requestBootstrapProposalCreate(world, {
     actor: "callan",
@@ -216,7 +226,12 @@ test("authoring bundle services approve asset attachment proposals through the s
     proposalId: "proposal.asset.detach.1",
     executeTarget: services.executeBootstrapProposal("aaron")
   });
-  assert.deepEqual(world.project(moduleProjectors.assets).find(row => row.id === "asset.shared")?.attachedTo, []);
+  assert.equal(
+    world.project(projectors.currentRelations).some(
+      row => row.from === "thing.shared" && row.rel === "attachedAsset" && row.to === "asset.shared"
+    ),
+    false
+  );
 });
 
 test("authoring bundle services approve shared canvas thing proposals through the shared proposal executor", async () => {
@@ -256,6 +271,7 @@ test("authoring bundle services approve shared canvas thing proposals through th
     supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
+    createAuthoringProposalExecutor,
     mcpToolNames: () => []
   });
 
@@ -338,6 +354,7 @@ test("authoring bundle services approve shared canvas batch proposals through th
     supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
+    createAuthoringProposalExecutor,
     mcpToolNames: () => []
   });
 
@@ -412,6 +429,7 @@ test("authoring bundle services approve shared canvas duplicate and removeMany p
     supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
+    createAuthoringProposalExecutor,
     mcpToolNames: () => []
   });
 
@@ -514,6 +532,7 @@ test("authoring bundle services approve shared canvas place proposals through th
     supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
+    createAuthoringProposalExecutor,
     mcpToolNames: () => []
   });
 
@@ -552,7 +571,7 @@ test("authoring bundle services approve shared canvas place proposals through th
   });
 });
 
-test("authoring bundle services allow bootstrap access before the first identity and execute proposals through the bundled executor", async () => {
+test("authoring bundle services allow bootstrap access before the first identity and report unavailable proposal execution when no executor is injected", async () => {
   const world = createWorld();
   let rows = [];
   const services = createAuthoringBundleServices({
@@ -576,8 +595,12 @@ test("authoring bundle services allow bootstrap access before the first identity
     targetId: "ctx.demo",
     body: { id: "ctx.demo", label: "Demo Context" }
   });
-  assert.equal(proposalResult.ok, true);
-  assert.equal(world.project(moduleProjectors.contexts).some(row => row.id === "ctx.demo" && row.label === "Demo Context"), true);
+  assert.deepEqual(proposalResult, {
+    ok: false,
+    status: 503,
+    reason: "proposal executor unavailable in active runtime composition"
+  });
+  assert.equal(world.project(moduleProjectors.contexts).some(row => row.id === "ctx.demo"), false);
 
   rows = [{ id: "identity.aaron", actor: "aaron" }];
   assert.deepEqual(services.requireBootstrapActor(null), {
@@ -585,6 +608,28 @@ test("authoring bundle services allow bootstrap access before the first identity
     status: 401,
     reason: "sign in to edit bootstrap state"
   });
+});
+
+test("authoring bundle services allow bootstrap access before the first identity and execute proposals through an injected executor", async () => {
+  const world = createWorld();
+  const services = createAuthoringBundleServices({
+    world,
+    backendHost: "backendHost",
+    currentIdentityIndex: () => ({ rows: [], byId: {}, byUsername: {} }),
+    supportedHandlerSets: [],
+    supportedHandlers: ["page.surface"],
+    supportedFrontendOps: [],
+    createAuthoringProposalExecutor,
+    mcpToolNames: () => []
+  });
+
+  const proposalResult = await services.executeBootstrapProposal("backendHost")({
+    targetProcess: "context.define",
+    targetId: "ctx.demo",
+    body: { id: "ctx.demo", label: "Demo Context" }
+  });
+  assert.equal(proposalResult.ok, true);
+  assert.equal(world.project(moduleProjectors.contexts).some(row => row.id === "ctx.demo" && row.label === "Demo Context"), true);
 });
 
 test("authoring bundle services approve runtime plugin install proposals through the shared executor", async () => {
@@ -620,6 +665,7 @@ test("authoring bundle services approve runtime plugin install proposals through
     supportedHandlers: ["page.surface"],
     supportedFrontendOps: [],
     supportedBackendOps: [],
+    createAuthoringProposalExecutor,
     mcpToolNames: () => [],
     getRuntimePluginCatalog: async () => ({
       packages: [{

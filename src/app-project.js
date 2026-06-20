@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadRuntimePluginRegistriesForDocs, loadWitnessAppFile } from "./dsl.js";
+import { buildOperatorWorkbenchDefinition } from "./operator-screen-specs.js";
 import { createStableAppOverlayReadFile, readStableAppSourceCache } from "./runtime-stable-source-cache.js";
 
 export const APP_MANIFEST_BASENAME = "app.wtoml";
@@ -267,6 +268,9 @@ export async function loadAppProject(entryPath, options = {}) {
     witnessDocs: loaded.witnessDocs,
     authoredDesireDocs: loaded.authoredDesireDocs,
     runtimePluginRegistries: pluginRuntime.registries ?? null,
+    operatorWorkbench: buildOperatorWorkbenchDefinition({
+      authoredDesireDocs: loaded.authoredDesireDocs
+    }),
     allDocs: loaded.allDocs,
     sourceFiles,
     importEntries: loaded.importEntries,

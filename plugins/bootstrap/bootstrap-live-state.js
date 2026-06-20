@@ -11,7 +11,7 @@ export function createBootstrapLiveStateReaders({
   buildBootstrapRuntimeIntegrationStateFn = buildBootstrapRuntimeIntegrationState
 } = {}) {
   const uniqueStrings = values => [...new Set((values || []).map(value => String(value)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const canonicalIdPolicyClasses = ["same-context-convenience", "imported-target-reference", "legacy-only-path"];
+  const canonicalIdPolicyClasses = ["same-context-convenience", "imported-target-reference"];
   return {
     authored() {
       return state.bootstrapState || {};

@@ -344,11 +344,24 @@ async function runDesktop(args) {
 }
 
 async function runOperator(args) {
-  const parsed = parseOperatorArgs(args);
-  if (!parsed.action) {
-    console.error(`Missing operator action.\n${usageText()}`);
-    process.exit(1);
+  const operatorActionSet = new Set(["backup", "export", "restore", "import"]);
+  const firstArg = args[0] ?? null;
+  if (!firstArg || firstArg.startsWith("--") || !operatorActionSet.has(firstArg)) {
+    try {
+      const exitCode = await launchDesktopProcess({
+        args,
+        cwd: process.cwd(),
+        env: process.env,
+        entryScript: path.resolve(process.cwd(), "src", "operator-workbench-main.js")
+      });
+      process.exit(exitCode ?? 0);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+    return;
   }
+  const parsed = parseOperatorArgs(args);
   const operatorContract = await resolveRuntimeOperatorPaths({
     startupMode: "operator",
     cwd: process.cwd(),
@@ -834,6 +847,7 @@ function usageText() {
     "  node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
     "  node src/cli.js tui [<app-dir|app.wtoml>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--command <text>]",
     "  node src/cli.js mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]",
+    "  node src/cli.js operator [<app-dir|app.wtoml>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
     "  node src/cli.js operator backup --world-home <path> [--label <text>] [--include-derived]",
     "  node src/cli.js operator export --world-home <path> [--label <text>]",
     "  node src/cli.js operator restore --world-home <path> --artifact <artifact-dir> [--preserve-current]",

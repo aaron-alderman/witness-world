@@ -13,7 +13,7 @@ import {
   packageConvergenceFromProject
 } from "../../src/package-authorship-world.js";
 import {
-  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
+  TRANSITIONAL_CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
   moduleProjectors
 } from "../../src/modules.js";
 import {
@@ -292,7 +292,7 @@ export function createBootstrapReadModels({
       contextualTargets,
       contextNameResolutions,
       contextNameConflicts,
-      canonicalIdPolicyClasses: [...CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES],
+      canonicalIdPolicyClasses: [...TRANSITIONAL_CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES],
       perspectives,
       stewardships,
       authority: authorityForActor(requestWorld, requestActor),

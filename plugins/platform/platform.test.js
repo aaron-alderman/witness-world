@@ -523,6 +523,42 @@ id = "ctx.target"
 actor = "system"
 id = "ctx.hidden"
 
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "frontendHost"
+target = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "frontendHost"
+target = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.hidden"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.hidden"
+name = "frontendHost"
+target = "frontendHost"
+
 [[serverRunner]]
 actor = "system"
 id = "source_server"
@@ -593,8 +629,7 @@ name = "importedRunner"
   });
   assert.deepEqual(contextView.contextNaming.canonicalIdPolicyClasses, [
     "same-context-convenience",
-    "imported-target-reference",
-    "legacy-only-path"
+    "imported-target-reference"
   ]);
   assert.equal(contextView.contextNaming.contextScopes.some(row =>
     row.context === "ctx.target"

@@ -3474,3 +3474,169 @@ test("buildSurfaceRuntimeManifest preserves the active parent chain for reused s
   const profile = manifest.surfaces.find(surface => surface.id === "Surface.ProfileSummary");
   assert.equal(profile?.parentId, "Surface.ModuleChrome");
 });
+
+test("createSurfaceInteractionRuntime debounces timed deliver interactions and uses the latest request context", async () => {
+  const listeners = new Map();
+  const node = {
+    addEventListener(eventName, listener) {
+      listeners.set(eventName, listener);
+    },
+    removeEventListener(eventName) {
+      listeners.delete(eventName);
+    }
+  };
+  const deliveries = [];
+  const runtime = createSurfaceInteractionRuntime({
+    document: {
+      getElementById(id) {
+        return id === "search-input" ? node : null;
+      }
+    },
+    window: {
+      location: { pathname: "/search", href: "http://127.0.0.1:3000/search" },
+      history: { replaceState() {}, pushState() {} },
+      addEventListener() {},
+      removeEventListener() {},
+      console: { error() {} }
+    },
+    manifest: {
+      activeSurfaceId: "Surface.Search",
+      surfaces: [
+        {
+          id: "Surface.Search",
+          runtime: {
+            processRef: "SearchFlow",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: [{
+              target: "field",
+              event: "input",
+              action: { kind: "deliver", message: "SearchRequested" },
+              timing: { mode: "debounce", ms: 20 }
+            }]
+          },
+          view: {
+            rootId: "surface-search",
+            propTargets: {},
+            interactionTargets: { field: [{ id: "search-input" }] }
+          }
+        }
+      ],
+      processWitnesses: []
+    },
+    createProcessRuntimeImpl() {
+      return {
+        deliver() {},
+        async deliverAuthored(message, _payload, options) {
+          deliveries.push({
+            message,
+            routeRequestContext: options?.routeRequestContext ?? null
+          });
+        },
+        subscribe() {
+          return () => {};
+        },
+        value() {
+          return "";
+        },
+        set() {}
+      };
+    }
+  });
+
+  const listener = listeners.get("input");
+  assert.equal(typeof listener, "function");
+  await listener({ preventDefault() {}, target: { value: "a" } });
+  await listener({ preventDefault() {}, target: { value: "ab" } });
+  await new Promise(resolve => setTimeout(resolve, 40));
+
+  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries[0].message, "SearchRequested");
+  assert.equal(typeof deliveries[0].routeRequestContext?.isCurrent, "function");
+  assert.equal(deliveries[0].routeRequestContext.isCurrent(), true);
+  runtime.destroy();
+});
+
+test("createSurfaceInteractionRuntime throttles timed deliver interactions to one authoritative request per interval", async () => {
+  const listeners = new Map();
+  const node = {
+    addEventListener(eventName, listener) {
+      listeners.set(eventName, listener);
+    },
+    removeEventListener(eventName) {
+      listeners.delete(eventName);
+    }
+  };
+  const deliveries = [];
+  const runtime = createSurfaceInteractionRuntime({
+    document: {
+      getElementById(id) {
+        return id === "search-input" ? node : null;
+      }
+    },
+    window: {
+      location: { pathname: "/search", href: "http://127.0.0.1:3000/search" },
+      history: { replaceState() {}, pushState() {} },
+      addEventListener() {},
+      removeEventListener() {},
+      console: { error() {} }
+    },
+    manifest: {
+      activeSurfaceId: "Surface.Search",
+      surfaces: [
+        {
+          id: "Surface.Search",
+          runtime: {
+            processRef: "SearchFlow",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: [{
+              target: "field",
+              event: "input",
+              action: { kind: "deliver", message: "SearchRequested" },
+              timing: { mode: "throttle", ms: 20 }
+            }]
+          },
+          view: {
+            rootId: "surface-search",
+            propTargets: {},
+            interactionTargets: { field: [{ id: "search-input" }] }
+          }
+        }
+      ],
+      processWitnesses: []
+    },
+    createProcessRuntimeImpl() {
+      return {
+        deliver() {},
+        async deliverAuthored(message, _payload, options) {
+          deliveries.push({
+            message,
+            routeRequestContext: options?.routeRequestContext ?? null
+          });
+        },
+        subscribe() {
+          return () => {};
+        },
+        value() {
+          return "";
+        },
+        set() {}
+      };
+    }
+  });
+
+  const listener = listeners.get("input");
+  assert.equal(typeof listener, "function");
+  await listener({ preventDefault() {}, target: { value: "a" } });
+  await listener({ preventDefault() {}, target: { value: "ab" } });
+  await listener({ preventDefault() {}, target: { value: "abc" } });
+  await new Promise(resolve => setTimeout(resolve, 50));
+
+  assert.equal(deliveries.length, 2);
+  assert.equal(deliveries.every(entry => entry.message === "SearchRequested"), true);
+  assert.equal(deliveries.every(entry => typeof entry.routeRequestContext?.isCurrent === "function"), true);
+  runtime.destroy();
+});

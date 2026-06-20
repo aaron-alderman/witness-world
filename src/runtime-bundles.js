@@ -185,6 +185,7 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         exactRoute("GET", "/api/runtime/backend-revisions/events", "backend.revision.events"),
         exactRoute("POST", "/api/runtime/app-snapshot/promote-current", "app.snapshot.promoteCurrent"),
         exactRoute("POST", "/api/runtime/app-snapshot/rollback-stable", "app.snapshot.rollbackStable"),
+        exactRoute("POST", "/api/runtime/app-snapshot/serve-live", "app.snapshot.serveLive"),
         exactRoute("POST", "/api/runtime/app-preview-sessions", "app.preview.session.create"),
         patternRoute("GET", /^\/api\/runtime\/app-preview-sessions\/([^/]+)$/, "app.preview.session.read", ["id"]),
         patternRoute("PATCH", /^\/api\/runtime\/app-preview-sessions\/([^/]+)\/sources$/, "app.preview.session.patchSources", ["id"]),
@@ -196,6 +197,8 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         patternRoute("GET", /^\/api\/runtime\/app-preview-sessions\/([^/]+)\/inspect$/, "app.preview.session.inspect.read", ["id"]),
         patternRoute("PATCH", /^\/api\/runtime\/app-preview-sessions\/([^/]+)\/properties$/, "app.preview.session.properties.patch", ["id"]),
         exactRoute("POST", "/api/runtime/app-sources", "app.source.write"),
+        exactRoute("POST", "/api/runtime/supervision/activate", "runtime.supervision.activate"),
+        exactRoute("POST", "/api/runtime/supervision/quiesce", "runtime.supervision.quiesce"),
         exactRoute("GET", "/api/runtime/diagnostics", "runtime.diagnostics.read"),
         exactRoute("GET", "/api/runtime/plugins", "runtime.plugins.read"),
         exactRoute("GET", "/api/runtime/plugin-reviews", "runtime.pluginReviews.read")

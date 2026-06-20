@@ -518,12 +518,12 @@ export function getOrCreateSourceryCompanionShell({
       if (targetUrl) window?.open?.(targetUrl, "_blank", "noopener");
     },
     promoteWitnessCoreGeneration: async (_generationId, url) => {
-      await postWitnessCoreGenerationAction({ window, shell, url });
-      await window?.fetch?.("/api/runtime/app-snapshot/promote-current", { method: "POST" }).catch(() => null);
+      const response = await window?.fetch?.("/api/runtime/app-snapshot/promote-current", { method: "POST" }).catch(() => null);
+      if (response && !response.ok) throw new Error(await response.text().catch(() => "Witness core promote failed"));
     },
     rollbackWitnessCoreGeneration: async (_generationId, url) => {
-      await postWitnessCoreGenerationAction({ window, shell, url });
-      await window?.fetch?.("/api/runtime/app-snapshot/rollback-stable", { method: "POST" }).catch(() => null);
+      const response = await window?.fetch?.("/api/runtime/app-snapshot/rollback-stable", { method: "POST" }).catch(() => null);
+      if (response && !response.ok) throw new Error(await response.text().catch(() => "Witness core rollback failed"));
     },
     restartWitnessCoreProcess: async url => {
       await postWitnessCoreGenerationAction({ window, shell, url });

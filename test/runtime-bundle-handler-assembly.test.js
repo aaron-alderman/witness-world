@@ -14,7 +14,7 @@ test("runtime bundle handler assembly injects diagnostics and preserves reserved
     handlerFactories: [
       {
         factory: ({ label, getRuntimeBundleHandlerDiagnostics }) => ({
-          "page.home": () => {
+          "page.surface": () => {
             capturedDiagnostics.push(getRuntimeBundleHandlerDiagnostics());
             return label;
           }
@@ -24,11 +24,11 @@ test("runtime bundle handler assembly injects diagnostics and preserves reserved
     composeHandlers: ({ availableHandlers }) => ({
       handlers: {
         __sessionStore: availableHandlers.__sessionStore,
-        "page.home": availableHandlers["page.home"]
+        "page.surface": availableHandlers["page.surface"]
       },
       diagnostics: {
         activeBundleIds: ["bundle-a"],
-        activeHandlerIds: ["page.home"],
+        activeHandlerIds: ["page.surface"],
         missingHandlerIds: [],
         extraHandlerIds: []
       }
@@ -36,17 +36,17 @@ test("runtime bundle handler assembly injects diagnostics and preserves reserved
   });
 
   assert.equal(handlers.__sessionStore, sessionStore);
-  assert.equal(typeof handlers["page.home"], "function");
-  assert.equal(handlers["page.home"](), "ok");
+  assert.equal(typeof handlers["page.surface"], "function");
+  assert.equal(handlers["page.surface"](), "ok");
   assert.deepEqual(capturedDiagnostics, [{
     activeBundleIds: ["bundle-a"],
-    activeHandlerIds: ["page.home"],
+    activeHandlerIds: ["page.surface"],
     missingHandlerIds: [],
     extraHandlerIds: []
   }]);
   assert.deepEqual(handlers.__runtimeBundleHandlerDiagnostics, {
     activeBundleIds: ["bundle-a"],
-    activeHandlerIds: ["page.home"],
+    activeHandlerIds: ["page.surface"],
     missingHandlerIds: [],
     extraHandlerIds: []
   });

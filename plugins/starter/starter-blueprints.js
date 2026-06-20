@@ -3,8 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const todoStarterBlueprintDocument = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "todo-starter-blueprint.json"), "utf8")
+const todoStarterLegacyFixtureDocument = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "todo-starter-legacy-fixture.json"), "utf8")
 );
 
 const NATIVE_TODO_STARTER = Object.freeze({
@@ -375,7 +375,7 @@ const NATIVE_TODO_STARTER = Object.freeze({
     {
       id: "home_page_route",
       path: "/",
-      serves: "native_todo_surface_root",
+      serves: "todoAppView",
       method: "GET",
       handler: "page.surface",
       rootSurface: "native_todo_surface_root",
@@ -399,7 +399,7 @@ function clone(value) {
 }
 
 export function todoStarterBlueprint() {
-  const legacy = clone(todoStarterBlueprintDocument);
+  const legacy = clone(todoStarterLegacyFixtureDocument);
   return {
     runner: legacy.runner,
     contexts: legacy.contexts,
@@ -419,13 +419,15 @@ export function todoStarterBlueprint() {
       { from: "boundaries", url: "/api/boundaries" },
       { from: "policies", url: "/api/policies" },
       { from: "surfaces", url: "/api/surfaces" },
+      { from: "contextBindings", url: "/api/context-bindings" },
       { from: "routes", url: "/api/routes" },
       { from: "serves", url: "/api/serve-mounts" }
     ],
     runtimePluginInstalls: legacy.runtimePluginInstalls,
-    // Historical widget/program/step records stay available as uplift input and
-    // inspect substrate. The maintained starter path below authors the runnable
-    // app directly through native page.surface nouns.
+    // This JSON asset is now historical substrate only. We still reuse its
+    // runner, inspect-facing widgets, and uplift fixtures, but the maintained
+    // runnable starter below is authored directly through native page.surface
+    // nouns.
     widgets: legacy.widgets,
     program: legacy.program,
     steps: legacy.steps,
@@ -436,6 +438,13 @@ export function todoStarterBlueprint() {
     backendProgramVersions: legacy.backendProgramVersions,
     backendSteps: legacy.backendSteps,
     backendActivations: legacy.backendActivations,
+    contextBindings: [
+      {
+        context: "frontend",
+        name: "todoAppView",
+        target: "native_todo_surface_root"
+      }
+    ],
     collections: clone(NATIVE_TODO_STARTER.collections),
     types: clone(NATIVE_TODO_STARTER.types),
     messages: clone(NATIVE_TODO_STARTER.messages),
@@ -445,7 +454,13 @@ export function todoStarterBlueprint() {
     policies: clone(NATIVE_TODO_STARTER.policies),
     surfaces: clone(NATIVE_TODO_STARTER.surfaces),
     routes: [
-      ...clone(NATIVE_TODO_STARTER.routes),
+      ...clone(NATIVE_TODO_STARTER.routes).map(route => ({
+        ...route,
+        servesRef: route.id === "home_page_route" ? "todoAppView" : route.servesRef,
+        rootSurfaceRef: route.id === "home_page_route" ? "todoAppView" : route.rootSurfaceRef,
+        serves: route.id === "home_page_route" ? undefined : route.serves,
+        rootSurface: route.id === "home_page_route" ? undefined : route.rootSurface
+      })),
       ...legacy.routes.filter(route => route.id !== "home_page_route")
     ],
     operatingRoutes: legacy.operatingRoutes,

@@ -46,7 +46,8 @@ import {
   surfaceHasVisibleBinding
 } from "./runtime-surface-diagnostics.js";
 import {
-  normalizeCapabilityAssets as normalizeSharedCapabilityAssets
+  normalizeCapabilityAssets as normalizeSharedCapabilityAssets,
+  normalizeInteractionTiming
 } from "./runtime-surface-runtime-shared.js";
 
 const processWitnessCatalogCache = new WeakMap();
@@ -1016,6 +1017,28 @@ export function createSurfaceInteractionRuntime({
   manifest.capabilityPreloadAssets = normalizeCapabilityPreloadAssets(manifest?.capabilityPreloadAssets);
   const declaredCollectionIds = new Set((manifest?.collections ?? []).map(entry => trimString(entry?.id)).filter(Boolean));
   const collectionValues = new Map([...declaredCollectionIds].map(id => [id, []]));
+  const setTimer = typeof window?.setTimeout === "function"
+    ? window.setTimeout.bind(window)
+    : globalThis.setTimeout.bind(globalThis);
+  const clearTimer = typeof window?.clearTimeout === "function"
+    ? window.clearTimeout.bind(window)
+    : globalThis.clearTimeout.bind(globalThis);
+  const timedInteractionAuthorities = new Map();
+  const latestWinsContextForInteraction = interactionKey => {
+    const key = trimString(interactionKey) || "interaction";
+    if (!timedInteractionAuthorities.has(key)) {
+      timedInteractionAuthorities.set(key, { version: 0 });
+    }
+    const authority = timedInteractionAuthorities.get(key);
+    authority.version += 1;
+    const version = authority.version;
+    return {
+      interactionKey: key,
+      isCurrent() {
+        return authority.version === version;
+      }
+    };
+  };
   const ensureDeclaredCollection = id => {
     const nextId = trimString(id);
     if (!nextId) return null;
@@ -2162,10 +2185,36 @@ export function createSurfaceInteractionRuntime({
       }
       resolveIssue(`surface-runtime:missing-process:${surface.id}`, { phase: "refresh" });
       resolveIssue(`surface-runtime:missing-capabilities:${surface.id}`, { phase: "refresh" });
-      for (const interaction of surface?.runtime?.interactions ?? []) {
+      for (const [interactionIndex, interaction] of (surface?.runtime?.interactions ?? []).entries()) {
         const targetKey = trimString(interaction?.target);
         const eventName = trimString(interaction?.event) || "click";
         const action = interaction?.action && typeof interaction.action === "object" ? interaction.action : null;
+        const timingDeclared = Boolean(
+          interaction
+          && typeof interaction === "object"
+          && Object.prototype.hasOwnProperty.call(interaction, "timing")
+        );
+        const timing = timingDeclared ? normalizeInteractionTiming(interaction?.timing) : null;
+        const interactionTimingIssueId = `surface-runtime:invalid-interaction-timing:${surface.id}:${targetKey || "self"}:${eventName}:${interactionIndex}`;
+        if (timingDeclared && (!timing || action?.kind !== "deliver")) {
+          reportIssue({
+            id: interactionTimingIssueId,
+            severity: "error",
+            phase: "refresh",
+            kind: "invalid-interaction-timing",
+            message: "Surface interaction timing is only supported for deliver actions with { mode, ms }",
+            surfaceId: surface.id,
+            details: {
+              event: eventName,
+              targetKey: targetKey ?? null,
+              timing: cloneInspectionValue(interaction?.timing ?? null),
+              actionKind: trimString(action?.kind)
+            },
+            correlationId: issueLedger.nextCorrelationId("refresh")
+          });
+          continue;
+        }
+        resolveIssue(interactionTimingIssueId, { phase: "refresh" });
         const targets = targetKey ? (surface?.view?.interactionTargets?.[targetKey] ?? []) : [];
         if (!targets.length) {
           reportIssue({
@@ -2196,19 +2245,26 @@ export function createSurfaceInteractionRuntime({
             continue;
           }
           resolveIssue(`surface-runtime:missing-interaction-target:${surface.id}:${targetKey || "self"}:${trimString(target?.id) || "unresolved"}`, { phase: "refresh" });
-      const listener = async event => {
-        if (action.kind === "navigate") {
-          const href = trimString(action.href);
-          if (href) {
-            event.preventDefault();
-                window.location.assign(href);
-              }
+          let timerId = null;
+          let pendingTimedEvent = null;
+          let throttleCooling = false;
+          const interactionKey = `${surface.id}:${targetKey || "self"}:${eventName}:${interactionIndex}`;
+          const logTimedInteractionFailure = error => {
+            window?.console?.error?.("surface interaction runtime timed interaction failed", error);
+          };
+          const executeAction = async (event, routeRequestContext = null) => {
+            if (action.kind === "navigate") {
+              const href = trimString(action.href);
+              if (href) window.location.assign(href);
               return;
             }
             if (action.kind === "deliver" && trimString(action.message)) {
-              event.preventDefault();
               if (typeof processRuntime.deliverAuthored === "function") {
-                await processRuntime.deliverAuthored(action.message);
+                await processRuntime.deliverAuthored(
+                  action.message,
+                  null,
+                  routeRequestContext ? { routeRequestContext } : undefined
+                );
               } else {
                 processRuntime.deliver(action.message);
               }
@@ -2216,13 +2272,77 @@ export function createSurfaceInteractionRuntime({
               return;
             }
             if (action.kind === "setState" && trimString(action.state)) {
-              event.preventDefault();
               processRuntime.set(action.state, eventValueFromSpec(action.value ?? {}, event, processRuntime));
               await requestSyncRouteAndRefresh("set-state");
             }
           };
+          const armThrottleWindow = () => {
+            timerId = setTimer(() => {
+              timerId = null;
+              if (pendingTimedEvent) {
+                const nextEvent = pendingTimedEvent;
+                pendingTimedEvent = null;
+                const routeRequestContext = latestWinsContextForInteraction(interactionKey);
+                void executeAction(nextEvent, routeRequestContext).catch(logTimedInteractionFailure);
+                armThrottleWindow();
+                return;
+              }
+              throttleCooling = false;
+            }, timing?.ms ?? 0);
+          };
+          const scheduleTimedAction = event => {
+            if (!timing) {
+              return executeAction(event);
+            }
+            if (timing.mode === "debounce") {
+              pendingTimedEvent = event;
+              if (timerId != null) clearTimer(timerId);
+              timerId = setTimer(() => {
+                timerId = null;
+                const nextEvent = pendingTimedEvent;
+                pendingTimedEvent = null;
+                const routeRequestContext = latestWinsContextForInteraction(interactionKey);
+                void executeAction(nextEvent, routeRequestContext).catch(logTimedInteractionFailure);
+              }, timing.ms);
+              return Promise.resolve();
+            }
+            pendingTimedEvent = event;
+            if (throttleCooling) return Promise.resolve();
+            throttleCooling = true;
+            const nextEvent = pendingTimedEvent;
+            pendingTimedEvent = null;
+            const routeRequestContext = latestWinsContextForInteraction(interactionKey);
+            void executeAction(nextEvent, routeRequestContext).catch(logTimedInteractionFailure);
+            armThrottleWindow();
+            return Promise.resolve();
+          };
+          const listener = async event => {
+            if (action.kind === "navigate") {
+              const href = trimString(action.href);
+              if (href) {
+                event.preventDefault();
+                window.location.assign(href);
+              }
+              return;
+            }
+            if (action.kind === "deliver" && trimString(action.message)) {
+              event.preventDefault();
+              await scheduleTimedAction(event);
+              return;
+            }
+            if (action.kind === "setState" && trimString(action.state)) {
+              event.preventDefault();
+              await executeAction(event);
+            }
+          };
           node.addEventListener(eventName, listener);
-          disposers.push(() => node.removeEventListener(eventName, listener));
+          disposers.push(() => {
+            if (timerId != null) clearTimer(timerId);
+            timerId = null;
+            pendingTimedEvent = null;
+            throttleCooling = false;
+            node.removeEventListener(eventName, listener);
+          });
         }
       }
     }

@@ -1,6 +1,6 @@
 # Package and Plugin Authorship Model
 
-Status: draft design for Group A A4.
+Status: shipped baseline plus remaining cleanup for Group A A4/A5.
 
 ## Why This Exists
 
@@ -11,17 +11,24 @@ The runtime already has a local plugin package contract:
 - `runtimePlugin.install`, `runtimePlugin.remove`, and `runtimePlugin.reconcile` are real witnessed mutations
 - proposal fallback exists for runtime-plugin, MCP, capability, program, and generic authoring writes
 
-What does not exist yet is a first-class authored model for the reusable unit itself.
+What no longer holds is the old assumption that the reusable unit exists only
+as a filesystem-manifest object.
 
-Today a plugin package is still primarily a filesystem-manifest object. That is good enough for discovery and activation, but it is not good enough for:
+The authored model now exists, but it is still being tightened and clarified.
+The remaining work is not "invent package authorship from scratch"; it is to
+make the authored truth and the compatibility seams line up cleanly.
 
-- contextual naming
-- concurrent revisions
-- explicit merge pressure
-- MCP-mediated authorship
-- inspectable package revision history
+The remaining gaps are:
 
-This document defines the authored model that should own those concerns.
+- filesystem compatibility material still exists beside authored package truth
+- runtime-native import/export language is not yet as crisp as the authored
+  package model itself
+- coexistence and convergence are inspectable, but still need continued product
+  workflow hardening
+- docs and operator guidance still need periodic cleanup to keep pace with the
+  shipped baseline
+
+This document describes the authored model that now owns those concerns.
 
 ## Decision Summary
 
@@ -49,7 +56,8 @@ The model must fit the system that already exists:
   - operator overlays
   - rejected or incompatible packages
 
-That current filesystem package lane stays as a compatibility import/export seam until runtime-native package loading exists.
+That current filesystem package lane remains a compatibility import/export seam.
+It is no longer the primary authorship truth.
 
 ## First-Class Authored Nouns
 
@@ -216,7 +224,7 @@ They must use the same shared authority rules already being established elsewher
 - proposal fallback when the actor is authenticated but lacks write authority
 - the same execution helpers for approved proposals and direct writes
 
-The package lifecycle should therefore grow route/process pairs such as:
+The package lifecycle now grows through route/process pairs such as:
 
 - `package.define`
 - `packageRevision.publish`
@@ -230,7 +238,7 @@ Filesystem writes under `plugins/` are not the primary authorship act. They are 
 
 MCP is the explicit authorship seam for reusable packages.
 
-The first tool family should be:
+The current tool family is:
 
 - `package.create`
 - `package.patch.emit`

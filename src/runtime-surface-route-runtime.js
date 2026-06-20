@@ -355,6 +355,7 @@ export function createBrowserRouteInvoker(window, {
     actorState = null,
     request = {},
     binding = null,
+    requestContext = null,
     runtime = null
   } = {}) => {
     if (!window || typeof window.fetch !== "function") {
@@ -389,6 +390,20 @@ export function createBrowserRouteInvoker(window, {
     const response = await window.fetch(resolvedRoute, init);
     const text = typeof response.text === "function" ? await response.text() : "";
     const body = parseRouteResponseBody(response, text);
+    const payload = normalizeRouteResponsePayload(body, {
+      ok: response.ok,
+      status: response.status,
+      method: normalizedMethod,
+      route: resolvedRoute
+    });
+    if (requestContext && typeof requestContext.isCurrent === "function" && !requestContext.isCurrent()) {
+      return {
+        status: "ignored",
+        ignored: true,
+        collections: null,
+        payload
+      };
+    }
     const collectionOutputs = response.ok
       ? resolveRouteCollectionOutputs(body, binding?.op?.collectionOutputs)
       : null;
@@ -398,12 +413,7 @@ export function createBrowserRouteInvoker(window, {
     return {
       status: response.ok ? "success" : "failure",
       collections: collectionOutputs,
-      payload: normalizeRouteResponsePayload(body, {
-        ok: response.ok,
-        status: response.status,
-        method: normalizedMethod,
-        route: resolvedRoute
-      })
+      payload
     };
   };
 }

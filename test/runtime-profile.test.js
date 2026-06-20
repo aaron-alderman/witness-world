@@ -15,11 +15,18 @@ import {
 
 function applyMinimalPageDsl(world) {
   applyWitnessToml(world, `
-[[widget]]
+[[surface]]
 actor = "adam"
-id = "home_widget"
-kind = "Page"
+id = "home_surface"
+surfaceKind = "app-root"
+children = ["home_surface_title"]
 props = { title = "Witness Home" }
+
+[[surface]]
+actor = "adam"
+id = "home_surface_title"
+surfaceKind = "text"
+props = { text = "Witness Home" }
 
 [[serverRunner]]
 actor = "adam"
@@ -27,19 +34,14 @@ id = "server_runner"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
 
-[[frontendProgram]]
-actor = "adam"
-id = "home_program"
-rootWidget = "home_widget"
-
 [[route]]
 actor = "adam"
 id = "home_route"
 path = "/"
 serves = "page"
 method = "GET"
-handler = "page.home"
-params = { rootWidget = "home_widget", frontendProgram = "home_program" }
+handler = "page.surface"
+rootSurface = "home_surface"
 
 [[serve]]
 actor = "adam"
@@ -1225,9 +1227,9 @@ test("runtime diagnostics endpoint exposes truthful minimal composition", async 
       },
       {
         class: "generic-host",
-        bundleId: null,
+        bundleId: "bundle-core-runtime",
         pluginId: null,
-        handlerId: "page.home",
+        handlerId: "page.surface",
         note: "Runtime behavior is owned by shared host/runtime code."
       }
     ]);

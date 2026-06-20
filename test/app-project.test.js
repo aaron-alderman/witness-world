@@ -76,6 +76,78 @@ test("app project loads authored runtime plugin registries for later DESIRE appl
   assert.equal(appProject.runtimePluginRegistries?.runtimeDeclarationRegistry?.has("sql_table"), true);
 });
 
+test("app project builds operator workbench definitions from authored operator screen RVM", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-screen-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_screen_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_dataset trace_dataset {
+  title "Trace Dataset"
+  provider provenance
+  row_filter_action open-source
+  primary_action none
+}
+
+operator_screen trace {
+  title "Trace"
+  subtitle "Authored trace screen"
+  shape table-detail
+  shortcut F5
+  default_section trace_rows
+  section trace_summary
+  section trace_rows
+}
+
+operator_screen_section trace_summary {
+  screen trace
+  title "Summary"
+  kind detail
+  data_source inspect
+  collapsible false
+  priority 1
+}
+
+operator_screen_section trace_rows {
+  screen trace
+  title "Rows"
+  kind table
+  dataset trace_dataset
+  collapsed true
+  priority 2
+}
+
+operator_setup shell {
+  screen trace
+  screen references
+  shortcut F5 trace
+  default_screen trace
+}
+`);
+  try {
+    const appProject = await loadAppProject(appRoot, {
+      runtimePluginIds: ["plugin.operator-workbench"]
+    });
+    assert.equal(appProject.operatorWorkbench.datasets.some(dataset => dataset.id === "trace_dataset" && dataset.provider === "provenance"), true);
+    const traceScreen = appProject.operatorWorkbench.screens.find(screen => screen.id === "trace");
+    assert.equal(Boolean(traceScreen), true);
+    assert.equal(traceScreen.datasetId, null);
+    assert.equal(traceScreen.defaultSectionId, "trace_rows");
+    assert.deepEqual(traceScreen.sectionIds, ["trace_summary", "trace_rows"]);
+    assert.deepEqual(traceScreen.sections.map(section => section.id), ["trace_summary", "trace_rows"]);
+    assert.deepEqual(traceScreen.sections.map(section => section.kind), ["detail", "table"]);
+    assert.equal(traceScreen.sections[0].collapsible, false);
+    assert.equal(traceScreen.sections[1].collapsed, true);
+    assert.equal(appProject.operatorWorkbench.defaultScreen, "trace");
+    assert.equal(appProject.operatorWorkbench.shortcuts.get("F5"), "trace");
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("shell target selection auto-selects single targets and honors explicit overrides", async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-app-targets-"));
   const appRoot = path.join(tempRoot, "apps", "sample");

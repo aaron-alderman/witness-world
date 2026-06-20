@@ -1,6 +1,7 @@
 import {
   requestBoundaryDefine,
   requestBootstrapContextDefine,
+  requestBootstrapContextBindingCreate,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
   requestCollectionDefine,
@@ -192,6 +193,14 @@ export function applyTodoStarter(world, {
       backendHost,
       body: rows.surfaces
     }), "starter native surfaces");
+  }
+
+  for (const binding of rows.contextBindings || []) {
+    requiredOk(requestBootstrapContextBindingCreate(world, {
+      actor,
+      backendHost,
+      body: binding
+    }), `context binding ${binding?.context || "unknown"}:${binding?.name || "unknown"}`);
   }
 
   for (const step of rows.operatingSteps || []) {

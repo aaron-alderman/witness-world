@@ -23,7 +23,7 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
       compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget", bridgeClass: "canonical-id-sugar" }],
       governanceRoutes: [{ id: "governanceRoute:POST /api/widgets", handler: "widgets.create", governanceMode: "proposal-fallback" }],
       proposalTargetGovernance: [{ id: "governanceProposalTarget:widget.define", targetProcess: "widget.define", governanceMode: "proposal-fallback" }],
-      canonicalIdPolicyClasses: ["same-context-convenience", "imported-target-reference", "legacy-only-path"],
+      canonicalIdPolicyClasses: ["same-context-convenience", "imported-target-reference"],
       contextualTargets: [{ id: "widget.one", context: "ctx.one" }],
       contextScopes: [{ context: "ctx.one", sourceKind: "local", target: "widget.one", name: "homePage" }],
       contextExports: [{ context: "ctx.one", name: "homePage", target: "widget.one" }],
@@ -112,7 +112,7 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
     compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.importedVisibleTarget", bridgeClass: "canonical-id-sugar" }],
     governanceRoutes: [{ id: "governanceRoute:POST /api/widgets", handler: "widgets.create", governanceMode: "proposal-fallback" }],
     proposalTargetGovernance: [{ id: "governanceProposalTarget:widget.define", targetProcess: "widget.define", governanceMode: "proposal-fallback" }],
-    canonicalIdPolicyClasses: ["same-context-convenience", "imported-target-reference", "legacy-only-path"],
+    canonicalIdPolicyClasses: ["same-context-convenience", "imported-target-reference"],
     contextualTargets: [{ id: "widget.two", context: "ctx.two" }, { id: "widget.source", context: "ctx.source" }, { id: "widget.hidden", context: "ctx.hidden" }],
     contextScopes: [
       { context: "ctx.two", sourceKind: "local", target: "widget.two", name: "homePage" },
@@ -198,7 +198,7 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
   assert.deepEqual(readers.contextExportRows("ctx.two"), [{ context: "ctx.two", name: "homePage", target: "widget.two" }]);
   assert.equal(readers.contextNameResolutionRows("ctx.two").length, 3);
   assert.deepEqual(readers.contextNameConflictRows("ctx.two"), [{ context: "ctx.two", name: "collision", targets: ["widget.source", "widget.two"], sourceKinds: ["import", "local"], rows: [] }]);
-  assert.deepEqual(readers.canonicalIdPolicyClasses(), ["same-context-convenience", "imported-target-reference", "legacy-only-path"]);
+  assert.deepEqual(readers.canonicalIdPolicyClasses(), ["same-context-convenience", "imported-target-reference"]);
   assert.equal(readers.explainContextualName("ctx.two", "homePage").target, "widget.two");
   assert.equal(readers.explainContextualName("ctx.two", "sourcePage").resolution, "import");
   assert.equal(readers.explainContextualName("ctx.two", "collision").ok, false);

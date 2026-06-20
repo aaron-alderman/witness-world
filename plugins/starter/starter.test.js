@@ -37,8 +37,9 @@ test("starter blueprint helper returns the authored todo starter as a fresh clon
   assert.equal(second.requestPlan.some(step => step.url === "/api/frontend-programs"), false);
   assert.equal(second.requestPlan.some(step => step.url === "/api/frontend-steps"), false);
   assert.equal(second.requestPlan.some(step => step.url === "/api/surfaces"), true);
+  assert.equal(second.requestPlan.some(step => step.url === "/api/context-bindings"), true);
   assert.equal(second.routes.find(row => row.id === "home_page_route")?.handler, "page.surface");
-  assert.equal(second.routes.find(row => row.id === "home_page_route")?.rootSurface, "native_todo_surface_root");
+  assert.equal(second.routes.find(row => row.id === "home_page_route")?.rootSurfaceRef, "todoAppView");
   assert.equal(serialized.includes('"guidanceTarget"'), true);
   assert.equal(serialized.includes('"tutorialTarget"'), false);
   assert.equal(serialized.includes('"surface-card surface-stack session-panel"'), true);

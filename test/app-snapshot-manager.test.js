@@ -70,8 +70,159 @@ test("AppSnapshotManager.detectChangedPaths marks files dirty when stat metadata
   assert.deepEqual([...changed], ["C:/tmp/app/shell.rvm"]);
 });
 
+test("AppSnapshotManager applySourceEdits uses witness-core bridge for persisted published writes when available", async () => {
+  const mkdirCalls = [];
+  const writeFileCalls = [];
+  const bridgeCalls = [];
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    generationBridge: {
+      async statSource(input) {
+        bridgeCalls.push({ kind: "stat", ...structuredClone(input) });
+        return { path: input.path, exists: true, hash: "sha256:baseline", size: 12 };
+      },
+      async writeSource(input) {
+        bridgeCalls.push({ kind: "write", ...structuredClone(input) });
+        return { path: input.path, hash: "sha256:test", size: String(input.content ?? "").length };
+      }
+    },
+    fsModule: {
+      async mkdir(target) {
+        mkdirCalls.push(String(target));
+      },
+      async writeFile(target, content) {
+        writeFileCalls.push([String(target), String(content)]);
+      }
+    }
+  });
+  manager.consumeDirtyAndRebuild = async () => ({ appRevision: 3 });
+
+  const result = await manager.applySourceEdits([{
+    path: "app/shell.rvm",
+    content: "(surface ShellUpdated)"
+  }], {
+    persist: true,
+    reason: "app.source.write",
+    correlation: {
+      sessionId: "session-1",
+      surfaceId: "surface-1",
+      actor: "tester"
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.changedSources, ["app/shell.rvm"]);
+  assert.deepEqual(bridgeCalls, [{
+    kind: "stat",
+    path: "app/shell.rvm",
+    correlation: {
+      sessionId: "session-1",
+      surfaceId: "surface-1",
+      actor: "tester"
+    }
+  }, {
+    kind: "write",
+    path: "app/shell.rvm",
+    content: "(surface ShellUpdated)",
+    expectedHash: "sha256:baseline",
+    reason: "app.source.write",
+    previewOnly: false,
+    correlation: {
+      sessionId: "session-1",
+      surfaceId: "surface-1",
+      actor: "tester"
+    }
+  }]);
+  assert.deepEqual(mkdirCalls, []);
+  assert.deepEqual(writeFileCalls, []);
+});
+
+test("AppSnapshotManager applySourceEdits falls back to local fs when witness-core bridge write fails", async () => {
+  const mkdirCalls = [];
+  const writeFileCalls = [];
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    logger: { warn() {} },
+    generationBridge: {
+      async writeSource() {
+        throw new Error("bridge offline");
+      }
+    },
+    fsModule: {
+      async mkdir(target) {
+        mkdirCalls.push(String(target));
+      },
+      async writeFile(target, content) {
+        writeFileCalls.push([String(target), String(content)]);
+      }
+    }
+  });
+  manager.consumeDirtyAndRebuild = async () => ({ appRevision: 4 });
+
+  const result = await manager.applySourceEdits([{
+    path: "app/shell.rvm",
+    content: "(surface LocalFallback)"
+  }], {
+    persist: true
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(mkdirCalls, ["C:\\tmp\\app"]);
+  assert.deepEqual(writeFileCalls, [["C:\\tmp\\app\\shell.rvm", "(surface LocalFallback)"]]);
+});
+
+test("AppSnapshotManager applySourceEdits fails closed when witness-core published writes are required", async () => {
+  const mkdirCalls = [];
+  const writeFileCalls = [];
+  const manager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    logger: { warn() {} },
+    requireGenerationBridgeForPublishedWrites: true,
+    generationBridge: {
+      async statSource() {
+        return { path: "app/shell.rvm", exists: true, hash: "sha256:baseline", size: 20 };
+      },
+      async writeSource() {
+        const error = new Error("witness core unavailable");
+        error.status = 503;
+        error.code = "WITNESS_CORE_UNAVAILABLE";
+        throw error;
+      }
+    },
+    fsModule: {
+      async mkdir(target) {
+        mkdirCalls.push(String(target));
+      },
+      async writeFile(target, content) {
+        writeFileCalls.push([String(target), String(content)]);
+      }
+    }
+  });
+  manager.consumeDirtyAndRebuild = async () => ({ appRevision: 4 });
+
+  await assert.rejects(
+    manager.applySourceEdits([{
+      path: "app/shell.rvm",
+      content: "(surface NoFallback)"
+    }], {
+      persist: true
+    }),
+    error => error?.status === 503 && error?.code === "WITNESS_CORE_UNAVAILABLE"
+  );
+
+  assert.deepEqual(mkdirCalls, []);
+  assert.deepEqual(writeFileCalls, []);
+});
+
 test("AppPreviewSessionManager stores overlay edits without publishing to disk", async () => {
   const readFileCalls = [];
+  const patchCalls = [];
   const previewManager = new AppPreviewSessionManager({
     appSnapshotManager: {
       manifestPath: "C:/tmp/app.wtoml",
@@ -87,6 +238,12 @@ test("AppPreviewSessionManager stores overlay edits without publishing to disk",
       async readFile(target) {
         readFileCalls.push(String(target));
         return "(surface Shell)";
+      }
+    },
+    generationBridge: {
+      async patchSource(input) {
+        patchCalls.push(structuredClone(input));
+        return { path: input.path, hash: "sha256:test", size: String(input.content ?? "").length };
       }
     }
   });
@@ -119,6 +276,17 @@ test("AppPreviewSessionManager stores overlay edits without publishing to disk",
   assert.equal(internalSession.overlaySources.get(resolvedSourcePath), "(surface ShellUpdated)");
   assert.equal(rebuildCalls, 1);
   assert.deepEqual(readFileCalls, []);
+  assert.deepEqual(patchCalls, [{
+    path: "app/shell.rvm",
+    content: "(surface ShellUpdated)",
+    reason: "preview.overlay.patch",
+    previewOnly: true,
+    correlation: {
+      sessionId: null,
+      surfaceId: null,
+      actor: null
+    }
+  }]);
 });
 
 test("AppPreviewSessionManager marks sessions stale when the active app revision changes", () => {
@@ -140,6 +308,134 @@ test("AppPreviewSessionManager marks sessions stale when the active app revision
 
   assert.equal(stale.status, "stale");
   assert.match(stale.invalidReason, /expected app revision 4, active revision 5/);
+});
+
+test("AppPreviewSessionManager hydrates persisted preview sessions from witness core and rebuilds their preview world", async () => {
+  const reads = [];
+  const previewManager = new AppPreviewSessionManager({
+    appSnapshotManager: {
+      manifestPath: "C:/tmp/app.wtoml",
+      appRoot: "C:/tmp",
+      runtimeProfile: "full",
+      runtimePluginIds: [],
+      env: {},
+      getActiveSnapshot() {
+        return { appRevision: 7, world: { allWitnesses() { return []; } } };
+      }
+    },
+    generationBridge: {
+      async readPreviewSession({ id }) {
+        reads.push(id);
+        return {
+          id,
+          baseAppRevision: 7,
+          previewRevision: 2,
+          status: "active",
+          invalidReason: null,
+          createdAt: "1",
+          updatedAt: "2",
+          changedSources: ["app/content.wtoml"],
+          overlaySources: [{
+            file: "C:/tmp/app/content.wtoml",
+            content: 'text = "Live Core Preview"'
+          }],
+          candidates: [],
+          candidateResults: [],
+          correlation: {
+            sessionId: "session-1",
+            surfaceId: "surface-1",
+            actor: "tester"
+          },
+          generationSequence: 2,
+          currentGenerationId: "preview-session-1-g2",
+          lastGoodGenerationId: "preview-session-1-g2",
+          latestGenerationId: "preview-session-1-g2",
+          latestGenerationState: "green_local",
+          generationHistory: [{
+            id: "preview-session-1-g2",
+            state: "green_local",
+            previewRevision: 2,
+            createdAt: "2",
+            sourcePaths: ["app/content.wtoml"]
+          }]
+        };
+      }
+    }
+  });
+  let rebuildCalls = 0;
+  previewManager.rebuildPreviewSnapshot = async (_sessionLike, { overlaySources, previewRevision } = {}) => {
+    rebuildCalls += 1;
+    return {
+      world: {
+        allWitnesses() {
+          return [];
+        }
+      },
+      appProject: { sourceFiles: [] },
+      sourceIndex: [],
+      compiledUnits: new Map(),
+      previewRevision,
+      overlaySources
+    };
+  };
+
+  const hydrated = await previewManager.hydrateSession("preview-session-1");
+  const resolved = previewManager.resolveRenderSession("preview-session-1");
+
+  assert.equal(reads[0], "preview-session-1");
+  assert.equal(rebuildCalls, 1);
+  assert.equal(hydrated.previewRevision, 2);
+  assert.equal(resolved.ok, true);
+  assert.equal(resolved.session.previewRevision, 2);
+  assert.equal(previewManager.readSession("preview-session-1")?.generation.latestState, "green_local");
+});
+
+test("AppPreviewSessionManager persists stale preview session invalidation back to witness core", async () => {
+  let activeRevision = 9;
+  const writes = [];
+  const previewManager = new AppPreviewSessionManager({
+    appSnapshotManager: {
+      appRoot: "C:/tmp",
+      getActiveSnapshot() {
+        return { appRevision: activeRevision };
+      }
+    },
+    generationBridge: {
+      async readPreviewSession() {
+        return {
+          id: "preview-stale",
+          baseAppRevision: 7,
+          previewRevision: 1,
+          status: "active",
+          invalidReason: null,
+          createdAt: "1",
+          updatedAt: "1",
+          changedSources: [],
+          overlaySources: [],
+          candidates: [],
+          candidateResults: [],
+          correlation: { sessionId: null, surfaceId: null, actor: null },
+          generationSequence: 1,
+          currentGenerationId: "preview-stale-g1",
+          lastGoodGenerationId: "preview-stale-g1",
+          latestGenerationId: "preview-stale-g1",
+          latestGenerationState: "green_local",
+          generationHistory: []
+        };
+      },
+      async writePreviewSession({ session }) {
+        writes.push(structuredClone(session));
+        return session;
+      }
+    }
+  });
+
+  const hydrated = await previewManager.hydrateSession("preview-stale", { rebuild: false });
+
+  assert.equal(hydrated.status, "stale");
+  assert.match(hydrated.invalidReason, /expected app revision 7, active revision 9/);
+  await previewManager.flushSessionPersistence("preview-stale");
+  assert.equal(writes.at(-1)?.status, "stale");
 });
 
 test("AppPreviewSessionManager mirrors preview revisions into witness core generations and preserves last good state on failure", async () => {
@@ -866,6 +1162,57 @@ test("AppSnapshotManager serves the stable snapshot when witness core reports a 
   }).mode, "stable");
 });
 
+test("AppSnapshotManager obeys explicit witness core serving modes over local fallback preference", () => {
+  const manager = createManager({
+    async stat() {
+      return { mtimeMs: 10, size: 100 };
+    }
+  });
+
+  manager.activeSnapshot = {
+    appRevision: 5,
+    changedSources: ["app/live.rvm"],
+    world: {}
+  };
+  manager.stableSnapshot = {
+    appRevision: 2,
+    changedSources: ["app/stable.rvm"],
+    world: {}
+  };
+  manager.servingPreference = "stable";
+
+  const explicitLive = manager.getServingSnapshot({
+    witnessCoreStatus: {
+      serving: {
+        requestedMode: "live",
+        effectiveMode: "live",
+        reason: "requested-live"
+      }
+    }
+  });
+  const explicitStable = manager.getServingSnapshot({
+    witnessCoreStatus: {
+      serving: {
+        requestedMode: "stable",
+        effectiveMode: "stable",
+        reason: "requested-stable"
+      }
+    }
+  });
+
+  assert.equal(explicitLive.appRevision, 5);
+  assert.equal(explicitStable.appRevision, 2);
+  assert.equal(manager.servingState({
+    witnessCoreStatus: {
+      serving: {
+        requestedMode: "stable",
+        effectiveMode: "stable",
+        reason: "requested-stable"
+      }
+    }
+  }).effectiveMode, "stable");
+});
+
 test("AppSnapshotManager promote and rollback controls move the serving pointer intentionally", () => {
   const manager = createManager({
     async stat() {
@@ -893,6 +1240,11 @@ test("AppSnapshotManager promote and rollback controls move the serving pointer 
   const promoted = manager.promoteActiveSnapshot();
   assert.equal(promoted.appRevision, 3);
   assert.equal(manager.getStableSnapshot().appRevision, 3);
+  assert.equal(manager.getServingSnapshot({
+    witnessCoreStatus: { latestState: "green_local" }
+  }).appRevision, 3);
+  const resumed = manager.requestServeLive();
+  assert.equal(resumed.mode, "live");
   assert.equal(manager.getServingSnapshot({
     witnessCoreStatus: { latestState: "green_local" }
   }).appRevision, 3);

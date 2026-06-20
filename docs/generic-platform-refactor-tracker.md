@@ -35,7 +35,7 @@ Goal: remove implementation-detail leaks where generic platform/runtime code dep
   Notes: Change “Todo Starter” / `create-todo-starter` semantics to neutral starter-blueprint semantics, with title and behavior supplied by the selected provider.
 
 - [ ] Move starter blueprint naming, plugin installs, and runner defaults behind provider data.
-  Files: [plugins/starter/runtime.js](/C:/Users/aaron/Documents/world/plugins/starter/runtime.js), [plugins/starter/starter-blueprints.js](/C:/Users/aaron/Documents/world/plugins/starter/starter-blueprints.js), [plugins/starter/todo-starter-blueprint.json](/C:/Users/aaron/Documents/world/plugins/starter/todo-starter-blueprint.json)
+  Files: [plugins/starter/runtime.js](/C:/Users/aaron/Documents/world/plugins/starter/runtime.js), [plugins/starter/starter-blueprints.js](/C:/Users/aaron/Documents/world/plugins/starter/starter-blueprints.js), [plugins/starter/todo-starter-legacy-fixture.json](/C:/Users/aaron/Documents/world/plugins/starter/todo-starter-legacy-fixture.json)
   Notes: The todo starter can remain a first-party blueprint, but bootstrap must not treat it as the platform default shape.
 
 - [ ] Remove todo/private-notes storage fields from generic server-runner authoring.
