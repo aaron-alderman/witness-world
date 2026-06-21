@@ -20,6 +20,7 @@ The canonical public frontend model in constrained mode is:
 - `boundary`
 - `policy`
 - `capability`
+- `computeModule`
 
 Canonical page hosting is `page.surface`.
 Legacy `page.home`, `widget`, `frontendProgram`, and `frontendStep` remain
@@ -35,6 +36,12 @@ surface.
 Lazy route-local transport is a runtime concern by default. Constrained
 authoring should stay natural and high-level unless the capability matrix proves
 that additional authored load hints are genuinely required.
+Route/state equivalence is pathway-proven through canonical `page.surface`
+routes that synchronize authored route state with browser URL state.
+
+AssemblyScript compute-module source and smoke fixtures are authored through
+MCP package materialized files. Direct app-source or file mutation is not a
+supported constrained authoring bypass.
 
 ## Hard boundaries
 

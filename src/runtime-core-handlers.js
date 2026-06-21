@@ -1763,16 +1763,6 @@ export function createCoreRuntimeBundleHandlers({
         sendJson(res, 409, runtimeDrainingPayload(appContext));
         return;
       }
-      sendJson(res, 403, blockedDirectMutationResponse({
-        attemptedAuthoringPath: APP_SOURCE_WRITE_PATH,
-        goal: "mutate app sources through the runtime host",
-        minimumHumanAction: "use MCP compute-module package authoring",
-        proof: [
-          "direct app-source writes are disabled for this AssemblyScript module tranche",
-          "AssemblyScript source and smoke fixtures must be persisted as package materialized files"
-        ]
-      }));
-      return;
       const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
       if (!snapshotManager) {
         sendJson(res, 404, { error: "app source updates unavailable" });
@@ -1810,6 +1800,16 @@ export function createCoreRuntimeBundleHandlers({
           return;
         }
       }
+      sendJson(res, 403, blockedDirectMutationResponse({
+        attemptedAuthoringPath: APP_SOURCE_WRITE_PATH,
+        goal: "mutate app sources through the runtime host",
+        minimumHumanAction: "use MCP compute-module package authoring",
+        proof: [
+          "direct app-source writes are disabled for this AssemblyScript module tranche",
+          "AssemblyScript source and smoke fixtures must be persisted as package materialized files"
+        ]
+      }));
+      return;
       try {
         const result = await snapshotManager.applySourceEdits(body?.edits ?? [], {
           persist: true,

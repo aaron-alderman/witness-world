@@ -15,7 +15,8 @@ import {
   requestComputeModuleSourceMarkDeleted,
   requestComputeModuleSmokeTestUpsert,
   requestComputeModuleSmokeTestMarkDeleted,
-  requestComputeModuleSmokeTestRun
+  requestComputeModuleSmokeTestRun,
+  requestPackagePatchSourceUpsert
 } from "./authoring-core-processes.js";
 import { bundles } from "./runtime.js";
 import { executeAuthoringCoreProposalTarget } from "./authoring-core-proposal-targets.js";
@@ -51,6 +52,7 @@ const AUTHORING_CORE_HANDLER_IDS = [
   "packageRevision.create",
   "packageRevision.publish",
   "packagePatch.create",
+  "packagePatch.source.upsert",
   "packageNamespace.create",
   "packageDependency.create",
   "packageTransformer.create",
@@ -94,6 +96,7 @@ const AUTHORING_CORE_PROCESS_EXPORTS = [
   "requestPackageRevisionDefine",
   "requestPackageRevisionPublish",
   "requestPackagePatchDefine",
+  "requestPackagePatchSourceUpsert",
   "requestPackageNamespaceDefine",
   "requestPackageDependencyDefine",
   "requestPackageTransformerDefine",
@@ -420,6 +423,7 @@ test("authoring-core plugin owns generic authoring routes and handlers", async (
   assert.equal(bundle.routes.some(route => route.path === "/api/package-revisions" && route.handler === "packageRevision.create"), true);
   assert.equal(bundle.routes.some(route => String(route.pattern) === String(/^\/api\/package-revisions\/([^/]+)\/publish$/) && route.handler === "packageRevision.publish"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/package-patches" && route.handler === "packagePatch.create"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/package-patches/source" && route.handler === "packagePatch.source.upsert"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/package-namespaces" && route.handler === "packageNamespace.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/package-dependencies" && route.handler === "packageDependency.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/package-transformers" && route.handler === "packageTransformer.create"), true);
@@ -861,6 +865,87 @@ test("authoring-core package process helpers resolve contextual refs and reject 
   assert.equal(ambiguous.ok, false);
   assert.equal(ambiguous.status, 400);
   assert.match(ambiguous.error, /ambiguously/i);
+});
+
+test("authoring-core package patch source upsert accepts canonical WTOML packagePatch docs", () => {
+  const world = packageAuthoringRefWorld();
+
+  const result = requestPackagePatchSourceUpsert(world, {
+    actor: "aaron",
+    body: {
+      context: "ctx.target",
+      packageRef: "importedPackage",
+      revisionRef: "importedRevision",
+      sourceLanguage: "wtoml",
+      content: `
+[[packagePatch]]
+path = "plugins/source/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "next" }
+`
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.packagePatches.length, 1);
+  assert.equal(result.packagePatches[0].package, "package.plugin.source");
+  assert.equal(result.packagePatches[0].revision, "packageRevision.plugin.source.v1");
+  assert.equal(result.packagePatches[0].path, "plugins/source/runtime.js");
+  assert.equal(result.packagePatches[0].sourceLanguage, "js");
+  assert.match(result.packagePatches[0].id, /^packagePatch:[0-9a-f]{64}$/);
+  assert.equal(world.project(moduleProjectors.packagePatchIndex).byRevision["packageRevision.plugin.source.v1"].length, 1);
+
+  const idempotent = requestPackagePatchSourceUpsert(world, {
+    actor: "aaron",
+    body: {
+      context: "ctx.target",
+      packageRef: "importedPackage",
+      revisionRef: "importedRevision",
+      sourceLanguage: "wtoml",
+      content: `
+[[packagePatch]]
+path = "plugins/source/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "next" }
+`
+    }
+  });
+  assert.equal(idempotent.ok, true);
+  assert.equal(idempotent.status, 200);
+  assert.equal(idempotent.witnesses.length, 0);
+  assert.equal(world.project(moduleProjectors.packagePatchIndex).byRevision["packageRevision.plugin.source.v1"].length, 1);
+});
+
+test("authoring-core package patch source upsert accepts canonical RVM source as a replacement patch", () => {
+  const world = packageAuthoringRefWorld();
+
+  const result = requestPackagePatchSourceUpsert(world, {
+    actor: "aaron",
+    body: {
+      context: "ctx.target",
+      packageRef: "importedPackage",
+      revisionRef: "importedRevision",
+      sourceLanguage: "rvm",
+      path: "app/views/source.rvm",
+      content: `
+view SourceHome {
+  kind page
+  prop title = "Source"
+}
+`
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.packagePatches.length, 1);
+  assert.equal(result.packagePatches[0].package, "package.plugin.source");
+  assert.equal(result.packagePatches[0].revision, "packageRevision.plugin.source.v1");
+  assert.equal(result.packagePatches[0].path, "app/views/source.rvm");
+  assert.equal(result.packagePatches[0].operation, "replace");
+  assert.equal(result.packagePatches[0].sourceLanguage, "rvm");
+  assert.match(result.packagePatches[0].body.content, /view SourceHome/);
 });
 
 test("authoring-core compute module helper defines AssemblyScript host operations", () => {

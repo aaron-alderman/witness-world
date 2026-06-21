@@ -36,6 +36,8 @@ test("mcp-only authoring policy exposes plugin.authoring as the canonical write 
   assert.equal(policy.allowedHandlerIds.includes("frontend.upliftLegacy"), true);
   assert.equal(policy.allowedHandlerIds.includes("computeModule.source.upsert"), true);
   assert.equal(policy.allowedHandlerIds.includes("computeModuleSmokeTest.run"), true);
+  assert.equal(policy.allowedHandlerIds.includes("packagePatch.create"), false);
+  assert.equal(policy.allowedHandlerIds.includes("packagePatch.source.upsert"), true);
   assert.equal(policy.publicMcpActions.includes("collection.create"), true);
   assert.equal(policy.publicMcpActions.includes("process.create"), true);
   assert.equal(policy.publicMcpActions.includes("type.create"), true);
@@ -46,6 +48,8 @@ test("mcp-only authoring policy exposes plugin.authoring as the canonical write 
   assert.equal(policy.publicMcpActions.includes("frontend.upliftLegacy"), true);
   assert.equal(policy.publicMcpActions.includes("computeModule.source.upsert"), true);
   assert.equal(policy.publicMcpActions.includes("computeModuleSmokeTest.run"), true);
+  assert.equal(policy.publicMcpActions.includes("packagePatch.create"), false);
+  assert.equal(policy.publicMcpActions.includes("packagePatch.source.upsert"), true);
   assert.equal(policy.publicMcpActions.includes("widget.create"), false);
   assert.equal(policy.legacyMcpActions.includes("frontendProgram.create"), false);
   assert.equal(policy.proposalAccess, "read_only");
@@ -71,6 +75,15 @@ test("authoring capability matrix reports page.surface pathway semantics separat
     "computeModuleSmokeTest.upsert",
     "computeModuleSmokeTest.markDeleted",
     "computeModuleSmokeTest.run"
+  ]);
+  assert.deepEqual(matrix.publicAuthoringConcepts.package.publicActions, [
+    "package.create",
+    "packageRevision.create",
+    "packageRevision.publish",
+    "packagePatch.source.upsert",
+    "packageNamespace.create",
+    "packageDependency.create",
+    "packageTransformer.create"
   ]);
   assert.equal(matrix.publicAuthoringConcepts.frontendLegacyUplift.publicAction, "frontend.upliftLegacy");
   assert.equal(pageSurface.status, "supported");

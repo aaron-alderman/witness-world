@@ -14,6 +14,20 @@ async function writeFile(targetPath, contents) {
   await fs.writeFile(targetPath, contents, "utf8");
 }
 
+function createManager(fsOverrides = {}) {
+  return new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full",
+    devMode: false,
+    watchEnabled: false,
+    fsModule: {
+      ...fs,
+      ...fsOverrides
+    }
+  });
+}
+
 test("AppSnapshotManager.ensureFresh skips filesystem probing in explicit dirty-input mode when nothing is pending", async () => {
   let statCalls = 0;
   const manager = new AppSnapshotManager({

@@ -37,8 +37,10 @@ function sanitizeSegment(value, fallback = "plugin") {
 function extractRelativeModuleSpecifiers(sourceText) {
   const specifiers = new Set();
   const patterns = [
-    /\b(?:import|export)\b[\s\S]*?\bfrom\s*["']([^"'`]+)["']/g,
-    /\bimport\s*["']([^"'`]+)["']/g,
+    /(?:^|[\r\n;])\s*import\b[\s\S]*?\bfrom\s*["']([^"'`]+)["']/g,
+    /(?:^|[\r\n;])\s*export\b\s+\*[\s\S]*?\bfrom\s*["']([^"'`]+)["']/g,
+    /(?:^|[\r\n;])\s*export\b\s+\{[\s\S]*?\}\s+from\s*["']([^"'`]+)["']/g,
+    /(?:^|[\r\n;])\s*import\b\s*["']([^"'`]+)["']/g,
     /\bimport\s*\(\s*["']([^"'`]+)["']\s*\)/g
   ];
   for (const pattern of patterns) {
@@ -111,6 +113,32 @@ function runtimeRelativeAssetSourceIds(sourceId, sourceText) {
     return [...new Set(assets)];
   }
   return [];
+}
+
+function cacheBridgeOperation(invoker) {
+  const cache = new Map();
+  return args => {
+    const key = JSON.stringify(args ?? null);
+    if (cache.has(key)) return cache.get(key);
+    const pending = Promise.resolve().then(() => invoker(args));
+    cache.set(key, pending);
+    return pending;
+  };
+}
+
+function createMemoizedGenerationBridge(generationBridge = null) {
+  if (!generationBridge || typeof generationBridge !== "object") return generationBridge;
+  const memoized = { ...generationBridge };
+  if (typeof generationBridge.readSource === "function") {
+    memoized.readSource = cacheBridgeOperation(args => generationBridge.readSource(args));
+  }
+  if (typeof generationBridge.statSource === "function") {
+    memoized.statSource = cacheBridgeOperation(args => generationBridge.statSource(args));
+  }
+  if (typeof generationBridge.listSourceDirectory === "function") {
+    memoized.listSourceDirectory = cacheBridgeOperation(args => generationBridge.listSourceDirectory(args));
+  }
+  return memoized;
 }
 
 async function materializePluginDirectoryFromWitnessCore(
@@ -501,6 +529,7 @@ export async function loadRuntimePluginModules({
   scratchRoot = null,
   requireGenerationBridgeForCanonicalImports = false
 } = {}) {
+  const memoizedGenerationBridge = createMemoizedGenerationBridge(generationBridge);
   const bundleOverrides = Object.create(null);
   const pluginStates = Object.create(null);
   const failures = [];
@@ -529,7 +558,7 @@ export async function loadRuntimePluginModules({
     }
     try {
       const materialized = await materializePluginDirectoryFromWitnessCore(pluginPackage, baseState.resolvedPath, {
-        generationBridge,
+        generationBridge: memoizedGenerationBridge,
         cwd,
         fsModule,
         scratchRoot,

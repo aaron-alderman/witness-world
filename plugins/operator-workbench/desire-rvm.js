@@ -1,3 +1,4 @@
+const VALID_THEME_MODES = new Set(["ansi16"]);
 const VALID_RIGHT_SHAPES = new Set(["detail", "list-detail", "table-detail"]);
 const VALID_LEFT_SHAPES = new Set(["list", "table", "tree"]);
 const VALID_SHAPES = new Set([...VALID_RIGHT_SHAPES, ...VALID_LEFT_SHAPES]);
@@ -96,6 +97,18 @@ function parseOperatorDataset(form) {
   };
 }
 
+function parseOperatorTheme(form) {
+  const parsed = pluginParsedData(form);
+  if (parsed) return parsed;
+  const bodyLines = formBodyLines(form);
+  return {
+    id: formName(form),
+    title: readSimpleValue(bodyLines, "title"),
+    mode: readSimpleValue(bodyLines, "mode") ?? "ansi16",
+    palette: readSimpleValue(bodyLines, "palette") ?? "terminal-dark"
+  };
+}
+
 function parseOperatorScreen(form) {
   const parsed = pluginParsedData(form);
   if (parsed) return parsed;
@@ -178,6 +191,7 @@ function parseOperatorOverlay(form) {
     width: readSimpleValue(bodyLines, "width"),
     height: readSimpleValue(bodyLines, "height"),
     resizable: readSimpleValue(bodyLines, "resizable"),
+    closeIdsOnOpen: readRepeatedSimpleValues(bodyLines, "close_on_open").map(value => String(value)),
     scroll: readRepeatedSimpleValues(bodyLines, "scroll").map(value => String(value))
   };
 }
@@ -257,6 +271,16 @@ function parseOperatorViewport(form) {
     overlays,
     bindings
   };
+}
+
+function validateOperatorTheme(form) {
+  const payload = parseOperatorTheme(form);
+  if (!VALID_THEME_MODES.has(String(payload.mode))) {
+    throw new Error(`operator_theme ${formName(form)} mode must be one of ${[...VALID_THEME_MODES].join(", ")}`);
+  }
+  if (!cleanValue(payload.palette)) {
+    throw new Error(`operator_theme ${formName(form)} palette is required`);
+  }
 }
 
 function validateOperatorDataset(form) {
@@ -358,6 +382,11 @@ function validateOperatorOverlay(form) {
   if (payload.resizable !== null && payload.resizable !== undefined && typeof payload.resizable !== "boolean") {
     throw new Error(`operator_overlay ${formName(form)} resizable must be true or false`);
   }
+  for (const overlayId of payload.closeIdsOnOpen ?? []) {
+    if (!String(overlayId ?? "").trim()) {
+      throw new Error(`operator_overlay ${formName(form)} close_on_open entries must be non-empty`);
+    }
+  }
 }
 
 function validateOperatorHandle(form) {
@@ -451,6 +480,15 @@ function validateOperatorViewport(form) {
   }
 }
 
+function serializeOperatorTheme(payload) {
+  const lines = [`operator_theme ${payload.id} {`];
+  if (payload.title) lines.push(`  title "${payload.title}"`);
+  if (payload.mode) lines.push(`  mode ${payload.mode}`);
+  if (payload.palette) lines.push(`  palette ${payload.palette}`);
+  lines.push("}");
+  return lines.join("\n");
+}
+
 function serializeOperatorDataset(payload) {
   const lines = [
     `operator_dataset ${payload.id} {`,
@@ -529,6 +567,7 @@ function serializeOperatorOverlay(payload) {
   if (payload.width !== undefined && payload.width !== null) lines.push(`  width ${payload.width}`);
   if (payload.height !== undefined && payload.height !== null) lines.push(`  height ${payload.height}`);
   if (payload.resizable !== undefined && payload.resizable !== null) lines.push(`  resizable ${payload.resizable ? "true" : "false"}`);
+  for (const overlayId of payload.closeIdsOnOpen ?? []) lines.push(`  close_on_open ${overlayId}`);
   for (const axis of payload.scroll ?? []) lines.push(`  scroll ${axis}`);
   lines.push("}");
   return lines.join("\n");
@@ -579,6 +618,23 @@ function serializeOperatorViewport(payload) {
   for (const binding of payload.bindings ?? []) lines.push(`  binding ${binding.trigger} ${binding.verb} ${binding.target}`);
   lines.push("}");
   return lines.join("\n");
+}
+
+function normalizeOperatorTheme(node, context) {
+  const values = parseOperatorTheme(node.payload);
+  return {
+    nodes: [],
+    runtimeResiduals: [
+      context.createRuntimeDeclarationResidual("operator_theme", {
+        id: values.id,
+        title: values.title ?? values.id,
+        mode: values.mode ?? "ansi16",
+        palette: values.palette ?? "terminal-dark"
+      }, values.id, {
+        pluginId: "plugin.operator-workbench"
+      })
+    ]
+  };
 }
 
 function normalizeOperatorDataset(node, context) {
@@ -691,6 +747,7 @@ function normalizeOperatorOverlay(node, context) {
         width: values.width ?? null,
         height: values.height ?? null,
         resizable: values.resizable ?? null,
+        closeIdsOnOpen: Array.isArray(values.closeIdsOnOpen) ? values.closeIdsOnOpen : [],
         scroll: Array.isArray(values.scroll) ? values.scroll : []
       }, values.id, {
         pluginId: "plugin.operator-workbench"
@@ -776,6 +833,13 @@ function normalizeOperatorViewport(node, context) {
 }
 
 export const operatorWorkbenchRvmForms = Object.freeze([
+  Object.freeze({
+    kind: "operator_theme",
+    parse: parseOperatorTheme,
+    serialize: serializeOperatorTheme,
+    validate: validateOperatorTheme,
+    normalize: normalizeOperatorTheme
+  }),
   Object.freeze({
     kind: "operator_dataset",
     parse: parseOperatorDataset,

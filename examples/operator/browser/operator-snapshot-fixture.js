@@ -1,4 +1,4 @@
-{
+const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
   "mode": "detached",
   "path": "root",
   "focus": {
@@ -27,7 +27,12 @@
     "focusedPane": "left",
     "inspectorTab": "inspect",
     "rightScreenMode": "custom-screen",
+    "openOverlayIds": [],
+    "overlayStateById": {},
+    "activeOverlayId": null,
     "helpOpen": false,
+    "contextMenuOpen": false,
+    "contextMenuContext": null,
     "rightSectionIndex": 0,
     "rightSectionCursorsByScreenId": {},
     "collapsedSectionIdsByScreenId": {},
@@ -35,6 +40,126 @@
     "lastOutput": "",
     "lastStatus": "info",
     "displaySettings": {}
+  },
+  "contextMenu": {
+    "frameTitle": "Context",
+    "title": "Context",
+    "subject": "Session",
+    "placement": "center",
+    "marginX": 2,
+    "marginY": 1,
+    "titleInsetX": 2,
+    "width": 24,
+    "height": 8,
+    "bodyInsetX": 2,
+    "bodyInsetY": 1,
+    "contentWidth": 20,
+    "contentHeight": 6,
+    "lineCount": 4,
+    "visibleLineCount": 4,
+    "overflowLineCount": 0,
+    "lines": [
+      "1. Edit :: pane:left",
+      "2. Change Color :: surface theme",
+      "3. Rename :: Session",
+      "4. Clone :: Session"
+    ],
+    "visibleLines": [
+      "1. Edit :: pane:left",
+      "2. Change Color :: …",
+      "3. Rename :: Session",
+      "4. Clone :: Session"
+    ],
+    "context": {
+      "pane": "left",
+      "rowIndex": 0,
+      "rowType": "container",
+      "rowLabel": "Session",
+      "targetId": "session",
+      "primaryCommand": "open 1"
+    },
+    "items": [
+      {
+        "id": "edit",
+        "label": "Edit",
+        "shortcut": "1",
+        "detail": "pane:left",
+        "enabled": true,
+        "action": {
+          "kind": "hook",
+          "hook": "edit",
+          "subject": "Session",
+          "context": {
+            "pane": "left",
+            "rowIndex": 0,
+            "rowType": "container",
+            "rowLabel": "Session",
+            "targetId": "session",
+            "primaryCommand": "open 1"
+          }
+        }
+      },
+      {
+        "id": "change-color",
+        "label": "Change Color",
+        "shortcut": "2",
+        "detail": "surface theme",
+        "enabled": true,
+        "action": {
+          "kind": "hook",
+          "hook": "change-color",
+          "subject": "Session",
+          "context": {
+            "pane": "left",
+            "rowIndex": 0,
+            "rowType": "container",
+            "rowLabel": "Session",
+            "targetId": "session",
+            "primaryCommand": "open 1"
+          }
+        }
+      },
+      {
+        "id": "rename",
+        "label": "Rename",
+        "shortcut": "3",
+        "detail": "Session",
+        "enabled": true,
+        "action": {
+          "kind": "hook",
+          "hook": "rename",
+          "subject": "Session",
+          "context": {
+            "pane": "left",
+            "rowIndex": 0,
+            "rowType": "container",
+            "rowLabel": "Session",
+            "targetId": "session",
+            "primaryCommand": "open 1"
+          }
+        }
+      },
+      {
+        "id": "clone",
+        "label": "Clone",
+        "shortcut": "4",
+        "detail": "Session",
+        "enabled": true,
+        "action": {
+          "kind": "hook",
+          "hook": "clone",
+          "subject": "Session",
+          "context": {
+            "pane": "left",
+            "rowIndex": 0,
+            "rowType": "container",
+            "rowLabel": "Session",
+            "targetId": "session",
+            "primaryCommand": "open 1"
+          }
+        }
+      }
+    ]
   },
   "screens": {
     "activeScreenId": "inspect",
@@ -121,6 +246,13 @@
     "id": "operator_default",
     "title": "Default Browser Workbench",
     "theme": "ansi16",
+    "themeSpec": {
+      "id": "ansi16",
+      "title": "ANSI 16",
+      "mode": "ansi16",
+      "palette": "terminal-dark",
+      "origin": "authored"
+    },
     "screenId": "operator_trace",
     "leftScreenId": "operator_left",
     "topSurfaceId": "top_status",
@@ -169,8 +301,29 @@
     ]
   },
   "topPane": {
+    "frameTitle": "Status",
     "title": "Operator Workbench",
     "subtitle": "global",
+    "titleLine": "Operator Workbench :: global",
+    "navigationLine": "NAV [root] [preview ready] [Inspect]",
+    "statusLine": "MODE preview-read",
+    "metaChips": [
+      {
+        "id": "viewport",
+        "type": "viewport",
+        "label": "viewport:operator_default"
+      },
+      {
+        "id": "theme",
+        "type": "theme",
+        "label": "theme:ansi16"
+      },
+      {
+        "id": "pane",
+        "type": "pane",
+        "label": "pane:left"
+      }
+    ],
     "navigation": {
       "chips": [
         {
@@ -214,6 +367,131 @@
       "selectedIndex": 0
     }
   },
+  "bottomPane": {
+    "frameTitle": "Commands",
+    "commandText": ": screen inspect",
+    "hintText": "F1 help | Right click menu | Drag handles resize"
+  },
+  "helpOverlay": {
+    "frameTitle": "Help",
+    "context": "Operator Navigation | Authored",
+    "summary": "Move the active row, then Enter to open Session.",
+    "placement": "center",
+    "marginX": 2,
+    "marginY": 1,
+    "titleInsetX": 2,
+    "width": 56,
+    "height": 10,
+    "bodyInsetX": 2,
+    "bodyInsetY": 1,
+    "contentWidth": 52,
+    "contentHeight": 8,
+    "lineCount": 4,
+    "visibleLineCount": 4,
+    "overflowLineCount": 0,
+    "lines": [
+      "F1 opens the authored help surface.",
+      "Right click opens the centered context menu surface.",
+      "Drag pane handles to resize the authored split layout.",
+      "Active right pane: Session."
+    ],
+    "visibleLines": [
+      "F1 opens the authored help surface.",
+      "Right click opens the centered context menu surface.",
+      "Drag pane handles to resize the authored split layout.",
+      "Active right pane: Session."
+    ]
+  },
+  "overlays": [
+    {
+      "frameTitle": "Help",
+      "title": "help_overlay",
+      "placement": "center",
+      "marginX": 2,
+      "marginY": 1,
+      "titleInsetX": 2,
+      "width": 56,
+      "height": 10,
+      "bodyInsetX": 2,
+      "bodyInsetY": 1,
+      "contentWidth": 52,
+      "contentHeight": 8,
+      "lineCount": 4,
+      "visibleLineCount": 4,
+      "overflowLineCount": 0,
+      "lines": [
+        "F1 opens the authored help surface.",
+        "Right click opens the centered context menu surface.",
+        "Drag pane handles to resize the authored split layout.",
+        "Active right pane: Session."
+      ],
+      "visibleLines": [
+        "F1 opens the authored help surface.",
+        "Right click opens the centered context menu surface.",
+        "Drag pane handles to resize the authored split layout.",
+        "Active right pane: Session."
+      ],
+      "id": "help_overlay",
+      "kind": "doc_view",
+      "policy": {
+        "closeIdsOnOpen": [
+          "context_menu"
+        ]
+      },
+      "resizable": true,
+      "scroll": [],
+      "origin": "authored",
+      "pluginId": "plugin.operator-workbench",
+      "source": {
+        "file": "examples/operator/browser/operator.workbench.rvm",
+        "line": 22
+      }
+    },
+    {
+      "frameTitle": "Context",
+      "title": "Context",
+      "placement": "center",
+      "marginX": 2,
+      "marginY": 1,
+      "titleInsetX": 2,
+      "width": 24,
+      "height": 8,
+      "bodyInsetX": 2,
+      "bodyInsetY": 1,
+      "contentWidth": 20,
+      "contentHeight": 6,
+      "lineCount": 4,
+      "visibleLineCount": 4,
+      "overflowLineCount": 0,
+      "lines": [
+        "1. Edit :: pane:left",
+        "2. Change Color :: surface theme",
+        "3. Rename :: Session",
+        "4. Clone :: Session"
+      ],
+      "visibleLines": [
+        "1. Edit :: pane:left",
+        "2. Change Color :: â€¦",
+        "3. Rename :: Session",
+        "4. Clone :: Session"
+      ],
+      "id": "context_menu",
+      "kind": "menu",
+      "policy": {
+        "closeIdsOnOpen": [
+          "help_overlay"
+        ]
+      },
+      "resizable": false,
+      "scroll": [],
+      "origin": "authored",
+      "pluginId": "plugin.operator-workbench",
+      "source": {
+        "file": "examples/operator/browser/operator.workbench.rvm",
+        "line": 15
+      }
+    }
+  ],
   "leftPane": {
     "mode": "tree",
     "screenId": "operator_left",
@@ -413,4 +691,10 @@
       "provenance": true
     }
   }
+};
+
+export function createOperatorWorkbenchSnapshotFixture() {
+  return structuredClone(OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE);
 }
+
+export { OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE };

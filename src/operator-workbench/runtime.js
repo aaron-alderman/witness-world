@@ -441,15 +441,17 @@ function extractCanvasSelectionText(buffer = [], selection = null) {
 
 function topPaneCanvasModel(snapshot = {}, cols = 80, reservedRight = 0) {
   const contentWidth = Math.max(1, cols - Math.max(0, Number(reservedRight) || 0));
+  const line1 = snapshot?.topPane?.titleLine
+    || `${snapshot?.topPane?.title || "Operator TUI"} :: ${snapshot?.topPane?.subtitle || "global shell"}`;
   const navLabels = (snapshot?.topPane?.navigation?.chips || []).map((chip, index) => {
     const selected = index === (snapshot?.topPane?.navigation?.selectedIndex ?? 0) && snapshot?.ui?.focusedPane === "top";
     return selected ? `<${chip.label || "chip"}>` : `[${chip.label || "chip"}]`;
   });
-  const line1 = `${snapshot?.topPane?.title || "Operator TUI"} :: ${snapshot?.topPane?.subtitle || "global shell"}`;
-  const line2 = `NAV ${navLabels.join(" ")}`.trim();
-  const line3 = snapshot?.focus?.active
-    ? `FOCUS ${snapshot.focus.kind}:${snapshot.focus.id}`
-    : `MODE ${(snapshot?.preview?.available ? "preview-read" : "repo-self")}`;
+  const line2 = snapshot?.topPane?.navigationLine || `NAV ${navLabels.join(" ")}`.trim();
+  const line3 = snapshot?.topPane?.statusLine
+    || (snapshot?.focus?.active
+      ? `FOCUS ${snapshot.focus.kind}:${snapshot.focus.id}`
+      : `MODE ${(snapshot?.preview?.available ? "preview-read" : "repo-self")}`);
   return [
     fitCanvasLine(line1, contentWidth),
     fitCanvasLine(line2, contentWidth),
@@ -510,14 +512,17 @@ function rightPaneCanvasModel(snapshot = {}, width = 72) {
   let activeLineIndex = 0;
   const sections = (model.sections || []).length ? model.sections : [model];
   sections.forEach((section, sectionIndex) => {
-    const stateText = [
+    const stateText = section.stateSummary || [
       section.kind || "list",
       `rows=${(section.rows || []).length}`,
       section.collapsed ? "collapsed" : "expanded",
       section.actionable === false ? "info" : "actionable"
     ].join(" | ");
+    const toggleLabel = section.toggleLabel || (section.collapsible === false
+      ? "[ ]"
+      : (section.collapsed ? "[+]" : "[-]"));
     const headerLines = buildUnicodeBoxLines([
-      `${sectionIndex === activeSectionIndex ? "▶" : " "} ${section.title || "Section"} ${section.collapsible === false ? "[ ]" : (section.collapsed ? "[+]" : "[-]")}`,
+      `${sectionIndex === activeSectionIndex ? "▶" : " "} ${section.title || "Section"} ${toggleLabel}`,
       stateText
     ], Math.max(20, innerWidth), sectionIndex === activeSectionIndex ? "double" : "single").map(line => `${contentPad}${line}`);
     hitLines.sectionHeaders.push(lines.length);
@@ -1036,6 +1041,12 @@ function sourceTabContentLines(lines = []) {
 }
 
 function helpCopyForSnapshot(snapshot = null) {
+  if (snapshot?.helpOverlay?.context || snapshot?.helpOverlay?.summary) {
+    return {
+      context: snapshot?.helpOverlay?.context || "Navigation",
+      summary: snapshot?.helpOverlay?.summary || "Move the active row, then Enter to trigger its primary action."
+    };
+  }
   const pane = snapshot?.ui?.focusedPane || "left";
   if (pane === "right") {
     const section = snapshot?.rightPane?.activeSection ?? null;
@@ -1134,17 +1145,20 @@ function renderScreenSectionHtml(section = {}, {
   active = false,
   cursor = 0
 } = {}) {
-  const rowCount = (section.rows || []).length;
   const collapsed = Boolean(section.collapsed);
-  const detailStateText = `${section.kind || "detail"} | rows=${rowCount}${collapsed ? " | collapsed" : " | expanded"}`;
-  const listStateText = `${section.kind || "list"} | rows=${rowCount}${collapsed ? " | collapsed" : " | expanded"}`;
+  const stateText = section.stateSummary || [
+    section.kind || "list",
+    `rows=${(section.rows || []).length}`,
+    collapsed ? "collapsed" : "expanded",
+    section.actionable === false ? "info" : "actionable"
+  ].join(" | ");
   const detailHtml = renderSectionDetailHtml(section.detailLines || [], section.emptyMessage || "(no rows)");
   if ((section.kind || "list") === "detail") {
     return `
       <section class="operator-screen-section" data-screen-section-index="${escapeHtml(String(section.index ?? 0))}" data-active="${active ? "true" : "false"}" data-collapsed="${collapsed ? "true" : "false"}">
         <div class="operator-screen-section-head">
           <strong>${escapeHtml(section.title || "Detail")}</strong>
-          <span>${escapeHtml(detailStateText)}</span>
+          <span>${escapeHtml(stateText)}</span>
         </div>
         ${collapsed ? "" : `<div class="operator-source-excerpt">${detailHtml}</div>`}
       </section>
@@ -1154,7 +1168,7 @@ function renderScreenSectionHtml(section = {}, {
     <section class="operator-screen-section" data-screen-section-index="${escapeHtml(String(section.index ?? 0))}" data-active="${active ? "true" : "false"}" data-collapsed="${collapsed ? "true" : "false"}">
       <div class="operator-screen-section-head">
         <strong>${escapeHtml(section.title || "Section")}</strong>
-        <span>${escapeHtml(listStateText)}</span>
+        <span>${escapeHtml(stateText)}</span>
       </div>
       ${collapsed ? "" : `<div class="operator-source-layout">
         <div class="operator-source-list">
@@ -1172,18 +1186,17 @@ function renderInteractiveScreenSectionHtml(section = {}, {
   active = false,
   cursor = 0
 } = {}) {
-  const rowCount = (section.rows || []).length;
   const collapsed = Boolean(section.collapsed);
   const actionable = Boolean(section.actionable);
-  const stateText = [
+  const stateText = section.stateSummary || [
     section.kind || "list",
-    `rows=${rowCount}`,
+    `rows=${(section.rows || []).length}`,
     collapsed ? "collapsed" : "expanded",
     actionable ? "actionable" : "info"
   ].join(" | ");
-  const toggleLabel = section.collapsible === false
+  const toggleLabel = section.toggleLabel || (section.collapsible === false
     ? "[ ]"
-    : (collapsed ? "[+]" : "[-]");
+    : (collapsed ? "[+]" : "[-]"));
   const detailHtml = renderSectionDetailHtml(section.detailLines || [], section.emptyMessage || "(no rows)");
   const headerLines = buildAsciiBoxLines([
     `${section.title || "Section"} ${toggleLabel}`,

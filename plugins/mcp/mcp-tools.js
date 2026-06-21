@@ -159,7 +159,7 @@ const TOOL_DEFINITIONS = [
     title: "World Read",
     description: "Read bootstrap state, witnesses, source, world graph, process projections, contextual naming state, authored package coexistence, or authoring capability state.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "computeModules", "computeModuleSources", "computeModuleSmokeTests", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "frontendLegacyUplift", "capabilityRevisionHistory", "authoringMatrix"] },
+      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "serverRunners", "routes", "servedRoutes", "computeModules", "computeModuleSources", "computeModuleSmokeTests", "contextNaming", "packageCoexistence", "packageConvergence", "packageApplyPreview", "capabilityLegacyMigration", "frontendLegacyUplift", "capabilityRevisionHistory", "authoringMatrix"] },
       id: { type: "string" },
       context: { type: "string" },
       name: { type: "string" },
@@ -182,11 +182,12 @@ const TOOL_DEFINITIONS = [
         "frontendLegacyUplift",
         "capabilityRevisionHistory"
       ]);
+      const projectedRuntimeViews = new Set(["serverRunners", "routes", "servedRoutes"]);
       const targets = args?.view === "processRun" && args?.runId
         ? [args.runId]
         : args?.view === "contextNaming"
           ? [args?.id, args?.target].filter(Boolean)
-          : (args?.view === "computeModules" || args?.view === "computeModuleSources" || args?.view === "computeModuleSmokeTests") && args?.id
+          : (projectedRuntimeViews.has(args?.view) || args?.view === "computeModules" || args?.view === "computeModuleSources" || args?.view === "computeModuleSmokeTests") && args?.id
             ? [args.id]
             : packageViews.has(args?.view) && args?.id
               ? [args.id]
@@ -237,6 +238,51 @@ const TOOL_DEFINITIONS = [
             path: "/api/source",
             query: { file: args.sourceFile || "" }
           });
+        case "serverRunners":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("serverRunners read requires projected world access");
+          }
+          try {
+            const rows = appContext.project(moduleProjectors.serverRunners) ?? [];
+            return jsonToolResult({
+              serverRunners: args.id ? rows.filter(row => row.id === args.id) : rows
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "routes":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("routes read requires projected world access");
+          }
+          try {
+            const rows = appContext.project(moduleProjectors.routes) ?? [];
+            return jsonToolResult({
+              routes: args.id ? rows.filter(row => row.id === args.id || row.path === args.id) : rows
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "servedRoutes":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("servedRoutes read requires projected world access");
+          }
+          try {
+            const rows = appContext.project(moduleProjectors.servedRoutes) ?? [];
+            return jsonToolResult({
+              servedRoutes: args.id ? rows.filter(row => row.id === args.id || row.route === args.id || row.serverRunner === args.id) : rows
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
         case "computeModules":
           if (typeof appContext?.project !== "function") {
             return errorToolResult("computeModules read requires projected world access");
@@ -502,7 +548,7 @@ const TOOL_DEFINITIONS = [
           "package.create",
           "packageRevision.create",
           "packageRevision.publish",
-          "packagePatch.create",
+          "packagePatch.source.upsert",
           "packageNamespace.create",
           "packageDependency.create",
           "packageTransformer.create",
@@ -629,8 +675,8 @@ const TOOL_DEFINITIONS = [
             params: { id: body.id || "" },
             body
           });
-        case "packagePatch.create":
-          return runJsonHandler(callHandler, { handler: "packagePatch.create", method: "POST", path: "/api/package-patches", body });
+        case "packagePatch.source.upsert":
+          return runJsonHandler(callHandler, { handler: "packagePatch.source.upsert", method: "POST", path: "/api/package-patches/source", body });
         case "packageNamespace.create":
           return runJsonHandler(callHandler, { handler: "packageNamespace.create", method: "POST", path: "/api/package-namespaces", body });
         case "packageDependency.create":

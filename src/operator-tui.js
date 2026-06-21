@@ -560,6 +560,144 @@ function fitTableCell(value, width) {
   return `${text.slice(0, width - 3)}...`;
 }
 
+function fitOverlayCell(value, width) {
+  const text = String(value ?? "");
+  if (text.length <= width) return text;
+  if (width <= 1) return text.slice(0, width);
+  return `${text.slice(0, width - 1)}…`;
+}
+
+function buildOverlayPresentationModel({
+  frameTitle,
+  title = null,
+  width = null,
+  height = null,
+  marginX = 2,
+  marginY = 1,
+  titleInsetX = 2,
+  bodyInsetX = 2,
+  bodyInsetY = 1,
+  scrollX = 0,
+  scrollY = 0,
+  lines = []
+} = {}) {
+  const resolvedWidth = Number(width ?? 0) || 0;
+  const resolvedHeight = Number(height ?? 0) || 0;
+  const resolvedBodyInsetX = Math.max(0, Number(bodyInsetX ?? 2) || 0);
+  const resolvedBodyInsetY = Math.max(0, Number(bodyInsetY ?? 1) || 0);
+  const contentWidth = resolvedWidth > 0
+    ? Math.max(1, resolvedWidth - Math.max(2, resolvedBodyInsetX * 2))
+    : null;
+  const contentHeight = resolvedHeight > 0
+    ? Math.max(0, resolvedHeight - resolvedBodyInsetY - 1)
+    : null;
+  const sourceLines = arrayWrap(lines).map(line => String(line ?? ""));
+  const maxScrollX = contentWidth === null
+    ? 0
+    : Math.max(0, sourceLines.reduce((maxWidth, line) => Math.max(maxWidth, line.length), 0) - contentWidth);
+  const resolvedScrollX = Math.min(Math.max(0, Number(scrollX ?? 0) || 0), maxScrollX);
+  const maxScrollY = contentHeight === null
+    ? 0
+    : Math.max(0, sourceLines.length - Math.max(0, contentHeight));
+  const resolvedScrollY = Math.min(Math.max(0, Number(scrollY ?? 0) || 0), maxScrollY);
+  const fittedLines = contentWidth === null
+    ? sourceLines.map(line => line.slice(resolvedScrollX))
+    : sourceLines.map(line => fitOverlayCell(line.slice(resolvedScrollX), contentWidth));
+  const clippedLines = contentHeight === null
+    ? fittedLines.slice(resolvedScrollY)
+    : fittedLines.slice(resolvedScrollY, resolvedScrollY + Math.max(0, contentHeight));
+  return {
+    frameTitle,
+    title,
+    placement: "center",
+    marginX: Math.max(0, Number(marginX ?? 2) || 0),
+    marginY: Math.max(0, Number(marginY ?? 1) || 0),
+    titleInsetX: Math.max(0, Number(titleInsetX ?? 2) || 0),
+    width: resolvedWidth > 0 ? resolvedWidth : null,
+    height: resolvedHeight > 0 ? resolvedHeight : null,
+    bodyInsetX: resolvedBodyInsetX,
+    bodyInsetY: resolvedBodyInsetY,
+    contentWidth,
+    contentHeight,
+    scrollX: resolvedScrollX,
+    scrollY: resolvedScrollY,
+    visibleLineStart: resolvedScrollY,
+    lineCount: sourceLines.length,
+    visibleLineCount: clippedLines.length,
+    overflowLineCount: Math.max(0, sourceLines.length - (resolvedScrollY + clippedLines.length)),
+    lines: sourceLines,
+    visibleLines: clippedLines
+  };
+}
+
+function buildOverlayInteractionModel(overlaySpec = null, model = {}) {
+  const kind = overlaySpec?.kind ?? model.kind ?? "doc_view";
+  const items = arrayWrap(model.items);
+  if (kind === "menu") {
+    return {
+      family: "menu",
+      cursorMode: items.length ? "items" : "none",
+      activationMode: items.length ? "item" : "none",
+      scrollMode: "none"
+    };
+  }
+  return {
+    family: "doc_view",
+    cursorMode: "none",
+    activationMode: "none",
+    scrollMode: "xy"
+  };
+}
+
+function buildOverlayPolicyModel(overlaySpec = null, model = {}) {
+  const authored = arrayWrap(overlaySpec?.closeIdsOnOpen ?? model.closeIdsOnOpen).map(String).filter(Boolean);
+  if (authored.length) {
+    return {
+      closeIdsOnOpen: authored
+    };
+  }
+  return {
+    closeIdsOnOpen: []
+  };
+}
+
+function buildOverlaySnapshotModel(overlaySpec = null, model = {}, options = {}) {
+  const overlay = buildOverlayPresentationModel({
+    frameTitle: model.frameTitle ?? overlaySpec?.title ?? overlaySpec?.id ?? "",
+    title: model.title ?? overlaySpec?.title ?? overlaySpec?.id ?? null,
+    width: model.width ?? overlaySpec?.width ?? null,
+    height: model.height ?? overlaySpec?.height ?? null,
+    marginX: model.marginX ?? 2,
+    marginY: model.marginY ?? 1,
+    titleInsetX: model.titleInsetX ?? 2,
+    bodyInsetX: model.bodyInsetX ?? 2,
+    bodyInsetY: model.bodyInsetY ?? 1,
+    scrollX: model.scrollX ?? 0,
+    scrollY: model.scrollY ?? 0,
+    lines: model.lines ?? []
+  });
+  return {
+    ...overlay,
+    id: overlaySpec?.id ?? model.id ?? null,
+    kind: overlaySpec?.kind ?? model.kind ?? "doc_view",
+    interaction: buildOverlayInteractionModel(overlaySpec, model),
+    policy: buildOverlayPolicyModel(overlaySpec, model),
+    open: Boolean(options.open),
+    active: Boolean(options.active),
+    order: Number.isFinite(options.order) ? options.order : null,
+    activeItemIndex: Number.isFinite(model.activeItemIndex) ? model.activeItemIndex : null,
+    subject: model.subject ?? null,
+    summary: model.summary ?? null,
+    context: model.context ? structuredClone(model.context) : null,
+    items: model.items ? structuredClone(model.items) : null,
+    resizable: overlaySpec?.resizable === true,
+    scroll: structuredClone(overlaySpec?.scroll ?? model.scroll ?? []),
+    origin: overlaySpec?.origin ?? model.origin ?? "authored",
+    pluginId: overlaySpec?.pluginId ?? model.pluginId ?? null,
+    source: overlaySpec?.source ? structuredClone(overlaySpec.source) : (model.source ? structuredClone(model.source) : null)
+  };
+}
+
 function describeResultViewFilter(filter) {
   return `${filter.column}=${filter.value}`;
 }
@@ -2890,6 +3028,16 @@ function operatorWorkbenchDatasetSpec(state, datasetId) {
   return operatorWorkbenchDefinitionForState(state).datasetsById.get(datasetId) ?? null;
 }
 
+function operatorWorkbenchThemeSpec(state, themeId) {
+  if (!themeId) return null;
+  return operatorWorkbenchDefinitionForState(state).themesById?.get(themeId) ?? null;
+}
+
+function operatorWorkbenchOverlaySpec(state, overlayId) {
+  if (!overlayId) return null;
+  return operatorWorkbenchDefinitionForState(state).overlaysById?.get(overlayId) ?? null;
+}
+
 function operatorWorkbenchScreenLines(state) {
   const definition = operatorWorkbenchDefinitionForState(state);
   if (!definition.screens.length) return ["(no screens)"];
@@ -3205,10 +3353,21 @@ function buildWorkbenchScreenSection(sectionSpec, datasetSpec, {
   if (provider === "references" || provider === "provenance") {
     detailLines = rows[activeRowIndex]?.detailLines ?? detailLines;
   }
+  const rowCount = arrayWrap(rows).length;
+  const sectionKind = sectionSpec?.kind ?? legacySectionKindForScreenShape(sectionSpec?.shape);
+  const toggleLabel = collapsible === false
+    ? "[ ]"
+    : (collapsed ? "[+]" : "[-]");
+  const stateSummary = [
+    sectionKind || "list",
+    `rows=${rowCount}`,
+    collapsed ? "collapsed" : "expanded",
+    actionable ? "actionable" : "info"
+  ].join(" | ");
   return {
     id: sectionId,
     title,
-    kind: sectionSpec?.kind ?? legacySectionKindForScreenShape(sectionSpec?.shape),
+    kind: sectionKind,
     shape: sectionSpec?.kind === "table"
       ? "table-detail"
       : (sectionSpec?.kind === "detail" ? "detail" : "list-detail"),
@@ -3223,6 +3382,10 @@ function buildWorkbenchScreenSection(sectionSpec, datasetSpec, {
     collapsible,
     collapsed,
     actionable,
+    rowCount,
+    toggleLabel,
+    stateSummary,
+    rowHeaderLabel: title ? `${title} rows` : "rows",
     origin: sectionSpec?.origin ?? "authored"
   };
 }
@@ -3618,6 +3781,178 @@ function normalizeWorkbenchInspectorSpec(spec = null) {
   return deepClone(spec);
 }
 
+function defaultWorkbenchContextMenuContext({
+  focusedPane,
+  topNavigationModel,
+  leftPaneModel,
+  leftCursor,
+  customScreen,
+  rightCursor,
+  activeScreenId
+} = {}) {
+  if (focusedPane === "top") {
+    const selectedIndex = Number(topNavigationModel?.selectedIndex ?? 0) || 0;
+    const chip = topNavigationModel?.chips?.[selectedIndex] ?? topNavigationModel?.chips?.[0] ?? null;
+    return chip
+      ? {
+          pane: "top",
+          chipIndex: selectedIndex,
+          chipType: optionalText(chip.type || ""),
+          chipLabel: optionalText(chip.label || "")
+        }
+      : { pane: "top" };
+  }
+  if (focusedPane === "right") {
+    const row = customScreen?.rows?.[rightCursor] ?? null;
+    return {
+      pane: "right",
+      rowIndex: Number(rightCursor ?? 0) || 0,
+      rowLabel: optionalText(row?.label || ""),
+      actionKind: optionalText(row?.actionKind || ""),
+      uri: optionalText(row?.uri || ""),
+      screenId: optionalText(activeScreenId || ""),
+      sectionId: optionalText(customScreen?.activeSectionId || "")
+    };
+  }
+  if (focusedPane === "bottom") {
+    return {
+      pane: "bottom"
+    };
+  }
+  const row = leftPaneModel?.rows?.[leftCursor] ?? null;
+  return {
+    pane: "left",
+    rowIndex: Number(leftCursor ?? 0) || 0,
+    rowType: optionalText(row?.type || ""),
+    rowLabel: optionalText(row?.label || ""),
+    targetId: optionalText(row?.record?.id || row?.id || row?.targetId || ""),
+    primaryCommand: optionalText(row?.primaryAction?.command || "")
+  };
+}
+
+function buildWorkbenchContextMenuModel({
+  focusedPane,
+  context = null,
+  activeItemIndex = 0,
+  topNavigationModel,
+  leftPaneModel,
+  leftCursor = 0,
+  customScreen,
+  rightCursor = 0,
+  activeScreenId = null,
+  surfaceSpec = null
+} = {}) {
+  const resolvedContext = context && typeof context === "object"
+    ? structuredClone(context)
+    : defaultWorkbenchContextMenuContext({
+        focusedPane,
+        topNavigationModel,
+        leftPaneModel,
+        leftCursor,
+        customScreen,
+        rightCursor,
+        activeScreenId
+      });
+  const subject = optionalText(
+    resolvedContext.rowLabel
+    || resolvedContext.chipLabel
+    || resolvedContext.targetId
+    || resolvedContext.screenId
+    || resolvedContext.pane
+  ) || "selection";
+  const pane = optionalText(resolvedContext.pane || focusedPane || "left");
+  const actionable = Boolean(
+    resolvedContext.rowLabel
+    || resolvedContext.chipLabel
+    || resolvedContext.targetId
+    || resolvedContext.uri
+    || resolvedContext.primaryCommand
+  );
+  const items = [
+    {
+      id: "edit",
+      label: "Edit",
+      shortcut: "1",
+      detail: actionable ? `pane:${pane}` : "no active target",
+      enabled: actionable,
+      action: {
+        kind: "hook",
+        hook: "edit",
+        subject,
+        context: structuredClone(resolvedContext)
+      }
+    },
+    {
+      id: "change-color",
+      label: "Change Color",
+      shortcut: "2",
+      detail: "surface theme",
+      enabled: pane !== "bottom",
+      action: {
+        kind: "hook",
+        hook: "change-color",
+        subject,
+        context: structuredClone(resolvedContext)
+      }
+    },
+    {
+      id: "rename",
+      label: "Rename",
+      shortcut: "3",
+      detail: actionable ? subject : "no active target",
+      enabled: actionable,
+      action: {
+        kind: "hook",
+        hook: "rename",
+        subject,
+        context: structuredClone(resolvedContext)
+      }
+    },
+    {
+      id: "clone",
+      label: "Clone",
+      shortcut: "4",
+      detail: actionable ? subject : "no active target",
+      enabled: actionable,
+      action: {
+        kind: "hook",
+        hook: "clone",
+        subject,
+        context: structuredClone(resolvedContext)
+      }
+    }
+  ];
+  const resolvedActiveItemIndex = Math.min(
+    Math.max(0, Number(activeItemIndex) || 0),
+    Math.max(0, items.length - 1)
+  );
+  const overlay = buildOverlayPresentationModel({
+    frameTitle: "Context",
+    title: "Context",
+    width: surfaceSpec?.width ?? null,
+    height: surfaceSpec?.height ?? null,
+    marginX: 2,
+    marginY: 1,
+    titleInsetX: 2,
+    bodyInsetX: 2,
+    bodyInsetY: 1,
+    lines: items.map((item, index) => {
+      const marker = item.enabled === false ? "x" : optionalText(item.shortcut || `${index + 1}`);
+      return item.detail ? `${marker}. ${item.label} :: ${item.detail}` : `${marker}. ${item.label}`;
+    })
+  });
+  return {
+    ...overlay,
+    subject,
+    context: resolvedContext,
+    activeItemIndex: resolvedActiveItemIndex,
+    items: items.map((item, index) => ({
+      ...item,
+      active: index === resolvedActiveItemIndex
+    }))
+  };
+}
+
 export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {}) {
   const focusedPane = optionalText(uiState.focusedPane) ?? "left";
   const requestedInspectorTab = optionalText(uiState.inspectorTab) ?? session.activeWorkbenchInspectorTab ?? "inspect";
@@ -3838,6 +4173,11 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
   const activeViewportSpec = activeViewportId
     ? (workbenchDefinition.viewportsById?.get(activeViewportId) ?? null)
     : null;
+  const activeViewportThemeSpec = activeViewportSpec?.theme
+    ? (operatorWorkbenchThemeSpec(state, activeViewportSpec.theme) ?? null)
+    : null;
+  const contextMenuSurfaceSpec = operatorWorkbenchOverlaySpec(state, "context_menu");
+  const helpOverlaySurfaceSpec = operatorWorkbenchOverlaySpec(state, "help_overlay");
   const activeViewportLayout = buildWorkbenchViewportLayout(activeViewportSpec, uiState);
   const leftPaneModel = resultView
     ? buildResultLeftPaneModel(resultView, materializedResultView, session)
@@ -3850,6 +4190,54 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
   const leftCursorLimit = Math.max(0, leftPaneModel.rows.length - 1);
   const leftCursor = Math.min(Math.max(0, Number(uiState.leftCursor ?? 0) || 0), leftCursorLimit);
   const resolvedActiveLeftRow = leftPaneModel.rows[leftCursor] ?? null;
+  const topNavigationModel = buildWorkbenchNavigationModel(state, session, {
+    screenId: activeScreenSpec?.id ?? activeScreenId,
+    screenSpec: activeScreenSpec,
+    resultView,
+    materializedResultView,
+    selectedIndex: uiState.topCursor ?? 0
+  });
+  const helpContextModel = workbenchHelpContextModel({
+    focusedPane,
+    leftPaneModel,
+    resolvedActiveLeftRow,
+    customScreen
+  });
+  const contextMenuModel = buildWorkbenchContextMenuModel({
+    focusedPane,
+    context: uiState.contextMenuContext ?? null,
+    activeItemIndex: Number(uiState.overlayStateById?.context_menu?.activeItemIndex ?? 0) || 0,
+    topNavigationModel,
+    leftPaneModel,
+    leftCursor,
+    customScreen,
+    rightCursor,
+    activeScreenId: activeScreenSpec?.id ?? activeScreenId,
+    surfaceSpec: contextMenuSurfaceSpec
+  });
+  const helpOverlayModel = workbenchHelpOverlayModel(
+    rightPaneTitleForScreen(customScreen),
+    helpContextModel,
+    helpOverlaySurfaceSpec,
+    uiState.overlayStateById?.help_overlay ?? null
+  );
+  const rightSurfaceId = optionalText(activeViewportSpec?.center?.rightSurfaceId || "session_reader") || "session_reader";
+  const openOverlayIds = arrayWrap(uiState.openOverlayIds).map(String).filter(Boolean);
+  const overlayModels = arrayWrap(activeViewportSpec?.overlays)
+    .map(overlayId => operatorWorkbenchOverlaySpec(state, overlayId))
+    .filter(Boolean)
+    .map(spec => {
+      const order = openOverlayIds.indexOf(spec.id);
+      const overlayOptions = {
+        open: order >= 0,
+        active: openOverlayIds.at(-1) === spec.id,
+        order: order >= 0 ? order : null
+      };
+      if (spec.id === "context_menu") return buildOverlaySnapshotModel(spec, contextMenuModel, overlayOptions);
+      if (spec.id === "help_overlay") return buildOverlaySnapshotModel(spec, helpOverlayModel, overlayOptions);
+      return buildOverlaySnapshotModel(spec, {}, overlayOptions);
+    });
+  const previewAvailable = previewReadAvailability(state).ok;
 
   return {
     mode: "detached",
@@ -3860,8 +4248,8 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
       active: Boolean(session.focusKind)
     },
     preview: {
-      available: previewReadAvailability(state).ok,
-      writable: previewReadAvailability(state).ok,
+      available: previewAvailable,
+      writable: previewAvailable,
       sessionId: session.previewSessionId ?? null,
       baseAppRevision: session.baseAppRevision ?? null,
       previewRevision: session.previewRevision ?? 0,
@@ -3880,7 +4268,13 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
       focusedPane,
       inspectorTab,
       rightScreenMode,
+      openOverlayIds: structuredClone(openOverlayIds),
+      activeOverlayId: openOverlayIds.at(-1) ?? null,
+      overlayStateById: structuredClone(uiState.overlayStateById ?? {}),
+      readerStateBySurfaceId: structuredClone(uiState.readerStateBySurfaceId ?? {}),
       helpOpen: Boolean(uiState.helpOpen),
+      contextMenuOpen: Boolean(uiState.contextMenuOpen),
+      contextMenuContext: uiState.contextMenuContext ? structuredClone(uiState.contextMenuContext) : null,
       rightSectionIndex: Number(customScreen?.activeSectionIndex ?? uiState.rightSectionIndex ?? 0) || 0,
       rightSectionCursorsByScreenId: structuredClone(uiState.rightSectionCursorsByScreenId ?? {}),
       collapsedSectionIdsByScreenId: structuredClone(uiState.collapsedSectionIdsByScreenId ?? {}),
@@ -3889,6 +4283,7 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
       lastStatus: optionalText(uiState.lastStatus) ?? "info",
       displaySettings: structuredClone(uiState.displaySettings ?? {})
     },
+    contextMenu: contextMenuModel,
     screens: {
       activeScreenId: activeScreenSpec?.id ?? activeScreenId,
       available: workbenchDefinition.screens.map(screen => ({
@@ -3913,6 +4308,15 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
           id: activeViewportSpec.id,
           title: activeViewportSpec.title ?? activeViewportSpec.id,
           theme: activeViewportSpec.theme ?? null,
+          themeSpec: activeViewportThemeSpec
+            ? {
+                id: activeViewportThemeSpec.id,
+                title: activeViewportThemeSpec.title ?? activeViewportThemeSpec.id,
+                mode: activeViewportThemeSpec.mode ?? "ansi16",
+                palette: activeViewportThemeSpec.palette ?? "terminal-dark",
+                origin: activeViewportThemeSpec.origin ?? "authored"
+              }
+            : null,
           screenId: activeViewportSpec.screenId ?? null,
           leftScreenId: activeViewportSpec.leftScreenId ?? null,
           topSurfaceId: activeViewportSpec.topSurfaceId ?? null,
@@ -3932,17 +4336,17 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
           bindings: structuredClone(activeViewportSpec.bindings ?? [])
         }
       : null,
-    topPane: {
-      title: "Operator Workbench",
-      subtitle: session.focusKind ? `focus=${session.focusKind}:${session.focusId}` : "global",
-      navigation: buildWorkbenchNavigationModel(state, session, {
-        screenId: activeScreenSpec?.id ?? activeScreenId,
-        screenSpec: activeScreenSpec,
-        resultView,
-        materializedResultView,
-        selectedIndex: uiState.topCursor ?? 0
-      })
-    },
+    topPane: workbenchTopPaneModel({
+      topNavigationModel,
+      viewportId: activeViewportSpec?.id ?? null,
+      themeId: activeViewportThemeSpec?.id ?? activeViewportSpec?.theme ?? null,
+      focusedPane,
+      session,
+      previewAvailable
+    }),
+    bottomPane: workbenchBottomPaneModel(activeScreenSpec?.id ?? activeScreenId),
+    helpOverlay: helpOverlayModel,
+    overlays: overlayModels,
     leftPane: {
       mode: leftPaneModel.mode,
       screenId: leftPaneModel.screenId ?? null,
@@ -3963,7 +4367,11 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
       paging: leftPaneModel.paging
     },
     rightPane: {
+      surfaceId: rightSurfaceId,
       title: rightPaneTitleForScreen(customScreen),
+      frameStatus: customScreen?.rows?.length
+        ? `rows:${customScreen.rows.length} y:${rightCursor}`
+        : null,
       screenMode: rightScreenMode,
       activeScreenId: activeScreenSpec?.id ?? activeScreenId,
       screen: customScreen,
@@ -3974,7 +4382,10 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
             rowCount: customScreen.activeSectionRowCount ?? 0,
             actionable: Boolean(customScreen.activeSectionActionable),
             collapsible: customScreen.activeSectionCollapsible === false ? false : true,
-            collapsed: Boolean(customScreen.activeSectionCollapsed)
+            collapsed: Boolean(customScreen.activeSectionCollapsed),
+            toggleLabel: customScreen.sections?.[customScreen.activeSectionIndex ?? 0]?.toggleLabel ?? null,
+            stateSummary: customScreen.sections?.[customScreen.activeSectionIndex ?? 0]?.stateSummary ?? null,
+            rowHeaderLabel: customScreen.sections?.[customScreen.activeSectionIndex ?? 0]?.rowHeaderLabel ?? null
           }
         : null,
       tab: activeScreenSpec?.id ?? activeScreenId,
@@ -3988,6 +4399,7 @@ export async function buildOperatorWorkbenchSnapshot(state, session, uiState = {
       provenanceEntries: inspector.provenanceEntries ?? [],
       activeProvenanceIndex: Number(inspector.activeProvenanceIndex ?? 0) || 0,
       provenanceDetailLines: inspector.provenanceDetailLines ?? inspector.provenanceLines ?? [],
+      readerScroll: structuredClone(uiState.readerStateBySurfaceId?.[rightSurfaceId] ?? { x: 0, y: 0 }),
       cursor: rightCursor,
       target: inspector.target ?? null,
       previewInspection: inspector.inspection ? {
@@ -4198,6 +4610,150 @@ function createLinkForRecord(state, record) {
   return buildRecordDeepLink(state, record, {
     label: `${record.scope}:${record.id}`
   });
+}
+
+function workbenchBottomPaneModel(screenId) {
+  return {
+    frameTitle: "Commands",
+    commandText: `: screen ${screenId || "inspect"}`,
+    hintText: "F1 help | Right click menu | Drag handles resize"
+  };
+}
+
+function workbenchTopNavigationLine(topNavigationModel, focusedPane) {
+  const chips = Array.isArray(topNavigationModel?.chips) ? topNavigationModel.chips : [];
+  const selectedIndex = Number(topNavigationModel?.selectedIndex ?? 0) || 0;
+  const tokens = chips.map((chip, index) => {
+    const selected = focusedPane === "top" && index === selectedIndex;
+    const label = optionalText(chip?.label || "chip");
+    return selected ? `<${label}>` : `[${label}]`;
+  });
+  return `NAV ${tokens.join(" ")}`.trim();
+}
+
+function workbenchTopPaneModel({
+  topNavigationModel,
+  viewportId,
+  themeId,
+  focusedPane,
+  session,
+  previewAvailable
+}) {
+  const normalizedViewportId = optionalText(viewportId || "default");
+  const normalizedThemeId = optionalText(themeId || "ansi16");
+  const normalizedPane = optionalText(focusedPane || "left");
+  const statusLine = session.focusKind
+    ? `FOCUS ${session.focusKind}:${session.focusId}`
+    : `MODE ${previewAvailable ? "preview-read" : "repo-self"}`;
+  const titleLine = `Operator Workbench :: ${session.focusKind ? `focus=${session.focusKind}:${session.focusId}` : "global"}`;
+  return {
+    frameTitle: "Status",
+    title: "Operator Workbench",
+    subtitle: session.focusKind ? `focus=${session.focusKind}:${session.focusId}` : "global",
+    titleLine,
+    navigationLine: workbenchTopNavigationLine(topNavigationModel, focusedPane),
+    statusLine,
+    metaChips: [
+      {
+        id: "viewport",
+        type: "viewport",
+        label: `viewport:${normalizedViewportId}`
+      },
+      {
+        id: "theme",
+        type: "theme",
+        label: `theme:${normalizedThemeId}`
+      },
+      {
+        id: "pane",
+        type: "pane",
+        label: `pane:${normalizedPane}`
+      }
+    ],
+    navigation: topNavigationModel
+  };
+}
+
+function workbenchHelpContextModel({
+  focusedPane,
+  leftPaneModel,
+  resolvedActiveLeftRow,
+  customScreen
+}) {
+  if (focusedPane === "right") {
+    const activeSection = customScreen
+      ? {
+          id: customScreen.activeSectionId ?? null,
+          title: customScreen.activeSectionTitle ?? null,
+          rowCount: customScreen.activeSectionRowCount ?? 0,
+          actionable: Boolean(customScreen.activeSectionActionable),
+          collapsible: customScreen.activeSectionCollapsible === false ? false : true,
+          collapsed: Boolean(customScreen.activeSectionCollapsed)
+        }
+      : null;
+    const sectionSummary = activeSection
+      ? [
+          `section=${activeSection.title || activeSection.id || "section"}`,
+          `rows=${activeSection.rowCount ?? 0}`,
+          `state=${activeSection.collapsed ? "collapsed" : "expanded"}`
+        ].join(" | ")
+      : "section=(none)";
+    return {
+      context: `${customScreen?.title || "Screen"} | ${sectionSummary}`,
+      summary: customScreen?.helpText
+        || "Use [ and ] to move sections, - and = to collapse or expand, and Enter to activate the active row when the section is actionable."
+    };
+  }
+  if (focusedPane === "bottom") {
+    return {
+      context: "Command Bar",
+      summary: "Type commands directly, use Tab for completion, and Enter to execute."
+    };
+  }
+  if (focusedPane === "top") {
+    return {
+      context: "Navigation",
+      summary: "Move across breadcrumb and status chips, then press Enter to trigger the selected navigation action."
+    };
+  }
+  const primaryLabel = resolvedActiveLeftRow?.primaryAction?.label ?? null;
+  const targetLabel = resolvedActiveLeftRow?.label ?? "row";
+  const leftKind = leftPaneModel?.overlay
+    ? "Search Overlay"
+    : ((leftPaneModel?.origin === "authored" ? "Authored" : "Navigation"));
+  return {
+    context: `${leftPaneModel?.title || "Left Pane"} | ${leftKind}${leftPaneModel?.paging ? ` | ${leftPaneModel.paging.start}-${leftPaneModel.paging.end} of ${leftPaneModel.paging.totalRows}` : ""}`,
+    summary: primaryLabel
+      ? `Move the active row, then Enter to ${primaryLabel} ${targetLabel}.`
+      : "Move the active row, then Enter to trigger its primary action."
+  };
+}
+
+function workbenchHelpOverlayModel(activeRightTitle, helpContextModel = null, surfaceSpec = null, overlayState = null) {
+  const overlay = buildOverlayPresentationModel({
+    frameTitle: "Help",
+    title: null,
+    width: surfaceSpec?.width ?? null,
+    height: surfaceSpec?.height ?? null,
+    marginX: 2,
+    marginY: 1,
+    titleInsetX: 2,
+    bodyInsetX: 2,
+    bodyInsetY: 1,
+    scrollX: Number(overlayState?.scrollX ?? 0) || 0,
+    scrollY: Number(overlayState?.scrollY ?? 0) || 0,
+    lines: [
+      "F1 opens the authored help surface.",
+      "Right click opens the centered context menu surface.",
+      "Drag pane handles to resize the authored split layout.",
+      `Active right pane: ${activeRightTitle || "Inspect"}.`
+    ]
+  });
+  return {
+    ...overlay,
+    context: helpContextModel?.context ?? "Navigation",
+    summary: helpContextModel?.summary ?? "Move the active row, then Enter to trigger its primary action."
+  };
 }
 
 function clearContextFocusState(session) {

@@ -54,7 +54,7 @@ async function startBlankServer({ runtimePluginIds = null } = {}) {
     runtimeStartupMode: "bootstrap",
     runtimePluginIds,
     startupRuntimePluginIds: runtimePluginIds == null ? [...DEFAULT_BOOTSTRAP_STARTUP_PLUGIN_IDS] : null
-  });
+});
   assert.equal(server.ok, true);
   return { world, server };
 }
@@ -922,26 +922,46 @@ test("canonical authoring pathway probe proves interactive authored page.surface
       throw error;
     }
     assert.equal(result.ok, true);
-    assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, ["surface", "process", "projection", "capability"]);
+    assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, [
+      "surface",
+      "collection",
+      "process",
+      "projection",
+      "message",
+      "boundary",
+      "policy",
+      "computeModule",
+      "capability"
+    ]);
     assert.equal(result.capabilityChecks.publicSurfaceCreate, true);
-      assert.equal(result.capabilityChecks.publicProcessCreate, true);
-      assert.equal(result.capabilityChecks.publicTypeCreate, true);
-      assert.equal(result.capabilityChecks.publicProjectionCreate, true);
-      assert.equal(result.capabilityChecks.publicMessageCreate, true);
-      assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
-      assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
-      assert.equal(result.pathwayProbe.surfaceHttpStatus, 200);
-      assert.equal(result.pathwayProbe.alternateSurfaceHttpStatus, 200);
-      assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
-      assert.equal(result.pathwayProbe.routeSelectedSurfaceVisible, true);
-      assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
-      assert.equal(result.pathwayProbe.firstBlockedRung, null);
-      assert.equal(result.blockers.firstBlocked ?? null, null);
-      assert.equal(result.stateChecks.rootSurfacePresent, true);
-    } finally {
-      await server.close();
-    }
-  });
+    assert.equal(result.capabilityChecks.publicProcessCreate, true);
+    assert.equal(result.capabilityChecks.publicTypeCreate, true);
+    assert.equal(result.capabilityChecks.publicProjectionCreate, true);
+    assert.equal(result.capabilityChecks.publicMessageCreate, true);
+    assert.equal(result.capabilityChecks.publicComputeModuleCreate, true);
+    assert.equal(result.capabilityChecks.publicComputeModuleSourceUpsert, true);
+    assert.equal(result.capabilityChecks.publicComputeModuleSmokeTestUpsert, true);
+    assert.equal(result.capabilityChecks.publicComputeModuleSmokeTestRun, true);
+    assert.equal(result.capabilityChecks.publicPackagePatchSourceUpsert, true);
+    assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
+    assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
+    assert.equal(result.pathwayProbe.surfaceHttpStatus, 200);
+    assert.equal(result.pathwayProbe.alternateSurfaceHttpStatus, 200);
+    assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
+    assert.equal(result.pathwayProbe.routeSelectedSurfaceVisible, true);
+    assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
+    assert.equal(result.pathwayProbe.firstBlockedRung, null);
+    assert.equal(result.blockers.firstBlocked ?? null, null);
+    assert.equal(result.stateChecks.rootSurfacePresent, true);
+    assert.equal(result.stateChecks.engentusComputeModulePresent, true);
+    assert.equal(result.stateChecks.engentusComputeSourcePresent, true);
+    assert.equal(result.stateChecks.engentusComputeSmokeTestPresent, true);
+    assert.equal(result.stateChecks.engentusComputeSourceBundled, true);
+    assert.equal(result.stateChecks.engentusComputeSmokeFixtureBundled, true);
+  } finally {
+    await server.close();
+  }
+});
 
 test("guidance progress syncs into the authenticated session store", async () => {
   const { server } = await startBlankServer();

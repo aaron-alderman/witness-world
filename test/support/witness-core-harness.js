@@ -378,7 +378,12 @@ export async function replaceFileText(filePath, fromText, toText) {
 }
 
 export async function fetchText(url) {
-  const response = await fetch(url, { cache: "no-store" });
+  let response = null;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch (error) {
+    throw new Error(`fetchText failed for ${url}: ${error instanceof Error ? error.message : String(error)}`);
+  }
   assert.equal(response.status, 200);
   return await response.text();
 }

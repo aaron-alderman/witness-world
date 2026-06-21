@@ -3,6 +3,7 @@ import { collectGlyphCodepoints } from "./operator-glyph-atlas.js";
 import { createOperatorBrowserRuntime } from "./operator-runtime.js";
 import { createOperatorBrowserLiveApi } from "./operator-browser-live-api.js";
 import { createOperatorBrowserStateFromWorkbenchSnapshot } from "./operator-snapshot-adapter.js";
+import { createOperatorWorkbenchSnapshotFixture } from "./operator-snapshot-fixture.js";
 import { resolveOperatorBrowserBootstrap } from "./operator-bootstrap.js";
 
 async function boot() {
@@ -13,11 +14,7 @@ async function boot() {
   const bootstrap = await resolveOperatorBrowserBootstrap({
     liveApi: bridgeApi,
     search: window.location.search,
-    loadFixtureSnapshot: async () => {
-      const response = await fetch("./operator.snapshot.json");
-      if (!response.ok) throw new Error(`operator snapshot unavailable: ${response.status}`);
-      return response.json();
-    }
+    loadFixtureSnapshot: async () => createOperatorWorkbenchSnapshotFixture()
   });
   const model = parseOperatorWorkbenchRvm(source);
   const initialState = createOperatorBrowserStateFromWorkbenchSnapshot(bootstrap.snapshot);

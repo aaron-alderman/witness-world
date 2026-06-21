@@ -47,52 +47,60 @@ async function safeTeardown({ server = null, core = null, workspace = null } = {
   await settleWithin(() => workspace?.cleanup?.(), 2000);
 }
 
+async function fetchWithContext(url, options = {}, label = "request") {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    throw new Error(`${label} failed for ${url}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function promoteStableGeneration({ appUrl }) {
-  const response = await fetch(`${appUrl}/api/runtime/app-snapshot/promote-current`, {
+  const response = await fetchWithContext(`${appUrl}/api/runtime/app-snapshot/promote-current`, {
     method: "POST"
-  });
+  }, "promote stable generation");
   assert.equal(response.status, 200);
 }
 
 async function rollbackStableGeneration({ appUrl }) {
-  const response = await fetch(`${appUrl}/api/runtime/app-snapshot/rollback-stable`, {
+  const response = await fetchWithContext(`${appUrl}/api/runtime/app-snapshot/rollback-stable`, {
     method: "POST"
-  });
+  }, "rollback stable generation");
   assert.equal(response.status, 200);
 }
 
 async function requestStableServing({ coreUrl }) {
-  const response = await fetch(`${coreUrl}/serving/stable`, {
+  const response = await fetchWithContext(`${coreUrl}/serving/stable`, {
     method: "POST"
-  });
+  }, "request stable serving");
   assert.equal(response.status, 200);
 }
 
 async function requestLiveServing({ appUrl }) {
-  const response = await fetch(`${appUrl}/api/runtime/app-snapshot/serve-live`, {
+  const response = await fetchWithContext(`${appUrl}/api/runtime/app-snapshot/serve-live`, {
     method: "POST"
-  });
+  }, "request live serving");
   assert.equal(response.status, 200);
 }
 
 async function readProcessHealth(appUrl) {
-  const response = await fetch(`${appUrl}/api/runtime/process-health`, {
+  const response = await fetchWithContext(`${appUrl}/api/runtime/process-health`, {
     cache: "no-store"
-  });
+  }, "read process health");
   assert.equal(response.status, 200);
   return await response.json();
 }
 
 async function readSoakState(coreUrl) {
-  const response = await fetch(`${coreUrl}/soak`, {
+  const response = await fetchWithContext(`${coreUrl}/soak`, {
     cache: "no-store"
-  });
+  }, "read soak state");
   assert.equal(response.status, 200);
   return await response.json();
 }
 
 async function readJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetchWithContext(url, options, "read json");
   let body = null;
   try {
     body = await response.json();
@@ -112,11 +120,11 @@ async function readJournalEvents(journalPath) {
 }
 
 async function postSoak(coreUrl, path, payload = {}) {
-  const response = await fetch(`${coreUrl}${path}`, {
+  const response = await fetchWithContext(`${coreUrl}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload)
-  });
+  }, "post soak control");
   assert.equal(response.status, 200);
   return await response.json();
 }
@@ -658,20 +666,41 @@ async function runPublishedAuthoringScenario() {
     assert.match(baselineHtml, /Live Core Baseline/);
     revisionEvents = await openJsonEventStream(`${appUrl}/api/runtime/app-revisions/events`, "published app revision event");
 
+    const postAppSourcesWithReadyRetry = async body => {
+      const deadline = Date.now() + 45000;
+      let response = null;
+      while (Date.now() < deadline) {
+        response = await readJson(`${appUrl}/api/runtime/app-sources`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        if (response.response.status !== 503) return response;
+        await waitForWitnessCoreHealthState(core.url, health =>
+          health.process?.running === true && health.process?.ready === true,
+        {
+          timeoutMs: 45000,
+          description: "published transaction process ready before retry"
+        });
+        await waitForProcessHealth(appUrl, health =>
+          health.ready === true && health.status === "healthy",
+        {
+          description: "fixture process health before published transaction retry"
+        });
+      }
+      return response;
+    };
+
     const originalSource = await fs.readFile(workspace.watchedSourcePath, "utf8");
     const updatedSource = originalSource.replace(
       'text = "Live Core Baseline"',
       'text = "Live Core Published"'
     );
-    const success = await readJson(`${appUrl}/api/runtime/app-sources`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        edits: [{
-          path: "app/content.wtoml",
-          content: updatedSource
-        }]
-      })
+    const success = await postAppSourcesWithReadyRetry({
+      edits: [{
+        path: "app/content.wtoml",
+        content: updatedSource
+      }]
     });
     assert.equal(success.response.status, 200);
     assert.equal(success.body?.ok, true);
@@ -896,15 +925,11 @@ async function runPublishedAuthoringScenario() {
       'text = "Live Core Out Of Band"',
       'text = "Live Core Pinned Stable"'
     );
-    const stablePinnedWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        edits: [{
-          path: "app/content.wtoml",
-          content: stablePinnedSource
-        }]
-      })
+    const stablePinnedWrite = await postAppSourcesWithReadyRetry({
+      edits: [{
+        path: "app/content.wtoml",
+        content: stablePinnedSource
+      }]
     });
     assert.equal(stablePinnedWrite.response.status, 200);
     assert.equal(stablePinnedWrite.body?.activated, false);

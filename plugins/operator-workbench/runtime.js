@@ -7,6 +7,7 @@ function applyOperatorWorkbenchDeclaration() {
 export const desireExtensions = Object.freeze({
   rvmForms: operatorWorkbenchRvmForms,
   runtimeDeclarations: Object.freeze([
+    Object.freeze({ kind: "operator_theme", apply: applyOperatorWorkbenchDeclaration }),
     Object.freeze({ kind: "operator_dataset", apply: applyOperatorWorkbenchDeclaration }),
     Object.freeze({ kind: "operator_screen", apply: applyOperatorWorkbenchDeclaration }),
     Object.freeze({ kind: "operator_screen_section", apply: applyOperatorWorkbenchDeclaration }),

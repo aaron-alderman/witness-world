@@ -76,6 +76,7 @@ function parseSurfaceBlock(id, lines) {
     kind: "text_reader",
     title: id,
     scrollAxes: [],
+    closeIdsOnOpen: [],
     maxPrimaryChars: null,
     resizable: false,
     width: null,
@@ -86,6 +87,7 @@ function parseSurfaceBlock(id, lines) {
     if (key === "kind") surface.kind = rest[0] ?? surface.kind;
     if (key === "title") surface.title = rest.join(" ") || surface.title;
     if (key === "scroll") surface.scrollAxes = rest;
+    if (key === "close_on_open") surface.closeIdsOnOpen = rest.filter(Boolean);
     if (key === "max_primary_chars") surface.maxPrimaryChars = Number(rest[0] ?? 0) || null;
     if (key === "resizable") surface.resizable = rest[0] === "true";
     if (key === "width") surface.width = Number(rest[0] ?? 0) || null;

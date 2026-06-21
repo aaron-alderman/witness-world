@@ -41,6 +41,7 @@ import {
   moduleProjectors
 } from "../../src/modules.js";
 import { createCanonicalPackagePatch, normalizeCanonicalPath } from "../../src/package-authorship.js";
+import { parseWitnessToml } from "../../src/dsl.js";
 import { applyLegacyFrontendUplift } from "../../src/frontend-legacy-uplift.js";
 import { defineFrontendProgram, defineFrontendStep, defineWidget, updateWidget, attachWidget, widgetDefinitions, widgetVersions } from "../../src/widgets.js";
 import { normalizeInteractionTiming } from "../../src/runtime-surface-runtime-shared.js";
@@ -55,7 +56,7 @@ import {
   rollbackBackendProgramVersion
 } from "../../src/backend-programs.js";
 import { processSpecFor, typeModelProjection, validateProcessInput, validateProcessOutput } from "../../src/type-model.js";
-import { applyDesire, createDesireDocument, createDesireNode } from "../../src/desire/index.js";
+import { applyDesire, compileRvmToDesirePlus, createDesireDocument, createDesireNode } from "../../src/desire/index.js";
 
 
 
@@ -2488,55 +2489,59 @@ export function requestPackageRevisionPublish(world, {
   };
 }
 
+function normalizePackagePatchDefinition(world, body) {
+  const packageIndex = world.project(moduleProjectors.packageIndex).byId;
+  const revisionIndex = world.project(moduleProjectors.packageRevisionIndex).byId;
+  const transformerIndex = world.project(moduleProjectors.packageTransformerIndex).byId;
+  const input = authoringObject(body, "package patch doc");
+  const packageId = requiredResolvedAuthoringRef(world, input, {
+    idField: "package",
+    refField: "packageRef",
+    label: "package"
+  });
+  const revisionId = requiredResolvedAuthoringRef(world, input, {
+    idField: "revision",
+    refField: "revisionRef",
+    label: "package revision"
+  });
+  if (!packageIndex[packageId]) throw new Error("package not found");
+  const revisionRow = revisionIndex[revisionId];
+  if (!revisionRow) throw new Error("package revision not found");
+  if (revisionRow.package !== packageId) throw new Error("package revision does not belong to package");
+  const transformerId = optionalResolvedAuthoringRef(world, input, {
+    idField: "transformer",
+    refField: "transformerRef",
+    label: "package transformer"
+  });
+  if (transformerId) {
+    const transformerRow = transformerIndex[transformerId];
+    if (!transformerRow) throw new Error("package transformer not found");
+    if (transformerRow.package !== packageId) throw new Error("package transformer does not belong to package");
+    if (transformerRow.targetRevision && transformerRow.targetRevision !== revisionId) {
+      throw new Error("package patch revision does not match transformer target revision");
+    }
+  }
+  return createCanonicalPackagePatch({
+    package: packageId,
+    revision: revisionId,
+    ordinal: input.ordinal ?? null,
+    path: input.path,
+    operation: input.operation,
+    sourceLanguage: input.sourceLanguage,
+    transformer: transformerId,
+    previousHash: trimOptionalString(input.previousHash),
+    nextHash: trimOptionalString(input.nextHash),
+    body: input.body ?? null
+  });
+}
+
 export function requestPackagePatchDefine(world, {
   actor,
   body
 }) {
-  const packageIndex = world.project(moduleProjectors.packageIndex).byId;
-  const revisionIndex = world.project(moduleProjectors.packageRevisionIndex).byId;
-  const transformerIndex = world.project(moduleProjectors.packageTransformerIndex).byId;
   let normalized;
   try {
-    const input = authoringObject(body, "package patch doc");
-    const packageId = requiredResolvedAuthoringRef(world, input, {
-      idField: "package",
-      refField: "packageRef",
-      label: "package"
-    });
-    const revisionId = requiredResolvedAuthoringRef(world, input, {
-      idField: "revision",
-      refField: "revisionRef",
-      label: "package revision"
-    });
-    if (!packageIndex[packageId]) throw new Error("package not found");
-    const revisionRow = revisionIndex[revisionId];
-    if (!revisionRow) throw new Error("package revision not found");
-    if (revisionRow.package !== packageId) throw new Error("package revision does not belong to package");
-    const transformerId = optionalResolvedAuthoringRef(world, input, {
-      idField: "transformer",
-      refField: "transformerRef",
-      label: "package transformer"
-    });
-    if (transformerId) {
-      const transformerRow = transformerIndex[transformerId];
-      if (!transformerRow) throw new Error("package transformer not found");
-      if (transformerRow.package !== packageId) throw new Error("package transformer does not belong to package");
-      if (transformerRow.targetRevision && transformerRow.targetRevision !== revisionId) {
-        throw new Error("package patch revision does not match transformer target revision");
-      }
-    }
-    normalized = createCanonicalPackagePatch({
-      package: packageId,
-      revision: revisionId,
-      ordinal: input.ordinal ?? null,
-      path: input.path,
-      operation: input.operation,
-      sourceLanguage: input.sourceLanguage,
-      transformer: transformerId,
-      previousHash: trimOptionalString(input.previousHash),
-      nextHash: trimOptionalString(input.nextHash),
-      body: input.body ?? null
-    });
+    normalized = normalizePackagePatchDefinition(world, body);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -2568,6 +2573,103 @@ export function requestPackagePatchDefine(world, {
   };
 }
 
+function packagePatchSourceLanguage(input) {
+  const explicit = trimOptionalString(input.sourceLanguage)?.toLowerCase();
+  if (explicit) return explicit;
+  const sourcePath = trimOptionalString(input.sourcePath ?? input.path);
+  if (sourcePath?.toLowerCase().endsWith(".rvm")) return "rvm";
+  if (sourcePath?.toLowerCase().endsWith(".wtoml")) return "wtoml";
+  throw new Error("package patch source doc requires sourceLanguage of rvm or wtoml");
+}
+
+function packagePatchDefinitionsFromSource(world, input) {
+  const sourceLanguage = packagePatchSourceLanguage(input);
+  const content = requiredStringField(input, "content", "package patch source doc");
+  if (sourceLanguage === "wtoml") {
+    const docs = parseWitnessToml(content).filter(doc => doc.kind === "packagePatch");
+    if (!docs.length) throw new Error("WTOML patch source must contain at least one [[packagePatch]] document");
+    return docs.map((doc, index) => ({
+      ...(doc.values ?? {}),
+      context: doc.values?.context ?? input.context,
+      package: doc.values?.package ?? input.package,
+      packageRef: doc.values?.packageRef ?? input.packageRef,
+      revision: doc.values?.revision ?? input.revision,
+      revisionRef: doc.values?.revisionRef ?? input.revisionRef,
+      ordinal: doc.values?.ordinal ?? input.ordinal ?? index + 1,
+      transformer: doc.values?.transformer ?? input.transformer,
+      transformerRef: doc.values?.transformerRef ?? input.transformerRef
+    }));
+  }
+  if (sourceLanguage === "rvm") {
+    compileRvmToDesirePlus(content, {
+      file: trimOptionalString(input.sourcePath ?? input.path) ?? "inline-package-patch.rvm"
+    });
+    return [{
+      context: input.context,
+      package: input.package,
+      packageRef: input.packageRef,
+      revision: input.revision,
+      revisionRef: input.revisionRef,
+      transformer: input.transformer,
+      transformerRef: input.transformerRef,
+      ordinal: input.ordinal ?? null,
+      path: input.path,
+      operation: input.operation ?? "replace",
+      sourceLanguage: "rvm",
+      previousHash: input.previousHash,
+      nextHash: input.nextHash,
+      body: {
+        content
+      }
+    }];
+  }
+  throw new Error("package patch sourceLanguage must be rvm or wtoml");
+}
+
+export function requestPackagePatchSourceUpsert(world, {
+  actor,
+  body
+}) {
+  let normalizedPatches;
+  try {
+    const input = authoringObject(body, "package patch source doc");
+    const definitions = packagePatchDefinitionsFromSource(world, input);
+    normalizedPatches = definitions.map(definition => normalizePackagePatchDefinition(world, definition));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      status: /not found/i.test(message) ? 404 : 400,
+      error: message,
+      witness: null
+    };
+  }
+
+  const seen = new Set();
+  const packagePatches = [];
+  const witnesses = [];
+  for (const normalized of normalizedPatches) {
+    if (seen.has(normalized.id)) continue;
+    seen.add(normalized.id);
+    if (exists(world, normalized.id)) {
+      packagePatches.push(normalized);
+      continue;
+    }
+    const witness = definePackagePatch(world, {
+      actor,
+      ...normalized
+    });
+    packagePatches.push(witness.body ?? { id: normalized.id });
+    witnesses.push(witness);
+  }
+  return {
+    ok: true,
+    status: witnesses.length ? 201 : 200,
+    packagePatches,
+    witnesses
+  };
+}
+
 export function requestPackageNamespaceDefine(world, {
   actor,
   body
@@ -2585,7 +2687,9 @@ export function requestPackageNamespaceDefine(world, {
       refField: "packageRef",
       label: "package"
     });
+    const revisionContextField = trimOptionalString(input.revision) ? "__packageRevisionContext" : "context";
     input.revision = optionalResolvedAuthoringRef(world, input, {
+      contextField: revisionContextField,
       idField: "revision",
       refField: "revisionRef",
       label: "package revision"

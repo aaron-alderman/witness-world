@@ -25,7 +25,12 @@ function defaultUiState(displaySettings) {
     rightScreenMode: "custom-screen",
     activeScreenId: "inspect",
     inspectorSpec: null,
+    openOverlayIds: [],
+    overlayStateById: {},
+    readerStateBySurfaceId: {},
     helpOpen: false,
+    contextMenuOpen: false,
+    contextMenuContext: null,
     topCursor: 0,
     leftCursor: 0,
     rightCursor: 0,
@@ -38,6 +43,179 @@ function defaultUiState(displaySettings) {
     lastStatus: "info",
     displaySettings: normalizeOperatorWorkbenchDisplaySettings(displaySettings)
   };
+}
+
+function orderedOverlayIds(ids = []) {
+  return [...new Set(
+    (Array.isArray(ids) ? ids : [])
+      .map(id => String(id ?? "").trim())
+      .filter(Boolean)
+  )];
+}
+
+function syncOverlayCompatibilityFlags(uiState) {
+  const overlayIds = orderedOverlayIds(uiState.openOverlayIds);
+  uiState.openOverlayIds = overlayIds;
+  uiState.helpOpen = overlayIds.includes("help_overlay");
+  uiState.contextMenuOpen = overlayIds.includes("context_menu");
+  if (!uiState.contextMenuOpen) uiState.contextMenuContext = null;
+}
+
+function closeOverlayId(uiState, overlayId) {
+  uiState.openOverlayIds = orderedOverlayIds(uiState.openOverlayIds).filter(id => id !== overlayId);
+  syncOverlayCompatibilityFlags(uiState);
+}
+
+function activeOverlayId(uiState) {
+  return orderedOverlayIds(uiState.openOverlayIds).at(-1) ?? null;
+}
+
+function ensureOverlayUiState(uiState, overlayId) {
+  if (!uiState.overlayStateById || typeof uiState.overlayStateById !== "object") {
+    uiState.overlayStateById = {};
+  }
+  if (!uiState.overlayStateById[overlayId] || typeof uiState.overlayStateById[overlayId] !== "object") {
+    uiState.overlayStateById[overlayId] = {};
+  }
+  return uiState.overlayStateById[overlayId];
+}
+
+function ensureReaderUiState(uiState, surfaceId) {
+  if (!uiState.readerStateBySurfaceId || typeof uiState.readerStateBySurfaceId !== "object") {
+    uiState.readerStateBySurfaceId = {};
+  }
+  if (!uiState.readerStateBySurfaceId[surfaceId] || typeof uiState.readerStateBySurfaceId[surfaceId] !== "object") {
+    uiState.readerStateBySurfaceId[surfaceId] = {};
+  }
+  return uiState.readerStateBySurfaceId[surfaceId];
+}
+
+function derivedOverlayInteraction(overlayId, overlayModel = null) {
+  if (overlayModel?.interaction && typeof overlayModel.interaction === "object") {
+    return overlayModel.interaction;
+  }
+  const kind = String(overlayModel?.kind ?? (overlayId === "context_menu" ? "menu" : "doc_view"));
+  if (kind === "menu") {
+    const items = arrayWrap(overlayModel?.items);
+    return {
+      family: "menu",
+      cursorMode: items.length ? "items" : "none",
+      activationMode: items.length ? "item" : "none",
+      scrollMode: "none"
+    };
+  }
+  return {
+    family: "doc_view",
+    cursorMode: "none",
+    activationMode: "none",
+    scrollMode: "xy"
+  };
+}
+
+function derivedOverlayPolicy(overlayId, overlayModel = null) {
+  if (overlayModel?.policy && typeof overlayModel.policy === "object") {
+    return overlayModel.policy;
+  }
+  if (Array.isArray(overlayModel?.closeIdsOnOpen)) {
+    return {
+      closeIdsOnOpen: overlayModel.closeIdsOnOpen
+        .map(id => String(id ?? "").trim())
+        .filter(Boolean)
+    };
+  }
+  return {
+    closeIdsOnOpen: []
+  };
+}
+
+function overlayModelById(snapshot, overlayId) {
+  if (!overlayId) return null;
+  const overlays = Array.isArray(snapshot?.overlays) ? snapshot.overlays : [];
+  const exact = overlays.find(overlay => overlay?.id === overlayId) ?? null;
+  if (exact) {
+    if (!exact.interaction) exact.interaction = derivedOverlayInteraction(overlayId, exact);
+    if (!exact.policy) exact.policy = derivedOverlayPolicy(overlayId, exact);
+    return exact;
+  }
+  if (overlayId === "context_menu" && snapshot?.contextMenu) {
+    return {
+      ...snapshot.contextMenu,
+      id: "context_menu",
+      kind: "menu",
+      interaction: derivedOverlayInteraction("context_menu", snapshot.contextMenu),
+      policy: derivedOverlayPolicy("context_menu", snapshot.contextMenu)
+    };
+  }
+  if (overlayId === "help_overlay" && snapshot?.helpOverlay) {
+    return {
+      ...snapshot.helpOverlay,
+      id: "help_overlay",
+      kind: "doc_view",
+      interaction: derivedOverlayInteraction("help_overlay", snapshot.helpOverlay),
+      policy: derivedOverlayPolicy("help_overlay", snapshot.helpOverlay)
+    };
+  }
+  return null;
+}
+
+function overlayInteractionById(snapshot, overlayId) {
+  return overlayModelById(snapshot, overlayId)?.interaction ?? null;
+}
+
+function overlayItemsById(snapshot, overlayId) {
+  return arrayWrap(overlayModelById(snapshot, overlayId)?.items);
+}
+
+function overlayCloseIdsForOpen(snapshot, overlayId) {
+  return arrayWrap(overlayModelById(snapshot, overlayId)?.policy?.closeIdsOnOpen)
+    .map(id => String(id ?? "").trim())
+    .filter(Boolean);
+}
+
+function openOverlayId(uiState, overlayId, {
+  closeIds = []
+} = {}) {
+  const closeSet = new Set(arrayWrap(closeIds).map(id => String(id ?? "").trim()).filter(Boolean));
+  const nextOverlayIds = orderedOverlayIds(uiState.openOverlayIds)
+    .filter(id => id !== overlayId && !closeSet.has(id));
+  nextOverlayIds.push(overlayId);
+  uiState.openOverlayIds = nextOverlayIds;
+  syncOverlayCompatibilityFlags(uiState);
+}
+
+function toggleOverlayId(uiState, overlayId, options = {}) {
+  if (orderedOverlayIds(uiState.openOverlayIds).includes(overlayId)) {
+    closeOverlayId(uiState, overlayId);
+    return;
+  }
+  openOverlayId(uiState, overlayId, options);
+}
+
+function focusOverlayId(uiState, overlayId) {
+  const nextOverlayIds = orderedOverlayIds(uiState.openOverlayIds).filter(id => id !== overlayId);
+  if (!nextOverlayIds.length && !orderedOverlayIds(uiState.openOverlayIds).includes(overlayId)) {
+    return false;
+  }
+  nextOverlayIds.push(overlayId);
+  uiState.openOverlayIds = nextOverlayIds;
+  syncOverlayCompatibilityFlags(uiState);
+  return true;
+}
+
+function moveOverlayFocus(uiState, direction = "next") {
+  const overlayIds = orderedOverlayIds(uiState.openOverlayIds);
+  if (!overlayIds.length) return false;
+  if (overlayIds.length === 1) return true;
+  const activeId = activeOverlayId(uiState) ?? overlayIds.at(-1);
+  const currentIndex = Math.max(0, overlayIds.indexOf(activeId));
+  const delta = direction === "prev" ? -1 : 1;
+  const nextIndex = (currentIndex + delta + overlayIds.length) % overlayIds.length;
+  const nextId = overlayIds[nextIndex];
+  return focusOverlayId(uiState, nextId);
+}
+
+function arrayWrap(value) {
+  return Array.isArray(value) ? value : [];
 }
 
 function normalizeViewportLayoutPatch(layout = {}, currentLayout = {}, viewport = {}) {
@@ -141,6 +319,7 @@ export function createOperatorWorkbenchController({
   saveDisplaySettings = async settings => settings
 } = {}) {
   const uiState = defaultUiState(displaySettings);
+  syncOverlayCompatibilityFlags(uiState);
 
   function applyDisplaySettingsToActiveResultView() {
     const resultView = engine.session.resultView;
@@ -341,14 +520,212 @@ export function createOperatorWorkbenchController({
 
   async function dispatchIntent(intent = {}) {
     const type = String(intent.type || "");
+    if (type === "activate-screen-shortcut") {
+      const shortcut = String(intent.shortcut || "").trim().toUpperCase();
+      if (!shortcut) return { snapshot: await snapshot() };
+      const next = await snapshot();
+      const target = Array.isArray(next?.screens?.shortcuts)
+        ? next.screens.shortcuts.find(row => String(row?.shortcut || "").toUpperCase() === shortcut)
+        : null;
+      if (!target?.screenId) {
+        return {
+          result: { output: `unknown screen shortcut: ${shortcut}`, status: "error" },
+          snapshot: next
+        };
+      }
+      return executeCommand(`screen ${target.screenId}`);
+    }
     if (type === "set-focused-pane") {
       uiState.focusedPane = intent.pane || "left";
       if (uiState.focusedPane !== "top") uiState.lastNonTopPane = uiState.focusedPane;
       return { snapshot: await snapshot() };
     }
     if (type === "toggle-help") {
-      uiState.helpOpen = !uiState.helpOpen;
+      const next = await snapshot();
+      toggleOverlayId(uiState, "help_overlay", { closeIds: overlayCloseIdsForOpen(next, "help_overlay") });
       return { snapshot: await snapshot() };
+    }
+    if (type === "open-context-menu") {
+      const next = await snapshot();
+      uiState.contextMenuContext = intent.context && typeof intent.context === "object"
+        ? structuredClone(intent.context)
+        : null;
+      openOverlayId(uiState, "context_menu", { closeIds: overlayCloseIdsForOpen(next, "context_menu") });
+      return { snapshot: await snapshot() };
+    }
+    if (type === "close-context-menu") {
+      closeOverlayId(uiState, "context_menu");
+      return { snapshot: await snapshot() };
+    }
+    if (type === "open-overlay") {
+      const overlayId = String(intent.overlayId || "").trim();
+      if (!overlayId) return { snapshot: await snapshot() };
+      const next = await snapshot();
+      const closeIds = overlayCloseIdsForOpen(next, overlayId);
+      if (overlayId === "context_menu") {
+        uiState.contextMenuContext = intent.context && typeof intent.context === "object"
+          ? structuredClone(intent.context)
+          : uiState.contextMenuContext;
+      }
+      openOverlayId(uiState, overlayId, { closeIds });
+      return { snapshot: await snapshot() };
+    }
+    if (type === "close-overlay") {
+      const overlayId = String(intent.overlayId || "").trim();
+      if (!overlayId) return { snapshot: await snapshot() };
+      closeOverlayId(uiState, overlayId);
+      return { snapshot: await snapshot() };
+    }
+    if (type === "toggle-overlay") {
+      const overlayId = String(intent.overlayId || "").trim();
+      if (!overlayId) return { snapshot: await snapshot() };
+      const next = await snapshot();
+      const closeIds = overlayCloseIdsForOpen(next, overlayId);
+      if (overlayId === "context_menu" && !uiState.contextMenuOpen) {
+        uiState.contextMenuContext = intent.context && typeof intent.context === "object"
+          ? structuredClone(intent.context)
+          : uiState.contextMenuContext;
+      }
+      toggleOverlayId(uiState, overlayId, { closeIds });
+      return { snapshot: await snapshot() };
+    }
+    if (type === "set-active-overlay") {
+      const overlayId = String(intent.overlayId || "").trim();
+      if (!overlayId) return { snapshot: await snapshot() };
+      focusOverlayId(uiState, overlayId);
+      return { snapshot: await snapshot() };
+    }
+    if (type === "move-active-overlay-focus") {
+      moveOverlayFocus(uiState, String(intent.direction || "next"));
+      return { snapshot: await snapshot() };
+    }
+    if (type === "activate-context-menu-item") {
+      const next = await snapshot();
+      const items = Array.isArray(next?.contextMenu?.items) ? next.contextMenu.items : [];
+      let item = null;
+      if (intent.itemId) item = items.find(entry => entry?.id === intent.itemId) ?? null;
+      else if (intent.index !== undefined) item = items[Number(intent.index) || 0] ?? null;
+      if (!item) {
+        return {
+          result: { output: "context menu item not found.", status: "error" },
+          snapshot: next
+        };
+      }
+      if (item.enabled === false) {
+        return {
+          result: { output: `${item.label || "menu item"} is disabled.`, status: "error" },
+          snapshot: next
+        };
+      }
+      closeOverlayId(uiState, "context_menu");
+      const action = item.action && typeof item.action === "object" ? item.action : null;
+      if (action?.kind === "command" && action.command) {
+        return executeCommand(action.command);
+      }
+      if (action?.kind === "hook") {
+        return afterResult({
+          output: `menu action requested: ${action.hook}${action.subject ? ` :: ${action.subject}` : ""}`,
+          status: "info"
+        }, { command: `menu ${item.id || action.hook}` });
+      }
+      return afterResult({
+        output: `menu action activated: ${item.label || item.id || "item"}`,
+        status: "info"
+      }, { command: `menu ${item.id || "item"}` });
+    }
+    if (type === "move-active-overlay-cursor") {
+      const next = await snapshot();
+      const overlayId = activeOverlayId(uiState);
+      if (!overlayId) return { snapshot: next };
+      const interaction = overlayInteractionById(next, overlayId);
+      if (interaction?.cursorMode !== "items") {
+        return {
+          result: { output: `${overlayId} has no cursor.`, status: "error" },
+          snapshot: next
+        };
+      }
+      const items = overlayItemsById(next, overlayId);
+      if (!items.length) return { snapshot: next };
+      const overlayState = ensureOverlayUiState(uiState, overlayId);
+      const limit = Math.max(0, items.length - 1);
+      const direction = String(intent.direction || "");
+      let index = clamp(Number(overlayState.activeItemIndex ?? next.contextMenu?.activeItemIndex ?? 0) || 0, 0, limit);
+      if (direction === "up") index = clamp(index - 1, 0, limit);
+      if (direction === "down") index = clamp(index + 1, 0, limit);
+      if (direction === "home") index = 0;
+      if (direction === "end") index = limit;
+      overlayState.activeItemIndex = index;
+      return { snapshot: await snapshot() };
+    }
+    if (type === "move-active-overlay-scroll") {
+      const next = await snapshot();
+      const overlayId = activeOverlayId(uiState);
+      if (!overlayId) return { snapshot: next };
+      const overlayModel = overlayModelById(next, overlayId);
+      if (!overlayModel) return { snapshot: next };
+      const interaction = overlayModel.interaction ?? null;
+      if (interaction?.scrollMode === "none") {
+        return {
+          result: { output: `${overlayId} has no scroll.`, status: "error" },
+          snapshot: next
+        };
+      }
+      const overlayState = ensureOverlayUiState(uiState, overlayId);
+      const lines = Array.isArray(overlayModel.lines) ? overlayModel.lines.map(line => String(line ?? "")) : [];
+      const contentWidth = Math.max(0, Number(overlayModel.contentWidth ?? 0) || 0);
+      const lineCount = Math.max(0, Number(overlayModel.lineCount ?? 0) || 0);
+      const contentHeight = Math.max(0, Number(overlayModel.contentHeight ?? 0) || 0);
+      const limitX = Math.max(0, lines.reduce((maxWidth, line) => Math.max(maxWidth, line.length), 0) - contentWidth);
+      const limitY = Math.max(0, lineCount - contentHeight);
+      const direction = String(intent.direction || "");
+      let scrollX = clamp(Number(overlayState.scrollX ?? overlayModel.scrollX ?? 0) || 0, 0, limitX);
+      let scrollY = clamp(Number(overlayState.scrollY ?? overlayModel.scrollY ?? 0) || 0, 0, limitY);
+      if (direction === "left") scrollX = clamp(scrollX - 1, 0, limitX);
+      if (direction === "right") scrollX = clamp(scrollX + 1, 0, limitX);
+      if (direction === "up") scrollY = clamp(scrollY - 1, 0, limitY);
+      if (direction === "down") scrollY = clamp(scrollY + 1, 0, limitY);
+      if (direction === "page-up") scrollY = clamp(scrollY - Math.max(1, contentHeight), 0, limitY);
+      if (direction === "page-down") scrollY = clamp(scrollY + Math.max(1, contentHeight), 0, limitY);
+      if (direction === "home") scrollY = 0;
+      if (direction === "end") scrollY = limitY;
+      overlayState.scrollX = scrollX;
+      overlayState.scrollY = scrollY;
+      return { snapshot: await snapshot() };
+    }
+    if (type === "move-reader-scroll") {
+      const next = await snapshot();
+      const surfaceId = String(intent.surfaceId || next.rightPane?.surfaceId || "").trim();
+      if (!surfaceId) return { snapshot: next };
+      const readerState = ensureReaderUiState(uiState, surfaceId);
+      let x = Math.max(0, Number(readerState.x ?? next.rightPane?.readerScroll?.x ?? 0) || 0);
+      let y = Math.max(0, Number(readerState.y ?? next.rightPane?.readerScroll?.y ?? 0) || 0);
+      if (intent.setX !== undefined) x = Math.max(0, Number(intent.setX) || 0);
+      else x = Math.max(0, x + (Number(intent.deltaX ?? 0) || 0));
+      if (intent.setY !== undefined) y = Math.max(0, Number(intent.setY) || 0);
+      else y = Math.max(0, y + (Number(intent.deltaY ?? 0) || 0));
+      readerState.x = x;
+      readerState.y = y;
+      return { snapshot: await snapshot() };
+    }
+    if (type === "activate-active-overlay") {
+      const next = await snapshot();
+      const overlayId = activeOverlayId(uiState);
+      if (!overlayId) return { snapshot: next };
+      const interaction = overlayInteractionById(next, overlayId);
+      if (interaction?.activationMode === "item") {
+        const overlayState = ensureOverlayUiState(uiState, overlayId);
+        const items = overlayItemsById(next, overlayId);
+        const index = clamp(
+          Number(overlayState.activeItemIndex ?? overlayModelById(next, overlayId)?.activeItemIndex ?? 0) || 0,
+          0,
+          Math.max(0, items.length - 1)
+        );
+        return dispatchIntent({ type: "activate-context-menu-item", index });
+      }
+      return {
+        result: { output: `${overlayId} has no primary action.`, status: "error" },
+        snapshot: next
+      };
     }
     if (type === "set-viewport-layout") {
       const next = await snapshot();
@@ -486,16 +863,25 @@ export function createOperatorWorkbenchController({
       return { snapshot: await snapshot() };
     }
     if (type === "escape") {
+      if (uiState.contextMenuOpen) {
+        closeOverlayId(uiState, "context_menu");
+        return { snapshot: await snapshot() };
+      }
       if (uiState.focusedPane === "top") {
         uiState.focusedPane = uiState.lastNonTopPane || "left";
         return { snapshot: await snapshot() };
       }
       if (uiState.numberBuffer) {
-        uiState.numberBuffer = "";
+      uiState.numberBuffer = "";
+      return { snapshot: await snapshot() };
+    }
+      const topOverlayId = orderedOverlayIds(uiState.openOverlayIds).at(-1) ?? null;
+      if (topOverlayId && topOverlayId !== "help_overlay" && topOverlayId !== "context_menu") {
+        closeOverlayId(uiState, topOverlayId);
         return { snapshot: await snapshot() };
       }
       if (uiState.helpOpen) {
-        uiState.helpOpen = false;
+        closeOverlayId(uiState, "help_overlay");
         return { snapshot: await snapshot() };
       }
       if (uiState.focusedPane === "right") {

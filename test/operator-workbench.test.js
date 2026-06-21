@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
-import { createOperatorTuiEngine } from "../src/operator-tui.js";
+import {
+  buildOperatorWorkbenchSnapshot,
+  buildOperatorTuiState,
+  createOperatorTuiEngine,
+  loadOperatorTuiRuntimeContext
+} from "../src/operator-tui.js";
 import { createOperatorWorkbenchController } from "../src/operator-workbench/core.js";
 import { renderOperatorWorkbenchPage } from "../src/operator-workbench/page.js";
 import { buildOperatorWorkbenchDefinition } from "../src/operator-screen-specs.js";
@@ -8,6 +14,8 @@ import {
   renderOperatorWorkbenchState,
   startOperatorWorkbenchRuntime
 } from "../src/operator-workbench/runtime.js";
+
+const exampleRoot = path.resolve("examples", "operator");
 
 function makeState() {
   const worldRecords = [
@@ -356,6 +364,43 @@ function makeFakeDocument() {
   return { documentTarget, elements };
 }
 
+test("non-authored workbench definition exposes canonical built-in overlays and viewport", async () => {
+  const definition = buildOperatorWorkbenchDefinition(null);
+  assert.equal(definition.defaultViewport, "builtin.default");
+  assert.deepEqual([...definition.overlaysById.keys()], ["help_overlay", "context_menu"]);
+  assert.deepEqual(definition.overlaysById.get("help_overlay")?.closeIdsOnOpen, ["context_menu"]);
+  assert.deepEqual(definition.overlaysById.get("context_menu")?.closeIdsOnOpen, ["help_overlay"]);
+  assert.deepEqual(definition.viewportsById.get("builtin.default")?.overlays, ["help_overlay", "context_menu"]);
+
+  const state = makeState();
+  const engine = createOperatorTuiEngine(state);
+  const snapshot = await buildOperatorWorkbenchSnapshot(state, engine.session, {
+    openOverlayIds: ["help_overlay"]
+  });
+  assert.equal(snapshot.viewport?.id, "builtin.default");
+  assert.deepEqual(snapshot.overlays?.map(overlay => overlay.id), ["help_overlay", "context_menu"]);
+  assert.deepEqual(snapshot.overlays?.[0]?.policy?.closeIdsOnOpen, ["context_menu"]);
+  assert.deepEqual(snapshot.overlays?.[1]?.policy?.closeIdsOnOpen, ["help_overlay"]);
+});
+
+test("authored operator setup can reference the built-in default viewport explicitly", () => {
+  const definition = buildOperatorWorkbenchDefinition({
+    authoredDesireDocs: [{
+      runtimeResiduals: [{
+        name: "shell",
+        body: {
+          declarationKind: "operator_setup",
+          values: {
+            defaultViewport: "builtin.default"
+          }
+        }
+      }]
+    }]
+  });
+  assert.equal(definition.defaultViewport, "builtin.default");
+  assert.equal(definition.viewportsById.has("builtin.default"), true);
+});
+
 test("workbench controller exposes root tree and primary navigation action", async () => {
   const state = makeState();
   const engine = createOperatorTuiEngine(state);
@@ -611,10 +656,12 @@ test("workbench controller escape unwinds number buffer, help, references, and r
   let next = await controller.dispatchIntent({ type: "escape" });
   assert.equal(next.snapshot.ui.numberBuffer, "");
   assert.equal(next.snapshot.ui.helpOpen, true);
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["help_overlay"]);
   assert.equal(next.snapshot.ui.inspectorTab, "references");
 
   next = await controller.dispatchIntent({ type: "escape" });
   assert.equal(next.snapshot.ui.helpOpen, false);
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, []);
   assert.equal(next.snapshot.ui.inspectorTab, "references");
 
   next = await controller.dispatchIntent({ type: "escape" });
@@ -622,6 +669,210 @@ test("workbench controller escape unwinds number buffer, help, references, and r
 
   next = await controller.dispatchIntent({ type: "escape" });
   assert.equal(next.snapshot.leftPane.mode, "tree");
+});
+
+test("workbench controller routes context-menu state through the shared UI snapshot and escape closes it first", async () => {
+  const state = makeState();
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  let next = await controller.dispatchIntent({
+    type: "open-context-menu",
+    context: {
+      pane: "left",
+      rowIndex: 1,
+      rowLabel: "World"
+    }
+  });
+  assert.equal(next.snapshot.ui.contextMenuOpen, true);
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["context_menu"]);
+  assert.equal(next.snapshot.ui.contextMenuContext?.pane, "left");
+  assert.equal(next.snapshot.ui.contextMenuContext?.rowLabel, "World");
+  assert.equal(next.snapshot.contextMenu?.items?.[0]?.label, "Edit");
+  assert.equal(next.snapshot.contextMenu?.items?.[2]?.label, "Rename");
+  assert.equal(next.snapshot.contextMenu?.items?.[2]?.action?.hook, "rename");
+  assert.equal(next.snapshot.contextMenu?.subject, "World");
+
+  next = await controller.dispatchIntent({ type: "activate-context-menu-item", index: 2 });
+  assert.equal(next.snapshot.ui.contextMenuOpen, false);
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, []);
+  assert.equal(next.snapshot.ui.contextMenuContext, null);
+  assert.equal(next.snapshot.ui.lastOutput.includes("menu action requested: rename :: World"), true);
+
+  await controller.dispatchIntent({
+    type: "open-context-menu",
+    context: {
+      pane: "bottom"
+    }
+  });
+  next = await controller.dispatchIntent({ type: "activate-context-menu-item", index: 2 });
+  assert.equal(next.result.status, "error");
+  assert.equal(next.result.output.includes("Rename is disabled"), true);
+
+  next = await controller.dispatchIntent({ type: "toggle-help" });
+  assert.equal(next.snapshot.ui.helpOpen, true);
+  assert.equal(next.snapshot.ui.contextMenuOpen, false);
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["help_overlay"]);
+  assert.equal(next.snapshot.ui.contextMenuContext, null);
+
+  await controller.dispatchIntent({
+    type: "open-context-menu",
+    context: {
+      pane: "right",
+      rowIndex: 0,
+      rowLabel: "alpha source"
+    }
+  });
+  await controller.dispatchIntent({ type: "set-focused-pane", pane: "top" });
+
+  next = await controller.dispatchIntent({ type: "escape" });
+  assert.equal(next.snapshot.ui.contextMenuOpen, false);
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, []);
+  assert.equal(next.snapshot.ui.focusedPane, "top");
+
+  next = await controller.dispatchIntent({ type: "escape" });
+  assert.equal(next.snapshot.ui.focusedPane, "left");
+});
+
+test("workbench controller routes generic overlay ordering through the shared UI snapshot", async () => {
+  const state = makeState();
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  let next = await controller.dispatchIntent({ type: "open-overlay", overlayId: "info_overlay" });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["info_overlay"]);
+  assert.equal(next.snapshot.ui.activeOverlayId, "info_overlay");
+
+  next = await controller.dispatchIntent({ type: "toggle-help" });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["info_overlay", "help_overlay"]);
+  assert.equal(next.snapshot.ui.activeOverlayId, "help_overlay");
+  assert.equal(next.snapshot.ui.helpOpen, true);
+
+  next = await controller.dispatchIntent({ type: "set-active-overlay", overlayId: "info_overlay" });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["help_overlay", "info_overlay"]);
+  assert.equal(next.snapshot.ui.activeOverlayId, "info_overlay");
+
+  next = await controller.dispatchIntent({ type: "move-active-overlay-focus", direction: "next" });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["info_overlay", "help_overlay"]);
+  assert.equal(next.snapshot.ui.activeOverlayId, "help_overlay");
+
+  next = await controller.dispatchIntent({ type: "move-active-overlay-focus", direction: "prev" });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["help_overlay", "info_overlay"]);
+  assert.equal(next.snapshot.ui.activeOverlayId, "info_overlay");
+
+  next = await controller.dispatchIntent({
+    type: "open-context-menu",
+    context: { pane: "left", rowLabel: "Session" }
+  });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["info_overlay", "context_menu"]);
+  assert.equal(next.snapshot.ui.helpOpen, false);
+  assert.equal(next.snapshot.ui.contextMenuOpen, true);
+  assert.equal(next.snapshot.ui.activeOverlayId, "context_menu");
+
+  next = await controller.dispatchIntent({ type: "escape" });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["info_overlay"]);
+  assert.equal(next.snapshot.ui.contextMenuOpen, false);
+
+  next = await controller.dispatchIntent({ type: "escape" });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, []);
+  assert.equal(next.snapshot.ui.activeOverlayId, null);
+});
+
+test("workbench controller routes context-menu cursor movement and activation through shared overlay state", async () => {
+  const state = makeState();
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  let next = await controller.dispatchIntent({
+    type: "open-context-menu",
+    context: {
+      pane: "left",
+      rowLabel: "World"
+    }
+  });
+  assert.equal(next.snapshot.contextMenu?.activeItemIndex, 0);
+  assert.equal(next.snapshot.contextMenu?.items?.[0]?.active, true);
+
+  next = await controller.dispatchIntent({ type: "move-active-overlay-cursor", direction: "down" });
+  assert.equal(next.snapshot.contextMenu?.activeItemIndex, 1);
+  assert.equal(next.snapshot.contextMenu?.items?.[1]?.active, true);
+
+  next = await controller.dispatchIntent({ type: "activate-active-overlay" });
+  assert.equal(next.snapshot.ui.contextMenuOpen, false);
+  assert.equal(next.snapshot.ui.lastOutput.includes("menu action requested: change-color :: World"), true);
+});
+
+test("workbench controller generic overlay open and toggle obey shared overlay close policy", async () => {
+  const state = makeState();
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  let next = await controller.dispatchIntent({ type: "toggle-help" });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["help_overlay"]);
+
+  next = await controller.dispatchIntent({
+    type: "open-overlay",
+    overlayId: "context_menu",
+    context: {
+      pane: "left",
+      rowLabel: "World"
+    }
+  });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["context_menu"]);
+  assert.equal(next.snapshot.ui.helpOpen, false);
+  assert.equal(next.snapshot.ui.contextMenuOpen, true);
+
+  next = await controller.dispatchIntent({ type: "toggle-overlay", overlayId: "help_overlay" });
+  assert.deepEqual(next.snapshot.ui.openOverlayIds, ["help_overlay"]);
+  assert.equal(next.snapshot.ui.helpOpen, true);
+  assert.equal(next.snapshot.ui.contextMenuOpen, false);
+});
+
+test("workbench controller routes non-menu overlay horizontal scroll through shared UI state", async () => {
+  const runtimeContext = await loadOperatorTuiRuntimeContext({
+    appPath: exampleRoot,
+    runtimePluginIds: ["plugin.operator-workbench"]
+  });
+  runtimeContext.appProject.operatorWorkbench.overlaysById.get("help_overlay").width = 24;
+  const state = await buildOperatorTuiState(runtimeContext);
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+  try {
+    let next = await controller.dispatchIntent({ type: "toggle-help" });
+    const initialOverlay = next.snapshot.overlays.find(entry => entry.id === "help_overlay");
+    const initialLine = next.snapshot.helpOverlay?.visibleLines?.[0] ?? "";
+    assert.ok(initialOverlay);
+    assert.ok((initialOverlay.contentWidth ?? 0) < initialOverlay.lines[0].length);
+
+    next = await controller.dispatchIntent({ type: "move-active-overlay-scroll", direction: "right" });
+    assert.equal(next.snapshot.ui?.overlayStateById?.help_overlay?.scrollX, 1);
+    assert.equal(next.snapshot.helpOverlay?.scrollX, 1);
+    assert.notEqual(next.snapshot.helpOverlay?.visibleLines?.[0] ?? "", initialLine);
+
+    next = await controller.dispatchIntent({ type: "move-active-overlay-scroll", direction: "left" });
+    assert.equal(next.snapshot.ui?.overlayStateById?.help_overlay?.scrollX, 0);
+    assert.equal(next.snapshot.helpOverlay?.scrollX, 0);
+    assert.equal(next.snapshot.helpOverlay?.visibleLines?.[0] ?? "", initialLine);
+  } finally {
+    await runtimeContext.close?.();
+  }
+});
+
+test("workbench controller routes right-pane reader scroll through shared UI state", async () => {
+  const state = makeState();
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  let next = await controller.dispatchIntent({ type: "move-reader-scroll", surfaceId: "session_reader", deltaX: 5, deltaY: 2 });
+  assert.equal(next.snapshot.rightPane?.surfaceId, "session_reader");
+  assert.equal(next.snapshot.ui?.readerStateBySurfaceId?.session_reader?.x, 5);
+  assert.equal(next.snapshot.ui?.readerStateBySurfaceId?.session_reader?.y, 2);
+  assert.equal(next.snapshot.rightPane?.readerScroll?.x, 5);
+  assert.equal(next.snapshot.rightPane?.readerScroll?.y, 2);
+
+  next = await controller.dispatchIntent({ type: "move-reader-scroll", surfaceId: "session_reader", deltaX: -20, setY: 0 });
+  assert.equal(next.snapshot.ui?.readerStateBySurfaceId?.session_reader?.x, 0);
+  assert.equal(next.snapshot.ui?.readerStateBySurfaceId?.session_reader?.y, 0);
 });
 
 test("workbench controller persists updated display settings through the host seam", async () => {
@@ -833,6 +1084,21 @@ test("workbench controller opens built-in source and provenance custom screens a
   assert.equal(next.snapshot.rightPane.screenMode, "custom-screen");
   assert.equal(next.snapshot.rightPane.activeScreenId, "source");
   assert.equal(next.snapshot.rightPane.screen.detailLines.some(line => line.includes("path: C:/tmp/world/alpha")), true);
+});
+
+test("workbench controller activates published screen shortcuts through a shared intent", async () => {
+  const state = makeState();
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  await controller.executeCommand("inspect thing.alpha");
+  let next = await controller.dispatchIntent({ type: "activate-screen-shortcut", shortcut: "F2" });
+  assert.equal(next.snapshot.rightPane.activeScreenId, "references");
+  assert.equal(next.snapshot.rightPane.screenMode, "custom-screen");
+
+  next = await controller.dispatchIntent({ type: "activate-screen-shortcut", shortcut: "F3" });
+  assert.equal(next.snapshot.rightPane.activeScreenId, "source");
+  assert.equal(next.snapshot.rightPane.tab, "source");
 });
 
 test("workbench controller opens authored custom screens and preserves screen mode on activation", async () => {
@@ -1524,6 +1790,8 @@ test("renderOperatorWorkbenchState renders stacked screen sections and only acti
               id: "summary",
               title: "Summary",
               kind: "detail",
+              stateSummary: "detail | rows=0 | expanded | info | shared",
+              toggleLabel: "[~]",
               detailLines: ["Alpha", "id: thing.alpha"],
               emptyMessage: "n/a",
               rows: []
@@ -1532,6 +1800,8 @@ test("renderOperatorWorkbenchState renders stacked screen sections and only acti
               id: "links",
               title: "Links",
               kind: "table",
+              stateSummary: "table | rows=1 | expanded | actionable | shared",
+              toggleLabel: "[!]",
               columns: ["kind", "label", "detail"],
               rows: [
                 {
@@ -1589,6 +1859,8 @@ test("renderOperatorWorkbenchState renders stacked screen sections and only acti
   const html = elements.get("operator-custom-screen-body").innerHTML;
   assert.equal(html.includes("Summary"), true);
   assert.equal(html.includes("Links"), true);
+  assert.equal(html.includes("table | rows=1 | expanded | actionable | shared"), true);
+  assert.equal(html.includes("[!]"), true);
   assert.equal(html.includes("data-screen-section-header"), true);
   assert.equal(html.includes("data-screen-section-toggle"), true);
   assert.equal(html.includes('data-custom-screen-row="0"'), true);
@@ -1824,6 +2096,11 @@ test("renderOperatorWorkbenchState surfaces active section context in help copy"
       focus: { active: false, kind: null, id: null },
       preview: { available: true, status: "active" },
       topPane: { title: "Operator Workbench", subtitle: "global" },
+      helpOverlay: {
+        context: "Trace | section=Links | rows=3 | state=expanded",
+        summary: "Shared help summary for Links.",
+        lines: []
+      },
       leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
       rightPane: {
         title: "Trace",
@@ -1867,8 +2144,167 @@ test("renderOperatorWorkbenchState surfaces active section context in help copy"
     autocomplete: { preview: "", matches: [] }
   });
 
-  assert.equal(elements.get("operator-help-context").textContent.includes("section=Links"), true);
-  assert.equal(elements.get("operator-help-summary").textContent.includes("[ and ]"), true);
+  assert.equal(elements.get("operator-help-context").textContent, "Trace | section=Links | rows=3 | state=expanded");
+  assert.equal(elements.get("operator-help-summary").textContent, "Shared help summary for Links.");
+});
+
+test("renderOperatorWorkbenchState renders the shared top-pane status line instead of host-only synthesis", () => {
+  const { documentTarget } = makeFakeDocument();
+  renderOperatorWorkbenchState({
+    snapshot: {
+      path: "root",
+      focus: { active: false, kind: null, id: null },
+      preview: { available: false, status: "unavailable" },
+      topPane: {
+        title: "Operator Workbench",
+        subtitle: "global",
+        statusLine: "MODE shared-top-status",
+        navigation: { selectedIndex: 0, chips: [] }
+      },
+      leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+      rightPane: {
+        title: "Trace",
+        screenMode: "custom-screen",
+        activeScreenId: "trace",
+        screen: {
+          title: "Trace",
+          activeSectionIndex: 0,
+          sections: [],
+          rows: [],
+          activeRowIndex: 0,
+          detailLines: []
+        },
+        cursor: 0,
+        tabs: { inspect: true, references: true, source: true, provenance: true },
+        target: { kind: "record", id: "thing.alpha", mode: "record" }
+      },
+      ui: {
+        focusedPane: "left",
+        inspectorTab: "trace",
+        rightScreenMode: "custom-screen",
+        helpOpen: false,
+        numberBuffer: "",
+        lastOutput: "Ready.",
+        lastStatus: "info",
+        displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto" }
+      }
+    },
+    documentTarget,
+    commandDraft: "",
+    autocomplete: { preview: "", matches: [] }
+  });
+
+  const rows = documentTarget.__operatorCanvasState.buffer.map(row => row.map(cell => cell.ch).join(""));
+  assert.equal(rows.some(line => line.includes("MODE shared-top-status")), true);
+  assert.equal(rows.some(line => line.includes("MODE repo-self")), false);
+});
+
+test("renderOperatorWorkbenchState renders the shared top-pane navigation line instead of host-only synthesis", () => {
+  const { documentTarget } = makeFakeDocument();
+  renderOperatorWorkbenchState({
+    snapshot: {
+      path: "root",
+      focus: { active: false, kind: null, id: null },
+      preview: { available: false, status: "unavailable" },
+      topPane: {
+        title: "Operator Workbench",
+        subtitle: "global",
+        navigationLine: "NAV <shared> [line]",
+        navigation: {
+          selectedIndex: 0,
+          chips: [
+            { label: "root" },
+            { label: "preview ready" }
+          ]
+        }
+      },
+      leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+      rightPane: {
+        title: "Trace",
+        screenMode: "custom-screen",
+        activeScreenId: "trace",
+        screen: {
+          title: "Trace",
+          activeSectionIndex: 0,
+          sections: [],
+          rows: [],
+          activeRowIndex: 0,
+          detailLines: []
+        },
+        cursor: 0,
+        tabs: { inspect: true, references: true, source: true, provenance: true },
+        target: { kind: "record", id: "thing.alpha", mode: "record" }
+      },
+      ui: {
+        focusedPane: "top",
+        inspectorTab: "trace",
+        rightScreenMode: "custom-screen",
+        helpOpen: false,
+        numberBuffer: "",
+        lastOutput: "Ready.",
+        lastStatus: "info",
+        displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto" }
+      }
+    },
+    documentTarget,
+    commandDraft: "",
+    autocomplete: { preview: "", matches: [] }
+  });
+
+  const rows = documentTarget.__operatorCanvasState.buffer.map(row => row.map(cell => cell.ch).join(""));
+  assert.equal(rows.some(line => line.includes("NAV <shared> [line]")), true);
+  assert.equal(rows.some(line => line.includes("NAV <root> [preview ready]")), false);
+});
+
+test("renderOperatorWorkbenchState renders the shared top-pane title line instead of host-only synthesis", () => {
+  const { documentTarget } = makeFakeDocument();
+  renderOperatorWorkbenchState({
+    snapshot: {
+      path: "root",
+      focus: { active: false, kind: null, id: null },
+      preview: { available: false, status: "unavailable" },
+      topPane: {
+        title: "Operator Workbench",
+        subtitle: "global",
+        titleLine: "Workbench :: shared title line",
+        navigation: { selectedIndex: 0, chips: [] }
+      },
+      leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+      rightPane: {
+        title: "Trace",
+        screenMode: "custom-screen",
+        activeScreenId: "trace",
+        screen: {
+          title: "Trace",
+          activeSectionIndex: 0,
+          sections: [],
+          rows: [],
+          activeRowIndex: 0,
+          detailLines: []
+        },
+        cursor: 0,
+        tabs: { inspect: true, references: true, source: true, provenance: true },
+        target: { kind: "record", id: "thing.alpha", mode: "record" }
+      },
+      ui: {
+        focusedPane: "left",
+        inspectorTab: "trace",
+        rightScreenMode: "custom-screen",
+        helpOpen: false,
+        numberBuffer: "",
+        lastOutput: "Ready.",
+        lastStatus: "info",
+        displaySettings: { fontSize: 14, paneSplit: 0.42, rowDensity: "comfortable", colorMode: "auto" }
+      }
+    },
+    documentTarget,
+    commandDraft: "",
+    autocomplete: { preview: "", matches: [] }
+  });
+
+  const rows = documentTarget.__operatorCanvasState.buffer.map(row => row.map(cell => cell.ch).join(""));
+  assert.equal(rows.some(line => line.includes("Workbench :: shared title line")), true);
+  assert.equal(rows.some(line => line.includes("Operator Workbench :: global")), false);
 });
 
 test("startOperatorWorkbenchRuntime reports bridge unavailability clearly", async () => {

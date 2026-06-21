@@ -135,15 +135,18 @@ timeoutMs = 100
 allowedBindings = ["host.log", "host.metric"]
 ```
 
-The source file itself is authored through MCP/package authoring:
+The package change is authored as canonical patch material, then the source file is persisted through MCP/package authoring:
 
+- `authoring.write` action `packagePatch.source.upsert`
+- accepts canonical `sourceLanguage = "wtoml"` content containing `[[packagePatch]]` docs
+- accepts canonical `sourceLanguage = "rvm"` content as a replacement patch body for an RVM target
 - `authoring.write` action `computeModule.source.upsert`
 - required body fields: `package`, `revision`, `module`, `path`, `content`
 - `path` must exactly match the compute module declaration's `source`
 - the result is a package materialized-file record with `sourceLanguage = "assemblyscript"`
 - package bundle preview emits the file under `materialized/<path>`
 
-The important property is that project compute is explicit and authored, not hidden inside platform JS wiring.
+The important property is that project compute is explicit and authored as package material. MCP is the constrained transport, not a parallel JSON source language.
 
 ## MCP Authoring Contract
 
@@ -155,6 +158,7 @@ AssemblyScript compute module authoring is exposed through these MCP actions:
 - `computeModuleSmokeTest.upsert`
 - `computeModuleSmokeTest.markDeleted`
 - `computeModuleSmokeTest.run`
+- `packagePatch.source.upsert`
 
 Package materialized-file records are first-class world material:
 
@@ -408,7 +412,8 @@ Why first:
 
 Steps:
 
-- author `app/modules/health-classify/assembly/index.ts` through `computeModule.source.upsert`
+- author the package patch candidate as WTOML/RVM through `packagePatch.source.upsert`
+- persist `app/modules/health-classify/assembly/index.ts` through `computeModule.source.upsert`
 - port `classifyChannelHour` and the aggregate helpers to AssemblyScript
 - save smoke fixtures through `computeModuleSmokeTest.upsert`
 - keep the host-operation shape unchanged

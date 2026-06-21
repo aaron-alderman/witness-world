@@ -1,5 +1,16 @@
 # Operator Workbench Execution TODO
 
+> Superseded by `OPERATOR-WORKBENCH-HEROIC-SPEC-TODO.md`.
+>
+> Use `OPERATOR-WORKBENCH-HEROIC-SPEC-TODO.md` as the canonical tracker for:
+> - current status
+> - remaining work
+> - tranche boundaries
+> - acceptance criteria
+> - ATTN notes and blockers
+>
+> This file remains as historical context only and is no longer the authoritative source of truth.
+
 This document is the canonical self-contained delivery tracker for the operator workbench.
 
 Use it as:

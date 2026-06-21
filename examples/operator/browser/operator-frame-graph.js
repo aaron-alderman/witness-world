@@ -104,6 +104,7 @@ export const FILL_STYLE_VARIANTS = Object.freeze({
 export const TEXT_STYLE_VARIANTS = Object.freeze({
   overlayTitle: Object.freeze({ id: "overlayTitle", fg: 15, bg: 0, flags: CELL_FLAGS.overlay }),
   overlayMenu: Object.freeze({ id: "overlayMenu", fg: 14, bg: 0, flags: CELL_FLAGS.overlay }),
+  overlayMenuSelected: Object.freeze({ id: "overlayMenuSelected", fg: 0, bg: 10, flags: CELL_FLAGS.overlay }),
   overlayHelp: Object.freeze({ id: "overlayHelp", fg: 15, bg: 0, flags: CELL_FLAGS.overlay }),
   sectionHeader: Object.freeze({ id: "sectionHeader", fg: 11, bg: 0, flags: CELL_FLAGS.none }),
   divider: Object.freeze({ id: "divider", fg: 8, bg: 0, flags: CELL_FLAGS.none }),

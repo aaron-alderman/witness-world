@@ -131,6 +131,69 @@ test("app.source.write is blocked even when witness-core ownership is configured
   assert.equal(APP_SOURCE_WRITE_PATH, "/api/runtime/app-sources");
 });
 
+test("app.source.write proxies to witness-core when supervised published transactions are enabled", async () => {
+  let publishedTransactionArgs = null;
+  const bridge = {
+    async publishedAuthoringTransaction(args) {
+      publishedTransactionArgs = args;
+      return {
+        ok: true,
+        activated: true,
+        generation: { id: "gen-1", state: "green_local" }
+      };
+    }
+  };
+  const snapshotManager = new AppSnapshotManager({
+    manifestPath: "C:/tmp/app.wtoml",
+    appRoot: "C:/tmp",
+    runtimeProfile: "full"
+  });
+
+  const { handlers, takeResponse } = createHandlerHarness();
+
+  await handlers["app.source.write"]({
+    req: {
+      body: {
+        edits: [{
+          path: "app/shell.rvm",
+          content: "(surface PublishedByCore)"
+        }]
+      }
+    },
+    res: {},
+    appContext: {
+      runtimeProfile: "full",
+      serverRunnerId: "engentus_server",
+      witnessCoreBridge: bridge,
+      runtimeSupervision: {
+        watchersEnabled: false
+      },
+      appSnapshotManager: snapshotManager
+    },
+    requestActor: "tester",
+    requestSession: { id: "session-1" }
+  });
+
+  const response = takeResponse();
+  assert.equal(response.status, 200);
+  assert.equal(response.body?.ok, true);
+  assert.equal(response.body?.activated, true);
+  assert.equal(response.body?.endpoint, APP_SOURCE_WRITE_PATH);
+  assert.deepEqual(publishedTransactionArgs, {
+    manifestPath: snapshotManager.manifestPath,
+    runtimeProfile: "full",
+    edits: [{
+      path: "app/shell.rvm",
+      content: "(surface PublishedByCore)"
+    }],
+    correlation: {
+      sessionId: "session-1",
+      surfaceId: "engentus_server",
+      actor: "tester"
+    }
+  });
+});
+
 test("app.source.write is blocked before local fallback when witness-core is not configured", async () => {
   const snapshotManager = new AppSnapshotManager({
     manifestPath: "C:/tmp/app.wtoml",

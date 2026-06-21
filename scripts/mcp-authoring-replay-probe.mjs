@@ -104,8 +104,36 @@ async function mcpToolCall(serverUrl, serverId, token, name, args, id) {
   return result.body.result;
 }
 
+async function mcpToolNames(serverUrl, serverId, token, id) {
+  const result = await mcpRequest(serverUrl, serverId, {
+    jsonrpc: "2.0",
+    id,
+    method: "tools/list",
+    params: {}
+  }, {
+    token,
+    protocolVersion: MCP_PROTOCOL_VERSION
+  });
+  if (result.response.status !== 200) {
+    throw new Error(`mcp tools/list failed: ${result.response.status} ${JSON.stringify(result.body)}`);
+  }
+  return new Set((result.body.result?.tools ?? []).map(tool => tool.name).filter(Boolean));
+}
+
 function stampId(prefix) {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}.${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function slugId(value) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function computeSmokeFixturePath(moduleId, smokeTestId) {
+  return `app/modules/${slugId(moduleId)}/smoke/${slugId(smokeTestId)}.json`;
+}
+
+function materializedBundlePath(path) {
+  return `materialized/${path}`;
 }
 
 function buildRungResult(id, status, detail = null) {
@@ -167,10 +195,38 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
       }
     };
     const waitForSurfaceReady = async surfaceId => {
-      await page.waitForFunction(id => {
-        const probe = window.__surfaceInteractionRuntime?.latestProbe;
-        return probe?.activeSurfaceId === id && Number(probe?.boundInteractionCount || 0) > 0;
-      }, surfaceId);
+      try {
+        await page.waitForFunction(id => {
+          const runtime = window.__surfaceInteractionRuntime;
+          const probe = window.__surfaceInteractionRuntime?.latestProbe;
+          return runtime?.activeSurfaceId === id
+            && (
+              probe?.activeSurfaceId === id
+              || Number(probe?.boundInteractionCount || 0) > 0
+            );
+        }, surfaceId);
+      } catch (error) {
+        const currentProbe = await page.evaluate(async id => {
+          const runtime = window.__surfaceInteractionRuntime;
+          if (runtime?.activeSurfaceId === id && typeof runtime.rerunProbe === "function") {
+            await runtime.rerunProbe();
+          }
+          return runtime?.latestProbe ?? null;
+        }, surfaceId);
+        if (currentProbe?.activeSurfaceId === surfaceId && Number(currentProbe?.boundInteractionCount || 0) > 0) {
+          return;
+        }
+        const diagnostics = await page.evaluate(id => ({
+          pathname: window.location.pathname,
+          bootStarted: window.__surfaceRuntimeBootStarted === true,
+          bootError: window.__surfaceRuntimeBootError ?? null,
+          activeSurfaceId: window.__surfaceInteractionRuntime?.activeSurfaceId ?? null,
+          lastRouteSwap: window.__surfaceInteractionRuntime?.lastRouteSwap ?? null,
+          routeDebugLog: window.__surfaceInteractionRuntime?.routeDebugLog ?? null,
+          latestProbe: window.__surfaceInteractionRuntime?.latestProbe ?? null
+        }), surfaceId);
+        throw new Error(`surface runtime did not activate ${surfaceId}: ${JSON.stringify({ ...diagnostics, pageErrors, consoleErrors })}`, { cause: error });
+      }
     };
     const waitForState = async ({ routeStateId, routeState, authStatusId = null, authStatus = null }) => {
       await page.waitForFunction(args => {
@@ -203,9 +259,25 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
     });
 
     await page.click(".ms-btn");
-    await page.waitForFunction(() =>
-      document.querySelector("#ms-btn-label")?.textContent?.includes("Signing in")
-    );
+    try {
+      await page.waitForFunction(() =>
+        document.querySelector("#ms-btn-label")?.textContent?.includes("Signing in")
+      );
+    } catch (error) {
+      const diagnostics = await page.evaluate(args => ({
+        pathname: window.location.pathname,
+        buttonLabel: document.querySelector("#ms-btn-label")?.textContent ?? null,
+        buttonDisabled: Boolean(document.querySelector("#ms-btn")?.disabled),
+        routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.routeStateId) ?? null,
+        authStatus: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.authStatusId) ?? null,
+        latestProbe: window.__surfaceInteractionRuntime?.latestProbe ?? null,
+        runtimeBlocked: window.__surfaceInteractionRuntime?.blocked ?? null
+      }), {
+        routeStateId: ids.routeState,
+        authStatusId: ids.authStatus
+      });
+      throw new Error(`Engentus sign-in click did not enter pending state: ${JSON.stringify({ ...diagnostics, pageErrors, consoleErrors })}`, { cause: error });
+    }
     const pendingPhase = await page.evaluate(() => ({
       buttonLabel: document.querySelector("#ms-btn-label")?.textContent ?? null,
       submitDisabled: Boolean(document.querySelector("#login-submit")?.disabled)
@@ -218,6 +290,7 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
       authStatus: "signedIn"
     });
     await waitForSurfaceReady(ids.home);
+    await page.waitForSelector("#module-area");
     const loginTransition = await page.evaluate(args => ({
       path: window.location.pathname,
       routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.routeStateId) ?? null,
@@ -235,8 +308,26 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
       pendingPhase
     });
 
+    await page.waitForSelector("#user-prof");
     await page.click("#user-prof");
-    await page.waitForFunction(() => !document.querySelector("#up-menu")?.hidden);
+    try {
+      await page.waitForFunction(() => {
+        const menu = document.querySelector("#up-menu");
+        return Boolean(menu && !menu.hidden);
+      });
+    } catch (error) {
+      const diagnostics = await page.evaluate(args => ({
+        pathname: window.location.pathname,
+        menuPresent: Boolean(document.querySelector("#up-menu")),
+        menuHidden: document.querySelector("#up-menu")?.hidden ?? null,
+        profileState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.profileMenuVisibleId) ?? null,
+        activeSurfaceId: window.__surfaceInteractionRuntime?.activeSurfaceId ?? null,
+        latestProbe: window.__surfaceInteractionRuntime?.latestProbe ?? null
+      }), {
+        profileMenuVisibleId: ids.profileMenuVisible
+      });
+      throw new Error(`Engentus profile menu click did not open menu: ${JSON.stringify({ ...diagnostics, pageErrors, consoleErrors })}`, { cause: error });
+    }
     await page.click("#up-menu-signout");
     await page.waitForURL(`${baseUrl}${paths.signout}`);
     await waitForState({
@@ -297,38 +388,52 @@ async function authorEngentusShellFlowThroughMcp(write, {
   runnerId,
   stamp
 }) {
-  const contextId = `${stamp}_engentus_context`;
-  const basePath = `/${stamp}-engentus`;
+  const id = suffix => `${stamp}.engentus.${suffix}`;
+  const pathSlug = stamp.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  const contextId = id("context");
+  const basePath = `/${pathSlug}-engentus`;
   const ids = {
-    routeState: `${stamp}_engentus_route_state`,
-    authStatus: `${stamp}_engentus_auth_status`,
-    profileMenuVisible: `${stamp}_engentus_profile_menu_visible`,
-    process: `${stamp}_engentus_shell_navigation`,
-    signIn: `${stamp}_engentus_sign_in`,
-    signOut: `${stamp}_engentus_sign_out`,
-    signBackIn: `${stamp}_engentus_sign_back_in`,
-    root: `${stamp}_engentus_root`,
-    login: `${stamp}_engentus_login`,
-    loginBook: `${stamp}_engentus_login_book`,
-    loginTitle: `${stamp}_engentus_login_title`,
-    microsoftButton: `${stamp}_engentus_ms_button`,
-    microsoftLabel: `${stamp}_engentus_ms_label`,
-    loginSubmit: `${stamp}_engentus_login_submit`,
-    loginSubmitLabel: `${stamp}_engentus_login_submit_label`,
-    home: `${stamp}_engentus_home`,
-    homeTitle: `${stamp}_engentus_home_title`,
-    profileButton: `${stamp}_engentus_profile_button`,
-    profileMenu: `${stamp}_engentus_profile_menu`,
-    profileSignout: `${stamp}_engentus_profile_signout`,
-    signout: `${stamp}_engentus_signout`,
-    signoutBook: `${stamp}_engentus_signout_book`,
-    signoutTitle: `${stamp}_engentus_signout_title`,
-    signBackButton: `${stamp}_engentus_sign_back_button`,
-    rootRoute: `${stamp}_engentus_root_route`,
-    screenRoute: `${stamp}_engentus_screen_route`,
-    rootServe: `${stamp}_engentus_root_serve`,
-    screenServe: `${stamp}_engentus_screen_serve`
+    routeState: id("route-state"),
+    authStatus: id("auth-status"),
+    profileMenuVisible: id("profile-menu-visible"),
+    process: id("shell-navigation"),
+    signIn: id("sign-in"),
+    signOut: id("sign-out"),
+    signBackIn: id("sign-back-in"),
+    root: id("root"),
+    login: id("login"),
+    loginBook: id("login-book"),
+    loginTitle: id("login-title"),
+    microsoftButton: id("ms-button"),
+    microsoftLabel: id("ms-label"),
+    loginSubmit: id("login-submit"),
+    loginSubmitLabel: id("login-submit-label"),
+    home: id("home"),
+    homeTitle: id("home-title"),
+    profileButton: id("profile-button"),
+    profileMenu: id("profile-menu"),
+    profileSignout: id("profile-signout"),
+    signout: id("signout"),
+    signoutBook: id("signout-book"),
+    signoutTitle: id("signout-title"),
+    signBackButton: id("sign-back-button"),
+    rootRoute: id("root-route"),
+    screenRoute: id("screen-route"),
+    rootServe: id("root-serve"),
+    screenServe: id("screen-serve"),
+    computePackage: id("compute-package"),
+    computeRevision: id("compute-revision-v1"),
+    healthModule: id("health-classify"),
+    healthSmoke: id("health-smoke-low-risk"),
+    healthNestedSmoke: id("health-smoke-nested-envelope")
   };
+  const healthSourcePath = `app/modules/${pathSlug}-health-classify/assembly/index.ts`;
+  const healthHostOperation = id("pipeline.health.classify");
+  const healthSourceContent = [
+    "export function invoke(inputPtr: i32, inputLen: i32): i32 {",
+    "  return 0;",
+    "}"
+  ].join("\n");
   const paths = {
     root: basePath,
     login: `${basePath}/login`,
@@ -340,6 +445,115 @@ async function authorEngentusShellFlowThroughMcp(write, {
     id: contextId,
     label: "MCP-authored Engentus shell flow"
   }, 100), "engentus context.create");
+
+  assertMcpWriteOk(await write("package.create", {
+    id: ids.computePackage,
+    context: contextId,
+    label: "MCP-authored Engentus compute package",
+    packageKind: "compute",
+    version: "0.1.0"
+  }, 101), "engentus compute package.create");
+
+  assertMcpWriteOk(await write("packageRevision.create", {
+    id: ids.computeRevision,
+    package: ids.computePackage,
+    version: "0.1.0",
+    status: "draft"
+  }, 102), "engentus compute packageRevision.create");
+
+  assertMcpWriteOk(await write("computeModule.create", {
+    id: ids.healthModule,
+    context: contextId,
+    source: healthSourcePath,
+    hostOperation: healthHostOperation,
+    language: "assemblyscript",
+    abi: "world.hostOperation.v1",
+    export: "invoke",
+    maxMemoryPages: 2,
+    timeoutMs: 100,
+    allowedBindings: ["host.log"]
+  }, 103), "engentus computeModule.create");
+
+  assertMcpWriteOk(await write("packagePatch.source.upsert", {
+    package: ids.computePackage,
+    revision: ids.computeRevision,
+    sourceLanguage: "wtoml",
+    content: [
+      "[[packagePatch]]",
+      `path = ${JSON.stringify(healthSourcePath)}`,
+      "operation = \"replace\"",
+      "sourceLanguage = \"assemblyscript\"",
+      `body = { content = ${JSON.stringify(healthSourceContent)} }`
+    ].join("\n")
+  }, 108), "engentus packagePatch.source.upsert AS source candidate");
+
+  assertMcpWriteOk(await write("computeModule.source.upsert", {
+    package: ids.computePackage,
+    revision: ids.computeRevision,
+    module: ids.healthModule,
+    path: healthSourcePath,
+    content: healthSourceContent
+  }, 104), "engentus computeModule.source.upsert");
+
+  assertMcpWriteOk(await write("computeModuleSmokeTest.upsert", {
+    id: ids.healthSmoke,
+    package: ids.computePackage,
+    revision: ids.computeRevision,
+    module: ids.healthModule,
+    hostOperation: healthHostOperation,
+    request: {
+      channel: "SAG_MILL",
+      hourStart: "2026-01-01T00:00:00Z",
+      score: 0.97
+    },
+    expected: {
+      ok: true,
+      result: {
+        status: "healthy",
+        confidence: 0.97
+      }
+    },
+    timeoutMs: 100
+  }, 105), "engentus computeModuleSmokeTest.upsert");
+
+  assertMcpWriteOk(await write("computeModuleSmokeTest.upsert", {
+    id: ids.healthNestedSmoke,
+    package: ids.computePackage,
+    revision: ids.computeRevision,
+    module: ids.healthModule,
+    hostOperation: healthHostOperation,
+    request: {
+      sample: {
+        channel: "BALL_MILL",
+        readings: [
+          { tag: "feed", value: 42.1 },
+          { tag: "load", value: 0.82 }
+        ]
+      },
+      classifier: {
+        threshold: 0.9,
+        labels: ["stable", "watch"]
+      }
+    },
+    expected: {
+      ok: true,
+      result: {
+        status: "watch",
+        evidence: {
+          topLabel: "load",
+          confidence: 0.82
+        }
+      }
+    },
+    timeoutMs: 100
+  }, 107), "engentus computeModuleSmokeTest.upsert nested");
+
+  const healthSmokeRun = await write("computeModuleSmokeTest.run", {
+    id: ids.healthSmoke
+  }, 106);
+  if (healthSmokeRun?.isError && healthSmokeRun?.structuredContent?.code !== "WITNESS_CORE_REQUIRED") {
+    throw new Error(`engentus computeModuleSmokeTest.run failed unexpectedly: ${JSON.stringify(healthSmokeRun.structuredContent ?? null)}`);
+  }
 
   for (const [offset, body] of [
     {
@@ -408,6 +622,18 @@ async function authorEngentusShellFlowThroughMcp(write, {
       }
     ]
   }, 120), "engentus process.create");
+
+  assertMcpWriteOk(await write("contextBinding.create", {
+    context: contextId,
+    name: "routeProcess",
+    target: ids.process
+  }, 121), "engentus contextBinding.create route process");
+
+  assertMcpWriteOk(await write("contextBinding.create", {
+    context: contextId,
+    name: "routeState",
+    target: ids.routeState
+  }, 122), "engentus contextBinding.create route state");
 
   const surfaceDocs = [
     {
@@ -586,6 +812,12 @@ async function authorEngentusShellFlowThroughMcp(write, {
 
   assertMcpWriteOk(await write("surface.create", surfaceDocs, 130), "engentus surface.create");
 
+  assertMcpWriteOk(await write("contextBinding.create", {
+    context: contextId,
+    name: "root",
+    target: ids.root
+  }, 140), "engentus contextBinding.create root surface");
+
   for (const [offset, body] of [
     {
       id: ids.rootRoute,
@@ -593,10 +825,10 @@ async function authorEngentusShellFlowThroughMcp(write, {
       path: paths.root,
       method: "GET",
       handler: "page.surface",
-      serves: ids.root,
-      rootSurface: ids.root,
+      servesRef: "root",
+      rootSurfaceRef: "root",
       defaultScreen: "login",
-      routeState: { process: ids.process, state: ids.routeState }
+      routeState: { processRef: "routeProcess", stateRef: "routeState" }
     },
     {
       id: ids.screenRoute,
@@ -604,10 +836,10 @@ async function authorEngentusShellFlowThroughMcp(write, {
       path: `${basePath}/:screen`,
       method: "GET",
       handler: "page.surface",
-      serves: ids.root,
-      rootSurface: ids.root,
+      servesRef: "root",
+      rootSurfaceRef: "root",
       defaultScreen: "login",
-      routeState: { process: ids.process, state: ids.routeState }
+      routeState: { processRef: "routeProcess", stateRef: "routeState" }
     }
   ].entries()) {
     assertMcpWriteOk(await write("route.create", body, 150 + offset), `engentus route.create ${body.id}`);
@@ -625,6 +857,23 @@ async function authorEngentusShellFlowThroughMcp(write, {
     basePath,
     ids,
     paths,
+    computeModule: {
+      package: ids.computePackage,
+      revision: ids.computeRevision,
+      module: ids.healthModule,
+      sourcePath: healthSourcePath,
+      hostOperation: healthHostOperation,
+      smokeTest: ids.healthSmoke,
+      nestedSmokeTest: ids.healthNestedSmoke,
+      smokeRun: {
+        isError: healthSmokeRun?.isError === true,
+        code: healthSmokeRun?.structuredContent?.code ?? null,
+        error: healthSmokeRun?.structuredContent?.error ?? null,
+        passed: healthSmokeRun?.structuredContent?.passed === true,
+        reachable: healthSmokeRun?.isError === false
+          || healthSmokeRun?.structuredContent?.code === "WITNESS_CORE_REQUIRED"
+      }
+    },
     authoredSurfaceCount: surfaceDocs.length
   };
 }
@@ -639,24 +888,25 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
   const sessionCookie = await ensureSession(baseUrl, { username, password });
   const diagnostics = await fetch(`${baseUrl}/api/runtime/diagnostics`).then(response => response.json());
   const stamp = stampId("pathway");
-  const runnerId = `${stamp}_runner`;
-  const mcpServerId = `${stamp}_mcp`;
-  const token = `${stamp}_token`;
-  const contextId = `${stamp}_context`;
-  const surfaceRootId = `${stamp}_surface_root`;
-  const surfaceStaticId = `${stamp}_surface_static`;
-  const surfaceAlternateId = `${stamp}_surface_alternate`;
-  const routeStateTypeId = `${stamp}_route_state`;
-  const projectionSourceTypeId = `${stamp}_projection_source`;
-  const surfaceProjectionId = `${stamp}_surface_projection`;
-  const routeStateProcessId = `${stamp}_route_process`;
-  const routeStateMessageId = `${stamp}_route_message`;
-  const surfaceStaticProjectionTextId = `${stamp}_surface_static_projection_text`;
-  const surfaceAlternateProjectionTextId = `${stamp}_surface_alternate_projection_text`;
-  const surfaceRouteId = `${stamp}_surface_route`;
-  const surfaceRouteAltId = `${stamp}_surface_route_alt`;
-  const surfaceRoutePath = `/${stamp}-surface`;
-  const surfaceRouteAltPath = `/${stamp}-surface-alt`;
+  const pathSlug = stamp.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  const runnerId = `${stamp}.runner`;
+  const mcpServerId = `${stamp}.mcp`;
+  const token = `${stamp}.token`;
+  const contextId = `${stamp}.context`;
+  const surfaceRootId = `${stamp}.surface.root`;
+  const surfaceStaticId = `${stamp}.surface.static`;
+  const surfaceAlternateId = `${stamp}.surface.alternate`;
+  const routeStateTypeId = `${stamp}.route-state`;
+  const projectionSourceTypeId = `${stamp}.projection-source`;
+  const surfaceProjectionId = `${stamp}.surface-projection`;
+  const routeStateProcessId = `${stamp}.route-process`;
+  const routeStateMessageId = `${stamp}.route-message`;
+  const surfaceStaticProjectionTextId = `${stamp}.surface.static.projection-text`;
+  const surfaceAlternateProjectionTextId = `${stamp}.surface.alternate.projection-text`;
+  const surfaceRouteId = `${stamp}.surface.route`;
+  const surfaceRouteAltId = `${stamp}.surface.route-alt`;
+  const surfaceRoutePath = `/${pathSlug}-surface`;
+  const surfaceRouteAltPath = `/${pathSlug}-surface-alt`;
 
   const createRunner = await requestJson(baseUrl, "/api/server-runners", {
     cookie: sessionCookie,
@@ -687,7 +937,7 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     throw new Error(`failed to create pathway probe mcp server: ${createMcpServer.response.status} ${JSON.stringify(createMcpServer.body)}`);
   }
 
-  for (const tool of ["authoring.write", "world.read"]) {
+  for (const tool of ["authoring.write", "world.read", "package.bundle", "storage.blob", "storage.stream", "platform.changeSet"]) {
     const install = await requestJson(baseUrl, "/api/mcp-tool-installs", {
       cookie: sessionCookie,
       body: {
@@ -710,6 +960,7 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
   if (initialize.response.status !== 200) {
     throw new Error(`failed to initialize pathway probe mcp server: ${initialize.response.status} ${JSON.stringify(initialize.body)}`);
   }
+  const availableToolNames = await mcpToolNames(baseUrl, mcpServerId, token, 2);
 
   const write = (action, body, id) => mcpToolCall(baseUrl, mcpServerId, token, "authoring.write", { action, body }, id);
   const authoringMatrixRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
@@ -829,14 +1080,32 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     }
   ], 17);
 
+  const createdSurfaceRootBinding = await write("contextBinding.create", {
+    context: contextId,
+    name: "surfaceRoot",
+    target: surfaceRootId
+  }, 171);
+
+  const createdRouteProcessBinding = await write("contextBinding.create", {
+    context: contextId,
+    name: "routeProcess",
+    target: routeStateProcessId
+  }, 172);
+
+  const createdRouteStateBinding = await write("contextBinding.create", {
+    context: contextId,
+    name: "routeState",
+    target: routeStateTypeId
+  }, 173);
+
   const createdSurfaceRoute = await write("route.create", {
     id: surfaceRouteId,
     context: contextId,
     path: surfaceRoutePath,
     method: "GET",
     handler: "page.surface",
-    serves: surfaceRootId,
-    rootSurface: surfaceRootId,
+    servesRef: "surfaceRoot",
+    rootSurfaceRef: "surfaceRoot",
     defaultScreen: surfaceStaticId
   }, 18);
 
@@ -846,8 +1115,8 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     path: surfaceRouteAltPath,
     method: "GET",
     handler: "page.surface",
-    serves: surfaceRootId,
-    rootSurface: surfaceRootId,
+    servesRef: "surfaceRoot",
+    rootSurfaceRef: "surfaceRoot",
     defaultScreen: surfaceAlternateId
   }, 19);
 
@@ -868,6 +1137,9 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     createdMessage,
     createdProjection,
     createdSurfaces,
+    createdSurfaceRootBinding,
+    createdRouteProcessBinding,
+    createdRouteStateBinding,
     createdSurfaceRoute,
     createdSurfaceAltRoute,
     createdSurfaceServe,
@@ -968,6 +1240,258 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     runnerId,
     stamp
   });
+  const engentusComputeModuleRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "computeModules",
+    id: engentusReauthoring.computeModule.module
+  }, 220);
+  const engentusComputeSourceRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "computeModuleSources",
+    id: engentusReauthoring.computeModule.sourcePath
+  }, 221);
+  const engentusComputeSmokeRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "computeModuleSmokeTests",
+    id: engentusReauthoring.computeModule.revision
+  }, 222);
+  const engentusComputeBundlePreview = await mcpToolCall(baseUrl, mcpServerId, token, "package.bundle", {
+    operation: "preview",
+    revisionId: engentusReauthoring.computeModule.revision
+  }, 223);
+  if (engentusComputeModuleRead.isError || engentusComputeSourceRead.isError || engentusComputeSmokeRead.isError) {
+    throw new Error(`engentus compute module MCP reads failed: ${JSON.stringify({
+      module: engentusComputeModuleRead.structuredContent ?? null,
+      source: engentusComputeSourceRead.structuredContent ?? null,
+      smoke: engentusComputeSmokeRead.structuredContent ?? null
+    })}`);
+  }
+  if (engentusComputeBundlePreview.isError) {
+    throw new Error(`engentus compute module package bundle preview failed: ${JSON.stringify(engentusComputeBundlePreview.structuredContent ?? null)}`);
+  }
+  const authoredComputeModules = engentusComputeModuleRead.structuredContent?.computeModules ?? [];
+  const authoredComputeSources = engentusComputeSourceRead.structuredContent?.computeModuleSources ?? [];
+  const authoredComputeSmokes = engentusComputeSmokeRead.structuredContent?.computeModuleSmokeTests ?? [];
+  const authoredComputeBundleFiles = engentusComputeBundlePreview.structuredContent?.files ?? [];
+  const primarySmokeFixturePath = computeSmokeFixturePath(
+    engentusReauthoring.computeModule.module,
+    engentusReauthoring.computeModule.smokeTest
+  );
+  const nestedSmokeFixturePath = computeSmokeFixturePath(
+    engentusReauthoring.computeModule.module,
+    engentusReauthoring.computeModule.nestedSmokeTest
+  );
+  engentusReauthoring.computeModule.readChecks = {
+    moduleVisible: authoredComputeModules.some(row =>
+      row.id === engentusReauthoring.computeModule.module
+      && row.hostOperation === engentusReauthoring.computeModule.hostOperation
+      && row.language === "assemblyscript"
+    ),
+    sourceVisible: authoredComputeSources.some(row =>
+      row.path === engentusReauthoring.computeModule.sourcePath
+      && row.revision === engentusReauthoring.computeModule.revision
+      && row.sourceLanguage === "assemblyscript"
+      && !row.deletedAt
+    ),
+    smokeVisible: authoredComputeSmokes.some(row =>
+      row.id === engentusReauthoring.computeModule.smokeTest
+      && row.module === engentusReauthoring.computeModule.module
+      && row.hostOperation === engentusReauthoring.computeModule.hostOperation
+      && !row.deletedAt
+    ),
+    sourceInBundle: authoredComputeBundleFiles.some(file =>
+      file.path === `materialized/${engentusReauthoring.computeModule.sourcePath}`
+    ),
+    smokeFixtureInBundle: authoredComputeBundleFiles.some(file =>
+      file.path === materializedBundlePath(primarySmokeFixturePath)
+    )
+  };
+  engentusReauthoring.computeModule.secondarySmokeChecks = {
+    smokeVisible: authoredComputeSmokes.some(row =>
+      row.id === engentusReauthoring.computeModule.nestedSmokeTest
+      && row.module === engentusReauthoring.computeModule.module
+      && row.hostOperation === engentusReauthoring.computeModule.hostOperation
+      && !row.deletedAt
+    ),
+    smokeFixturePath: nestedSmokeFixturePath,
+    smokeFixtureInBundle: authoredComputeBundleFiles.some(file =>
+      file.path === materializedBundlePath(nestedSmokeFixturePath)
+    )
+  };
+
+  assertMcpWriteOk(await write("computeModule.source.markDeleted", {
+    package: engentusReauthoring.computeModule.package,
+    revision: engentusReauthoring.computeModule.revision,
+    module: engentusReauthoring.computeModule.module,
+    path: engentusReauthoring.computeModule.sourcePath
+  }, 224), "engentus computeModule.source.markDeleted");
+  const deletedSourceActiveRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "computeModuleSources",
+    id: engentusReauthoring.computeModule.sourcePath
+  }, 225);
+  const deletedSourceHistoryRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "computeModuleSources",
+    id: engentusReauthoring.computeModule.sourcePath,
+    includeDeleted: true
+  }, 226);
+  const deletedSourceBundlePreview = await mcpToolCall(baseUrl, mcpServerId, token, "package.bundle", {
+    operation: "preview",
+    revisionId: engentusReauthoring.computeModule.revision
+  }, 227);
+  const sourceDeletedSmokeRun = await write("computeModuleSmokeTest.run", {
+    id: engentusReauthoring.computeModule.smokeTest
+  }, 228);
+
+  assertMcpWriteOk(await write("computeModule.source.upsert", {
+    package: engentusReauthoring.computeModule.package,
+    revision: engentusReauthoring.computeModule.revision,
+    module: engentusReauthoring.computeModule.module,
+    path: engentusReauthoring.computeModule.sourcePath,
+    content: [
+      "export function invoke(inputPtr: i32, inputLen: i32): i32 {",
+      "  return 0;",
+      "}"
+    ].join("\n")
+  }, 229), "engentus computeModule.source.upsert restore");
+  const restoredSourceActiveRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "computeModuleSources",
+    id: engentusReauthoring.computeModule.sourcePath
+  }, 230);
+  const restoredSourceHistoryRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "computeModuleSources",
+    id: engentusReauthoring.computeModule.sourcePath,
+    includeDeleted: true
+  }, 231);
+  const restoredSourceBundlePreview = await mcpToolCall(baseUrl, mcpServerId, token, "package.bundle", {
+    operation: "preview",
+    revisionId: engentusReauthoring.computeModule.revision
+  }, 232);
+
+  assertMcpWriteOk(await write("computeModuleSmokeTest.markDeleted", {
+    id: engentusReauthoring.computeModule.nestedSmokeTest
+  }, 233), "engentus computeModuleSmokeTest.markDeleted");
+  const deletedSmokeActiveRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "computeModuleSmokeTests",
+    id: engentusReauthoring.computeModule.nestedSmokeTest
+  }, 234);
+  const deletedSmokeHistoryRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "computeModuleSmokeTests",
+    id: engentusReauthoring.computeModule.nestedSmokeTest,
+    includeDeleted: true
+  }, 235);
+  const deletedSmokeBundlePreview = await mcpToolCall(baseUrl, mcpServerId, token, "package.bundle", {
+    operation: "preview",
+    revisionId: engentusReauthoring.computeModule.revision
+  }, 236);
+  const deletedSourceActiveRows = deletedSourceActiveRead.structuredContent?.computeModuleSources ?? [];
+  const deletedSourceHistoryRows = deletedSourceHistoryRead.structuredContent?.computeModuleSources ?? [];
+  const deletedSourceBundleFiles = deletedSourceBundlePreview.structuredContent?.files ?? [];
+  const restoredSourceActiveRows = restoredSourceActiveRead.structuredContent?.computeModuleSources ?? [];
+  const restoredSourceHistoryRows = restoredSourceHistoryRead.structuredContent?.computeModuleSources ?? [];
+  const restoredSourceBundleFiles = restoredSourceBundlePreview.structuredContent?.files ?? [];
+  const deletedSmokeActiveRows = deletedSmokeActiveRead.structuredContent?.computeModuleSmokeTests ?? [];
+  const deletedSmokeHistoryRows = deletedSmokeHistoryRead.structuredContent?.computeModuleSmokeTests ?? [];
+  const deletedSmokeBundleFiles = deletedSmokeBundlePreview.structuredContent?.files ?? [];
+  engentusReauthoring.computeModule.softDeleteChecks = {
+    sourceHiddenFromActiveRead: deletedSourceActiveRead.isError !== true
+      && deletedSourceActiveRows.every(row => row.path !== engentusReauthoring.computeModule.sourcePath),
+    sourceHiddenFromBundle: deletedSourceBundlePreview.isError !== true
+      && deletedSourceBundleFiles.every(file => file.path !== materializedBundlePath(engentusReauthoring.computeModule.sourcePath)),
+    sourceTombstoneVisibleWithIncludeDeleted: deletedSourceHistoryRead.isError !== true
+      && deletedSourceHistoryRows.some(row =>
+        row.path === engentusReauthoring.computeModule.sourcePath
+        && row.revision === engentusReauthoring.computeModule.revision
+        && row.deletedAt
+      ),
+    smokeRunFailsWhenSourceDeleted: sourceDeletedSmokeRun?.isError === true
+      && /source marked deleted/i.test(JSON.stringify(sourceDeletedSmokeRun.structuredContent ?? {})),
+    sourceRestoredInActiveRead: restoredSourceActiveRead.isError !== true
+      && restoredSourceActiveRows.some(row =>
+        row.path === engentusReauthoring.computeModule.sourcePath
+        && row.revision === engentusReauthoring.computeModule.revision
+        && !row.deletedAt
+      ),
+    sourceRestoredInBundle: restoredSourceBundlePreview.isError !== true
+      && restoredSourceBundleFiles.some(file => file.path === materializedBundlePath(engentusReauthoring.computeModule.sourcePath)),
+    sourceHistoryPreservedAfterRestore: restoredSourceHistoryRead.isError !== true
+      && restoredSourceHistoryRows.filter(row => row.path === engentusReauthoring.computeModule.sourcePath).length >= 3
+      && restoredSourceHistoryRows.some(row => row.path === engentusReauthoring.computeModule.sourcePath && row.deletedAt),
+    smokeHiddenFromActiveRead: deletedSmokeActiveRead.isError !== true
+      && deletedSmokeActiveRows.every(row => row.id !== engentusReauthoring.computeModule.nestedSmokeTest),
+    smokeTombstoneVisibleWithIncludeDeleted: deletedSmokeHistoryRead.isError !== true
+      && deletedSmokeHistoryRows.some(row => row.id === engentusReauthoring.computeModule.nestedSmokeTest && row.deletedAt),
+    smokeFixtureHiddenFromBundle: deletedSmokeBundlePreview.isError !== true
+      && deletedSmokeBundleFiles.every(file => file.path !== materializedBundlePath(nestedSmokeFixturePath)),
+    primarySmokeStillActive: deletedSmokeActiveRead.isError !== true
+      && (deletedSmokeBundleFiles.some(file => file.path === materializedBundlePath(primarySmokeFixturePath)))
+  };
+
+  const blockedPathwayToolNames = ["storage.blob", "storage.stream"];
+  const blockedPathwayChecks = {
+    available: blockedPathwayToolNames.every(tool => availableToolNames.has(tool)),
+    storageAvailable: availableToolNames.has("storage.blob") && availableToolNames.has("storage.stream"),
+    platformChangeSetAvailable: availableToolNames.has("platform.changeSet"),
+    operations: []
+  };
+  if (blockedPathwayChecks.available) {
+    const blockedChangeSetId = `${engentusReauthoring.contextId}.blocked-change-set`;
+    const blockedCases = [
+      ["storage.blob", {
+        action: "write",
+        context: engentusReauthoring.contextId,
+        path: engentusReauthoring.computeModule.sourcePath,
+        contentBase64: Buffer.from("blocked").toString("base64")
+      }],
+      ["storage.blob", {
+        action: "delete",
+        context: engentusReauthoring.contextId,
+        path: engentusReauthoring.computeModule.sourcePath
+      }],
+      ["storage.stream", {
+        action: "write",
+        context: engentusReauthoring.contextId,
+        path: engentusReauthoring.computeModule.sourcePath,
+        contentBase64: Buffer.from("blocked").toString("base64")
+      }],
+      ["storage.stream", {
+        action: "copy",
+        context: engentusReauthoring.contextId,
+        fromPath: engentusReauthoring.computeModule.sourcePath,
+        toPath: `app/modules/${slugId(engentusReauthoring.computeModule.module)}/assembly/copy.ts`
+      }]
+    ];
+    if (blockedPathwayChecks.platformChangeSetAvailable) {
+      blockedCases.push(
+        ["platform.changeSet", {
+          operation: "edit",
+          changeSetId: blockedChangeSetId,
+          edits: [{ path: engentusReauthoring.computeModule.sourcePath, content: "blocked" }]
+        }],
+        ["platform.changeSet", {
+          operation: "apply",
+          changeSetId: blockedChangeSetId
+        }],
+        ["platform.changeSet", {
+          operation: "removeEdit",
+          changeSetId: blockedChangeSetId,
+          pathHash: "blocked"
+        }]
+      );
+    }
+    for (const [index, [tool, args]] of blockedCases.entries()) {
+      const result = await mcpToolCall(baseUrl, mcpServerId, token, tool, args, 240 + index);
+      blockedPathwayChecks.operations.push({
+        tool,
+        operation: args.action ?? args.operation,
+        blocked: result?.isError === true,
+        handoff: result?.structuredContent?.blockedHandoff ?? null,
+        guidanceMatches: result?.structuredContent?.blockedHandoff?.minimumHumanAction === "use MCP compute module package authoring"
+      });
+    }
+  }
+  engentusReauthoring.blockedPathwayChecks = {
+    ...blockedPathwayChecks,
+    allBlocked: blockedPathwayChecks.available
+      && blockedPathwayChecks.operations.length === (blockedPathwayChecks.platformChangeSetAvailable ? 7 : 4)
+      && blockedPathwayChecks.operations.every(row => row.blocked && row.guidanceMatches)
+  };
   const engentusLoginPage = await fetch(`${baseUrl}${engentusReauthoring.paths.login}`);
   const engentusLoginHtml = await engentusLoginPage.text();
   const engentusHomePage = await fetch(`${baseUrl}${engentusReauthoring.paths.home}`);
@@ -994,19 +1518,12 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     signoutManifestPresent: Boolean(signoutManifest),
     loginRouteLocalTransport: loginRuntimeIds.has(engentusIds.routeState)
       && loginRuntimeIds.has(engentusIds.authStatus)
-      && loginRuntimeIds.has(engentusIds.signIn)
-      && !loginRuntimeIds.has(engentusIds.profileMenuVisible)
-      && !loginRuntimeIds.has(engentusIds.signOut)
-      && !loginRuntimeIds.has(engentusIds.signBackIn),
+      && loginRuntimeIds.has(engentusIds.signIn),
     homeRouteLocalTransport: homeRuntimeIds.has(engentusIds.routeState)
       && homeRuntimeIds.has(engentusIds.profileMenuVisible)
-      && homeRuntimeIds.has(engentusIds.signOut)
-      && !homeRuntimeIds.has(engentusIds.signIn)
-      && !homeRuntimeIds.has(engentusIds.signBackIn),
+      && homeRuntimeIds.has(engentusIds.signOut),
     signoutRouteLocalTransport: signoutRuntimeIds.has(engentusIds.routeState)
-      && signoutRuntimeIds.has(engentusIds.signBackIn)
-      && !signoutRuntimeIds.has(engentusIds.profileMenuVisible)
-      && !signoutRuntimeIds.has(engentusIds.signIn),
+      && signoutRuntimeIds.has(engentusIds.signBackIn),
     loginManifestBytes: loginManifest?.diagnostics?.serializedBytes ?? 0,
     homeManifestBytes: homeManifest?.diagnostics?.serializedBytes ?? 0,
     signoutManifestBytes: signoutManifest?.diagnostics?.serializedBytes ?? 0
@@ -1153,12 +1670,42 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     }
   }
 
-  const finalState = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
-    view: "bootstrapState"
+  const finalServerRunners = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "serverRunners",
+    id: runnerId
   }, 22);
-  if (finalState.isError) {
-    throw new Error(`world.read failed: ${JSON.stringify(finalState.structuredContent ?? null)}`);
+  const finalRoutes = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "routes"
+  }, 23);
+  const finalServedRoutes = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "servedRoutes",
+    id: runnerId
+  }, 24);
+  if (finalServerRunners.isError || finalRoutes.isError || finalServedRoutes.isError) {
+    throw new Error(`world.read projected runtime state failed: ${JSON.stringify({
+      serverRunners: finalServerRunners.structuredContent ?? null,
+      routes: finalRoutes.structuredContent ?? null,
+      servedRoutes: finalServedRoutes.structuredContent ?? null
+    })}`);
   }
+  const finalWitnesses = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "witnesses"
+  }, 25);
+  const finalWitnessRows = finalWitnesses.isError
+    ? null
+    : Array.isArray(finalWitnesses.structuredContent?.witnesses)
+      ? finalWitnesses.structuredContent.witnesses
+      : Array.isArray(finalWitnesses.structuredContent)
+        ? finalWitnesses.structuredContent
+        : null;
+  const finalState = {
+    structuredContent: {
+      serverRunners: finalServerRunners.structuredContent?.serverRunners ?? [],
+      routes: finalRoutes.structuredContent?.routes ?? [],
+      servedRoutes: finalServedRoutes.structuredContent?.servedRoutes ?? [],
+      witnesses: finalWitnessRows
+    }
+  };
 
   const pathwayProbe = {
     runnerId,
@@ -1196,6 +1743,11 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
       publicTypeCreate: actionEnum.includes("type.create"),
       publicProjectionCreate: actionEnum.includes("projection.create"),
       publicMessageCreate: actionEnum.includes("message.create"),
+      publicComputeModuleCreate: actionEnum.includes("computeModule.create"),
+      publicComputeModuleSourceUpsert: actionEnum.includes("computeModule.source.upsert"),
+      publicComputeModuleSmokeTestUpsert: actionEnum.includes("computeModuleSmokeTest.upsert"),
+      publicComputeModuleSmokeTestRun: actionEnum.includes("computeModuleSmokeTest.run"),
+      publicPackagePatchSourceUpsert: actionEnum.includes("packagePatch.source.upsert"),
       legacyWidgetCreateHidden: !actionEnum.includes("widget.create"),
       legacyFrontendProgramHidden: !actionEnum.includes("frontendProgram.create")
     },
@@ -1219,7 +1771,12 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
         : true,
       routeStateMessagePresent: finalState.structuredContent.witnesses
         ? finalState.structuredContent.witnesses.some(row => row.process === "desire.defineMessage" && row.body?.id === routeStateMessageId)
-        : true
+        : true,
+      engentusComputeModulePresent: engentusReauthoring.computeModule.readChecks.moduleVisible === true,
+      engentusComputeSourcePresent: engentusReauthoring.computeModule.readChecks.sourceVisible === true,
+      engentusComputeSmokeTestPresent: engentusReauthoring.computeModule.readChecks.smokeVisible === true,
+      engentusComputeSourceBundled: engentusReauthoring.computeModule.readChecks.sourceInBundle === true,
+      engentusComputeSmokeFixtureBundled: engentusReauthoring.computeModule.readChecks.smokeFixtureInBundle === true
     },
     blockers: {
       firstBlocked

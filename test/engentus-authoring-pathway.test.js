@@ -9,6 +9,13 @@ import { MCP_PROTOCOL_VERSION } from "../plugins/mcp/mcp-tools.js";
 import { runCanonicalAuthoringPathwayProbe } from "../scripts/mcp-authoring-replay-probe.mjs";
 import { launchBrowser } from "./support/harness.js";
 
+const silentLogger = {
+  error() {},
+  warn() {},
+  info() {},
+  debug() {}
+};
+
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-engentus-authoring-pathway-"));
 }
@@ -21,7 +28,15 @@ async function startAuthoringProbeServer() {
     actor: "system",
     runtimeRoot: await tempRuntimeRoot(),
     runtimeStartupMode: "bootstrap",
-    runtimePluginIds: ["plugin.mcp"]
+    runtimePluginIds: [
+      "plugin.authoring-core",
+      "plugin.server-runner-authoring",
+      "plugin.mcp-authoring",
+      "plugin.fs-blob",
+      "plugin.fs-stream",
+      "plugin.mcp"
+    ],
+    logger: silentLogger
   });
   assert.equal(server.ok, true);
   return server;
@@ -180,7 +195,7 @@ test("canonical docs encode the single-track canonical authoring pathway probe",
   assert.match(pathwayPlaybook, /URL -> route-state synchronization/i);
 });
 
-test("canonical authoring pathway probe proves interactive page.surface routing and MCP-authors the Engentus shell flow", { timeout: 30000 }, async () => {
+test("canonical authoring pathway probe proves interactive page.surface routing and MCP-authors the Engentus shell flow", { timeout: 60000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const result = await runCanonicalAuthoringPathwayProbe(server.url);
@@ -193,6 +208,7 @@ test("canonical authoring pathway probe proves interactive page.surface routing 
       "message",
       "boundary",
       "policy",
+      "computeModule",
       "capability"
     ]);
     assert.equal(result.capabilityChecks.publicSurfaceCreate, true);
@@ -200,6 +216,10 @@ test("canonical authoring pathway probe proves interactive page.surface routing 
     assert.equal(result.capabilityChecks.publicTypeCreate, true);
     assert.equal(result.capabilityChecks.publicProjectionCreate, true);
     assert.equal(result.capabilityChecks.publicMessageCreate, true);
+    assert.equal(result.capabilityChecks.publicComputeModuleCreate, true);
+    assert.equal(result.capabilityChecks.publicComputeModuleSourceUpsert, true);
+    assert.equal(result.capabilityChecks.publicComputeModuleSmokeTestUpsert, true);
+    assert.equal(result.capabilityChecks.publicPackagePatchSourceUpsert, true);
     assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
     assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
     assert.equal(result.pathwayProbe.surfaceHttpStatus, 200);
@@ -238,7 +258,35 @@ test("canonical authoring pathway probe proves interactive page.surface routing 
     assert.equal(result.stateChecks.routeStateProcessPresent, true);
     assert.equal(result.stateChecks.routeStateTypePresent, true);
     assert.equal(result.stateChecks.routeStateMessagePresent, true);
+    assert.equal(result.stateChecks.engentusComputeModulePresent, true);
+    assert.equal(result.stateChecks.engentusComputeSourcePresent, true);
+    assert.equal(result.stateChecks.engentusComputeSmokeTestPresent, true);
+    assert.equal(result.stateChecks.engentusComputeSourceBundled, true);
+    assert.equal(result.stateChecks.engentusComputeSmokeFixtureBundled, true);
     assert.equal(result.engentusReauthoring.authoredSurfaceCount > 0, true);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.moduleVisible, true);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.sourceVisible, true);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.smokeVisible, true);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.sourceInBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.smokeFixtureInBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.secondarySmokeChecks.smokeVisible, true);
+    assert.equal(result.engentusReauthoring.computeModule.secondarySmokeChecks.smokeFixtureInBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.sourceHiddenFromActiveRead, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.sourceHiddenFromBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.sourceTombstoneVisibleWithIncludeDeleted, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.smokeRunFailsWhenSourceDeleted, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.sourceRestoredInActiveRead, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.sourceRestoredInBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.sourceHistoryPreservedAfterRestore, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.smokeHiddenFromActiveRead, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.smokeTombstoneVisibleWithIncludeDeleted, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.smokeFixtureHiddenFromBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.primarySmokeStillActive, true);
+    assert.equal(result.engentusReauthoring.blockedPathwayChecks.available, true);
+    assert.equal(result.engentusReauthoring.blockedPathwayChecks.storageAvailable, true);
+    assert.equal(result.engentusReauthoring.blockedPathwayChecks.allBlocked, true);
+    assert.equal(result.engentusReauthoring.blockedPathwayChecks.operations.length, 4);
+    assert.equal(result.engentusReauthoring.computeModule.smokeRun.reachable, true);
     assert.equal(result.engentusReauthoring.servedChecks.loginHttpStatus, 200);
     assert.equal(result.engentusReauthoring.servedChecks.homeHttpStatus, 200);
     assert.equal(result.engentusReauthoring.servedChecks.signoutHttpStatus, 200);
@@ -282,6 +330,11 @@ test("live constrained MCP discovery exposes canonical frontend actions and hide
     assert.equal(actions.includes("type.create"), true);
     assert.equal(actions.includes("projection.create"), true);
     assert.equal(actions.includes("message.create"), true);
+    assert.equal(actions.includes("computeModule.create"), true);
+    assert.equal(actions.includes("computeModule.source.upsert"), true);
+    assert.equal(actions.includes("computeModuleSmokeTest.upsert"), true);
+    assert.equal(actions.includes("computeModuleSmokeTest.run"), true);
+    assert.equal(actions.includes("packagePatch.source.upsert"), true);
     assert.equal(actions.includes("frontendProgram.create"), false);
     assert.equal(actions.includes("frontendStep.create"), false);
     assert.equal(actions.includes("widget.create"), false);
@@ -307,6 +360,7 @@ test("live constrained MCP keeps canonical authoring actions available while pag
       "message",
       "boundary",
       "policy",
+      "computeModule",
       "capability"
     ]);
 
@@ -341,6 +395,7 @@ test("live constrained MCP keeps canonical authoring actions available while pag
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.projection.status, "supported");
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.process.status, "supported");
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.type.status, "supported");
+    assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.computeModule.status, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].status, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.surface, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.process, "supported");
@@ -409,6 +464,21 @@ test("canonical pathway probe recreates the current Engentus shell flow through 
     await page.waitForSelector("#view-login");
     assert.equal(new URL(page.url()).pathname, paths.login);
     assert.equal(await page.locator("#view-signout .auth-book.folding").count(), 0);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.moduleVisible, true);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.sourceVisible, true);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.smokeVisible, true);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.sourceInBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.readChecks.smokeFixtureInBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.secondarySmokeChecks.smokeVisible, true);
+    assert.equal(result.engentusReauthoring.computeModule.secondarySmokeChecks.smokeFixtureInBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.sourceHiddenFromActiveRead, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.sourceTombstoneVisibleWithIncludeDeleted, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.sourceRestoredInBundle, true);
+    assert.equal(result.engentusReauthoring.computeModule.softDeleteChecks.smokeFixtureHiddenFromBundle, true);
+    assert.equal(result.engentusReauthoring.blockedPathwayChecks.available, true);
+    assert.equal(result.engentusReauthoring.blockedPathwayChecks.storageAvailable, true);
+    assert.equal(result.engentusReauthoring.blockedPathwayChecks.allBlocked, true);
+    assert.equal(result.engentusReauthoring.computeModule.smokeRun.reachable, true);
   } finally {
     await browser.close();
     await server.close();

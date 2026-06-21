@@ -97,7 +97,11 @@ const DERIVE_OPS = {
 };
 
 export function deriveProjectionValue(body = {}, valueOrInputs) {
-  const inputs = body?.inputs && typeof valueOrInputs === "object" && valueOrInputs !== null && !Array.isArray(valueOrInputs)
+  const valueIsInputMap = typeof valueOrInputs === "object"
+    && valueOrInputs !== null
+    && !Array.isArray(valueOrInputs)
+    && Object.prototype.hasOwnProperty.call(valueOrInputs, "value");
+  const inputs = (body?.inputs || valueIsInputMap) && typeof valueOrInputs === "object" && valueOrInputs !== null && !Array.isArray(valueOrInputs)
     ? valueOrInputs
     : { value: valueOrInputs };
   const derive = DERIVE_OPS[String(body?.projectionKind || "").trim()];

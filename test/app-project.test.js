@@ -176,6 +176,12 @@ id = "operator_screen_app"
 imports = ["./shell.rvm"]
 `);
   await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_theme trace_theme {
+  title "Trace Theme"
+  mode ansi16
+  palette terminal-dark
+}
+
 operator_dataset trace_dataset {
   title "Trace Dataset"
   provider provenance
@@ -226,6 +232,7 @@ operator_overlay help_overlay {
   width 56
   height 10
   resizable true
+  close_on_open context_menu
 }
 
 operator_overlay context_menu {
@@ -233,6 +240,7 @@ operator_overlay context_menu {
   title "Context"
   width 24
   height 8
+  close_on_open help_overlay
 }
 
 operator_surface top_status {
@@ -268,7 +276,7 @@ operator_handle split_handle {
 
 operator_viewport trace_default {
   title "Trace Default"
-  theme ansi16
+  theme trace_theme
   screen trace
   left_screen trace_left
   top_surface top_status
@@ -302,6 +310,8 @@ operator_setup shell {
     const appProject = await loadAppProject(appRoot, {
       runtimePluginIds: ["plugin.operator-workbench"]
     });
+    assert.equal(appProject.operatorWorkbench.themes.some(theme => theme.id === "trace_theme" && theme.mode === "ansi16"), true);
+    assert.equal(appProject.operatorWorkbench.themesById.get("trace_theme")?.palette, "terminal-dark");
     assert.equal(appProject.operatorWorkbench.datasets.some(dataset => dataset.id === "trace_dataset" && dataset.provider === "provenance"), true);
     const traceScreen = appProject.operatorWorkbench.screens.find(screen => screen.id === "trace");
     assert.equal(Boolean(traceScreen), true);
@@ -316,6 +326,8 @@ operator_setup shell {
     assert.equal(appProject.operatorWorkbench.leftScreens.some(screen => screen.id === "trace_left" && screen.shape === "table"), true);
     assert.equal(appProject.operatorWorkbench.overlays.some(overlay => overlay.id === "help_overlay" && overlay.kind === "doc_view"), true);
     assert.equal(appProject.operatorWorkbench.overlays.some(overlay => overlay.id === "context_menu" && overlay.kind === "menu"), true);
+    assert.deepEqual(appProject.operatorWorkbench.overlaysById.get("help_overlay")?.closeIdsOnOpen, ["context_menu"]);
+    assert.deepEqual(appProject.operatorWorkbench.overlaysById.get("context_menu")?.closeIdsOnOpen, ["help_overlay"]);
     assert.equal(appProject.operatorWorkbench.handles.some(handle => handle.id === "top_handle" && handle.axis === "horizontal"), true);
     assert.equal(appProject.operatorWorkbench.handles.some(handle => handle.id === "bottom_handle" && handle.axis === "horizontal"), true);
     assert.equal(appProject.operatorWorkbench.handles.some(handle => handle.id === "split_handle" && handle.axis === "vertical"), true);
@@ -323,6 +335,7 @@ operator_setup shell {
     assert.equal(appProject.operatorWorkbench.surfaces.some(surface => surface.id === "command_bar" && surface.kind === "command_bar"), true);
     const traceViewport = appProject.operatorWorkbench.viewports.find(viewport => viewport.id === "trace_default");
     assert.equal(Boolean(traceViewport), true);
+    assert.equal(traceViewport.theme, "trace_theme");
     assert.equal(traceViewport.screenId, "trace");
     assert.equal(traceViewport.leftScreenId, "trace_left");
     assert.equal(traceViewport.topSurfaceId, "top_status");
@@ -342,6 +355,97 @@ operator_setup shell {
     assert.equal(appProject.operatorWorkbench.defaultLeftScreen, "trace_left");
     assert.equal(appProject.operatorWorkbench.defaultViewport, "trace_default");
     assert.equal(appProject.operatorWorkbench.shortcuts.get("F5"), "trace");
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects operator overlay close_on_open references that do not resolve", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-overlay-close-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_overlay_close_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape list-detail
+  data_source references
+}
+
+operator_overlay help_overlay {
+  kind doc_view
+  title "Help"
+  width 56
+  height 10
+  close_on_open missing_overlay
+}
+
+operator_viewport trace_default {
+  screen trace
+  width 80
+  height 30
+  overlay help_overlay
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_overlay help_overlay close_on_open overlay not found: missing_overlay/
+    );
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("app project rejects operator viewport theme references that do not resolve to an authored operator theme", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-theme-invalid-"));
+  const appRoot = path.join(tempRoot, "app");
+  await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "operator_theme_invalid_app"
+imports = ["./shell.rvm"]
+`);
+  await writeFile(path.join(appRoot, "shell.rvm"), `
+operator_screen trace {
+  title "Trace"
+  pane right
+  shape detail
+  data_source inspect
+}
+
+operator_viewport trace_default {
+  title "Trace Default"
+  theme missing_theme
+  screen trace
+  width 80
+  height 30
+}
+
+operator_setup shell {
+  screen trace
+  default_screen trace
+  default_viewport trace_default
+}
+`);
+  try {
+    await assert.rejects(
+      loadAppProject(appRoot, {
+        runtimePluginIds: ["plugin.operator-workbench"]
+      }),
+      /operator_viewport trace_default theme not found: missing_theme/
+    );
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }

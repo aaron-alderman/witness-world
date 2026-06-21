@@ -322,6 +322,120 @@ test("plugin runtime loader materializes transitive cross-root dependencies thro
   }
 });
 
+test("plugin runtime loader only extracts real import specifiers from bridged source modules", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(process.cwd(), ".tmp-witness-plugin-loader-specifiers-"));
+  try {
+    const pluginRoot = path.join(workspaceRoot, "plugins");
+    await writePlugin(pluginRoot, "demo", {
+      id: "plugin.demo",
+      version: "0.1.0",
+      displayName: "Demo",
+      description: "Demo plugin runtime",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-demo-local"],
+      contributes: {}
+    }, `
+      import { createBundle } from "../../src/support.js";
+      export default { bundles: { "bundle-demo-local": createBundle() } };
+    `);
+    await fs.mkdir(path.join(workspaceRoot, "src"), { recursive: true });
+    await fs.writeFile(path.join(workspaceRoot, "src", "support.js"), `
+      import { helperValue } from "./helper.js";
+      const metadata = {
+        importContextName: "noise",
+        from: "not a module specifier"
+      };
+      function parsePseudoImport(line = "") {
+        if (line.startsWith("import")) {
+          return { kind: "pseudo", target: line.slice("import ".length).trim() };
+        }
+        return null;
+      }
+      export function createBundle(line = "demo.read") {
+        return {
+          createHandlers() {
+            return {};
+          },
+          handlerCatalog: {
+            authorableHandlers: [],
+            pageHandlers: [],
+            dispatchHandlers: [],
+            handlerMetadata: {}
+          },
+          routes: [],
+          surfaces: [],
+          header: line,
+          body: helperValue,
+          metadata,
+          pseudoImport: parsePseudoImport(line)
+        };
+      }
+    `, "utf8");
+    await fs.writeFile(path.join(workspaceRoot, "src", "helper.js"), `
+      export const helperValue = "demo.read";
+    `, "utf8");
+
+    const bridgeCalls = [];
+    const bridge = {
+      async listSourceDirectory({ path: sourceId }) {
+        bridgeCalls.push({ kind: "list", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const entries = await fs.readdir(target, { withFileTypes: true });
+        return {
+          path: sourceId,
+          exists: true,
+          entries: entries.map(entry => ({
+            name: entry.name,
+            isFile: entry.isFile(),
+            isDirectory: entry.isDirectory()
+          }))
+        };
+      },
+      async readSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "read", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        return {
+          path: sourceId,
+          content: await fs.readFile(target, "utf8")
+        };
+      },
+      async statSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "stat", path: sourceId });
+        assert.equal(/[\r\n]/.test(String(sourceId || "")), false, `unexpected multiline source id: ${sourceId}`);
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const stat = await fs.stat(target);
+        return {
+          path: sourceId,
+          exists: true,
+          isFile: stat.isFile(),
+          isDirectory: stat.isDirectory(),
+          size: Number(stat.size || 0),
+          modifiedAt: String(stat.mtimeMs || 0)
+        };
+      }
+    };
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.demo"],
+      generationBridge: bridge,
+      cwd: workspaceRoot
+    });
+    const loadResult = await loadRuntimePluginModules({
+      pluginCatalog,
+      generationBridge: bridge,
+      cwd: workspaceRoot
+    });
+
+    assert.equal(loadResult.hasBlockingErrors, false);
+    assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "src/helper.js"), true);
+  } finally {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 test("plugin runtime loader materializes runtime-store seed assets needed by bridged src modules", async () => {
   const workspaceRoot = await fs.mkdtemp(path.join(process.cwd(), ".tmp-witness-plugin-loader-store-"));
   try {
@@ -479,6 +593,123 @@ test("plugin runtime loader materializes runtime-store seed assets needed by bri
     assert.equal(loadResult.hasBlockingErrors, false);
     assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "store/seeds/runtime-profiles.json"), true);
     assert.equal(bridgeCalls.some(call => call.kind === "read" && call.path === "store/seeds/first-party-plugin-catalog.json"), true);
+  } finally {
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("plugin runtime loader memoizes bridged transitive source lookups across plugins", async () => {
+  const workspaceRoot = await fs.mkdtemp(path.join(process.cwd(), ".tmp-witness-plugin-loader-memo-"));
+  try {
+    const pluginRoot = path.join(workspaceRoot, "plugins");
+    const runtimeSource = `
+      import { createBundle } from "../../src/support.js";
+      export default {
+        bundles: {
+          "__BUNDLE_ID__": createBundle("__HEADER__")
+        }
+      };
+    `;
+    await writePlugin(pluginRoot, "alpha", {
+      id: "plugin.alpha",
+      version: "0.1.0",
+      displayName: "Alpha",
+      description: "Alpha plugin runtime",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-alpha"],
+      contributes: {}
+    }, runtimeSource.replace("__BUNDLE_ID__", "bundle-alpha").replace("__HEADER__", "alpha"));
+    await writePlugin(pluginRoot, "beta", {
+      id: "plugin.beta",
+      version: "0.1.0",
+      displayName: "Beta",
+      description: "Beta plugin runtime",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-beta"],
+      contributes: {}
+    }, runtimeSource.replace("__BUNDLE_ID__", "bundle-beta").replace("__HEADER__", "beta"));
+    await fs.mkdir(path.join(workspaceRoot, "src"), { recursive: true });
+    await fs.writeFile(path.join(workspaceRoot, "src", "support.js"), `
+      import { helperValue } from "./helper.js";
+      export function createBundle(line = "demo.read") {
+        return {
+          createHandlers() {
+            return {};
+          },
+          handlerCatalog: {
+            authorableHandlers: [],
+            pageHandlers: [],
+            dispatchHandlers: [],
+            handlerMetadata: {}
+          },
+          routes: [],
+          surfaces: [],
+          header: line,
+          body: helperValue
+        };
+      }
+    `, "utf8");
+    await fs.writeFile(path.join(workspaceRoot, "src", "helper.js"), `
+      export const helperValue = "shared.read";
+    `, "utf8");
+
+    const bridgeCalls = [];
+    const bridge = {
+      async listSourceDirectory({ path: sourceId }) {
+        bridgeCalls.push({ kind: "list", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const entries = await fs.readdir(target, { withFileTypes: true });
+        return {
+          path: sourceId,
+          exists: true,
+          entries: entries.map(entry => ({
+            name: entry.name,
+            isFile: entry.isFile(),
+            isDirectory: entry.isDirectory()
+          }))
+        };
+      },
+      async readSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "read", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        return {
+          path: sourceId,
+          content: await fs.readFile(target, "utf8")
+        };
+      },
+      async statSource({ path: sourceId }) {
+        bridgeCalls.push({ kind: "stat", path: sourceId });
+        const target = path.join(workspaceRoot, ...normalize(sourceId).split("/"));
+        const stat = await fs.stat(target);
+        return {
+          path: sourceId,
+          exists: true,
+          isFile: stat.isFile(),
+          isDirectory: stat.isDirectory(),
+          size: Number(stat.size || 0),
+          modifiedAt: String(stat.mtimeMs || 0)
+        };
+      }
+    };
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.alpha", "plugin.beta"],
+      generationBridge: bridge,
+      cwd: workspaceRoot
+    });
+    const loadResult = await loadRuntimePluginModules({
+      pluginCatalog,
+      generationBridge: bridge,
+      cwd: workspaceRoot
+    });
+
+    assert.equal(loadResult.hasBlockingErrors, false);
+    assert.equal(bridgeCalls.filter(call => call.kind === "read" && call.path === "src/support.js").length, 1);
+    assert.equal(bridgeCalls.filter(call => call.kind === "read" && call.path === "src/helper.js").length, 1);
   } finally {
     await fs.rm(workspaceRoot, { recursive: true, force: true });
   }

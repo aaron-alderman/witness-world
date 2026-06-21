@@ -182,6 +182,10 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
     contextIds: [],
     targetIds: ["engentus.health.classify"]
   });
+  assert.deepEqual(resolveMcpToolScope("world.read", { view: "routes", id: "route.home" }), {
+    contextIds: [],
+    targetIds: ["route.home"]
+  });
   assert.deepEqual(resolveMcpToolScope("world.read", { view: "computeModuleSources", id: "app/modules/health-classify/assembly/index.ts" }), {
     contextIds: [],
     targetIds: ["app/modules/health-classify/assembly/index.ts"]
@@ -203,6 +207,9 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   const platformChangeSet = listSupportedMcpTools().find(tool => tool.name === "platform.changeSet");
   const platformTest = listSupportedMcpTools().find(tool => tool.name === "platform.test");
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("authoringMatrix"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("serverRunners"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("routes"), true);
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("servedRoutes"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("contextNaming"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageCoexistence"), true);
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("packageConvergence"), true);
@@ -276,7 +283,8 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("package.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageRevision.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageRevision.publish"), true);
-  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packagePatch.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packagePatch.create"), false);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packagePatch.source.upsert"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageNamespace.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageDependency.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("packageTransformer.create"), true);
@@ -1502,17 +1510,15 @@ test("mcp authoring.write routes package authorship actions through shared packa
       }
     },
     {
-      action: "packagePatch.create",
+      action: "packagePatch.source.upsert",
       method: "POST",
-      path: "/api/package-patches",
-      handler: "packagePatch.create",
+      path: "/api/package-patches/source",
+      handler: "packagePatch.source.upsert",
       body: {
         package: "package.plugin.inspect",
         revision: "packageRevision.plugin.inspect.v1",
-        path: "plugins/inspect/plugin.json",
-        operation: "replace",
-        sourceLanguage: "json",
-        body: { id: "plugin.inspect" }
+        sourceLanguage: "wtoml",
+        content: "[[packagePatch]]\npath = \"plugins/inspect/plugin.json\"\noperation = \"replace\"\nsourceLanguage = \"json\"\nbody = { id = \"plugin.inspect\" }\n"
       }
     },
     {
@@ -1815,10 +1821,20 @@ test("platform MCP mutation tools only target human-exposed platform handlers", 
     },
     {
       tool: "platform.changeSet",
+      blocked: true,
       args: {
         operation: "edit",
         changeSetId: "changeSet:guard",
         edits: [{ path: "plugins/platform/platform-console.rvm", content: "surface PlatformConsolePage {}" }]
+      }
+    },
+    {
+      tool: "platform.changeSet",
+      blocked: true,
+      args: {
+        operation: "removeEdit",
+        changeSetId: "changeSet:guard",
+        pathHash: "abc123"
       }
     },
     {
@@ -1830,6 +1846,7 @@ test("platform MCP mutation tools only target human-exposed platform handlers", 
     },
     {
       tool: "platform.changeSet",
+      blocked: true,
       args: {
         operation: "apply",
         changeSetId: "changeSet:guard"
@@ -1871,10 +1888,17 @@ test("platform MCP mutation tools only target human-exposed platform handlers", 
   ];
 
   for (const testCase of cases) {
+    const callCount = calls.length;
     const result = await executeMcpTool(testCase.tool, {
       args: testCase.args,
       callHandler
     });
+    if (testCase.blocked) {
+      assert.equal(result.isError, true, `${testCase.tool} ${testCase.args.operation} should be blocked`);
+      assert.equal(calls.length, callCount, `${testCase.tool} ${testCase.args.operation} should not call a handler`);
+      assert.equal(result.structuredContent.blockedHandoff.minimumHumanAction, "use MCP compute module package authoring");
+      continue;
+    }
     assert.equal(result.isError, false, `${testCase.tool} ${testCase.args.operation} should succeed`);
     const call = calls.at(-1);
     assert.equal(platformHandlerCatalog.dispatchHandlers.includes(call.handler), true, `${call.handler} should be owned by plugin.platform`);

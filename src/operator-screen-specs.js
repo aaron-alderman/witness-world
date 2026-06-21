@@ -1,3 +1,4 @@
+const VALID_THEME_MODES = new Set(["ansi16"]);
 const VALID_RIGHT_SCREEN_SHAPES = new Set(["detail", "list-detail", "table-detail"]);
 const VALID_LEFT_SCREEN_SHAPES = new Set(["list", "table", "tree"]);
 const VALID_SCREEN_SHAPES = new Set([...VALID_RIGHT_SCREEN_SHAPES, ...VALID_LEFT_SCREEN_SHAPES]);
@@ -103,6 +104,56 @@ const BUILTIN_SCREEN_DEFINITIONS = Object.freeze([
   })
 ]);
 
+const BUILTIN_OVERLAY_DEFINITIONS = Object.freeze([
+  Object.freeze({
+    id: "help_overlay",
+    title: "Help",
+    kind: "doc_view",
+    width: 56,
+    height: 10,
+    resizable: true,
+    closeIdsOnOpen: ["context_menu"],
+    scroll: [],
+    origin: "builtin"
+  }),
+  Object.freeze({
+    id: "context_menu",
+    title: "Context",
+    kind: "menu",
+    width: 24,
+    height: 8,
+    resizable: false,
+    closeIdsOnOpen: ["help_overlay"],
+    scroll: [],
+    origin: "builtin"
+  })
+]);
+
+const BUILTIN_VIEWPORT_DEFINITIONS = Object.freeze([
+  Object.freeze({
+    id: "builtin.default",
+    title: "Builtin Default",
+    theme: null,
+    screenId: "inspect",
+    leftScreenId: null,
+    topSurfaceId: null,
+    bottomSurfaceId: null,
+    topHandleId: null,
+    bottomHandleId: null,
+    splitHandleId: null,
+    width: 80,
+    height: 30,
+    top: 3,
+    bottom: 4,
+    splitOrientation: "horizontal",
+    leftWeight: 28,
+    rightWeight: 72,
+    overlays: ["help_overlay", "context_menu"],
+    bindings: [],
+    origin: "builtin"
+  })
+]);
+
 function optionalText(value) {
   if (value === undefined || value === null) return null;
   const trimmed = String(value).trim();
@@ -129,6 +180,12 @@ function normalizeColumns(values) {
   return (Array.isArray(values) ? values : []).map(optionalText).filter(Boolean);
 }
 
+function normalizeIdList(value) {
+  if (Array.isArray(value)) return value.map(optionalText).filter(Boolean);
+  const single = optionalText(value);
+  return single ? [single] : [];
+}
+
 function arrayWrap(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -143,6 +200,18 @@ function cloneDatasetSpec(spec = {}) {
     columns: Array.isArray(spec.columns) ? [...spec.columns] : [],
     emptyMessage: spec.emptyMessage ?? null,
     primaryAction: spec.primaryAction ?? null,
+    origin: spec.origin ?? "authored",
+    pluginId: spec.pluginId ?? null,
+    source: spec.source ? { ...spec.source } : null
+  };
+}
+
+function cloneThemeSpec(spec = {}) {
+  return {
+    id: spec.id,
+    title: spec.title ?? spec.id,
+    mode: spec.mode ?? "ansi16",
+    palette: spec.palette ?? "terminal-dark",
     origin: spec.origin ?? "authored",
     pluginId: spec.pluginId ?? null,
     source: spec.source ? { ...spec.source } : null
@@ -211,6 +280,7 @@ function cloneOverlaySpec(spec = {}) {
     width: spec.width ?? null,
     height: spec.height ?? null,
     resizable: spec.resizable ?? null,
+    closeIdsOnOpen: Array.isArray(spec.closeIdsOnOpen) ? [...spec.closeIdsOnOpen] : [],
     scroll: Array.isArray(spec.scroll) ? [...spec.scroll] : [],
     origin: spec.origin ?? "authored",
     pluginId: spec.pluginId ?? null,
@@ -272,6 +342,26 @@ function cloneViewportSpec(spec = {}) {
     origin: spec.origin ?? "authored",
     pluginId: spec.pluginId ?? null,
     source: spec.source ? { ...spec.source } : null
+  };
+}
+
+function normalizeAuthoredThemeSpec(residual = null) {
+  const values = residual?.body?.values ?? {};
+  const id = optionalText(values.id) ?? optionalText(residual?.name);
+  const mode = optionalText(values.mode) ?? "ansi16";
+  const palette = optionalText(values.palette) ?? "terminal-dark";
+  if (!id || !VALID_THEME_MODES.has(mode) || !palette) return null;
+  return {
+    id,
+    title: optionalText(values.title) ?? id,
+    mode,
+    palette,
+    origin: "authored",
+    pluginId: residual?.body?.trace?.pluginId ?? residual?.meta?.pluginId ?? null,
+    source: {
+      file: residual?.body?.file ?? null,
+      line: residual?.body?.line ?? null
+    }
   };
 }
 
@@ -407,6 +497,7 @@ function normalizeAuthoredOverlaySpec(residual = null) {
     width: optionalInteger(values.width),
     height: optionalInteger(values.height),
     resizable: values.resizable === undefined || values.resizable === null ? null : Boolean(values.resizable),
+    closeIdsOnOpen: normalizeIdList(values.closeIdsOnOpen ?? values.closeOnOpen ?? values.close_on_open),
     scroll: normalizeOverlayScroll(values.scroll),
     origin: "authored",
     pluginId: residual?.body?.trace?.pluginId ?? residual?.meta?.pluginId ?? null,
@@ -526,6 +617,7 @@ function normalizeResolvedScreenSection(section, datasetsById) {
 }
 
 export function collectAuthoredOperatorWorkbenchSpecs(authoredDesireDocs = []) {
+  const themes = [];
   const datasets = [];
   const screens = [];
   const sections = [];
@@ -537,6 +629,10 @@ export function collectAuthoredOperatorWorkbenchSpecs(authoredDesireDocs = []) {
   for (const desire of authoredDesireDocs ?? []) {
     for (const residual of desire?.runtimeResiduals ?? []) {
       const kind = residual?.body?.declarationKind ?? null;
+      if (kind === "operator_theme") {
+        const theme = normalizeAuthoredThemeSpec(residual);
+        if (theme) themes.push(theme);
+      }
       if (kind === "operator_dataset") {
         const dataset = normalizeAuthoredDatasetSpec(residual);
         if (dataset) datasets.push(dataset);
@@ -571,6 +667,7 @@ export function collectAuthoredOperatorWorkbenchSpecs(authoredDesireDocs = []) {
     }
   }
   return {
+    themes,
     datasets,
     screens,
     sections,
@@ -586,6 +683,10 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
   const authored = collectAuthoredOperatorWorkbenchSpecs(appProject?.authoredDesireDocs ?? []);
   const builtinDatasets = BUILTIN_DATASET_DEFINITIONS.map(cloneDatasetSpec);
   const builtins = BUILTIN_SCREEN_DEFINITIONS.map(cloneScreenSpec);
+  const builtinOverlays = BUILTIN_OVERLAY_DEFINITIONS.map(cloneOverlaySpec);
+  const builtinViewports = BUILTIN_VIEWPORT_DEFINITIONS.map(cloneViewportSpec);
+  const authoredThemesById = new Map();
+  for (const theme of authored.themes) authoredThemesById.set(theme.id, cloneThemeSpec(theme));
 
   const datasetsById = new Map();
   for (const dataset of builtinDatasets) datasetsById.set(dataset.id, dataset);
@@ -719,7 +820,10 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
     };
   });
 
-  const overlays = [...authoredOverlaysById.values()].map(overlay => {
+  const overlaysById = new Map();
+  for (const overlay of builtinOverlays) overlaysById.set(overlay.id, cloneOverlaySpec(overlay));
+  for (const overlay of authoredOverlaysById.values()) overlaysById.set(overlay.id, cloneOverlaySpec(overlay));
+  const overlays = [...overlaysById.values()].map(overlay => {
     if (!VALID_OVERLAY_KINDS.has(overlay.kind)) {
       throw new Error(`operator_overlay ${overlay.id} invalid kind: ${overlay.kind}`);
     }
@@ -728,6 +832,14 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
     }
     if (overlay.height !== null && overlay.height <= 0) {
       throw new Error(`operator_overlay ${overlay.id} height must be positive`);
+    }
+    if (overlay.closeIdsOnOpen.some(candidate => candidate === overlay.id)) {
+      throw new Error(`operator_overlay ${overlay.id} close_on_open cannot reference itself`);
+    }
+    for (const closeOverlayId of overlay.closeIdsOnOpen) {
+      if (!overlaysById.has(closeOverlayId)) {
+        throw new Error(`operator_overlay ${overlay.id} close_on_open overlay not found: ${closeOverlayId}`);
+      }
     }
     return cloneOverlaySpec(overlay);
   });
@@ -761,7 +873,23 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
     return cloneSurfaceSpec(surface);
   });
 
-  const viewports = [...authoredViewportsById.values()].map(viewport => {
+  const themes = [...authoredThemesById.values()].map(theme => {
+    if (!VALID_THEME_MODES.has(theme.mode)) {
+      throw new Error(`operator_theme ${theme.id} invalid mode: ${theme.mode}`);
+    }
+    if (!optionalText(theme.palette)) {
+      throw new Error(`operator_theme ${theme.id} palette is required`);
+    }
+    return cloneThemeSpec(theme);
+  });
+
+  const allViewportSpecs = new Map();
+  for (const viewport of builtinViewports) allViewportSpecs.set(viewport.id, cloneViewportSpec(viewport));
+  for (const viewport of authoredViewportsById.values()) allViewportSpecs.set(viewport.id, cloneViewportSpec(viewport));
+  const viewports = [...allViewportSpecs.values()].map(viewport => {
+    if (viewport.theme && !authoredThemesById.has(viewport.theme)) {
+      throw new Error(`operator_viewport ${viewport.id} theme not found: ${viewport.theme}`);
+    }
     if (viewport.screenId && !rightScreensById.has(viewport.screenId)) {
       throw new Error(`operator_viewport ${viewport.id} screen not found: ${viewport.screenId}`);
     }
@@ -835,7 +963,7 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
         throw new Error(`operator_viewport ${viewport.id} duplicate overlay reference: ${overlayId}`);
       }
       seenOverlays.add(overlayId);
-      if (!authoredOverlaysById.has(overlayId)) {
+      if (!overlaysById.has(overlayId)) {
         throw new Error(`operator_viewport ${viewport.id} overlay not found: ${overlayId}`);
       }
     }
@@ -851,6 +979,7 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
       }
       seenTriggers.add(binding.trigger);
       if (binding.verb === "overlay" && !authoredOverlaysById.has(binding.target)) {
+        if (overlaysById.has(binding.target)) continue;
         throw new Error(`operator_viewport ${viewport.id} binding overlay target not found: ${binding.target}`);
       }
     }
@@ -883,14 +1012,18 @@ export function buildOperatorWorkbenchDefinition(appProject = null) {
   if (invalidDefaultLeftScreen?.defaultLeftScreen) {
     throw new Error(`operator_setup ${invalidDefaultLeftScreen.id} default_left_screen not found: ${invalidDefaultLeftScreen.defaultLeftScreen}`);
   }
-  const invalidDefaultViewport = authored.setupRows.find(row => row.defaultViewport && !authoredViewportsById.has(row.defaultViewport)) ?? null;
+  const invalidDefaultViewport = authored.setupRows.find(row => row.defaultViewport && !allViewportSpecs.has(row.defaultViewport)) ?? null;
   if (invalidDefaultViewport?.defaultViewport) {
     throw new Error(`operator_setup ${invalidDefaultViewport.id} default_viewport not found: ${invalidDefaultViewport.defaultViewport}`);
   }
   const defaultScreen = authored.setupRows.find(row => row.defaultScreen && rightScreensById.has(row.defaultScreen))?.defaultScreen ?? null;
   const defaultLeftScreen = authored.setupRows.find(row => row.defaultLeftScreen && leftScreensById.has(row.defaultLeftScreen))?.defaultLeftScreen ?? null;
-  const defaultViewport = authored.setupRows.find(row => row.defaultViewport && authoredViewportsById.has(row.defaultViewport))?.defaultViewport ?? null;
+  const defaultViewport = authored.setupRows.find(row => row.defaultViewport && allViewportSpecs.has(row.defaultViewport))?.defaultViewport
+    ?? builtinViewports[0]?.id
+    ?? null;
   return {
+    themes,
+    themesById: new Map(themes.map(theme => [theme.id, theme])),
     datasets: [...datasetsById.values()].map(cloneDatasetSpec),
     datasetsById,
     screens,

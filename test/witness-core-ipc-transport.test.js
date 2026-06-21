@@ -192,3 +192,52 @@ test("createWitnessCoreBridge can use the IPC transport without fetch", async ()
   await new Promise(resolve => server.close(resolve));
   await cleanupSocketPath(socketPath);
 });
+
+test("witness-core IPC transport retries briefly while the pipe listener is still coming up", async () => {
+  const socketPath = testSocketPath("witness-core-ipc-retry");
+  const server = net.createServer(socket => {
+    let buffer = "";
+    socket.on("data", chunk => {
+      buffer += chunk.toString("utf8");
+      const boundary = buffer.indexOf("\n");
+      if (boundary < 0) return;
+      const line = buffer.slice(0, boundary).trim();
+      const request = JSON.parse(line);
+      socket.write(`${JSON.stringify({
+        protocol: request.protocol,
+        kind: "result",
+        method: request.method,
+        requestId: request.requestId,
+        ok: true,
+        payload: {
+          exists: true,
+          isFile: true,
+          size: 7,
+          modifiedAt: "now"
+        },
+        error: null
+      })}\n`);
+      socket.end();
+    });
+  });
+  await cleanupSocketPath(socketPath);
+  const transport = createWitnessCoreIpcTransport({
+    pipePath: socketPath,
+    connectTimeoutMs: 500,
+    connectRetryDelayMs: 20
+  });
+  setTimeout(() => {
+    void onceServerListening(server, socketPath);
+  }, 80);
+  const payload = await transport.call({
+    method: WITNESS_CORE_TRANSPORT_METHODS.sourceStat,
+    args: {
+      query: {
+        path: "app/content.wtoml"
+      }
+    }
+  });
+  assert.equal(payload.exists, true);
+  await new Promise(resolve => server.close(resolve));
+  await cleanupSocketPath(socketPath);
+});

@@ -30,6 +30,7 @@ import {
   requestPackageRevisionDefine,
   requestPackageRevisionPublish,
   requestPackagePatchDefine,
+  requestPackagePatchSourceUpsert,
   requestPackageNamespaceDefine,
   requestPackageDependencyDefine,
   requestPackageTransformerDefine,
@@ -1158,6 +1159,47 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       sendJson(res, result.status, { packagePatch: result.packagePatch, witness: result.witness });
+    },
+
+    "packagePatch.source.upsert": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const resolvedRevision = requireCoveredAuthoringRefInput(world, body, {
+        idField: "revision",
+        refField: "revisionRef",
+        label: "package revision"
+      });
+      if (!resolvedRevision.ok) {
+        sendJson(res, 400, { error: resolvedRevision.error, witness: null });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedRevision.target);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "packagePatch.define",
+            targetKind: "packageRevision",
+            targetId: resolvedRevision.target,
+            body: { ...body, revision: resolvedRevision.target, revisionRef: null },
+            reason: "Define a source-backed package patch through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestPackagePatchSourceUpsert(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { packagePatches: result.packagePatches, witnesses: result.witnesses });
     },
 
     "packageNamespace.create": async ({ req, res, requestActor }) => {

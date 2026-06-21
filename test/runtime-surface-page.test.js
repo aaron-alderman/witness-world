@@ -217,7 +217,7 @@ test("runtime-surface-page projects authored projection bindings during the init
     requestPathname: "/status"
   });
 
-  assert.match(html, /<div id="status-readout">Status: signedIn<\/div>/);
+  assert.match(html, /<div[^>]*id="status-readout"[^>]*>Status: signedIn<\/div>/);
   assert.match(html, /"id":"StatusSummary"/);
   assert.match(html, /"projection":"StatusSummary"/);
 });

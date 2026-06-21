@@ -206,14 +206,15 @@ test("transitional node external-boundary owners stay contained to the known exc
   const sqliteOwners = await matchSourceFiles(/\bnode:sqlite\b|\bDatabaseSync\b/g);
   const pluginSqliteOwners = await matchFilesUnder(path.join(repoRoot, "plugins"), /\bnode:sqlite\b|\bDatabaseSync\b/g);
   const directDbOwners = await matchFilesWithin(["plugins"], /import\("pg"\)|import\("mysql2\/promise"\)/g);
-  const publicHttpOwners = await matchSourceFiles(/\bnode:http\b|createServer\s*\(|server\.listen\s*\(/g);
+  const httpOwners = await matchSourceFiles(/\bnode:http\b|createServer\s*\(|server\.listen\s*\(/g);
   const canonicalWatcherOwners = await matchSourceFiles(/\bfsWatch\.watch\s*\(/g);
 
   assert.deepEqual(sqliteOwners, []);
   assert.deepEqual(pluginSqliteOwners, []);
   assert.deepEqual(directDbOwners, []);
 
-  assert.deepEqual(publicHttpOwners, [
+  assert.deepEqual(httpOwners, [
+    "src/operator-browser-example-server.js",
     "src/runtime-server.js"
   ]);
 
@@ -253,6 +254,7 @@ test("node fs ownership stays split between canonical runtime paths, desktop/ope
     "src/desktop-launcher-view.js",
     "src/desktop-main.js",
     "src/desktop-session-manager.js",
+    "src/operator-browser-example-server.js",
     "src/operator-tui.js",
     "src/operator-workbench/main.js",
     "src/operator-workbench/settings.js",

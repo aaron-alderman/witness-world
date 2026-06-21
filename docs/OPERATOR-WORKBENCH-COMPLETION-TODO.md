@@ -1,10 +1,21 @@
 # Operator Workbench Completion TODO
 
-This document is the self-contained completion tracker for the operator workbench.
+> Superseded by `OPERATOR-WORKBENCH-HEROIC-SPEC-TODO.md`.
+>
+> Use `OPERATOR-WORKBENCH-HEROIC-SPEC-TODO.md` as the canonical tracker for:
+> - current status
+> - remaining work
+> - tranche boundaries
+> - acceptance criteria
+> - ATTN notes and blockers
+>
+> This file remains as historical context only and is no longer the authoritative source of truth.
+
+This document is the canonical self-contained delivery tracker for the operator workbench.
 
 Use it as:
 
-- the goal statement
+- the product goal
 - the honest status readout
 - the architecture guardrail
 - the phase-by-phase TODO
@@ -15,11 +26,12 @@ Use it as:
 
 ## How To Use This Document
 
-- Change `[ ]` to `[X]` only when the statement is materially true.
+- Change `[ ]` to `[X]` only when the statement is materially true, not merely started.
 - Add `ATTN:` notes when implementation exposes a shortcut, ownership leak, or misleading seam.
 - Prefer explicit ownership over convenience duplication.
-- If a phase lands only partially, record the real boundary instead of claiming the whole thing.
-- Keep this document self-contained; do not rely on oral history.
+- If a phase lands only partially, record the real boundary instead of claiming the whole phase.
+- Keep this document self-contained; do not make it depend on oral history.
+- If a new tranche does not obviously strengthen the authored model, core ownership, compositor, or reusable surface family, it is probably too early.
 
 ---
 
@@ -27,14 +39,14 @@ Use it as:
 
 - [ ] Build the operator workbench as a real authored product surface, not a painted browser prototype.
 
-The target end state is:
+The intended end state is:
 
 - [ ] One shared operator core owns navigation, selection, search, focus, inspection, references, provenance, preview-read state, intents, and workbench object lifecycle.
 - [ ] One canonical RVM/operator authoring pathway defines the workbench.
 - [ ] The browser workbench is the first fully correct rich host.
 - [ ] Electron is only a host adapter, not a second product implementation.
 - [ ] Future native hosts can consume the same compiled workbench model.
-- [ ] Rendering is genuinely cell-based and scene-driven.
+- [ ] Rendering is genuinely cell-based and scene-driven rather than HTML layout wearing a TUI costume.
 - [ ] Frames, separators, handles, overlays, and junctions are composed globally and deterministically.
 - [ ] Menus, help, viewers, references, provenance, editing, and viewport management are first-class workbench objects.
 
@@ -42,7 +54,7 @@ The target end state is:
 
 ## Definition Of Done
 
-This effort is not complete until all of the following are true:
+This effort is not complete until all of the following are materially true:
 
 - [ ] Product truth lives in the shared operator core.
 - [ ] The workbench is authored through canonical RVM/operator definitions.
@@ -70,7 +82,9 @@ What is materially true today:
 - [X] The browser-side left pane now renders from the canonical `leftPane` model rather than browser-only mirrors.
 - [X] Several browser compatibility mirrors have already been removed.
 - [X] A first frame-graph/compositor slice exists for pane, separator, and overlay composition.
-- [X] Several text and ornament surfaces have already moved away from ad hoc paint order toward explicit composition seams.
+- [X] The four primary pane interiors now render through explicit base fill-scene entries rather than only implicit clear-buffer background.
+- [X] Fill-scene entries now resolve through a normalized fill-style catalog rather than inline runtime fill literals.
+- [X] Text-scene and segmented ornament entries now resolve through a normalized text-style catalog rather than inline runtime text-style literals.
 
 What is not materially true yet:
 
@@ -89,16 +103,32 @@ Plain-English assessment:
 - [ ] This is not yet the finished product architecture.
 - [X] The highest-leverage remaining work is ownership cleanup, compositor completion, surface-family unification, and authored-model tightening.
 
+ATTN: The runtime-owned style catalogs are a real improvement over inline paint literals, but they are still runtime-owned. They are not yet the final authored scene-policy boundary.
+
 ---
 
-## Primary Risks
+## Current Priority
 
-- [ ] Browser runtime becomes the permanent product implementation by accident.
-- [ ] RVM/operator authoring remains partial while more host logic accumulates.
-- [ ] More UX features are added before ownership and compositor boundaries are stable.
-- [ ] Electron-specific behavior leaks into shared product logic.
-- [ ] Text, frames, and interactions continue to be added as one-off render cases rather than scene families.
-- [ ] Viewers and editors arrive too late, forcing incompatible local widgets.
+- [ ] Finish shrinking browser-local product truth in Phase 2.
+- [ ] Expand Phase 3 from the first frame-graph slice into the full shared compositor contract.
+- [ ] Tighten Phase 1 so the canonical authored pathway covers the workbench shapes that still live in browser-specific definition space.
+- [ ] Do not pile on more UI cleverness until Phase 2 and Phase 3 are materially stronger.
+
+---
+
+## Global Pitfalls To Avoid
+
+- [ ] Do not let `examples/operator/browser/operator-runtime.js` become the permanent product runtime.
+- [ ] Do not let the browser-side grammar remain a forever sidecar detached from canonical RVM.
+- [ ] Do not use DOM layout, DOM tables, CSS box layout, or browser scrollbars as the real layout engine.
+- [ ] Do not collapse product semantics and rendering logic into one host module.
+- [ ] Do not keep fixing border and junction bugs with more render-order exceptions instead of expanding the compositor.
+- [ ] Do not treat host-font-derived glyph output as the final fidelity answer.
+- [ ] Do not implement help, menus, viewers, or edit mode as isolated one-off widgets.
+- [ ] Do not add more heroic UX while the authored model and compositor boundary are still weak.
+- [ ] Do not hard-code host behavior that should instead be authored or normalized.
+- [ ] Do not accept sample host state as long-term product truth.
+- [ ] Do not push Electron-specific logic into the shared core.
 
 ---
 
@@ -107,7 +137,7 @@ Plain-English assessment:
 - [ ] Keep pushing truth into the shared operator core.
 - [ ] Compile authored workbench definitions into a host-neutral surface tree and scene.
 - [ ] Expand the compositor into the single authority for frame and separator behavior.
-- [ ] Promote repeated browser render patterns into real surface families.
+- [ ] Promote repeated render patterns into real surface families instead of multiplying special cases.
 - [ ] Keep interactions intent-driven rather than host-event-driven.
 - [ ] Treat viewers, help, menus, and editing as reusable product surfaces.
 - [ ] Verify at three layers:
@@ -120,12 +150,11 @@ Plain-English assessment:
 ## What Not To Do
 
 - [ ] Do not ship HTML layout disguised as a TUI.
-- [ ] Do not let `examples/operator/browser/operator-runtime.js` become the permanent product runtime.
-- [ ] Do not keep browser-only mirrors unless their ownership is explicit and temporary.
-- [ ] Do not fix junction bugs with paint-order hacks instead of compositor ownership.
+- [ ] Do not let browser-local convenience mirrors become permanent product truth.
 - [ ] Do not keep inventing host-local widgets for help, menus, viewers, or editing.
-- [ ] Do not hard-code behavior in Electron that belongs in authored workbench definitions.
-- [ ] Do not add more UX cleverness while Phase 2 and Phase 3 are still structurally incomplete.
+- [ ] Do not delay the compositor until after interaction features accumulate.
+- [ ] Do not delay structured viewers until after editing; they are a core surface family.
+- [ ] Do not add more rendering cleverness if it deepens ownership ambiguity.
 
 ---
 
@@ -145,6 +174,18 @@ Ownership boundary:
 
 - [ ] Host owns window lifecycle, presentation, input capture, clipboard, and platform integration.
 - [ ] Core owns navigation, selection, search, focus, inspect, references, provenance, help context, viewports, intents, and workbench object lifecycle.
+
+---
+
+## Phase Dependency Order
+
+The safe execution order is:
+
+- [ ] Phase 1 must be strong enough that the browser is not forced to invent product structure ad hoc.
+- [ ] Phase 2 must reduce browser-local truth before large new feature families land.
+- [ ] Phase 3 must own borders, separators, overlays, and handles before more visual complexity lands.
+- [ ] Phase 5 and Phase 7 must exist before Phase 9 grows serious editing.
+- [ ] Phase 10 should be a proof of architecture quality, not a late rescue rewrite.
 
 ---
 
@@ -169,6 +210,10 @@ Ownership boundary:
 ### Goal
 
 - [X] Prove that a browser-first, canvas-first, cell-first direction is viable.
+
+### Current Status
+
+- [X] Phase complete
 
 ### Required Work
 
@@ -200,6 +245,7 @@ Ownership boundary:
 
 ### Current Status
 
+- [ ] Phase complete
 - [X] Viewport seam landed
 - [X] Overlay seam landed
 - [X] Handle seam landed
@@ -207,6 +253,7 @@ Ownership boundary:
 - [ ] Left-pane authored model is incomplete
 - [ ] Right-pane generic projection model is incomplete
 - [ ] Viewer-surface authoring is still deferred
+- [ ] Theme and scene-style ownership is not yet canonical
 
 ### Required Work
 
@@ -223,18 +270,21 @@ Ownership boundary:
 - [ ] Add validation for viewport constraints.
 - [ ] Add validation for overlay ownership.
 - [ ] Add a normalized compiled workbench schema contract.
+- [ ] Decide whether themes, text styles, and fill styles remain runtime-owned or become authored workbench assets.
 
 ### Acceptance Criteria
 
 - [ ] There is one canonical authored pathway for workbench definition.
-- [ ] The workbench can be described without relying on a browser-only product grammar.
+- [ ] The browser workbench can be described without relying on an ad hoc product grammar.
 - [ ] Invalid authored definitions fail clearly.
 - [ ] Tests cover parse, validation, normalization, and compiled output.
+- [ ] Theme and scene-style ownership is explicit rather than split across runtime and authoring seams.
 
 ### Pitfalls To Avoid
 
+- [ ] Do not keep the browser grammar as permanent product truth.
 - [ ] Do not let critical surface concepts exist only in handwritten host code.
-- [ ] Do not keep browser grammar and canonical grammar both acting as product truth.
+- [ ] Do not add more authored fields without defining who compiles and owns them.
 
 ---
 
@@ -242,36 +292,39 @@ Ownership boundary:
 
 ### Goal
 
-- [ ] Make the shared operator core the real owner of workbench truth rather than a boot-time input source.
+- [ ] Make the shared operator core the real owner of workbench truth and reduce browser-local runtime state to adapter concerns.
 
 ### Current Status
 
-- [X] Boot prefers a live shared snapshot.
-- [X] A narrow live interaction slice round-trips through the shared core.
-- [X] Browser mirrors for pane cursors and focus have been reduced.
-- [ ] Most interactions still depend on browser-local runtime adaptation.
-- [ ] Search, overlays, help, references, and inspector state still have too much browser-local ownership.
+- [ ] Phase complete
+- [X] Shared workbench snapshot export exists
+- [X] Browser boot prefers live shared snapshot data
+- [X] Fixture-readonly boot requires explicit opt-in
+- [X] A narrow live interaction slice round-trips through the shared core
+- [X] Browser left-pane rendering now consumes the canonical `leftPane` snapshot model
+- [ ] Most interactions after boot are still browser-runtime-driven
+- [ ] The browser still owns too much cursor, help, viewer, and render-prep truth
 
 ### Required Work
 
-- [ ] Remove remaining browser-local product mirrors where the shared snapshot already owns truth.
-- [ ] Move left-pane and right-pane state transitions to shared intents wherever ownership belongs in the core.
-- [ ] Move overlay lifecycle and active overlay semantics to the shared snapshot contract.
-- [ ] Move help-context ownership into shared snapshot state.
-- [ ] Normalize row primary-action behavior so host adapters only dispatch intents.
-- [ ] Tighten snapshot contracts so the browser stops inferring product semantics from raw data.
+- [ ] Make the browser host consume the real shared workbench snapshot for most interactions after boot.
+- [ ] Remove remaining browser-local mirrors where the shared snapshot already owns the same truth.
+- [ ] Move help, references, provenance, and viewer context ownership into the core snapshot or compiled scene model.
+- [ ] Tighten the host-facing contract for top strip, left pane, right pane, command bar, overlays, and viewport state.
+- [ ] Ensure row activation, focus movement, unwind, and screen changes dispatch core-owned intents rather than host-local product logic.
+- [ ] Keep the browser runtime limited to rendering, event capture, clipboard, and adapter glue.
 
 ### Acceptance Criteria
 
-- [ ] Browser workbench state after boot is materially driven by the shared operator core.
-- [ ] Browser runtime no longer invents product truth that should belong to the core.
-- [ ] Shared snapshot tests cover focus, pane state, overlays, help context, and viewport state.
-- [ ] Host interaction tests prove the browser is dispatching intents rather than reimplementing product logic.
+- [ ] The browser host is mostly a renderer plus input adapter.
+- [ ] Shared snapshot truth is sufficient for pane state, focus state, view state, and workbench context.
+- [ ] Removing a browser-local mirror no longer changes product behavior because the host was not the true owner.
+- [ ] Tests cover live shared-snapshot flows rather than fixture-only browser behavior.
 
 ### Pitfalls To Avoid
 
-- [ ] Do not leave half-owned state split between browser runtime and shared snapshot.
-- [ ] Do not move rendering concerns into the core while trying to move product truth out of the browser.
+- [ ] Do not keep adding features on browser-owned state and promise to normalize them later.
+- [ ] Do not move renderer-specific concerns into the core just to make the adapter thinner.
 
 ---
 
@@ -279,37 +332,40 @@ Ownership boundary:
 
 ### Goal
 
-- [ ] Make one deterministic compositor/frame-graph the universal authority for borders, separators, handles, overlays, and text-affiliated scene objects.
+- [ ] Make the compositor and frame graph the universal authority for pane boundaries, overlays, separators, handles, and junctions.
 
 ### Current Status
 
-- [X] A first frame-graph slice exists.
-- [X] Pane, separator, and overlay composition is no longer entirely ad hoc.
-- [X] Several ornament and text surfaces have been moved into explicit composed seams.
-- [ ] Runtime-specific paint loops still exist for too many surface families.
-- [ ] Junction resolution, mixed weight line rules, and scene-family ownership are not fully centralized.
+- [ ] Phase complete
+- [X] A first frame-graph slice exists
+- [X] Pane, separator, and overlay composition already use that slice in narrow paths
+- [X] Base pane interiors now render through explicit fill-scene entries
+- [X] Fill scenes now resolve through normalized fill-style ids
+- [X] Text scenes and segmented ornaments now resolve through normalized text-style ids
+- [ ] Not every border, junction, or overlay-affiliated text object is yet owned by the compositor
+- [ ] Some render correctness still depends on runtime ordering knowledge
 
 ### Required Work
 
-- [ ] Move every pane frame and separator into one global frame graph.
-- [ ] Move every overlay frame, divider, and ownership rule into the compositor contract.
-- [ ] Introduce a generic scene family for text-bearing surfaces instead of runtime-specific paint loops.
-- [ ] Centralize mixed single/double/heavy line-weight policy.
-- [ ] Make handles, resize rails, and viewport dividers compositor-owned rather than patch-painted.
-- [ ] Ensure right-pane and left-pane share the same box/junction rules.
-- [ ] Add deterministic layering rules for base scene, overlay fills, overlay text, and overlay frames.
+- [ ] Finish the global frame graph so panes do not paint overlapping rectangles independently.
+- [ ] Centralize border, separator, handle, overlay, and shared-junction ownership in the compositor.
+- [ ] Normalize mixed single, double, and heavy line behavior through graph-owned rules rather than local paint tricks.
+- [ ] Define deterministic layering rules for base fills, base frame graph, base text, overlay fills, overlay text, and overlay frame graph.
+- [ ] Move remaining host-local separator and junction math into graph composition.
+- [ ] Ensure active vs passive pane styling does not clobber shared borders due to paint order.
 
 ### Acceptance Criteria
 
 - [ ] Junction behavior is deterministic and testable.
 - [ ] Shared separators do not get clobbered by paint order.
-- [ ] Frame and separator rendering is driven by scene data rather than patched after the fact.
+- [ ] Frame and separator rendering is driven by graph and scene data rather than patched after the fact.
 - [ ] New panes or overlays can be added without inventing new junction logic.
 
 ### Pitfalls To Avoid
 
 - [ ] Do not keep fixing compositor problems with more render-order exceptions.
 - [ ] Do not let each pane surface own its own border math.
+- [ ] Do not let active-pane emphasis override graph correctness.
 
 ---
 
@@ -321,12 +377,13 @@ Ownership boundary:
 
 ### Required Work
 
-- [ ] Complete the extended box-drawing glyph policy, including tasteful single/double/heavy usage.
+- [ ] Complete the extended box-drawing glyph policy, including tasteful single, double, and heavy usage.
 - [ ] Ensure glyph metrics are stable across the atlas and do not drift by pane or font path.
 - [ ] Finish text selection behavior for word, line, and rectangular selection.
 - [ ] Preserve copied text exactly as rendered, including box-drawing characters.
 - [ ] Eliminate residual HTML affordances such as browser scrollbars or DOM-looking controls in the workbench surface.
-- [ ] Ensure title/chrome controls and status ornaments are rendered as cell content, not incidental host widgets.
+- [ ] Ensure title, chrome controls, and status ornaments are rendered as cell content, not incidental host widgets.
+- [ ] Support copy and selection without breaking cell-accurate layout.
 
 ### Acceptance Criteria
 
@@ -339,6 +396,7 @@ Ownership boundary:
 
 - [ ] Do not overuse heavy or double frames everywhere.
 - [ ] Do not allow font fallback or inconsistent metrics to create false layout bugs.
+- [ ] Do not call the renderer finished while text selection or copy still diverge from the displayed grid.
 
 ---
 
@@ -353,7 +411,7 @@ Ownership boundary:
 - [ ] Define reusable surface families for detail, list, table, tree, menu, help, inspector, and text-reader behavior.
 - [ ] Normalize section behavior so authored sections are real workbench objects, not just render decoration.
 - [ ] Make left-pane and right-pane consume the same family contracts where appropriate.
-- [ ] Introduce a generic scene or surface descriptor that can be compiled from authored workbench definitions.
+- [ ] Introduce a generic surface descriptor that can be compiled from authored workbench definitions.
 - [ ] Stop encoding repeated surface semantics in browser runtime conditionals.
 
 ### Acceptance Criteria
@@ -382,7 +440,7 @@ Ownership boundary:
 - [ ] Finish primary-action and alternate-action ownership.
 - [ ] Make links first-class actionable targets across panes and surfaces.
 - [ ] Define contextual help ownership and trigger flow.
-- [ ] Define right-click/context-menu flow as a real workbench surface.
+- [ ] Define right-click and context-menu flow as a real workbench surface.
 - [ ] Introduce customizable keybinding seams without leaking host-specific behavior into core logic.
 
 ### Acceptance Criteria
@@ -406,11 +464,12 @@ Ownership boundary:
 
 ### Required Work
 
-- [ ] Add structured JSON/source/help/provenance/reference viewers.
+- [ ] Add structured JSON, source, help, provenance, and reference viewers.
 - [ ] Support navigable trees for ownership and provenance.
 - [ ] Support long-content horizontal and vertical browsing where required without reintroducing browser scrollbars as product truth.
 - [ ] Make F1 help a first-class authored window or overlay surface.
 - [ ] Ensure property and metadata rows can expose links and inline actions consistently.
+- [ ] Define text-reader and structured-reader surface families that can scale into edit mode later.
 
 ### Acceptance Criteria
 
@@ -420,7 +479,7 @@ Ownership boundary:
 
 ### Pitfalls To Avoid
 
-- [ ] Do not leave JSON/source/help as one-off text-reader hacks.
+- [ ] Do not leave JSON, source, or help as one-off text-reader hacks.
 - [ ] Do not let viewer behavior diverge between browser and Electron.
 
 ---
@@ -430,6 +489,15 @@ Ownership boundary:
 ### Goal
 
 - [ ] Make viewport control, pane sizing, and user-personalized layouts first-class and eventually authorable.
+
+### Current Status
+
+- [ ] Phase complete
+- [X] Top, bottom, and split viewport settings persist
+- [X] Reset-to-authored-default viewport behavior exists
+- [ ] Grabbable pane handles are not yet complete
+- [ ] Saved named viewports are not yet complete
+- [ ] Ownership of authored defaults vs session state vs workspace state still needs tightening
 
 ### Required Work
 
@@ -466,6 +534,7 @@ Ownership boundary:
 - [ ] Ensure editing surfaces are authored through the same workbench language set.
 - [ ] Add rename, edit, clone, and property-edit actions through menus and direct intents.
 - [ ] Reconcile preview-read, future preview-write, and editing surfaces without inventing a second architecture.
+- [ ] Ensure editors can grow the canvas or viewport model coherently rather than escaping into host-native widgets.
 
 ### Acceptance Criteria
 
@@ -507,13 +576,14 @@ Ownership boundary:
 
 ---
 
-## Near-Term Execution Order
+## Recommended Near-Term Execution Order
 
 If work resumed immediately, the highest-value order is:
 
 - [ ] Finish Phase 2 ownership cleanup before expanding more host-side product logic.
 - [ ] Finish Phase 3 compositor centralization before adding more surface richness.
-- [ ] Finish Phase 5 surface-family normalization so viewers/help/editing have a real substrate.
+- [ ] Tighten Phase 1 around canonical authored themes, left-pane projections, right-pane projections, and viewer surfaces.
+- [ ] Finish Phase 5 surface-family normalization so viewers, help, menus, and editing have a real substrate.
 - [ ] Finish Phase 7 structured viewers before broad editing features.
 - [ ] Use Phase 8 and Phase 9 to expand capability only after the ownership and compositor boundaries are stable.
 
@@ -521,7 +591,7 @@ If work resumed immediately, the highest-value order is:
 
 ## Completion Standard
 
-This work is not “done enough” when:
+This work is not "done enough" when:
 
 - [ ] it merely looks like a TUI
 - [ ] the browser example feels impressive
@@ -536,4 +606,3 @@ This work is only done when:
 - [ ] the renderer is cell-native
 - [ ] the interaction model is unified
 - [ ] the host adapters are genuinely adapters
-

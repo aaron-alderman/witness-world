@@ -1,3 +1,9 @@
+operator_theme ansi16 {
+  title "ANSI 16"
+  mode ansi16
+  palette terminal-dark
+}
+
 operator_screen operator_trace {
   title "Operator Trace"
   subtitle "Browser-first operator example"
@@ -40,6 +46,7 @@ operator_overlay help_overlay {
   width 56
   height 10
   resizable true
+  close_on_open context_menu
 }
 
 operator_overlay context_menu {
@@ -47,6 +54,7 @@ operator_overlay context_menu {
   title "Context"
   width 24
   height 8
+  close_on_open help_overlay
 }
 
 operator_surface top_status {
