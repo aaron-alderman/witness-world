@@ -1,116 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EventEmitter } from "node:events";
-import { runTuiLauncher, shouldFallbackToShell } from "../scripts/run-tui.mjs";
+import { pathToFileURL } from "node:url";
+import path from "node:path";
 
-function mockChild({ code = 0, stdout = "", stderr = "" } = {}) {
+function mockChild({ code = 0 } = {}) {
   const child = new EventEmitter();
-  child.stdout = new EventEmitter();
-  child.stderr = new EventEmitter();
-  queueMicrotask(() => {
-    if (stdout) child.stdout.emit("data", stdout);
-    if (stderr) child.stderr.emit("data", stderr);
-    child.emit("exit", code);
-  });
+  queueMicrotask(() => child.emit("exit", code));
   return child;
 }
 
-test("shouldFallbackToShell detects missing node:sqlite in rich workbench output", () => {
-  assert.equal(shouldFallbackToShell({
-    code: 1,
-    output: "App threw an error during load\nError [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:sqlite"
-  }), true);
-  assert.equal(shouldFallbackToShell({ code: 0, output: "" }), false);
-  assert.equal(shouldFallbackToShell({ code: 1, output: "some other failure" }), false);
-});
-
-test("runTuiLauncher falls back to raw shell when the rich host cannot load node:sqlite", async () => {
+test("operator example launcher boots Electron against the plugin-owned workbench entry script", async () => {
   const calls = [];
-  const writes = [];
-  const spawnImpl = (command, args, options) => {
-    calls.push({ command, args, options });
-    if (calls.length === 1) {
-      return mockChild({
-        code: 1,
-        stderr: "App threw an error during load\nError [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:sqlite\n"
-      });
-    }
-    return mockChild({ code: 0 });
-  };
+  const electronModuleUrl = pathToFileURL(path.resolve("scripts", "run-operator-workbench.mjs")).href;
+  const desktopCliUrl = pathToFileURL(path.resolve("src", "desktop-cli.js")).href;
+  const { launchDesktopProcess } = await import(desktopCliUrl);
 
-  const code = await runTuiLauncher({
-    args: ["examples/demo/app.wtoml"],
+  const code = await launchDesktopProcess({
+    args: [
+      path.resolve("examples", "operator"),
+      "--runtime-plugin",
+      "plugin.operator-workbench"
+    ],
     cwd: "C:/repo",
     env: { TEST: "1" },
-    spawnImpl,
-    nodeExecutable: "node",
-    stdout: { write() {} },
-    stderr: { write(value) { writes.push(String(value)); } }
-  });
-
-  assert.equal(code, 0);
-  assert.deepEqual(calls.map(call => call.args), [
-    ["src/cli.js", "operator", "examples/demo/app.wtoml"],
-    ["src/cli.js", "tui", "examples/demo/app.wtoml"]
-  ]);
-  assert.equal(writes.some(value => value.includes("falling back to raw shell TUI")), true);
-});
-
-test("runTuiLauncher falls back even when the rich host prints node:sqlite failure and hangs", async () => {
-  const calls = [];
-  const writes = [];
-  const spawnImpl = (command, args, options) => {
-    calls.push({ command, args, options });
-    if (command === "taskkill") {
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
       return mockChild({ code: 0 });
-    }
-    if (calls.filter(call => call.command === "node").length === 1) {
-      const child = new EventEmitter();
-      child.pid = 4242;
-      child.stdout = new EventEmitter();
-      child.stderr = new EventEmitter();
-      queueMicrotask(() => {
-        child.stderr.emit("data", "App threw an error during load\nError [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:sqlite\n");
-      });
-      return child;
-    }
-    return mockChild({ code: 0 });
-  };
-
-  const code = await runTuiLauncher({
-    args: [],
-    cwd: "C:/repo",
-    env: {},
-    spawnImpl,
-    nodeExecutable: "node",
-    stdout: { write() {} },
-    stderr: { write(value) { writes.push(String(value)); } }
-  });
-
-  assert.equal(code, 0);
-  assert.equal(calls.some(call => call.command === "taskkill"), true);
-  assert.equal(calls.filter(call => call.command === "node").length, 2);
-  assert.equal(writes.some(value => value.includes("falling back to raw shell TUI")), true);
-});
-
-test("runTuiLauncher returns the rich host exit code when no sqlite fallback is needed", async () => {
-  const calls = [];
-  const spawnImpl = (command, args, options) => {
-    calls.push({ command, args, options });
-    return mockChild({ code: 0, stdout: "ok\n" });
-  };
-
-  const code = await runTuiLauncher({
-    args: [],
-    cwd: "C:/repo",
-    env: {},
-    spawnImpl,
-    nodeExecutable: "node",
-    stdout: { write() {} },
-    stderr: { write() {} }
+    },
+    loadElectronModule: async () => ({ default: "electron" }),
+    entryScript: path.resolve("plugins", "operator-workbench", "workbench", "main.js")
   });
 
   assert.equal(code, 0);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].args, ["src/cli.js", "operator"]);
+  assert.equal(calls[0].command, "electron");
+  assert.deepEqual(calls[0].args, [
+    path.resolve("plugins", "operator-workbench", "workbench", "main.js"),
+    path.resolve("examples", "operator"),
+    "--runtime-plugin",
+    "plugin.operator-workbench"
+  ]);
 });

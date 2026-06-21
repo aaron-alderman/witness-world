@@ -32,10 +32,46 @@ function resolveSnapshotManager(runtimeContext, appContext) {
   return runtimeContext?.appSnapshotManager ?? appContext?.appSnapshotManager ?? null;
 }
 
+function resolveRuntimeTransportRequest(runtimeContext, appContext) {
+  return runtimeContext?.runtimeTransportHttpRequest
+    ?? appContext?.runtimeTransportHttpRequest
+    ?? null;
+}
+
+function resolvePreviewManager(runtimeContext, appContext) {
+  return runtimeContext?.appPreviewSessionManager
+    ?? appContext?.appPreviewSessionManager
+    ?? null;
+}
+
+function appRevisionPayload(snapshotManager = null) {
+  return typeof snapshotManager?.getLastRevisionEvent === "function"
+    ? snapshotManager.getLastRevisionEvent()
+    : null;
+}
+
+function backendRevisionPayload(snapshotManager = null) {
+  const event = appRevisionPayload(snapshotManager);
+  return event
+    ? {
+        revision: Number(event?.revision ?? event?.appRevision ?? 0),
+        branch: event?.branchId ? String(event.branchId) : null,
+        changeSet: event?.changeSetId ? String(event.changeSetId) : null,
+        trigger: String(event?.trigger || "initial"),
+        changedSources: Array.isArray(event?.changedSources) ? event.changedSources.map(String) : [],
+        status: String(event?.status || "active")
+      }
+    : null;
+}
+
 function healthPayload(runtimeProcessHealthMonitor, runtimeContext, appContext) {
+  const baseHealth = typeof runtimeProcessHealthMonitor?.sample === "function"
+    ? runtimeProcessHealthMonitor.sample()
+    : runtimeProcessHealthMonitor.snapshot();
   const supervision = resolveSupervision(runtimeContext, appContext);
   return {
-    ...runtimeProcessHealthMonitor.snapshot(),
+    ...baseHealth,
+    startupMode: appContext?.runtimeStartupMode ?? runtimeContext?.runtimeStartupMode ?? "serve",
     instanceId: supervision?.instanceId ?? null,
     role: supervision?.role ?? "active",
     mutationsEnabled: supervision?.mutationsEnabled !== false,
@@ -123,18 +159,22 @@ export async function executeRuntimeWorkerTransportCall({
       }
       try {
         const sourceIds = Array.isArray(args?.paths) ? args.paths : [];
+        const trigger = typeof args?.trigger === "string" && args.trigger.trim()
+          ? args.trigger.trim()
+          : "reload";
         const absolutePaths = sourceIds
           .map(value => typeof value === "string" && value.trim() ? path.resolve(snapshotManager.appRoot, value.trim()) : null)
           .filter(Boolean);
         const snapshot = absolutePaths.length
-          ? await snapshotManager.markDirtyPaths(absolutePaths, { trigger: "reload" })
-          : await snapshotManager.ensureFresh({ trigger: "reload" });
+          ? await snapshotManager.markDirtyPaths(absolutePaths, { trigger })
+          : await snapshotManager.ensureFresh({ trigger });
         return {
           status: 200,
           body: {
             ok: true,
             appRevision: Number(snapshot?.appRevision ?? snapshotManager.appRevision ?? 0),
             changedSources: sourceIds,
+            trigger,
             buildErrors: [...(snapshotManager.buildErrors ?? [])],
             watchersEnabled: appContext?.runtimeSupervision?.watchersEnabled === true
           }
@@ -145,6 +185,98 @@ export async function executeRuntimeWorkerTransportCall({
           body: {
             ok: false,
             error: error instanceof Error ? error.message : String(error)
+          }
+        };
+      }
+    }
+    case RUNTIME_WORKER_TRANSPORT_METHODS.appRevisionRead: {
+      const snapshotManager = resolveSnapshotManager(runtimeContext, appContext);
+      if (!snapshotManager || appContext?.devMode !== true) {
+        return {
+          status: 404,
+          body: { error: "app revision events unavailable" }
+        };
+      }
+      return {
+        status: 200,
+        body: appRevisionPayload(snapshotManager)
+      };
+    }
+    case RUNTIME_WORKER_TRANSPORT_METHODS.backendRevisionRead: {
+      const snapshotManager = resolveSnapshotManager(runtimeContext, appContext);
+      if (!snapshotManager) {
+        return {
+          status: 404,
+          body: { error: "backend revision events unavailable" }
+        };
+      }
+      return {
+        status: 200,
+        body: backendRevisionPayload(snapshotManager)
+      };
+    }
+    case RUNTIME_WORKER_TRANSPORT_METHODS.appPreviewSessionEventRead: {
+      const previewManager = resolvePreviewManager(runtimeContext, appContext);
+      if (!previewManager) {
+        return {
+          status: 503,
+          body: { error: "app preview sessions unavailable" }
+        };
+      }
+      const previewSessionId = typeof args?.previewSessionId === "string" && args.previewSessionId.trim()
+        ? args.previewSessionId.trim()
+        : "";
+      if (!previewSessionId) {
+        return {
+          status: 400,
+          body: { error: "preview session id is required" }
+        };
+      }
+      if (typeof previewManager.hydrateSession === "function") {
+        await previewManager.hydrateSession(previewSessionId);
+      }
+      const previewSession = previewManager.readSession(previewSessionId);
+      if (!previewSession) {
+        return {
+          status: 404,
+          body: { error: "preview session not found" }
+        };
+      }
+      return {
+        status: 200,
+        body: previewSession.event ?? previewSession
+      };
+    }
+    case RUNTIME_WORKER_TRANSPORT_METHODS.appHttpRequest: {
+      const transportRequest = resolveRuntimeTransportRequest(runtimeContext, appContext);
+      if (typeof transportRequest !== "function") {
+        return {
+          status: 503,
+          body: { error: "runtime request transport unavailable" }
+        };
+      }
+      try {
+        const result = await transportRequest({
+          method: typeof args?.method === "string" && args.method.trim()
+            ? args.method.trim().toUpperCase()
+            : "GET",
+          path: typeof args?.path === "string" && args.path.trim()
+            ? args.path.trim()
+            : "/",
+          headers: args?.headers && typeof args.headers === "object" ? args.headers : {},
+          bodyBase64: typeof args?.bodyBase64 === "string" ? args.bodyBase64 : null,
+          bodyText: typeof args?.bodyText === "string" ? args.bodyText : null
+        });
+        return {
+          status: Number(result?.status || 200),
+          body: result && typeof result === "object" ? result : { status: 200 }
+        };
+      } catch (error) {
+        return {
+          status: Number(error?.status || 500),
+          body: {
+            error: error instanceof Error ? error.message : String(error),
+            code: error?.code ?? null
           }
         };
       }

@@ -23,11 +23,11 @@ export function createOperatorBrowserLiveApi({
   const href = path => `${root}${path.startsWith("/") ? path : `/${path}`}`;
   return Object.freeze({
     async getSnapshot() {
-      const response = await fetchImpl(href("/api/snapshot"));
+      const response = await fetchImpl(href("/api/operator/snapshot"));
       return parseJsonResponse(response, "operator browser snapshot request failed");
     },
     async runCommand(command = "") {
-      const response = await fetchImpl(href("/api/command"), {
+      const response = await fetchImpl(href("/api/operator/command"), {
         method: "POST",
         headers: jsonHeaders(),
         body: JSON.stringify({ command })
@@ -35,7 +35,7 @@ export function createOperatorBrowserLiveApi({
       return parseJsonResponse(response, "operator browser command request failed");
     },
     async dispatchIntent(intent = {}) {
-      const response = await fetchImpl(href("/api/intent"), {
+      const response = await fetchImpl(href("/api/operator/intent"), {
         method: "POST",
         headers: jsonHeaders(),
         body: JSON.stringify(intent ?? {})
@@ -43,12 +43,16 @@ export function createOperatorBrowserLiveApi({
       return parseJsonResponse(response, "operator browser intent request failed");
     },
     async updateDisplaySettings(patch = {}) {
-      const response = await fetchImpl(href("/api/display-settings"), {
+      const response = await fetchImpl(href("/api/operator/display-settings"), {
         method: "POST",
         headers: jsonHeaders(),
         body: JSON.stringify(patch ?? {})
       });
       return parseJsonResponse(response, "operator browser display settings request failed");
+    },
+    async getAutocomplete(line = "") {
+      const response = await fetchImpl(href(`/api/operator/autocomplete?line=${encodeURIComponent(line)}`));
+      return parseJsonResponse(response, "operator browser autocomplete request failed");
     }
   });
 }

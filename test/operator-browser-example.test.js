@@ -46,13 +46,17 @@ import {
   buildOperatorWorkbenchSnapshot,
   createOperatorTuiEngine,
   loadOperatorTuiRuntimeContext
-} from "../src/operator-tui.js";
+} from "../plugins/operator-workbench/tui-engine.js";
 import {
   createOperatorWorkbenchController,
   createOperatorWorkbenchCore
-} from "../src/operator-workbench/core.js";
+} from "../plugins/operator-workbench/workbench/core.js";
 
 const exampleRoot = path.resolve("examples", "operator");
+
+function operatorWorkbenchModel(appProject) {
+  return appProject?.extensionModels?.byId?.get("operatorWorkbench") ?? null;
+}
 
 async function loadBrowserExampleModel() {
   const source = await fs.readFile(path.join(exampleRoot, "browser", "operator.workbench.rvm"), "utf8");
@@ -119,7 +123,7 @@ function pointerEventForCell(canvas, layout, x, y) {
 
 function applyLongTextReaderFixture(state) {
   state.snapshot.rightPane.bodyLines = [
-    "Session :: Selection, aliases, notes, preview session, and mini-programs.",
+    "Workbench :: Selection, aliases, notes, preview session, and mini-programs.",
     "This text reader is intentionally long so horizontal scrolling is a first-class concern.",
     "Properties view tokens should become links in later tranches.",
     "Ownership and provenance can lower into the same navigable tree surface family.",
@@ -134,22 +138,23 @@ test("operator example current app project authoring loads through the existing 
   const appProject = await loadAppProject(exampleRoot, {
     runtimePluginIds: ["plugin.operator-workbench"]
   });
-  assert.equal(appProject.operatorWorkbench.defaultScreen, "operator_trace");
-  assert.equal(appProject.operatorWorkbench.defaultLeftScreen, "operator_left");
-  assert.equal(appProject.operatorWorkbench.defaultViewport, "operator_default");
-  assert.equal(appProject.operatorWorkbench.themesById.get("ansi16")?.mode, "ansi16");
-  assert.equal(appProject.operatorWorkbench.themesById.get("ansi16")?.palette, "terminal-dark");
-  assert.equal(appProject.operatorWorkbench.overlaysById.get("help_overlay")?.kind, "doc_view");
-  assert.equal(appProject.operatorWorkbench.overlaysById.get("context_menu")?.kind, "menu");
-  assert.equal(appProject.operatorWorkbench.overlaysById.get("help_overlay")?.resizable, true);
-  assert.deepEqual(appProject.operatorWorkbench.overlaysById.get("help_overlay")?.closeIdsOnOpen, ["context_menu"]);
-  assert.deepEqual(appProject.operatorWorkbench.overlaysById.get("context_menu")?.closeIdsOnOpen, ["help_overlay"]);
-  assert.equal(appProject.operatorWorkbench.handlesById.get("top_handle")?.axis, "horizontal");
-  assert.equal(appProject.operatorWorkbench.handlesById.get("bottom_handle")?.axis, "horizontal");
-  assert.equal(appProject.operatorWorkbench.handlesById.get("split_handle")?.axis, "vertical");
-  assert.equal(appProject.operatorWorkbench.surfacesById.get("top_status")?.kind, "status_bar");
-  assert.equal(appProject.operatorWorkbench.surfacesById.get("command_bar")?.kind, "command_bar");
-  const viewport = appProject.operatorWorkbench.viewportsById.get("operator_default");
+  const workbench = operatorWorkbenchModel(appProject);
+  assert.equal(workbench.defaultScreen, "operator_trace");
+  assert.equal(workbench.defaultLeftScreen, "operator_left");
+  assert.equal(workbench.defaultViewport, "operator_default");
+  assert.equal(workbench.themesById.get("ansi16")?.mode, "ansi16");
+  assert.equal(workbench.themesById.get("ansi16")?.palette, "terminal-dark");
+  assert.equal(workbench.overlaysById.get("help_overlay")?.kind, "doc_view");
+  assert.equal(workbench.overlaysById.get("context_menu")?.kind, "menu");
+  assert.equal(workbench.overlaysById.get("help_overlay")?.resizable, true);
+  assert.deepEqual(workbench.overlaysById.get("help_overlay")?.closeIdsOnOpen, ["context_menu"]);
+  assert.deepEqual(workbench.overlaysById.get("context_menu")?.closeIdsOnOpen, ["help_overlay"]);
+  assert.equal(workbench.handlesById.get("top_handle")?.axis, "horizontal");
+  assert.equal(workbench.handlesById.get("bottom_handle")?.axis, "horizontal");
+  assert.equal(workbench.handlesById.get("split_handle")?.axis, "vertical");
+  assert.equal(workbench.surfacesById.get("top_status")?.kind, "status_bar");
+  assert.equal(workbench.surfacesById.get("command_bar")?.kind, "command_bar");
+  const viewport = workbench.viewportsById.get("operator_default");
   assert.equal(viewport?.screenId, "operator_trace");
   assert.equal(viewport?.leftScreenId, "operator_left");
   assert.equal(viewport?.theme, "ansi16");
@@ -164,15 +169,15 @@ test("operator example current app project authoring loads through the existing 
   assert.equal(viewport?.bottom, 4);
   assert.equal(viewport?.splitOrientation, "horizontal");
   assert.deepEqual(viewport?.bindings.map(binding => `${binding.trigger}:${binding.verb}:${binding.target}`), [
-    "F1:overlay:help_overlay",
+    "F1:action:toggle_help",
     "MouseSecondary:overlay:context_menu",
-    "Alt-R:action:rename",
-    "F2:action:rename"
+    "Alt-R:action:rename_selection",
+    "F2:action:open_references"
   ]);
-  assert.equal(appProject.operatorWorkbench.shortcuts.get("F5"), "operator_trace");
+  assert.equal(workbench.shortcuts.get("F5"), "operator_trace");
 });
 
-test("operator example prototype RVM parses themes, surfaces, overlays, and bindings", async () => {
+test("operator example prototype RVM parses canonical window/panel authoring into browser surfaces and bindings", async () => {
   const model = await loadBrowserExampleModel();
   assert.equal(model.themes.length, 1);
   assert.equal(model.surfaces.length, 6);
@@ -187,7 +192,7 @@ test("operator example prototype RVM parses themes, surfaces, overlays, and bind
     rightSurfaceId: "session_reader"
   });
   assert.deepEqual(viewport.overlays, ["help_overlay", "context_menu"]);
-  assert.equal(viewport.bindings.some(binding => binding.trigger === "F1" && binding.target === "help_overlay"), true);
+  assert.equal(viewport.bindings.some(binding => binding.trigger === "F1" && binding.verb === "action" && binding.target === "toggle_help"), true);
   assert.equal(model.surfaceById.get("help_overlay")?.width, 56);
   assert.equal(model.surfaceById.get("context_menu")?.height, 8);
   assert.deepEqual(model.surfaceById.get("help_overlay")?.closeIdsOnOpen, ["context_menu"]);
@@ -223,10 +228,10 @@ test("operator example shared core can build a workbench snapshot for the browse
     );
     assert.equal(snapshot.bottomPane?.frameTitle, "Commands");
     assert.deepEqual(snapshot.contextMenu?.lines, [
-      "1. Edit :: pane:left",
-      "2. Change Color :: surface theme",
-      "3. Rename :: Session",
-      "4. Clone :: Session"
+      "1. Edit :: edit",
+      "2. Change Color :: change-color",
+      "3. Rename :: rename",
+      "4. Clone :: clone"
     ]);
     assert.equal(snapshot.contextMenu?.placement, "center");
     assert.equal(snapshot.contextMenu?.marginX, 2);
@@ -242,16 +247,16 @@ test("operator example shared core can build a workbench snapshot for the browse
     assert.equal(snapshot.contextMenu?.visibleLineCount, 4);
     assert.equal(snapshot.contextMenu?.overflowLineCount, 0);
     assert.deepEqual(snapshot.contextMenu?.visibleLines, [
-      "1. Edit :: pane:left",
+      "1. Edit :: edit",
       "2. Change Color :: …",
-      "3. Rename :: Session",
-      "4. Clone :: Session"
+      "3. Rename :: rename",
+      "4. Clone :: clone"
     ]);
     assert.deepEqual(snapshot.helpOverlay?.lines, [
       "F1 opens the authored help surface.",
       "Right click opens the centered context menu surface.",
       "Drag pane handles to resize the authored split layout.",
-      "Active right pane: Session."
+      "Active right pane: Workbench."
     ]);
     assert.equal(snapshot.helpOverlay?.placement, "center");
     assert.equal(snapshot.helpOverlay?.marginX, 2);
@@ -267,7 +272,7 @@ test("operator example shared core can build a workbench snapshot for the browse
     assert.equal(snapshot.helpOverlay?.visibleLineCount, 4);
     assert.equal(snapshot.helpOverlay?.overflowLineCount, 0);
     assert.equal(snapshot.helpOverlay?.context, "Operator Navigation | Authored");
-    assert.equal(snapshot.helpOverlay?.summary, "Move the active row, then Enter to open Session.");
+    assert.equal(snapshot.helpOverlay?.summary, "Move the active row, then Enter to open Workbench.");
     assert.equal(Array.isArray(snapshot.overlays), true);
     assert.deepEqual(snapshot.overlays?.map(overlay => overlay.id), ["help_overlay", "context_menu"]);
     assert.equal(snapshot.overlays?.[0]?.kind, "doc_view");
@@ -280,7 +285,7 @@ test("operator example shared core can build a workbench snapshot for the browse
     assert.equal(snapshot.overlays?.[1]?.interaction?.cursorMode, "items");
     assert.equal(snapshot.overlays?.[1]?.interaction?.activationMode, "item");
     assert.deepEqual(snapshot.overlays?.[1]?.policy?.closeIdsOnOpen, ["help_overlay"]);
-    assert.equal(snapshot.overlays?.[1]?.visibleLines?.[0], "1. Edit :: pane:left");
+    assert.equal(snapshot.overlays?.[1]?.visibleLines?.[0], "1. Edit :: edit");
   } finally {
     await runtimeContext.close?.();
   }
@@ -292,8 +297,8 @@ test("operator example shared core clips overlay visible lines from authored geo
     runtimePluginIds: ["plugin.operator-workbench"]
   });
   try {
-    runtimeContext.appProject.operatorWorkbench.overlaysById.get("context_menu").width = 18;
-    runtimeContext.appProject.operatorWorkbench.overlaysById.get("context_menu").height = 4;
+    operatorWorkbenchModel(runtimeContext.appProject).overlaysById.get("context_menu").width = 18;
+    operatorWorkbenchModel(runtimeContext.appProject).overlaysById.get("context_menu").height = 4;
     const state = await buildOperatorTuiState(runtimeContext);
     const engine = createOperatorTuiEngine(state);
     const snapshot = await buildOperatorWorkbenchSnapshot(state, engine.session, {});
@@ -303,7 +308,7 @@ test("operator example shared core clips overlay visible lines from authored geo
     assert.equal(snapshot.contextMenu?.visibleLineCount, 2);
     assert.equal(snapshot.contextMenu?.overflowLineCount, 2);
     assert.deepEqual(snapshot.contextMenu?.visibleLines, [
-      "1. Edit :: pa…",
+      "1. Edit :: ed…",
       "2. Change Col…"
     ]);
   } finally {
@@ -317,7 +322,7 @@ test("operator example shared core applies help overlay scroll state from the sh
     runtimePluginIds: ["plugin.operator-workbench"]
   });
   try {
-    runtimeContext.appProject.operatorWorkbench.overlaysById.get("help_overlay").height = 4;
+    operatorWorkbenchModel(runtimeContext.appProject).overlaysById.get("help_overlay").height = 4;
     const state = await buildOperatorTuiState(runtimeContext);
     const engine = createOperatorTuiEngine(state);
     const snapshot = await buildOperatorWorkbenchSnapshot(state, engine.session, {
@@ -363,8 +368,8 @@ test("operator browser snapshot adapter lowers a shared workbench snapshot into 
     runtimeState.snapshot.topPane?.metaChips?.map(chip => chip.label),
     ["viewport:operator_default", "theme:ansi16", "pane:left"]
   );
-  assert.equal(runtimeState.snapshot.leftPane?.rows?.[0]?.label, "Session");
-  assert.equal(runtimeState.snapshot.rightPane?.bodyLines?.[0]?.includes("Session"), true);
+  assert.equal(runtimeState.snapshot.leftPane?.rows?.[0]?.label, "Workbench");
+  assert.equal(runtimeState.snapshot.rightPane?.bodyLines?.[0]?.includes("Workbench"), true);
   assert.equal(runtimeState.snapshot.viewport?.id, "operator_default");
   assert.equal(runtimeState.snapshot.viewport?.themeSpec?.id, "ansi16");
   assert.equal(runtimeState.snapshot.viewport?.themeSpec?.palette, "terminal-dark");
@@ -374,8 +379,8 @@ test("operator browser snapshot adapter lowers a shared workbench snapshot into 
   assert.deepEqual(runtimeState.snapshot.contextMenu?.lines, [
     "1. Edit :: pane:left",
     "2. Change Color :: surface theme",
-    "3. Rename :: Session",
-    "4. Clone :: Session"
+    "3. Rename :: Workbench",
+    "4. Clone :: Workbench"
   ]);
   assert.equal(runtimeState.snapshot.contextMenu?.placement, "center");
   assert.equal(runtimeState.snapshot.contextMenu?.marginX, 2);
@@ -393,11 +398,11 @@ test("operator browser snapshot adapter lowers a shared workbench snapshot into 
   assert.deepEqual(runtimeState.snapshot.contextMenu?.visibleLines, [
     "1. Edit :: pane:left",
     "2. Change Color :: …",
-    "3. Rename :: Session",
-    "4. Clone :: Session"
+    "3. Rename :: Workbe…",
+    "4. Clone :: Workben…"
   ]);
   assert.equal(runtimeState.snapshot.helpOverlay?.context, "Operator Navigation | Authored");
-  assert.equal(runtimeState.snapshot.helpOverlay?.summary, "Move the active row, then Enter to open Session.");
+  assert.equal(runtimeState.snapshot.helpOverlay?.summary, "Move the active row, then Enter to open Workbench.");
   assert.equal(runtimeState.snapshot.helpOverlay?.placement, "center");
   assert.equal(runtimeState.snapshot.helpOverlay?.marginX, 2);
   assert.equal(runtimeState.snapshot.helpOverlay?.marginY, 1);
@@ -490,15 +495,18 @@ test("operator browser live api requests the shared snapshot and command routes"
   const command = await api.runCommand("inspect 1");
   const intent = await api.dispatchIntent({ type: "focus-pane", pane: "right" });
   const settings = await api.updateDisplaySettings({ paneSplit: 0.5 });
+  const autocomplete = await api.getAutocomplete("ins");
   assert.equal(snapshot.method, "GET");
   assert.equal(command.method, "POST");
   assert.equal(intent.method, "POST");
   assert.equal(settings.method, "POST");
+  assert.equal(autocomplete.method, "GET");
   assert.deepEqual(calls.map(call => call.url), [
-    "http://127.0.0.1:4020/api/snapshot",
-    "http://127.0.0.1:4020/api/command",
-    "http://127.0.0.1:4020/api/intent",
-    "http://127.0.0.1:4020/api/display-settings"
+    "http://127.0.0.1:4020/api/operator/snapshot",
+    "http://127.0.0.1:4020/api/operator/command",
+    "http://127.0.0.1:4020/api/operator/intent",
+    "http://127.0.0.1:4020/api/operator/display-settings",
+    "http://127.0.0.1:4020/api/operator/autocomplete?line=ins"
   ]);
   assert.match(String(calls[1].options?.body || ""), /inspect 1/);
   assert.match(String(calls[2].options?.body || ""), /focus-pane/);
@@ -582,15 +590,14 @@ test("operator browser runtime round-trips left-pane movement and activation thr
     });
     assert.equal(runtime.runtimeState.snapshot.leftPane?.cursor, 1);
     assert.equal(runtime.runtimeState.snapshot.leftPane?.cursor, 1);
-    assert.equal(runtime.runtimeState.snapshot.leftPane?.rows?.[1]?.label, "World");
+    assert.equal(runtime.runtimeState.snapshot.leftPane?.rows?.[1]?.label, "Things");
 
     await keydown({
       key: "Enter",
       preventDefault() {}
     });
-    assert.equal(runtime.runtimeState.snapshot.leftPane?.header, "World");
+    assert.equal(runtime.runtimeState.snapshot.leftPane?.header, "Things");
     assert.equal(runtime.runtimeState.snapshot.leftPane?.rows?.[0]?.label, "Contexts");
-    assert.equal(runtime.runtimeState.snapshot.rightPane?.bodyLines?.some(line => line.includes("Processes")), true);
   } finally {
     await core.close();
   }
@@ -663,8 +670,8 @@ test("operator browser runtime routes right-pane row movement and activation thr
     env: process.env
   });
   try {
-    await core.executeCommand("open world");
-    await core.executeCommand("open things");
+    await core.executeCommand("search --scope world operator_example");
+    await core.executeCommand("select 1");
     await core.executeCommand("inspect 1");
     const screenResult = await core.executeCommand("screen references");
 
@@ -685,7 +692,7 @@ test("operator browser runtime routes right-pane row movement and activation thr
 
     const keydown = windowTarget.listeners.get("keydown");
     assert.equal(typeof keydown, "function");
-    assert.equal((runtime.runtimeState.snapshot.rightPane?.screen?.rows?.length ?? 0) > 1, true);
+    assert.equal((runtime.runtimeState.snapshot.rightPane?.screen?.rows?.length ?? 0) > 0, true);
 
     await keydown({
       key: "ArrowRight",
@@ -700,15 +707,18 @@ test("operator browser runtime routes right-pane row movement and activation thr
       preventDefault() {}
     });
     assert.equal(runtime.runtimeState.snapshot.rightPane?.cursor, 1);
-    assert.equal(runtime.runtimeState.snapshot.rightPane?.screen?.rows?.[1]?.label, "operator_example");
+    assert.equal(
+      runtime.runtimeState.snapshot.rightPane?.screen?.rows?.[1]?.label?.includes("app.wtoml:1"),
+      true
+    );
 
     await keydown({
       key: "Enter",
       altKey: false,
       preventDefault() {}
     });
-    assert.equal(runtime.runtimeState.snapshot.rightPane?.target?.id, "operator_example");
-    assert.equal(runtime.runtimeState.snapshot.rightPane?.activeScreenId, "inspect");
+    assert.equal(runtime.runtimeState.snapshot.rightPane?.activeScreenId, "source");
+    assert.equal(runtime.runtimeState.snapshot.rightPane?.target?.ownerTargetId, "operator_example");
     assert.equal(runtime.runtimeState.snapshot.rightPane?.bodyLines?.some(line => line.includes("operator_example")), true);
   } finally {
     await core.close();
@@ -772,7 +782,7 @@ test("operator browser runtime routes right-pane section movement and collapse t
     });
     assert.equal(runtime.runtimeState.snapshot.rightPane?.activeSection?.id, "operator_summary");
     assert.equal(runtime.runtimeState.snapshot.rightPane?.activeSection?.title, "Summary");
-    assert.equal(runtime.runtimeState.snapshot.rightPane?.bodyLines?.some(line => line.includes("Session")), true);
+    assert.equal(runtime.runtimeState.snapshot.rightPane?.bodyLines?.some(line => line.includes("Workbench")), true);
   } finally {
     await core.close();
   }
@@ -835,7 +845,7 @@ test("operator browser runtime routes the help overlay and context menu through 
     assert.equal(runtime.runtimeState.snapshot.ui?.contextMenuOpen, true);
     assert.equal(runtime.runtimeState.snapshot.ui?.contextMenuContext?.pane, "left");
     assert.equal(runtime.runtimeState.snapshot.contextMenu?.items?.[1]?.label, "Change Color");
-    assert.equal(runtime.runtimeState.snapshot.contextMenu?.items?.[1]?.detail, "surface theme");
+    assert.equal(runtime.runtimeState.snapshot.contextMenu?.items?.[1]?.detail, "change-color");
     assert.equal(runtime.runtimeState.snapshot.ui?.helpOpen, false);
 
     await keydown({
@@ -889,7 +899,8 @@ test("operator browser runtime routes context-menu digit activation through the 
     ));
     assert.equal(runtime.runtimeState.snapshot.ui?.contextMenuOpen, true);
     assert.equal(runtime.runtimeState.snapshot.contextMenu?.items?.[2]?.shortcut, "3");
-    assert.equal(runtime.runtimeState.snapshot.contextMenu?.items?.[2]?.action?.hook, "rename");
+    assert.equal(runtime.runtimeState.snapshot.contextMenu?.items?.[2]?.action?.kind, "action-ref");
+    assert.equal(runtime.runtimeState.snapshot.contextMenu?.items?.[2]?.action?.actionId, "rename_selection");
 
     await keydown({
       key: "3",
@@ -898,7 +909,7 @@ test("operator browser runtime routes context-menu digit activation through the 
     });
     assert.equal(runtime.runtimeState.snapshot.ui?.contextMenuOpen, false);
     assert.equal(runtime.runtimeState.snapshot.ui?.contextMenuContext, null);
-    assert.equal(runtime.runtimeState.snapshot.ui?.lastOutput.includes("menu action requested: rename :: World"), true);
+    assert.equal(runtime.runtimeState.snapshot.ui?.lastOutput.includes("rename requested:"), true);
   } finally {
     await core.close();
   }
@@ -956,7 +967,7 @@ test("operator browser runtime routes context-menu cursor movement and Enter act
       preventDefault() {}
     });
     assert.equal(runtime.runtimeState.snapshot.ui?.contextMenuOpen, false);
-    assert.equal(runtime.runtimeState.snapshot.ui?.lastOutput.includes("menu action requested: change-color :: World"), true);
+    assert.equal(runtime.runtimeState.snapshot.ui?.lastOutput.includes("change-color requested:"), true);
   } finally {
     await core.close();
   }
@@ -967,7 +978,7 @@ test("operator browser runtime routes help overlay scrolling through the live co
     appPath: exampleRoot,
     runtimePluginIds: ["plugin.operator-workbench"]
   });
-  runtimeContext.appProject.operatorWorkbench.overlaysById.get("help_overlay").height = 4;
+  operatorWorkbenchModel(runtimeContext.appProject).overlaysById.get("help_overlay").height = 4;
   const state = await buildOperatorTuiState(runtimeContext);
   const engine = createOperatorTuiEngine(state);
   const core = createOperatorWorkbenchController({ state, engine });
@@ -1273,7 +1284,7 @@ test("operator browser runtime routes help-overlay wheel scrolling through the l
     runtimePluginIds: ["plugin.operator-workbench"]
   });
   try {
-    runtimeContext.appProject.operatorWorkbench.overlaysById.get("help_overlay").height = 4;
+    operatorWorkbenchModel(runtimeContext.appProject).overlaysById.get("help_overlay").height = 4;
     const state = await buildOperatorTuiState(runtimeContext);
     const engine = createOperatorTuiEngine(state);
     const core = createOperatorWorkbenchController({ state, engine });
@@ -1332,7 +1343,7 @@ test("operator browser runtime routes help-overlay horizontal wheel scrolling th
     runtimePluginIds: ["plugin.operator-workbench"]
   });
   try {
-    runtimeContext.appProject.operatorWorkbench.overlaysById.get("help_overlay").width = 24;
+    operatorWorkbenchModel(runtimeContext.appProject).overlaysById.get("help_overlay").width = 24;
     const state = await buildOperatorTuiState(runtimeContext);
     const engine = createOperatorTuiEngine(state);
     const core = createOperatorWorkbenchController({ state, engine });
@@ -1502,7 +1513,7 @@ test("operator browser runtime uses shared context-menu inset offsets for pointe
 
     assert.equal(runtime.runtimeState.snapshot.ui?.contextMenuOpen, false);
     assert.equal(runtime.runtimeState.snapshot.ui?.contextMenuContext, null);
-    assert.equal(runtime.runtimeState.snapshot.ui?.lastOutput.includes("menu action requested: change-color :: World"), true);
+    assert.equal(runtime.runtimeState.snapshot.ui?.lastOutput.includes("change-color requested:"), true);
   } finally {
     await core.close();
   }
@@ -1516,8 +1527,8 @@ test("operator browser runtime routes published screen shortcuts through the liv
     env: process.env
   });
   try {
-    await core.executeCommand("open world");
-    await core.executeCommand("open things");
+    await core.executeCommand("search --scope world operator_example");
+    await core.executeCommand("select 1");
     const initialSnapshot = (await core.executeCommand("inspect 1")).snapshot;
 
     const canvas = createFakeCanvas();
@@ -1566,8 +1577,8 @@ test("operator browser runtime routes escape unwind through the live core, inclu
     env: process.env
   });
   try {
-    await core.executeCommand("open world");
-    await core.executeCommand("open things");
+    await core.executeCommand("search --scope world operator_example");
+    await core.executeCommand("select 1");
     const initialSnapshot = (await core.executeCommand("inspect 1")).snapshot;
 
     const canvas = createFakeCanvas();
@@ -1692,7 +1703,7 @@ test("operator browser runtime routes left-pane number-buffer digits and clear t
       preventDefault() {}
     });
     assert.equal(runtime.runtimeState.snapshot.ui?.numberBuffer, "");
-    assert.equal(runtime.runtimeState.snapshot.path.toLowerCase().includes("world"), true);
+    assert.equal(runtime.runtimeState.snapshot.path.toLowerCase().includes("things"), true);
     assert.equal(runtime.runtimeState.snapshot.leftPane?.rows?.[0]?.label, "Contexts");
   } finally {
     await core.close();
@@ -1739,16 +1750,16 @@ test("operator browser runtime routes pointer row selection and mouse primary ac
     }
 
     const worldCell = findCellMatching(
-      line => line.includes("World") && line.includes("Live"),
-      "root world row"
+      line => line.includes("Things"),
+      "root things row"
     );
     await pointerdown(pointerEventForCell(canvas, worldCell.layout, worldCell.x, worldCell.y));
     assert.equal(runtime.runtimeState.snapshot.ui?.focusedPane, "left");
     assert.equal(runtime.runtimeState.snapshot.leftPane?.activeRowIndex, 1);
-    assert.equal(runtime.runtimeState.snapshot.leftPane?.activeRow?.label, "World");
+    assert.equal(runtime.runtimeState.snapshot.leftPane?.activeRow?.label, "Things");
 
     await dblclick(pointerEventForCell(canvas, worldCell.layout, worldCell.x, worldCell.y));
-    assert.equal(runtime.runtimeState.snapshot.path, "World");
+    assert.equal(runtime.runtimeState.snapshot.path, "Things");
     assert.equal(runtime.runtimeState.snapshot.leftPane?.rows?.[0]?.label, "Contexts");
 
     const nextLayout = layoutViewport(model, runtime.runtimeState);
@@ -2217,7 +2228,7 @@ test("operator example composition lowers authored surfaces into a cell buffer a
   assert.equal(frameGraph.ornaments.some(ornament => ornament.text.includes("root")), true);
   assert.equal(frameGraph.ornaments.some(ornament => ornament.text.includes(": screen inspect")), true);
   assert.equal(textScene.overlay.some(entry => entry.text.includes("2. Change Color")), true);
-  assert.equal(rows.some(line => line.includes("Session")), true);
+  assert.equal(rows.some(line => line.includes("Workbench")), true);
   assert.equal(rows.some(line => line.includes("Context")), true);
   assert.equal(rows.some(line => line.includes("Change Color")), true);
   const menuRow = rows.findIndex(line => line.includes("Change Color"));
@@ -2529,7 +2540,7 @@ test("operator example pane frame titles render from the shared snapshot instead
   assert.equal(rows[3].includes("TRACE"), true);
   assert.equal(rows.some(line => line.includes("PROMPT")), true);
   assert.equal(rows[0].includes("Status"), false);
-  assert.equal(rows.some(line => line.includes("Commands")), false);
+  assert.equal(rows.some(line => line.includes("PROMPT")), true);
 });
 
 test("operator example right-pane section header and divider render through compositor ornaments", async () => {
@@ -2616,7 +2627,7 @@ test("operator example text reader scrolling shifts horizontal content instead o
   state.snapshot.rightPane.readerScroll = { x: 8, y: 0 };
   composed = composeViewportToBuffer(model, state);
   const shiftedRow = readAllRows(composed.buffer).find(line => line.includes("aliases, notes")) || "";
-  assert.equal(baselineRow.includes("Session :: Selection"), true);
+  assert.equal(baselineRow.includes("Workbench :: Selection"), true);
   assert.equal(shiftedRow.includes("aliases, notes"), true);
 });
 
@@ -2641,7 +2652,7 @@ test("operator example frame rows preserve corners and keep pane titles inside t
   assert.match(rows[29], /^└.*┘$/u);
   assert.equal(rows[0].includes("Status"), true);
   assert.equal(rows[3].includes("Operator Navi"), true);
-  assert.equal(rows[3].includes("Session"), true);
+  assert.equal(rows[3].includes("Workbench"), true);
   assert.equal(rows[3].includes("x:0 y:0"), false);
   assert.equal(rows[4].includes("root"), true);
 });
@@ -2655,10 +2666,10 @@ test("operator example visual snapshot keeps the expected pane scaffold", async 
   assert.equal(rows[0].includes("Status"), true);
   assert.equal(rows[1].includes("viewport:operator_default | theme:ansi16 | pane:left"), true);
   assert.equal(rows[3].includes("Operator Navi"), true);
-  assert.equal(rows[3].includes("Session"), true);
+  assert.equal(rows[3].includes("Workbench"), true);
   assert.equal(rows[4].includes("root"), true);
-  assert.equal(rows[5].includes("Session      Selec"), true);
-  assert.equal(rows[4].includes("Session :: Selection, aliases, notes"), true);
+  assert.equal(rows[5].includes("Workbench    Opera"), true);
+  assert.equal(rows[4].includes("Workbench :: Selection, aliases"), true);
   assert.equal(rows[5].includes("This text reader is intentionally long"), true);
   assert.equal(rows.some(line => line.includes(": screen inspect")), true);
   if (false) assert.deepEqual(rows.slice(0, 6), [

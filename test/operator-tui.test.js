@@ -14,7 +14,7 @@ import {
   createOperatorTuiEngine,
   loadOperatorTuiRuntimeContext,
   parseTuiArgs
-} from "../src/operator-tui.js";
+} from "../plugins/operator-workbench/tui-engine.js";
 
 function makeStubState(options = {}) {
   const worldRecord = {
@@ -519,33 +519,40 @@ test("operator TUI engine keeps tree navigation, aliases, and local programs wor
   assert.equal(buildTuiPrompt(engine.state, engine.session), "root> ");
 
   const root = await engine.execute("tree");
-  assert.match(root.output, /Session/);
-  assert.match(root.output, /World/);
-  assert.match(root.output, /Platform/);
+  assert.match(root.output, /Workbench/);
+  assert.match(root.output, /Things/);
+  assert.match(root.output, /Witnesses/);
 
-  const openWorld = await engine.execute("open world");
-  assert.match(openWorld.output, /Things/);
-  assert.equal(buildTuiPrompt(engine.state, engine.session), "World> ");
+  const openThingsRoot = await engine.execute("open things");
+  assert.match(openThingsRoot.output, /Contexts/);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "Things> ");
 
-  const openThings = await engine.execute("open thing");
+  const openThings = await engine.execute("open entities");
   assert.match(openThings.output, /Alpha <thing>/);
-  assert.equal(buildTuiPrompt(engine.state, engine.session), "World/Things> ");
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "Things/Entities> ");
 
-  const backToWorld = await engine.execute("close");
-  assert.match(backToWorld.output, /Value Types/);
-  assert.equal(buildTuiPrompt(engine.state, engine.session), "World> ");
+  const backToThings = await engine.execute("close");
+  assert.match(backToThings.output, /Contexts/);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "Things> ");
 
-  const openThingsByLabel = await engine.execute("open Things");
+  const openThingsByLabel = await engine.execute("open Entities");
   assert.match(openThingsByLabel.output, /Alpha <thing>/);
-  assert.equal(buildTuiPrompt(engine.state, engine.session), "World/Things> ");
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "Things/Entities> ");
 
   await engine.execute("back");
+  const backHome = await engine.execute("home");
+  assert.match(backHome.output, /Workbench/);
+  const openTypes = await engine.execute("open types");
+  assert.match(openTypes.output, /Value Types/);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "Types> ");
   const openValueTypesByLabel = await engine.execute("open Value Types");
   assert.match(openValueTypesByLabel.output, /Value Types/);
-  assert.equal(buildTuiPrompt(engine.state, engine.session), "World/Value Types> ");
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "Types/Value Types> ");
 
   await engine.execute("close");
-  await engine.execute("open thing");
+  await engine.execute("home");
+  await engine.execute("open things");
+  await engine.execute("open entities");
 
   const select = await engine.execute("select 1");
   assert.equal(select.output, "this = world:thing.alpha");
@@ -578,15 +585,18 @@ test("operator TUI autocomplete suggests commands, containers, and column helper
 
   let candidates = buildTuiAutocompleteCandidates(engine.state, engine.session);
   assert.equal(candidates.includes("look"), true);
-  assert.equal(candidates.includes("open world"), true);
+  assert.equal(candidates.includes("open things"), true);
   assert.equal(candidates.includes("use context backend/runtime"), true);
   assert.equal(buildTuiAutocompletePreview(engine.state, engine.session, "lo"), "ok");
-  assert.equal(buildTuiAutocompletePreview(engine.state, engine.session, "open w"), "orld");
+  assert.equal(buildTuiAutocompletePreview(engine.state, engine.session, "open t"), "hings");
   assert.equal(buildTuiAutocompletePreview(engine.state, engine.session, "use con"), "text ");
 
-  await engine.execute("open world");
+  await engine.execute("open things");
   candidates = buildTuiAutocompleteCandidates(engine.state, engine.session);
-  assert.equal(candidates.includes("open things"), true);
+  assert.equal(candidates.includes("open contexts"), true);
+  await engine.execute("home");
+  await engine.execute("open types");
+  candidates = buildTuiAutocompleteCandidates(engine.state, engine.session);
   assert.equal(candidates.includes("open value types"), true);
   assert.equal(buildTuiAutocompletePreview(engine.state, engine.session, "open val"), "ue types");
 
@@ -600,7 +610,7 @@ test("operator TUI autocomplete suggests commands, containers, and column helper
 test("operator TUI supports context focus roots with use leave and scoped look/search", async () => {
   const engine = createOperatorTuiEngine(makeStubState());
 
-  await engine.execute("open world");
+  await engine.execute("open things");
   await engine.execute("open contexts");
   const used = await engine.execute("use 1");
   assert.match(used.output, /^context:backend\/routes$/m);
@@ -608,13 +618,13 @@ test("operator TUI supports context focus roots with use leave and scoped look/s
 
   const leave = await engine.execute("leave");
   assert.match(leave.output, /^Contexts$/m);
-  assert.equal(buildTuiPrompt(engine.state, engine.session), "World/Contexts> ");
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "Things/Contexts> ");
 
   const useRuntime = await engine.execute("use context backend/runtime");
   assert.match(useRuntime.output, /^context:backend\/runtime$/m);
-  assert.match(useRuntime.output, /Things \(1\)/);
-  assert.match(useRuntime.output, /Processes \(1\)/);
+  assert.match(useRuntime.output, /Things \(2\)/);
   assert.doesNotMatch(useRuntime.output, /Contexts \(/);
+  assert.doesNotMatch(useRuntime.output, /Processes \(/);
   assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime> ");
 
   const pwd = await engine.execute("pwd");
@@ -622,11 +632,20 @@ test("operator TUI supports context focus roots with use leave and scoped look/s
 
   const openThings = await engine.execute("open things");
   assert.match(openThings.output, /^Things$/m);
-  assert.match(openThings.output, /backendHost <thing> - backend\/runtime/);
+  assert.match(openThings.output, /Entities \(1\)/);
+  assert.match(openThings.output, /Processes \(1\)/);
   assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime/Things> ");
 
+  const openEntities = await engine.execute("open entities");
+  assert.match(openEntities.output, /backendHost <thing> - backend\/runtime/);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime/Things/Entities> ");
+
   const close = await engine.execute("close");
-  assert.match(close.output, /^context:backend\/runtime$/m);
+  assert.match(close.output, /^Things$/m);
+  assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime/Things> ");
+
+  const closeToFocusRoot = await engine.execute("close");
+  assert.match(closeToFocusRoot.output, /^context:backend\/runtime$/m);
   assert.equal(buildTuiPrompt(engine.state, engine.session), "context:backend/runtime> ");
 
   const home = await engine.execute("home");
@@ -1206,17 +1225,16 @@ test("operator TUI runtime context hydrates persisted world-home witnesses", asy
   }
 });
 
-test("tui CLI batch mode runs preview-aware reads and windowed search commands cleanly", async () => {
+test("plugin-owned operator shell batch mode runs preview-aware reads and windowed search commands cleanly", async () => {
   const child = spawn(process.execPath, [
-    "src/cli.js",
-    "tui",
-    "examples/demo-todo-app",
-    "--command", "search todo_title",
+    "scripts/run-operator-shell.mjs",
+    "examples/operator",
+    "--runtime-plugin", "plugin.operator-workbench",
+    "--command", "search backend",
     "--command", "columns",
     "--command", "column add summary",
     "--command", "sort by kind",
     "--command", "filter scope=world",
-    "--command", "next",
     "--command", "inspect 1",
     "--command", "status",
     "--command", "preview",
@@ -1237,8 +1255,8 @@ test("tui CLI batch mode runs preview-aware reads and windowed search commands c
 
   assert.equal(code, 0);
   assert.equal(normalizeStderr(stderr), "");
-  assert.match(stdout, /> search todo_title/);
-  assert.match(stdout, /search "todo_title" \| scope=all \| rows=/);
+  assert.match(stdout, /> search backend/);
+  assert.match(stdout, /search "backend" \| scope=all \| rows=/);
   assert.match(stdout, /> columns/);
   assert.match(stdout, /active columns: title, kind, scope, id/);
   assert.match(stdout, /> column add summary/);
@@ -1247,8 +1265,9 @@ test("tui CLI batch mode runs preview-aware reads and windowed search commands c
   assert.match(stdout, /sort=kind/);
   assert.match(stdout, /> filter scope=world/);
   assert.match(stdout, /filters=scope=world/);
-  assert.match(stdout, /> next/);
   assert.match(stdout, /> inspect 1/);
+  assert.match(stdout, /backend\/capabilities/);
+  assert.match(stdout, /preview target: operator_example/);
   assert.match(stdout, /> status/);
   assert.match(stdout, /preview session:/);
   assert.match(stdout, /> preview/);
@@ -1257,15 +1276,16 @@ test("tui CLI batch mode runs preview-aware reads and windowed search commands c
   assert.match(stdout, /bye\./);
 });
 
-test("tui CLI batch mode runs context focus flows cleanly", async () => {
+test("plugin-owned operator shell batch mode runs context focus flows cleanly", async () => {
   const child = spawn(process.execPath, [
-    "src/cli.js",
-    "tui",
+    "scripts/run-operator-shell.mjs",
     "--command", "open world",
     "--command", "open contexts",
     "--command", "use 4",
     "--command", "look",
     "--command", "open things",
+    "--command", "open entities",
+    "--command", "close",
     "--command", "close",
     "--command", "search host",
     "--command", "values context",
@@ -1292,6 +1312,8 @@ test("tui CLI batch mode runs context focus flows cleanly", async () => {
   assert.match(stdout, /Things \(\d+\)/);
   assert.match(stdout, /> look/);
   assert.match(stdout, /> open things/);
+  assert.match(stdout, /Entities \(\d+\)/);
+  assert.match(stdout, /> open entities/);
   assert.match(stdout, /backendHost <thing> - backend\/runtime/);
   assert.match(stdout, /> search host/);
   assert.match(stdout, /scope=context/);

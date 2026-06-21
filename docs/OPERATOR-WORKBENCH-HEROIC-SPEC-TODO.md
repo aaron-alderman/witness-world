@@ -551,8 +551,8 @@ ATTN:
 ### Evidence
 
 - [X] `snapshot.overlays?.[0]?.interaction?.family === "doc_view"` and `snapshot.overlays?.[1]?.interaction?.family === "menu"` are asserted in `test/operator-browser-example.test.js`.
-- [X] `src/operator-tui.js` builds overlay interaction families via `buildOverlayInteractionModel(...)` with explicit `menu` and `doc_view` semantics.
-- [X] `src/operator-tui.js` normalizes screen shapes through `legacySectionKindForScreenShape(...)` and `buildWorkbenchScreenSection(...)`.
+- [X] `plugins/operator-workbench/tui-engine.js` builds overlay interaction families via `buildOverlayInteractionModel(...)` with explicit `menu` and `doc_view` semantics.
+- [X] `plugins/operator-workbench/tui-engine.js` normalizes screen shapes through `legacySectionKindForScreenShape(...)` and `buildWorkbenchScreenSection(...)`.
 - [X] `buildAuthoredLeftPaneModel(...)` lowers authored left-pane `tree` and `table` screens through the same workbench row/section machinery.
 - [X] `workbench controller opens authored custom screens and preserves screen mode on activation`.
 - [X] `workbench controller normalizes sectioned authored screens and activates the first actionable section`.

@@ -1274,11 +1274,13 @@ test("plugin runtime loader supports DESIRE extension-only plugin modules", asyn
         return world.emit({ process: "plugin.dashboard.runtime", actor: "plugin.dashboard", claims: [], body: { id: doc.values.id } });
       }
       export function elaborateDashboard() { return []; }
+      export function buildDashboardModel() { return { title: "Dashboard Model" }; }
       export const desireExtensions = {
         elaborators: [{ id: "plugin.dashboard.elaborator", sourceLanguage: "rvm", sourceKind: "dashboard", elaborate: elaborateDashboard }],
         runtimeDeclarations: [{ kind: "dashboardRuntime", apply: applyDashboardRuntime }]
       };
-      export default { desireExtensions };
+      export const appProjectAssemblers = [{ modelId: "dashboardModel", build: buildDashboardModel }];
+      export default { desireExtensions, appProjectAssemblers };
     `);
 
     const pluginCatalog = await readRuntimePluginCatalog({
@@ -1297,11 +1299,13 @@ test("plugin runtime loader supports DESIRE extension-only plugin modules", asyn
     assert.deepEqual(loadResult.desireExtensions.elaborators.map(row => row.id), ["plugin.dashboard.elaborator"]);
     assert.deepEqual(loadResult.desireExtensions.runtimeDeclarations.map(row => row.kind), ["dashboardRuntime"]);
     assert.deepEqual(loadResult.desireExtensions.rvmForms.map(row => row.kind), []);
+    assert.deepEqual(loadResult.appProjectAssemblers.map(row => row.modelId), ["dashboardModel"]);
     assert.deepEqual(Object.keys(loadResult.bundleOverrides), []);
     assert.equal(loadedPackage.runtimeModule.loadStatus, "loaded");
     assert.deepEqual(loadedPackage.runtimeModule.desireExtensions.elaborators, ["plugin.dashboard.elaborator"]);
     assert.deepEqual(loadedPackage.runtimeModule.desireExtensions.runtimeDeclarations, ["dashboardRuntime"]);
     assert.deepEqual(loadedPackage.runtimeModule.desireExtensions.rvmForms, []);
+    assert.deepEqual(loadedPackage.runtimeModule.appProjectAssemblers, ["dashboardModel"]);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -1323,7 +1327,8 @@ test("plugin runtime loader rejects malformed DESIRE extension exports", async (
         desireExtensions: {
           elaborators: [{ id: "plugin.broken.elaborator", sourceLanguage: "rvm", sourceKind: "broken" }],
           runtimeDeclarations: [{ kind: "brokenRuntime" }]
-        }
+        },
+        appProjectAssemblers: [{ modelId: "broken-model" }]
       };
     `);
 
@@ -1339,6 +1344,7 @@ test("plugin runtime loader rejects malformed DESIRE extension exports", async (
       entry.id === "plugin.broken"
       && entry.reasons.some(reason => reason.includes("desireExtensions.elaborators[0].elaborate must be a function"))
       && entry.reasons.some(reason => reason.includes("desireExtensions.runtimeDeclarations[0].apply must be a function"))
+      && entry.reasons.some(reason => reason.includes("appProjectAssemblers[0].build must be a function"))
       && !entry.reasons.some(reason => reason.includes("desireExtensions.rvmForms"))
     ), true);
   } finally {
@@ -1422,6 +1428,45 @@ test("plugin runtime loader rejects duplicate active DESIRE runtime declaration 
     assert.equal(loadResult.failures.some(entry =>
       entry.id === "plugin.beta"
       && entry.reasons.some(reason => reason.includes("DESIRE runtime declaration already claimed by plugin.alpha: sharedRuntime"))
+    ), true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin runtime loader rejects duplicate active app-project model ids", async () => {
+  const root = await tempPluginRoot();
+  try {
+    for (const id of ["alpha", "beta"]) {
+      await writePlugin(root, id, {
+        id: `plugin.${id}`,
+        version: "0.1.0",
+        displayName: id,
+        description: `${id} app-project model extension`,
+        kind: "plugin",
+        runtime: { entry: "./runtime.js" },
+        contributes: {}
+      }, `
+        export default {
+          appProjectAssemblers: [{
+            modelId: "sharedModel",
+            build() { return { plugin: "plugin.${id}" }; }
+          }]
+        };
+      `);
+    }
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot: root,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.alpha", "plugin.beta"]
+    });
+    const loadResult = await loadRuntimePluginModules({ pluginCatalog });
+
+    assert.equal(loadResult.hasBlockingErrors, true);
+    assert.equal(loadResult.failures.some(entry =>
+      entry.id === "plugin.beta"
+      && entry.reasons.some(reason => reason.includes("app-project model already claimed by plugin.alpha: sharedModel"))
     ), true);
   } finally {
     await fs.rm(root, { recursive: true, force: true });

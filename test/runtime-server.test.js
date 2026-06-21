@@ -185,6 +185,155 @@ test("runtime server emits a startup failure when runner resolution fails", asyn
   assert.equal(world.allWitnesses().at(-1)?.body?.serverRunner, "missing");
 });
 
+test("runtime server fails startup when witness-core authority is declared without the bounded transport pipe", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+
+  const result = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    appProject: {
+      appRoot: "C:/app",
+      manifestPath: "C:/app/app.wtoml",
+      diagnostics: { imports: {} }
+    },
+    env: {
+      ...process.env,
+      WITNESS_CORE_URL: "http://127.0.0.1:8788"
+    },
+    logger: { info() {}, error() {}, warn() {} },
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: (_world, hostId) => hostId === "backendHost"
+      ? new Set(["http.serve", "runtime.config"])
+      : new Set(["dom.render", "http.fetch"]),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: () => {},
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    readRuntimePluginCatalog: async () => {
+      throw new Error("plugin catalog should not be read without bounded witness-core transport");
+    },
+    loadRuntimePluginModules: async () => {
+      throw new Error("plugin modules should not load without bounded witness-core transport");
+    }
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "witness core bounded transport required");
+  assert.equal(result.code, "WITNESS_CORE_TRANSPORT_REQUIRED");
+  assert.equal(world.allWitnesses().at(-1)?.process, "server.start.failed");
+  assert.equal(world.allWitnesses().at(-1)?.body?.code, "WITNESS_CORE_TRANSPORT_REQUIRED");
+});
+
+test("runtime server uses the supplied env witness-core transport pipe for core-connected startup", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let bridgeOptions = null;
+  let statusStoreOptions = null;
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    appProject: {
+      appRoot: "C:/app",
+      manifestPath: "C:/app/app.wtoml",
+      diagnostics: { imports: {} }
+    },
+    env: {
+      ...process.env,
+      WITNESS_CORE_URL: "http://127.0.0.1:8788",
+      WITNESS_CORE_TRANSPORT_PIPE: "\\\\.\\pipe\\witness-core-test"
+    },
+    logger: { info() {}, error() {}, warn() {} },
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: (_world, hostId) => hostId === "backendHost"
+      ? new Set(["http.serve", "runtime.config"])
+      : new Set(["dom.render", "http.fetch"]),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: () => {},
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    readRuntimePluginCatalog: async () => ({
+      authoredPluginIds: [],
+      startupPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: [],
+      activePluginIds: [],
+      plugins: []
+    }),
+    loadRuntimePluginModules: async () => ({
+      dispatchHandlers: [],
+      modules: []
+    }),
+    createWitnessCoreBridge(options) {
+      bridgeOptions = options;
+      return {
+        coreUrl: options.coreUrl,
+        readSource: async () => ({ content: "" }),
+        statSource: async () => ({ exists: false }),
+        listSourceDirectory: async () => ({ entries: [] }),
+        subscribeEvents: async () => null
+      };
+    },
+    createWitnessCoreStatusStore(options) {
+      statusStoreOptions = options;
+      return {
+        subscribe() {
+          return () => {};
+        }
+      };
+    },
+    httpModule: {
+      createServer(handler) {
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          },
+          on() {},
+          removeListener() {},
+          _handler: handler
+        };
+      }
+    }
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(bridgeOptions?.pipePath, "\\\\.\\pipe\\witness-core-test");
+  assert.equal(statusStoreOptions?.pipePath, "\\\\.\\pipe\\witness-core-test");
+  await server.close();
+});
+
 test("runtime server composes authored runtime plugin installs with operator plugin ids for the active runner", async () => {
   const world = createWitnessWorld({
     runtimePluginInstalls: [{ serverRunner: "runner-1", plugin: "plugin.inspect" }]
@@ -527,6 +676,12 @@ test("runtime server requires witness-core preview access whenever witness-core 
         runtimeContexts: new Map(),
         resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
       }),
+      createWitnessCoreBridge: () => ({
+        readSource() {
+          throw new Error("preview policy test should not perform witness-core reads");
+        }
+      }),
+      createWitnessCoreStatusStore: () => null,
       createRuntimeVerificationPersistence: async () => ({
         inspect: () => ({ diagnostics: [] }),
         close() {}
@@ -1767,6 +1922,7 @@ test("runtime server serves app-static and canvas-lib content through witness-co
   const bridgeCalls = [];
   const appRoot = `${process.cwd()}\\examples\\bridge-static-app`;
   const canvasProjectionPath = `${process.cwd()}\\plugins\\canvas\\canvas-projection.js`;
+  const emptyPluginRoot = `${process.cwd()}\\test\\fixtures\\missing-runtime-plugins`;
   const pngBytes = Buffer.from("PNGDATA", "utf8");
   const bridge = {
     async readSource({ path, encoding = null }) {
@@ -1790,6 +1946,18 @@ test("runtime server serves app-static and canvas-lib content through witness-co
         };
       }
       throw Object.assign(new Error(`unexpected bridge path ${path}`), { status: 404 });
+    },
+    async statSource({ path }) {
+      if (path === "test/fixtures/missing-runtime-plugins") {
+        return { path, exists: false, isDirectory: true, isFile: false };
+      }
+      throw Object.assign(new Error(`unexpected bridge stat path ${path}`), { status: 404 });
+    },
+    async listSourceDirectory({ path }) {
+      if (path === "test/fixtures/missing-runtime-plugins") {
+        throw Object.assign(new Error(`missing bridge directory ${path}`), { status: 404 });
+      }
+      throw Object.assign(new Error(`unexpected bridge directory path ${path}`), { status: 404 });
     }
   };
 
@@ -1823,6 +1991,26 @@ test("runtime server serves app-static and canvas-lib content through witness-co
     handlerSetFactoriesForProfile: () => ({}),
     handlerSetDefinitionsForProfile: () => ({}),
     providedCapabilityIdsForProfile: () => [],
+    readRuntimePluginCatalog: async () => ({
+      activeProfile: "full",
+      availableProfiles: ["full"],
+      packages: [],
+      rejectedPlugins: [],
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: [],
+      activePluginIds: [],
+      selection: {
+        hasBlockingErrors: false
+      }
+    }),
+    loadRuntimePluginModules: async () => ({
+      hasBlockingErrors: false,
+      bundleOverrides: {},
+      packages: [],
+      rejectedPlugins: []
+    }),
+    applyRuntimePluginLoadState: catalog => catalog,
     startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render"],
     collectActiveRuntimeContributions: () => ({
       staticAssetFiles: new Map([
@@ -1833,6 +2021,7 @@ test("runtime server serves app-static and canvas-lib content through witness-co
       inspect: () => ({ diagnostics: [] }),
       close() {}
     }),
+    resolveRuntimePluginRoot: () => emptyPluginRoot,
     createRuntimeAppContextForRunner: async () => ({
       ok: true,
       actors: [],
@@ -2056,8 +2245,6 @@ test("runtime server fails closed for core-connected static reads when witness-c
     allowActorHeader: false,
     handlerSet: null
   };
-  let requestHandler = null;
-
   const server = await startRuntimeServer(world, {
     actor: "adam",
     serverRunnerId: "runner-1",
@@ -2140,8 +2327,7 @@ test("runtime server fails closed for core-connected static reads when witness-c
       }
     },
     httpModule: {
-      createServer(handler) {
-        requestHandler = handler;
+      createServer() {
         return {
           listen(_port, _host, callback) {
             callback();
@@ -2158,29 +2344,10 @@ test("runtime server fails closed for core-connected static reads when witness-c
     }
   });
 
-  const staticReq = {
-    method: "GET",
-    url: "/app-static/img/main.png",
-    headers: {},
-    on() {}
-  };
-  const staticRes = createResponse();
-  await requestHandler(staticReq, staticRes);
-  assert.equal(staticRes.statusCode, 503);
-  assert.match(staticRes.body, /witness core unavailable/i);
-
-  const canvasReq = {
-    method: "GET",
-    url: "/canvas-lib/canvas-projection.js",
-    headers: {},
-    on() {}
-  };
-  const canvasRes = createResponse();
-  await requestHandler(canvasReq, canvasRes);
-  assert.equal(canvasRes.statusCode, 503);
-  assert.match(canvasRes.body, /witness core unavailable/i);
-
-  await server.close();
+  assert.equal(server.ok, false);
+  assert.equal(server.reason, "witness core bounded transport required");
+  assert.equal(server.code, "WITNESS_CORE_TRANSPORT_REQUIRED");
+  assert.equal(world.allWitnesses().at(-1)?.process, "server.start.failed");
 });
 
 test("runtime server returns 410 for retired frontend step authoring endpoints", async () => {
@@ -2634,6 +2801,8 @@ test("runtime server exposes a versioned worker-control descriptor for supervise
   }, {
     ...createModuleProjectorRuntimeDeps({ runner, projectors: {}, port: 4321 }),
     readJson: async () => ({}),
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: ["hello.handler"] }),
+    dispatchHandlerIdsForProfile: () => ["hello.handler"],
     createRuntimeAppContextForRunner: async () => ({
       ok: true,
       actors: [{ id: "adam", label: "Adam" }],
@@ -2692,6 +2861,279 @@ test("runtime server exposes a versioned worker-control descriptor for supervise
   assert.equal(body.transport?.methods?.activate, RUNTIME_WORKER_TRANSPORT_METHODS.supervisionActivate);
   assert.equal(body.transport?.methods?.quiesce, RUNTIME_WORKER_TRANSPORT_METHODS.supervisionQuiesce);
   assert.equal(body.transport?.methods?.reload, RUNTIME_WORKER_TRANSPORT_METHODS.appSnapshotReload);
+  assert.equal(body.transport?.methods?.request, RUNTIME_WORKER_TRANSPORT_METHODS.appHttpRequest);
+});
+
+test("runtime server attaches an outbound worker control client when Rust provides a control socket", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let clientArgs = null;
+  let closed = false;
+  let createServerCalls = 0;
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {}, warn() {} },
+    runtimeProfile: "minimal",
+    env: {
+      ...process.env,
+      WITNESS_RUNTIME_CONTROL_ADDR: "127.0.0.1:45555",
+      WITNESS_RUNTIME_TRANSPORT_ONLY: "true"
+    }
+  }, {
+    ...createModuleProjectorRuntimeDeps({ runner, projectors: {}, port: 4321 }),
+    readJson: async () => ({}),
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [{ id: "adam", label: "Adam" }],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeWorkerControlClient() {
+      clientArgs = arguments[0];
+      return {
+        close() {
+          closed = true;
+        }
+      };
+    },
+    startRuntimeUtilityListener() {
+      createServerCalls += 1;
+      return {
+        url: "http://127.0.0.1:4321",
+        closeAllConnections() {},
+        async close() {}
+      };
+    }
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(server.listenerMode, "transport-only");
+  assert.equal(server.url, "runtime-worker-transport://control-socket");
+  assert.equal(createServerCalls, 0);
+  assert.equal(clientArgs?.controlAddress, "127.0.0.1:45555");
+  assert.equal(typeof clientArgs?.resolveActiveRuntime, "function");
+  assert.equal(clientArgs?.appContext?.runtimeProcessHealthMonitor != null, true);
+  await server.close();
+  assert.equal(closed, true);
+});
+
+test("runtime server exposes a carrier-neutral transport request handler for app routes", async () => {
+  const routes = [{
+    id: "hello_route",
+    serverRunner: "runner-1",
+    method: "POST",
+    path: "/hello",
+    handler: "hello.handler",
+    params: {}
+  }];
+  const world = createWitnessWorld({ routes });
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: true,
+    handlerSet: null
+  };
+  const runtimeContext = {
+    activeDispatchHandlers: new Set(["hello.handler"]),
+    handlers: {
+      "hello.handler": async ({ req, res, requestActor }) => {
+        const body = await new Promise((resolve, reject) => {
+          const chunks = [];
+          req.on("data", chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+          req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+          req.on("error", reject);
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ actor: requestActor, body }));
+      }
+    },
+    close() {}
+  };
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} },
+    runtimeProfile: "minimal"
+  }, {
+    ...createModuleProjectorRuntimeDeps({ runner, projectors: {}, port: 4321 }),
+    readJson: async () => ({}),
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [{ id: "adam", label: "Adam" }],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeContextResolver: () => ({
+      runtimeContexts: new Map([["runner-1", runtimeContext]]),
+      resolveActiveRuntime: async () => ({ runner, context: runtimeContext })
+    })
+  });
+
+  const response = await server.handleTransportRequest({
+    method: "POST",
+    path: "/hello",
+    headers: {
+      "content-type": "application/json",
+      "x-witness-actor": "casey"
+    },
+    bodyText: "{\"msg\":\"hi\"}"
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers["content-type"], "application/json");
+  assert.deepEqual(JSON.parse(response.bodyText), {
+    actor: "casey",
+    body: "{\"msg\":\"hi\"}"
+  });
+
+  await server.close();
+});
+
+test("runtime server serves carrier-neutral app requests in transport-only mode without binding HTTP", async () => {
+  const routes = [{
+    id: "hello_route",
+    serverRunner: "runner-1",
+    method: "POST",
+    path: "/hello",
+    handler: "hello.handler",
+    params: {}
+  }];
+  const world = createWitnessWorld({ routes });
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: true,
+    handlerSet: null
+  };
+  const runtimeContext = {
+    activeDispatchHandlers: new Set(["hello.handler"]),
+    handlers: {
+      "hello.handler": async ({ req, res, requestActor }) => {
+        const body = await new Promise((resolve, reject) => {
+          const chunks = [];
+          req.on("data", chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+          req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+          req.on("error", reject);
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ actor: requestActor, body, mode: "transport-only" }));
+      }
+    },
+    close() {}
+  };
+  let createServerCalls = 0;
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {}, warn() {} },
+    runtimeProfile: "minimal",
+    env: {
+      ...process.env,
+      WITNESS_RUNTIME_CONTROL_ADDR: "127.0.0.1:45555",
+      WITNESS_RUNTIME_TRANSPORT_ONLY: "true"
+    }
+  }, {
+    ...createModuleProjectorRuntimeDeps({ runner, projectors: {}, port: 4321 }),
+    readJson: async () => ({}),
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [{ id: "adam", label: "Adam" }],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeWorkerControlClient: () => ({ close() {} }),
+    createRuntimeContextResolver: () => ({
+      runtimeContexts: new Map([["runner-1", runtimeContext]]),
+      resolveActiveRuntime: async () => ({ runner, context: runtimeContext })
+    }),
+    startRuntimeUtilityListener() {
+      createServerCalls += 1;
+      throw new Error("transport-only runtime should not bind an HTTP listener");
+    }
+  });
+
+  const response = await server.handleTransportRequest({
+    method: "POST",
+    path: "/hello",
+    headers: {
+      "content-type": "application/json",
+      "x-witness-actor": "casey"
+    },
+    bodyText: "{\"msg\":\"hi\"}"
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(server.listenerMode, "transport-only");
+  assert.equal(createServerCalls, 0);
+  assert.equal(response.status, 200);
+  assert.deepEqual(JSON.parse(response.bodyText), {
+    actor: "casey",
+    body: "{\"msg\":\"hi\"}",
+    mode: "transport-only"
+  });
+
+  await server.close();
+});
+
+test("runtime server delegates direct listener startup to the utility listener adapter", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let listenerArgs = null;
+  let closed = false;
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    port: 4321,
+    logger: { info() {}, error() {}, warn() {} },
+    runtimeProfile: "minimal"
+  }, {
+    ...createModuleProjectorRuntimeDeps({ runner, projectors: {}, port: 4321 }),
+    readJson: async () => ({}),
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [{ id: "adam", label: "Adam" }],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    startRuntimeUtilityListener(args) {
+      listenerArgs = args;
+      return {
+        url: "http://127.0.0.1:4321",
+        closeAllConnections() {},
+        async close() {
+          closed = true;
+        }
+      };
+    }
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(server.url, "http://127.0.0.1:4321");
+  assert.equal(server.listenerMode, "http");
+  assert.equal(typeof listenerArgs?.requestHandler, "function");
+  assert.equal(listenerArgs?.port, 4321);
+  await server.close();
+  assert.equal(closed, true);
 });
 
 test("runtime server exposes the local plugin catalog through the generic route table", async () => {

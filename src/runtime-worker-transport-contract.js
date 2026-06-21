@@ -10,7 +10,11 @@ export const RUNTIME_WORKER_TRANSPORT_METHODS = Object.freeze({
   processHealthRead: "runtime.process_health.read",
   supervisionActivate: "runtime.supervision.activate",
   supervisionQuiesce: "runtime.supervision.quiesce",
-  appSnapshotReload: "runtime.app_snapshot.reload"
+  appSnapshotReload: "runtime.app_snapshot.reload",
+  appRevisionRead: "runtime.app_revision.read",
+  backendRevisionRead: "runtime.backend_revision.read",
+  appPreviewSessionEventRead: "runtime.app_preview_session.event.read",
+  appHttpRequest: "runtime.app_http.request"
 });
 
 function cloneJson(value) {
@@ -61,7 +65,8 @@ export function createRuntimeWorkerTransportResult({
       ? { message: error }
       : {
           message: String(error.message || error.error || "runtime worker transport failed"),
-          code: error.code ? String(error.code) : null
+          code: error.code ? String(error.code) : null,
+          status: Number.isFinite(Number(error.status)) ? Number(error.status) : null
         });
   return {
     protocol: RUNTIME_WORKER_TRANSPORT_PROTOCOL_VERSION,
@@ -93,7 +98,11 @@ export function createRuntimeWorkerTransportDescriptor({
       readHealth: RUNTIME_WORKER_TRANSPORT_METHODS.processHealthRead,
       activate: RUNTIME_WORKER_TRANSPORT_METHODS.supervisionActivate,
       quiesce: RUNTIME_WORKER_TRANSPORT_METHODS.supervisionQuiesce,
-      reload: mutationsEnabled === true ? RUNTIME_WORKER_TRANSPORT_METHODS.appSnapshotReload : null
+      reload: mutationsEnabled === true ? RUNTIME_WORKER_TRANSPORT_METHODS.appSnapshotReload : null,
+      readAppRevision: RUNTIME_WORKER_TRANSPORT_METHODS.appRevisionRead,
+      readBackendRevision: RUNTIME_WORKER_TRANSPORT_METHODS.backendRevisionRead,
+      readPreviewSessionEvent: RUNTIME_WORKER_TRANSPORT_METHODS.appPreviewSessionEventRead,
+      request: RUNTIME_WORKER_TRANSPORT_METHODS.appHttpRequest
     }
   };
 }

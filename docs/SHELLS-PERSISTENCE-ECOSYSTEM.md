@@ -143,12 +143,12 @@ Detailed tranche planning for that work lives here:
 
 The first operator slice is now shipped through one shared runtime operator service.
 
-CLI surfaces:
+The old top-level operator shell is no longer the product entrypoint.
+Operator UI work is plugin-owned now:
 
-- `node src/cli.js operator backup --world-home <path> [--label <text>] [--include-derived]`
-- `node src/cli.js operator export --world-home <path> [--label <text>]`
-- `node src/cli.js operator restore --world-home <path> --artifact <backup-id-or-dir> [--preserve-current]`
-- `node src/cli.js operator import --world-home <path> --artifact <import-id-or-dir> [--preserve-current]`
+- `npm run operator:example`
+- `npm run operator:example:browser`
+- `npm run operator:example:shell`
 
 Authenticated bootstrap surfaces:
 

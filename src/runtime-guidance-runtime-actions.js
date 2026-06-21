@@ -28,15 +28,6 @@ export async function continueTutorialOnPage({
     windowTarget.location.assign(new URL("/", windowTarget.location.href).toString());
     return true;
   }
-  if (page === "world") {
-    const target = new URL("/world", windowTarget.location.href);
-    if (windowTarget.location.pathname === target.pathname) {
-      windowTarget.location.reload();
-      return true;
-    }
-    windowTarget.location.assign(target.toString());
-    return true;
-  }
   return false;
 }
 

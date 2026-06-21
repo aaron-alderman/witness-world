@@ -10,7 +10,7 @@ import {
   injectRuntimePageMarkupBeforeProgram,
   renderRuntimePageInitialStateScript
 } from "../../src/runtime-page-state.js";
-import { renderWidgetPage } from "./widget-page.js";
+import { renderWidgetPage } from "../../src/runtime-widget-page.js";
 
 const ASYNC_OPS = new Set(["fetchJson", "postJson", "patchJson", "deleteJson", "initSession", "setSession", "logout", "refreshProjection", "request.readJson", "handler.invoke", "process.request", "run"]);
 const TERMINAL_STEP_PROCESSES = new Set(["frontend.step.done", "frontend.step.skipped", "frontend.step.failed", "backend.step.done", "backend.step.skipped", "backend.step.failed"]);

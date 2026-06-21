@@ -11,10 +11,10 @@ slow_ms = 15000
 include = ["src/**", "plugins/**"]
 
 [supervise]
-command = "node src/cli.js utility-bootstrap --port {runtime_port} --runtime-profile authoring --runtime-plugin plugin.mcp"
+command = "node src/cli.js utility-bootstrap --runtime-profile authoring --runtime-plugin plugin.mcp"
 working_dir = "."
 restart_on_exit = true
-control_url = "http://127.0.0.1:{runtime_port}/api/runtime/worker-control"
+transport_only_runtime = true
 health_interval_ms = 1000
 health_timeout_ms = 5000
 restart_on_unhealthy = true

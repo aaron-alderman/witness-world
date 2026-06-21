@@ -1,6 +1,6 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { runtimeLocalFsModule } from "./runtime-local-fs.js";
 import {
   cloneRuntimeOwnerChain,
   describeHandlerOwnership,
@@ -147,7 +147,7 @@ async function materializePluginDirectoryFromWitnessCore(
   {
     generationBridge = null,
     cwd = process.cwd(),
-    fsModule = fs,
+    fsModule = runtimeLocalFsModule,
     scratchRoot = null,
     requireGenerationBridgeForCanonicalImports = false
   } = {}
@@ -466,6 +466,35 @@ function validateDesireExtensions(pluginPackage, loaded, errors) {
   };
 }
 
+function validateAppProjectAssemblers(pluginPackage, loaded, errors) {
+  const raw = loaded?.appProjectAssemblers ?? null;
+  if (raw === null || raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    errors.push("appProjectAssemblers must be an array");
+    return [];
+  }
+  const pluginId = pluginPackage.id;
+  const assemblers = [];
+  for (const [index, entry] of raw.entries()) {
+    const path = `appProjectAssemblers[${index}]`;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      errors.push(`${path} must be an object`);
+      continue;
+    }
+    const modelId = typeof entry.modelId === "string" && entry.modelId.trim() ? entry.modelId.trim() : null;
+    if (!modelId) errors.push(`${path}.modelId must be a non-empty string`);
+    if (typeof entry.build !== "function") errors.push(`${path}.build must be a function`);
+    if (modelId && typeof entry.build === "function") {
+      assemblers.push({
+        pluginId,
+        modelId,
+        build: entry.build
+      });
+    }
+  }
+  return assemblers;
+}
+
 function normalizeLegacyRuntimeModule(loaded) {
   const bundleId = typeof loaded?.bundleId === "string" && loaded.bundleId.trim()
     ? loaded.bundleId.trim()
@@ -491,6 +520,7 @@ function validatePluginRuntimeModule(pluginPackage, loaded) {
     : normalizeLegacyRuntimeModule(loaded);
   const bundleDefinitions = [];
   const desireExtensions = validateDesireExtensions(pluginPackage, loaded, errors);
+  const appProjectAssemblers = validateAppProjectAssemblers(pluginPackage, loaded, errors);
   for (const [rawBundleId, definition] of Object.entries(rawBundles ?? {})) {
     const bundleId = String(rawBundleId || "").trim();
     if (!bundleId) {
@@ -509,14 +539,15 @@ function validatePluginRuntimeModule(pluginPackage, loaded) {
     }
     bundleDefinitions.push(normalized);
   }
-  if (!bundleDefinitions.length && !desireExtensions.elaborators.length && !desireExtensions.runtimeDeclarations.length && !desireExtensions.rvmForms.length && !errors.length) {
-    errors.push("runtime module must export bundles, legacy bundleId/handlerCatalog/routes/surfaces/createHandlers, or desireExtensions");
+  if (!bundleDefinitions.length && !desireExtensions.elaborators.length && !desireExtensions.runtimeDeclarations.length && !desireExtensions.rvmForms.length && !appProjectAssemblers.length && !errors.length) {
+    errors.push("runtime module must export bundles, legacy bundleId/handlerCatalog/routes/surfaces/createHandlers, desireExtensions, or appProjectAssemblers");
   }
   if (errors.length) return { ok: false, errors };
   return {
     ok: true,
     bundleDefinitions,
-    desireExtensions
+    desireExtensions,
+    appProjectAssemblers
   };
 }
 
@@ -525,7 +556,7 @@ export async function loadRuntimePluginModules({
   importModule = specifier => import(specifier),
   generationBridge = null,
   cwd = process.cwd(),
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   scratchRoot = null,
   requireGenerationBridgeForCanonicalImports = false
 } = {}) {
@@ -537,11 +568,13 @@ export async function loadRuntimePluginModules({
   const claimedElaborators = Object.create(null);
   const claimedRuntimeDeclarations = Object.create(null);
   const claimedRvmForms = Object.create(null);
+  const claimedAppProjectModels = Object.create(null);
   const desireExtensions = {
     elaborators: [],
     runtimeDeclarations: [],
     rvmForms: []
   };
+  const appProjectAssemblers = [];
 
   for (const pluginPackage of pluginCatalog?.packages ?? []) {
     const baseState = {
@@ -629,6 +662,18 @@ export async function loadRuntimePluginModules({
           duplicateExtensionClaims.push(`RVM form already claimed by ${claimedBy}: ${rvmForm.kind}`);
         }
       }
+      const localAppProjectModels = new Set();
+      for (const assembler of validated.appProjectAssemblers) {
+        if (localAppProjectModels.has(assembler.modelId)) {
+          duplicateExtensionClaims.push(`duplicate app-project model in plugin ${pluginPackage.id}: ${assembler.modelId}`);
+          continue;
+        }
+        localAppProjectModels.add(assembler.modelId);
+        const claimedBy = claimedAppProjectModels[assembler.modelId];
+        if (claimedBy && claimedBy !== pluginPackage.id) {
+          duplicateExtensionClaims.push(`app-project model already claimed by ${claimedBy}: ${assembler.modelId}`);
+        }
+      }
       if (duplicateBundleClaims.length || duplicateExtensionClaims.length) {
         const errors = [...duplicateBundleClaims, ...duplicateExtensionClaims];
         pluginStates[pluginPackage.id] = {
@@ -699,6 +744,10 @@ export async function loadRuntimePluginModules({
         claimedRvmForms[rvmForm.kind] = pluginPackage.id;
         desireExtensions.rvmForms.push(rvmForm);
       }
+      for (const assembler of validated.appProjectAssemblers) {
+        claimedAppProjectModels[assembler.modelId] = pluginPackage.id;
+        appProjectAssemblers.push(assembler);
+      }
       pluginStates[pluginPackage.id] = {
         ...baseState,
         resolvedPath: effectiveEntryPath,
@@ -710,6 +759,7 @@ export async function loadRuntimePluginModules({
           runtimeDeclarations: validated.desireExtensions.runtimeDeclarations.map(entry => entry.kind),
           rvmForms: validated.desireExtensions.rvmForms.map(entry => entry.kind)
         },
+        appProjectAssemblers: validated.appProjectAssemblers.map(entry => entry.modelId),
         errors: []
       };
     } catch (error) {
@@ -730,6 +780,7 @@ export async function loadRuntimePluginModules({
   return {
     bundleOverrides,
     desireExtensions,
+    appProjectAssemblers,
     pluginStates,
     failures,
     hasBlockingErrors: failures.length > 0

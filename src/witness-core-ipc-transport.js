@@ -1,7 +1,7 @@
 import net from "node:net";
 import {
   createWitnessCoreRequestError
-} from "./witness-core-http-transport.js";
+} from "./witness-core-transport-utils.js";
 import {
   WITNESS_CORE_TRANSPORT_METHODS,
   WITNESS_CORE_TRANSPORT_PROTOCOL_VERSION,

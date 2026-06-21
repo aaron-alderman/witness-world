@@ -2173,14 +2173,30 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     assert.equal((await post("/api/widgets", widgetInput({ id: "shell_box", kind: "Box", attach: false, context: "ctx.target" }))).status, 201);
     assert.equal((await post("/api/widgets", widgetInput({ id: "legacy_shell", kind: "Box", attach: false }))).status, 201);
     assert.equal((await post("/api/widgets", widgetInput({ id: "local_note", kind: "Text", text: "Note", attach: false }))).status, 201);
+    assert.equal((await post("/api/surfaces", [
+      {
+        id: "page_surface_root",
+        surfaceKind: "app-root",
+        context: "ctx.source",
+        children: ["page_surface_title"]
+      },
+      {
+        id: "page_surface_title",
+        surfaceKind: "text",
+        context: "ctx.source",
+        props: { text: "Home Surface" }
+      }
+    ])).status, 201);
 
     assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "homePage", target: "page_root" })).status, 201);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "homeSurface", target: "page_surface_root" })).status, 201);
     assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "backendNode", target: backendHost })).status, 201);
     assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "frontendNode", target: frontendHost })).status, 201);
     assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "homePage", target: "page_root" })).status, 201);
+    assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "homeSurface", target: "page_surface_root" })).status, 201);
     assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "backendNode", target: backendHost })).status, 201);
     assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "frontendNode", target: frontendHost })).status, 201);
-    assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "homePage", name: "landingPage" })).status, 201);
+    assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "homeSurface", name: "landingSurface" })).status, 201);
     assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "backendNode", name: "backendAlias" })).status, 201);
     assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "frontendNode", name: "frontendAlias" })).status, 201);
     assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "shellBox", target: "shell_box" })).status, 201);
@@ -2221,9 +2237,9 @@ test("bootstrap context composition endpoints expose scope state and lower conte
       context: "ctx.target",
       path: "/landing",
       method: "GET",
-      handler: "page.world",
-      servesRef: "landingPage",
-      rootWidgetRef: "landingPage"
+      handler: "page.surface",
+      servesRef: "landingSurface",
+      rootSurfaceRef: "landingSurface"
     });
     assert.equal(createdRoute.status, 201);
     assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "landingRoute", target: "landing_route" })).status, 201);
@@ -2244,7 +2260,7 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     }));
     assert.equal(unresolvedParent.status, 400);
 
-    const collision = await post("/api/context-bindings", { context: "ctx.target", name: "landingPage", target: "local_note" });
+    const collision = await post("/api/context-bindings", { context: "ctx.target", name: "landingSurface", target: "local_note" });
     assert.equal(collision.status, 409);
     const foreignScopedBind = await post("/api/context-bindings", { context: "ctx.target", name: "foreignPage", target: "page_root" });
     assert.equal(foreignScopedBind.status, 400);
@@ -2252,11 +2268,11 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     const state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
     assert.equal(state.contextBindings.some(row => row.context === "ctx.source" && row.name === "homePage" && row.target === "page_root"), true);
     assert.equal(state.contextExports.some(row => row.context === "ctx.source" && row.name === "homePage" && row.target === "page_root"), true);
-    assert.equal(state.contextImports.some(row => row.context === "ctx.target" && row.sourceContext === "ctx.source" && row.exportName === "homePage" && row.name === "landingPage"), true);
-    assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.sourceKind === "import" && row.sourceContext === "ctx.source" && row.exportName === "homePage"), true);
+    assert.equal(state.contextImports.some(row => row.context === "ctx.target" && row.sourceContext === "ctx.source" && row.exportName === "homeSurface" && row.name === "landingSurface"), true);
+    assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "landingSurface" && row.target === "page_surface_root" && row.sourceKind === "import" && row.sourceContext === "ctx.source" && row.exportName === "homeSurface"), true);
     assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "homePage"), false);
     assert.equal(state.contextualTargets.some(row => row.id === "page_root" && row.context === "ctx.source"), true);
-    assert.equal(state.contextNameResolutions.some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.resolution === "resolved"), true);
+    assert.equal(state.contextNameResolutions.some(row => row.context === "ctx.target" && row.name === "landingSurface" && row.target === "page_surface_root" && row.resolution === "resolved"), true);
     assert.equal((state.contextNameConflicts || []).length, 0);
     assert.equal(state.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget" && row.policyStatus === "allowed-transitional"), true);
     assert.equal(state.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.unscopedLegacyTarget" && row.policyStatus === "migration-required"), true);
@@ -2265,10 +2281,12 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     assert.equal(state.widgets.some(row => row.id === "shell_child" && row.context === "ctx.target"), true);
     assert.equal(state.widgets.some(row => row.id === "legacy_child" && row.context === "ctx.target"), true);
     assert.equal(state.serverRunners.some(row => row.id === "demo_server" && row.backendHost === backendHost && row.frontendHost === frontendHost), true);
-    assert.equal(state.routes.some(row => row.id === "landing_route" && row.serves === "page_root" && row.params?.rootWidget === "page_root"), true);
+    assert.equal(state.routes.some(row => row.id === "landing_route" && row.serves === "page_surface_root" && row.params?.rootSurface === "page_surface_root"), true);
     assert.equal(state.servedRoutes.some(row => row.id === "landing_route" && row.serverRunner === "demo_server"), true);
 
-    assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "homePage", name: "landingPage" }, "DELETE")).status, 200);
+    assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "homeSurface", name: "landingSurface" }, "DELETE")).status, 200);
+    assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "homeSurface", target: "page_surface_root" }, "DELETE")).status, 200);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "homeSurface", target: "page_surface_root" }, "DELETE")).status, 200);
     assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "homePage", target: "page_root" }, "DELETE")).status, 200);
     assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "homePage", target: "page_root" }, "DELETE")).status, 200);
   } finally {

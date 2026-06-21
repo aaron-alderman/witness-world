@@ -83,24 +83,22 @@ test("bootstrap app authoring submit request builder preserves create-form paylo
     buildBootstrapAppAuthoringSubmitRequest({
       detail: { family: "route" },
       data: {
-        id: "world_route",
-        path: "/world",
-        handler: "page.world",
-        page: "world",
-        rootWidget: "page_root",
-        rootWidgetRef: "landingPage",
+        id: "surface_route_with_root",
+        path: "/surface",
+        handler: "page.surface",
+        rootSurface: "landing_surface",
+        rootSurfaceRef: "landingSurface",
         liveProjection: true
       }
     }),
     {
       url: "/api/routes",
       body: {
-        id: "world_route",
-        path: "/world",
-        handler: "page.world",
-        page: "world",
-        rootWidget: "page_root",
-        rootWidgetRef: "landingPage",
+        id: "surface_route_with_root",
+        path: "/surface",
+        handler: "page.surface",
+        rootSurface: "landing_surface",
+        rootSurfaceRef: "landingSurface",
         liveProjection: true
       }
     }

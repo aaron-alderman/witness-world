@@ -1,3 +1,7 @@
+# Legacy plugin-owned operator workbench adapter grammar.
+# This file remains useful for the current loader and shell, but it is not the
+# canonical operator ontology.
+
 operator_theme ansi16 {
   title "ANSI 16"
   mode ansi16
@@ -40,6 +44,52 @@ operator_screen_section operator_links {
   priority 2
 }
 
+operator_action toggle_help {
+  title "Help"
+  kind builtin
+  builtin toggle-help
+}
+
+operator_action open_references {
+  title "References"
+  kind builtin
+  builtin set-right-screen
+  screen references
+  pane right
+}
+
+operator_action edit_selection {
+  title "Edit"
+  kind builtin
+  builtin edit
+}
+
+operator_action change_surface_color {
+  title "Change Color"
+  kind builtin
+  builtin change-color
+}
+
+operator_action rename_selection {
+  title "Rename"
+  kind builtin
+  builtin rename
+}
+
+operator_action clone_selection {
+  title "Clone"
+  kind builtin
+  builtin clone
+}
+
+operator_menu operator_context_actions {
+  title "Context"
+  item edit_selection
+  item change_surface_color
+  item rename_selection
+  item clone_selection
+}
+
 operator_overlay help_overlay {
   kind doc_view
   title "Help"
@@ -52,6 +102,7 @@ operator_overlay help_overlay {
 operator_overlay context_menu {
   kind menu
   title "Context"
+  menu operator_context_actions
   width 24
   height 8
   close_on_open help_overlay
@@ -107,10 +158,10 @@ operator_viewport operator_default {
   right_weight 72
   overlay help_overlay
   overlay context_menu
-  binding F1 overlay help_overlay
+  binding F1 action toggle_help
   binding MouseSecondary overlay context_menu
-  binding Alt-R action rename
-  binding F2 action rename
+  binding Alt-R action rename_selection
+  binding F2 action open_references
 }
 
 operator_setup operator_shell {

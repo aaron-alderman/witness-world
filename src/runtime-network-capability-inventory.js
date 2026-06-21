@@ -7,14 +7,6 @@ export const RUNTIME_NETWORK_CAPABILITY_INVENTORY = {
     ],
     note: "Temporary utility-only exception: stdio MCP traffic is bridged into a private local runtime HTTP endpoint. This remains outside the canonical server-runtime boundary claim and is expected to disappear behind the worker transport/frontdoor tranches."
   },
-  witnessCoreControlPlane: {
-    capabilityId: "capability.network.control_plane.witness_core",
-    scope: "server-runtime",
-    ownerFiles: [
-      "src/witness-core-http-transport.js"
-    ],
-    note: "Concrete HTTP/fetch fallback adapter for witness-core status, generations, serving, preview, verification persistence, and capability calls. Higher-level bridge semantics remain in src/witness-core-bridge.js, and supervised runtimes can now prefer the Rust-injected IPC carrier in src/witness-core-ipc-transport.js instead."
-  },
   injectedServerFetch: {
     capabilityId: "capability.network.server.fetch_injection",
     scope: "server-runtime",

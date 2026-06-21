@@ -342,7 +342,7 @@ function renderClientEngine(program) {
   const currentActor = () => state.session?.actor || state.actor || '';
   const applyTheme = () => { document.body.dataset.actor = currentActor() || ''; };
   const liveSurfaceInspectable = Boolean(config.page && config.page !== 'world');
-  const validWorldGraphModes = new Set(['graph', 'things', 'primitive', 'witness', 'source', 'process']);
+  const validWorldGraphModes = new Set(['system', 'graph', 'things', 'primitive', 'witness', 'source', 'process']);
   const browserRuntimeCapabilities = Array.isArray(config.browserRuntimeCapabilities)
     ? config.browserRuntimeCapabilities.map(String).filter(Boolean)
     : [];
@@ -3757,7 +3757,42 @@ function renderClientEngine(program) {
       linkPrimitive,
       escapeHtml
     });
+    const ensureWorldSystemOverview = async ({ force = false } = {}) => {
+      if (!force && state.worldSystemLoaded && state.worldSystemModel) return state.worldSystemModel;
+      if (state.worldSystemPromise) return state.worldSystemPromise;
+      state.worldSystemLoading = true;
+      state.worldSystemPromise = (async () => {
+        const url = '/api/world-system';
+        const response = await fetch(resolveRuntimeUrl(url), requestOptions({}, { url }));
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          state.worldSystemError = body?.error || 'system overview request failed';
+          state.worldSystemLoaded = true;
+          return null;
+        }
+        state.worldSystemModel = body;
+        state.worldSystemError = null;
+        state.worldSystemLoaded = true;
+        return body;
+      })();
+      try {
+        return await state.worldSystemPromise;
+      } finally {
+        state.worldSystemLoading = false;
+        state.worldSystemPromise = null;
+        if (byWidget(widget)) draw();
+      }
+    };
     const renderCanvas = () => {
+      if (currentMode() === 'system') {
+        if (!state.worldSystemLoaded && !state.worldSystemLoading) void ensureWorldSystemOverview();
+        return renderWorldSystemOverviewView({
+          model: state.worldSystemModel || null,
+          loading: state.worldSystemLoading === true,
+          error: state.worldSystemError || '',
+          escapeHtml
+        });
+      }
       if (currentMode() === 'source') return renderWorldSourceDocumentView({
         doc: state.worldGraphSource,
         sourceFiles,

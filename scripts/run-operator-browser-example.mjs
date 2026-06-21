@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { startOperatorBrowserExampleServer } from "../src/operator-browser-example-server.js";
+import { startOperatorBrowserExampleServer } from "../plugins/operator-workbench/browser-example-server.js";
 
 const host = "127.0.0.1";
 const shouldOpen = process.argv.includes("--open");

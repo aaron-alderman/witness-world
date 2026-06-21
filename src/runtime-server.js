@@ -1,5 +1,3 @@
-import http from "node:http";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { relation } from "./kernel.js";
 import { createModuleProjectorContext, ensureCapabilityDefinition, installCapability, moduleProjectors } from "./modules.js";
@@ -70,16 +68,19 @@ import { resolveRunnerPromotionPolicy } from "./runtime-promotion-policy.js";
 import { resolveRunnerVerificationPolicy } from "./runtime-verification-policy.js";
 import { createStartupTelemetry } from "./startup-telemetry.js";
 import { createRuntimeProcessHealthMonitor } from "./runtime-process-health.js";
+import { runtimeLocalFsModule } from "./runtime-local-fs.js";
 import {
   RUNTIME_PROCESS_HEALTH_PATH,
   RUNTIME_SUPERVISION_ACTIVATE_PATH,
   RUNTIME_SUPERVISION_QUIESCE_PATH,
   RUNTIME_WORKER_CONTROL_PATH
 } from "./runtime-worker-control-contract.js";
+import { createRuntimeWorkerControlClient } from "./runtime-worker-control-client.js";
 import { RUNTIME_WORKER_TRANSPORT_METHODS } from "./runtime-worker-transport-contract.js";
 import { executeRuntimeWorkerTransportCall } from "./runtime-worker-transport.js";
 import { createWitnessCoreBridge, createWitnessCoreStatusStore } from "./witness-core-bridge.js";
 import { retiredLegacyFrontendRouteState } from "./legacy-frontend-bridge.js";
+import { startRuntimeUtilityListener } from "./runtime-utility-listener.js";
 
 const WITNESS_CORE_WORKSPACE_ROOT_ENV = "WITNESS_CORE_WORKSPACE_ROOT";
 
@@ -103,6 +104,12 @@ function resolveWitnessCoreWorkspaceRoot(env = process.env, fallbackCwd = proces
   return path.resolve(configured || String(fallbackCwd || process.cwd()));
 }
 
+function resolveWitnessCoreTransportPipe(env = process.env) {
+  return typeof env?.WITNESS_CORE_TRANSPORT_PIPE === "string" && env.WITNESS_CORE_TRANSPORT_PIPE.trim()
+    ? env.WITNESS_CORE_TRANSPORT_PIPE.trim()
+    : null;
+}
+
 function normalizeSlashes(value) {
   return String(value || "").replaceAll("\\", "/");
 }
@@ -122,7 +129,7 @@ function capabilitySourceIdForWorkspacePath(targetPath, cwd = process.cwd()) {
   return relative;
 }
 
-async function detectLocallyChangedSnapshotPaths(snapshotManager, fsModule = fs) {
+async function detectLocallyChangedSnapshotPaths(snapshotManager, fsModule = runtimeLocalFsModule) {
   const snapshot = snapshotManager?.getActiveSnapshot?.();
   if (!snapshot?.sourceIndex?.length) return [];
   const checks = await Promise.all((snapshot.sourceIndex ?? []).map(async row => {
@@ -142,7 +149,7 @@ async function detectLocallyChangedSnapshotPaths(snapshotManager, fsModule = fs)
 
 async function readRuntimeSourceBytes(targetPath, {
   witnessCoreBridge = null,
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   cwd = process.cwd(),
   requireWitnessCoreAuthority = false
 } = {}) {
@@ -172,7 +179,7 @@ async function readRuntimeSourceBytes(targetPath, {
 
 async function readRuntimeSourceText(targetPath, {
   witnessCoreBridge = null,
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   cwd = process.cwd(),
   requireWitnessCoreAuthority = false
 } = {}) {
@@ -213,6 +220,98 @@ function coreEventSourcePaths(event = null) {
     ? generation.source_paths
     : (Array.isArray(generation?.sourcePaths) ? generation.sourcePaths : []);
   return [...new Set(sourcePaths.map(path => String(path || "").trim()).filter(Boolean))];
+}
+
+function createInMemoryRequest({
+  method = "GET",
+  url = "/",
+  headers = {},
+  body = Buffer.alloc(0)
+} = {}) {
+  const listeners = new Map();
+  const normalizedBody = Buffer.isBuffer(body) ? body : Buffer.from(body ?? "");
+  let bodyDispatched = false;
+  let closed = false;
+  const request = {
+    method,
+    url,
+    headers,
+    on(event, listener) {
+      if (!listeners.has(event)) listeners.set(event, []);
+      listeners.get(event).push(listener);
+      if (bodyDispatched) {
+        if (event === "data" && normalizedBody.length) listener(normalizedBody);
+        if (event === "end") listener();
+      }
+      if (closed && event === "close") listener();
+    }
+  };
+  const emit = (event, ...args) => {
+    for (const listener of listeners.get(event) ?? []) {
+      listener(...args);
+    }
+  };
+  return {
+    request,
+    dispatchBody() {
+      if (bodyDispatched) return;
+      bodyDispatched = true;
+      if (normalizedBody.length) emit("data", normalizedBody);
+      emit("end");
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      emit("close");
+    }
+  };
+}
+
+function createInMemoryResponse() {
+  const listeners = new Map();
+  const chunks = [];
+  let headers = {};
+  let finished = false;
+  let resolveFinished = null;
+  const finishedPromise = new Promise(resolve => {
+    resolveFinished = resolve;
+  });
+  const response = {
+    statusCode: 200,
+    on(event, listener) {
+      if (!listeners.has(event)) listeners.set(event, []);
+      listeners.get(event).push(listener);
+    },
+    writeHead(statusCode, nextHeaders = {}) {
+      this.statusCode = Number(statusCode || 200);
+      headers = { ...headers, ...nextHeaders };
+    },
+    write(chunk) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk ?? ""), "utf8"));
+    },
+    end(chunk = "") {
+      if (chunk) this.write(chunk);
+      if (finished) return;
+      finished = true;
+      for (const listener of listeners.get("finish") ?? []) {
+        listener();
+      }
+      resolveFinished?.();
+    }
+  };
+  return {
+    response,
+    waitForFinish() {
+      return finishedPromise;
+    },
+    snapshot() {
+      return {
+        statusCode: Number(response.statusCode || 200),
+        headers: { ...headers },
+        body: Buffer.concat(chunks)
+      };
+    }
+  };
 }
 
 function mergePluginCatalogs(catalogs = []) {
@@ -292,8 +391,9 @@ export async function startRuntimeServer(world, {
     resolveRunnerForHost,
     resolveStartupRunner,
     resolveStorageConfig,
-    httpModule = http,
-    fsModule = fs,
+    httpModule = undefined,
+    startRuntimeUtilityListener: startRuntimeUtilityListenerImpl = startRuntimeUtilityListener,
+    fsModule = runtimeLocalFsModule,
     ensureRuntimeBuiltins: ensureRuntimeBuiltinsImpl = ensureRuntimeBuiltins,
     runtimeBundleSummaryForProfile: runtimeBundleSummaryForProfileImpl = runtimeBundleSummaryForProfile,
     handlerMetadataForProfile: handlerMetadataForProfileImpl = handlerMetadataForProfile,
@@ -317,6 +417,7 @@ export async function startRuntimeServer(world, {
     applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState,
     collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions,
     createRuntimeVerificationPersistence: createRuntimeVerificationPersistenceImpl = createRuntimeVerificationPersistence,
+    createRuntimeWorkerControlClient: createRuntimeWorkerControlClientImpl = createRuntimeWorkerControlClient,
     createWitnessCoreBridge: createWitnessCoreBridgeImpl = createWitnessCoreBridge,
     createWitnessCoreStatusStore: createWitnessCoreStatusStoreImpl = createWitnessCoreStatusStore,
     AppSnapshotManagerClass = AppSnapshotManager
@@ -476,6 +577,7 @@ export async function startRuntimeServer(world, {
   };
 
   const startupWitnessCoreWorkspaceRoot = resolveWitnessCoreWorkspaceRoot(env, process.cwd());
+  const startupWitnessCoreTransportPipe = resolveWitnessCoreTransportPipe(env);
   const runtimePluginRoot = resolveRuntimePluginRootImpl({ env, cwd: startupWitnessCoreWorkspaceRoot });
   const configuredRuntimePluginIds = resolveConfiguredRuntimePluginIdsImpl({ env, runtimePluginIds });
   const startupWitnessCoreUrl = typeof env.WITNESS_CORE_URL === "string" && env.WITNESS_CORE_URL.trim()
@@ -484,9 +586,27 @@ export async function startRuntimeServer(world, {
   const startupWitnessCoreBridge = startupWitnessCoreUrl
     ? createWitnessCoreBridgeImpl({
         coreUrl: startupWitnessCoreUrl,
-        logger
+        pipePath: startupWitnessCoreTransportPipe,
+        logger,
+        requirePipe: true
       })
     : null;
+  if (startupWitnessCoreUrl && !startupWitnessCoreBridge) {
+    world.emit({
+      process: "server.start.failed",
+      actor,
+      claims: [],
+      body: {
+        reason: "witness core bounded transport required",
+        code: "WITNESS_CORE_TRANSPORT_REQUIRED"
+      }
+    });
+    return {
+      ok: false,
+      reason: "witness core bounded transport required",
+      code: "WITNESS_CORE_TRANSPORT_REQUIRED"
+    };
+  }
   const startupDefaultRuntimePluginIds = Array.isArray(startupRuntimePluginIds)
     ? [...new Set(startupRuntimePluginIds.map(String).filter(Boolean))]
     : [];
@@ -850,13 +970,12 @@ export async function startRuntimeServer(world, {
       ? env.WITNESS_CORE_URL.trim()
       : null;
     appContext.witnessCoreWorkspaceRoot = startupWitnessCoreWorkspaceRoot;
-    appContext.witnessCoreBridge = createWitnessCoreBridgeImpl({
-      coreUrl: appContext.witnessCoreUrl,
-      logger
-    });
+    appContext.witnessCoreBridge = startupWitnessCoreBridge;
     appContext.witnessCoreStatusStore = createWitnessCoreStatusStoreImpl({
       coreUrl: appContext.witnessCoreUrl,
-      logger
+      pipePath: startupWitnessCoreTransportPipe,
+      logger,
+      requirePipe: Boolean(appContext.witnessCoreUrl)
     });
     appContext.witnessCoreStatusUnsubscribe = appContext.witnessCoreStatusStore?.subscribe?.(event => {
       if (!appContext.witnessCoreUrl) return;
@@ -997,26 +1116,9 @@ export async function startRuntimeServer(world, {
   const currentWitnessCount = () => typeof world?.witnessCount === "function"
     ? Number(world.witnessCount() || 0)
     : Number(world?.allWitnesses?.().length || 0);
-  const currentLastWitness = () => typeof world?.lastWitness === "function"
-    ? world.lastWitness()
-    : world?.allWitnesses?.().at(-1) ?? null;
   const witnessesSince = index => typeof world?.witnessesSince === "function"
     ? world.witnessesSince(index)
     : world?.allWitnesses?.().slice(index) ?? [];
-  const attachEventsStream = context => {
-    if (!context) return context;
-    context.eventsStream = {
-      open(res, req) {
-        res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
-        res.write(sseFrame(currentWitnessCount(), currentLastWitness()));
-        sseClients.add(res);
-        req.on("close", () => sseClients.delete(res));
-        return { clients: sseClients.size, serverRunner: context.serverRunnerId ?? serverRunner.id };
-      }
-    };
-    return context;
-  };
-  attachEventsStream(appContext);
   const storage = appContext.storage;
 
   const sessionStore = new Map();
@@ -1177,7 +1279,6 @@ export async function startRuntimeServer(world, {
       if (cachedContext && cachedContext.witnessCount === cacheVersion) return cachedContext.context;
       const runnerState = await buildRunnerState(liveRunner);
       const liveContext = await createRunnerAppContext(liveRunner, runnerState);
-      attachEventsStream(liveContext);
       runnerContextCache.set(liveRunner.id, {
         witnessCount: cacheVersion,
         context: liveContext
@@ -1191,7 +1292,6 @@ export async function startRuntimeServer(world, {
     })
   }));
   const staticPluginFiles = unionRuntimeContributions.staticAssetFiles ?? new Map();
-  const sseClients = new Set();
   const appStaticRoot = appContext.appRoot;
   const APP_STATIC_PREFIX = "/app-static/";
   const trimString = value => typeof value === "string" && value.trim() ? value.trim() : "";
@@ -1270,26 +1370,12 @@ export async function startRuntimeServer(world, {
         return "application/octet-stream";
     }
   }
-  let sseLastCount = currentWitnessCount();
-  const sseWatcher = setInterval(() => {
-    const count = currentWitnessCount();
-    if (count <= sseLastCount) return;
-    const nextWitnesses = witnessesSince(sseLastCount);
-    for (let index = 0; index < nextWitnesses.length; index += 1) {
-      const witness = nextWitnesses[index] ?? null;
-      const frame = sseFrame(sseLastCount + index + 1, witness);
-      for (const client of sseClients) client.write(frame);
-    }
-    sseLastCount = count;
-  }, 250);
-  sseWatcher.unref?.();
-
   const runtimeProcessHealthMonitor = createRuntimeProcessHealthMonitor({
     runtimeConfig: appContext.runtimeConfig,
     probeCollector: appContext.resourceProbes,
     getRuntimeCounts: () => ({
       activeRequests: activeRequestCount,
-      sseClients: sseClients.size,
+      sseClients: 0,
       runtimeContexts: runtimeContexts.size,
       previewSessions: appContext.appPreviewSessionManager?.diagnostics?.().sessionCount ?? 0,
       snapshotWatchers: appContext.appSnapshotManager?.diagnostics?.().watcherCount ?? 0
@@ -1305,7 +1391,7 @@ export async function startRuntimeServer(world, {
     },
     getReadyState: () => {
       if (serverClosing) return false;
-      if (appProject && !appContext.appSnapshotManager) return false;
+      if (runtimeStartupMode === "serve" && appProject && !appContext.appSnapshotManager) return false;
       return appContext.startupTelemetry?.snapshot?.().meaningfulReadyAtMs != null;
     }
   });
@@ -1355,8 +1441,27 @@ export async function startRuntimeServer(world, {
     }
     stopLocalSnapshotPoller();
   };
+  const runtimeWorkerControlAddress = typeof env.WITNESS_RUNTIME_CONTROL_ADDR === "string" && env.WITNESS_RUNTIME_CONTROL_ADDR.trim()
+    ? env.WITNESS_RUNTIME_CONTROL_ADDR.trim()
+    : "";
+  const transportOnlyRuntime = env.WITNESS_RUNTIME_TRANSPORT_ONLY === "true" && Boolean(runtimeWorkerControlAddress);
+  const runtimeWorkerControlClient = runtimeWorkerControlAddress
+    ? createRuntimeWorkerControlClientImpl({
+        controlAddress: runtimeWorkerControlAddress,
+        resolveActiveRuntime,
+        appContext,
+        runtimeProcessHealthMonitor,
+        syncLocalSnapshotPoller,
+        logger
+      })
+    : null;
+  if (runtimeWorkerControlClient) {
+    registerDeferredCloser(() => {
+      runtimeWorkerControlClient.close?.();
+    });
+  }
 
-  const server = httpModule.createServer(async (req, res) => {
+  const dispatchRuntimeHttpRequest = async (req, res) => {
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
     const countTowardRequestPressure = !(
       req.method === "GET"
@@ -1373,7 +1478,6 @@ export async function startRuntimeServer(world, {
       runtime.context.appSnapshotManager = appContext.appSnapshotManager;
       runtime.context.devMode = activeDevMode === true;
     }
-    attachEventsStream(runtime.context);
     const requestContext = resolveRequestContext(req, sessionStore, { allowActorHeader: runtime.runner.allowActorHeader === true });
     if (req.method === "GET" && requestUrl.pathname === RUNTIME_PROCESS_HEALTH_PATH) {
       const result = await executeRuntimeWorkerTransportCall({
@@ -1389,7 +1493,9 @@ export async function startRuntimeServer(world, {
     if (req.method === "GET" && requestUrl.pathname === RUNTIME_WORKER_CONTROL_PATH) {
       const host = typeof req.headers?.host === "string" && req.headers.host.trim()
         ? req.headers.host.trim()
-        : `127.0.0.1:${server.address()?.port ?? 0}`;
+        : transportOnlyRuntime
+          ? "127.0.0.1"
+          : `127.0.0.1:${httpServer?.address?.()?.port ?? 0}`;
       const result = await executeRuntimeWorkerTransportCall({
         method: RUNTIME_WORKER_TRANSPORT_METHODS.controlDescribe,
         runtimeContext: runtime.context,
@@ -1779,13 +1885,85 @@ export async function startRuntimeServer(world, {
         }
       });
     }
-  });
+  };
 
-  await startupTelemetry.runPhase("runtime.listen", () => new Promise(resolve => server.listen(port, "127.0.0.1", resolve)), {
-    label: "Bind HTTP listener"
-  });
-  const address = server.address();
-  const url = `http://127.0.0.1:${address.port}`;
+  const handleTransportRequest = async ({
+    method = "GET",
+    path: requestPath = "/",
+    headers = {},
+    bodyBase64 = null,
+    bodyText = null
+  } = {}) => {
+    const normalizedHeaders = headers && typeof headers === "object"
+      ? Object.fromEntries(
+          Object.entries(headers).map(([key, value]) => {
+            if (Array.isArray(value)) return [String(key).toLowerCase(), value.map(entry => String(entry))];
+            return [String(key).toLowerCase(), String(value ?? "")];
+          })
+        )
+      : {};
+    const body = typeof bodyBase64 === "string"
+      ? Buffer.from(bodyBase64, "base64")
+      : Buffer.from(String(bodyText ?? ""), "utf8");
+    const inMemoryRequest = createInMemoryRequest({
+      method: String(method || "GET").trim().toUpperCase() || "GET",
+      url: typeof requestPath === "string" && requestPath.trim() ? requestPath.trim() : "/",
+      headers: normalizedHeaders,
+      body
+    });
+    const inMemoryResponse = createInMemoryResponse();
+    const handlerPromise = dispatchRuntimeHttpRequest(inMemoryRequest.request, inMemoryResponse.response);
+    queueMicrotask(() => {
+      inMemoryRequest.dispatchBody();
+    });
+    await handlerPromise;
+    const finished = inMemoryResponse.waitForFinish();
+    const timeoutPromise = new Promise((_, reject) => {
+      const timeout = setTimeout(() => {
+        const error = new Error("streaming runtime transport responses are not supported");
+        error.status = 501;
+        error.code = "WITNESS_RUNTIME_TRANSPORT_STREAMING_UNSUPPORTED";
+        reject(error);
+      }, 5000);
+      timeout.unref?.();
+      finished.finally(() => clearTimeout(timeout));
+    });
+    await Promise.race([finished, timeoutPromise]);
+    inMemoryRequest.close();
+    const snapshot = inMemoryResponse.snapshot();
+    const contentType = typeof snapshot.headers["content-type"] === "string"
+      ? snapshot.headers["content-type"]
+      : "";
+    return {
+      status: snapshot.statusCode,
+      headers: snapshot.headers,
+      bodyBase64: snapshot.body.toString("base64"),
+      bodyText: /^text\/|^application\/json\b|^application\/javascript\b|^application\/xml\b/i.test(contentType)
+        ? snapshot.body.toString("utf8")
+        : null
+    };
+  };
+  appContext.runtimeTransportHttpRequest = handleTransportRequest;
+
+  let utilityListener = null;
+  let url = "runtime-worker-transport://control-socket";
+  await startupTelemetry.runPhase(
+    "runtime.listen",
+    async () => {
+      if (transportOnlyRuntime) return;
+      utilityListener = await startRuntimeUtilityListenerImpl({
+        requestHandler: dispatchRuntimeHttpRequest,
+        port,
+        ...(httpModule ? { httpModule } : {})
+      });
+    },
+    {
+      label: transportOnlyRuntime
+        ? "Skip HTTP listener (transport-only runtime)"
+        : "Bind HTTP listener"
+    }
+  );
+  if (!transportOnlyRuntime) url = utilityListener?.url ?? url;
   if (startupPersistenceCommitMode === "pre-ready") {
     await startupTelemetry.runPhase("runtime.persistence.commit", () => world.flushPersistence?.(), {
       label: "Persist startup witnesses"
@@ -1927,19 +2105,18 @@ export async function startRuntimeServer(world, {
   return {
     ok: true,
     url,
+    listenerMode: transportOnlyRuntime ? "transport-only" : "http",
     runtimeBundleSummary: appContext.runtimeBundleSummary,
     runtimePluginCatalog: appContext.runtimePluginCatalog,
     runtimeContext: appContext,
+    handleTransportRequest,
     getStartupTelemetry: () => startupTelemetry.snapshot(),
     subscribeStartupTelemetry: listener => startupTelemetry.subscribe?.(listener) ?? (() => {}),
     startupReady,
     close: async () => {
       serverClosing = true;
       runtimeProcessHealthMonitor.close();
-      clearInterval(sseWatcher);
       stopLocalSnapshotPoller();
-      for (const client of sseClients) client.end();
-      sseClients.clear();
       for (const context of new Set(runtimeContexts.values())) context?.close?.();
       const appContextClose = typeof appContext.close === "function" ? appContext.close.bind(appContext) : null;
       try {
@@ -1961,8 +2138,9 @@ export async function startRuntimeServer(world, {
           removeProjectionContext?.();
         } catch {}
       }
-      server.closeAllConnections?.();
-      return new Promise(resolve => server.close(resolve));
+      utilityListener?.closeAllConnections?.();
+      if (!utilityListener) return;
+      return utilityListener.close?.();
     }
   };
 }

@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import {
   availableRuntimeBundleIds,
@@ -9,6 +8,7 @@ import {
   runtimeProfilePluginIds,
   runtimeBundleManifest
 } from "./runtime-bundles.js";
+import { runtimeLocalFsModule } from "./runtime-local-fs.js";
 import { availableRuntimeShellIds } from "./runtime-shell-contract.js";
 import { cloneRuntimeOwnerChain, extractRuntimeOwnershipFields } from "./runtime-ownership.js";
 
@@ -124,7 +124,7 @@ function createCapabilityRequiredError(targetPath) {
 
 function createRuntimePluginDiscoveryFsModule({
   cwd = process.cwd(),
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   generationBridge = null,
   requireGenerationBridgeForCanonicalReads = false
 } = {}) {
@@ -967,7 +967,7 @@ async function buildPluginPackageRow({
   activeProfile,
   availableProfileIds,
   validPluginIds,
-  fsModule = fs
+  fsModule = runtimeLocalFsModule
 }) {
   const errors = [...validationErrors];
   const availableBundleIds = availableRuntimeBundleIds();
@@ -1298,7 +1298,7 @@ export async function discoverRuntimePluginPackages({
   pluginRoot,
   runtimeProfile = DEFAULT_RUNTIME_PROFILE,
   availableProfileIds = availableRuntimeProfiles(),
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   generationBridge = null,
   cwd = process.cwd(),
   requireGenerationBridgeForCanonicalReads = false
@@ -1438,7 +1438,7 @@ export async function readRuntimePluginCatalog({
   startupPluginIds = [],
   authoredPluginIds = [],
   availableProfileIds = availableRuntimeProfiles(),
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   generationBridge = null,
   cwd = process.cwd(),
   requireGenerationBridgeForCanonicalReads = false
@@ -1894,7 +1894,7 @@ export async function readRuntimePluginReviews({
   authoredPluginIds = [],
   pluginId = null,
   availableProfileIds = availableRuntimeProfiles(),
-  fsModule = fs
+  fsModule = runtimeLocalFsModule
 } = {}) {
   const catalog = await readRuntimePluginCatalog({
     pluginRoot,

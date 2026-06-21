@@ -4,6 +4,7 @@ import {
   renderWorldBrowserViewFactory,
   renderWorldPrimitiveBrowserView,
   renderWorldProcessExplorerView,
+  renderWorldSystemOverviewView,
   renderWorldSourceDocumentView,
   renderWorldThingListView,
   renderWorldWitnessBrowserView,
@@ -90,10 +91,39 @@ test("world browser collection views render thing, witness, process, and primiti
   assert.equal(primitiveHtml.includes('data-world-select="todo_form"'), true);
 });
 
+test("world browser system overview renders runtime, capabilities, boundaries, and evidence", () => {
+  const html = renderWorldSystemOverviewView({
+    model: {
+      summary: { witnesses: 3, runtimeStatus: "healthy" },
+      runtime: { status: "healthy", runtimeCounts: { activeRequests: 0 } },
+      capabilities: {
+        definitions: [{ id: "dom.render", source: "witnessed" }],
+        installs: [{ id: "host:frontendHost:dom.render", capability: "dom.render", target: "frontendHost", targetKind: "host" }]
+      },
+      boundaries: [{ id: "browserClientFetch", kind: "network", status: "browser-client", capability: "capability.browser.runtime_fetch" }],
+      processes: [{ id: "o1", process: "backend.request.finish", statusCode: 200 }],
+      sources: [{ file: "app.wtoml", count: 2 }],
+      proofs: [{ id: "p1", process: "proof.run" }],
+      externalSystems: [{ id: "browserClientFetch", kind: "network", status: "browser-client" }],
+      recentEvidence: [{ kind: "witness", id: "w1", process: "defineCapability" }]
+    },
+    escapeHtml: value => String(value)
+  });
+
+  assert.equal(html.includes('data-world-system-overview'), true);
+  assert.equal(html.includes("System Overview"), true);
+  assert.equal(html.includes("Capabilities"), true);
+  assert.equal(html.includes("Boundaries"), true);
+  assert.equal(html.includes("Runtime"), true);
+  assert.equal(html.includes("Recent Evidence"), true);
+  assert.equal(html.includes("dom.render"), true);
+});
+
 test("world browser view factory exposes the extracted browser helpers", () => {
   const factory = renderWorldBrowserViewFactory();
   assert.equal(factory.includes("const sourceDefinitionRange ="), true);
   assert.equal(factory.includes("const renderWorldSourceDocumentView ="), true);
   assert.equal(factory.includes("const renderWorldWitnessBrowserView ="), true);
   assert.equal(factory.includes("const renderWorldPrimitiveBrowserView ="), true);
+  assert.equal(factory.includes("const renderWorldSystemOverviewView ="), true);
 });

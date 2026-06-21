@@ -6,7 +6,7 @@ import {
   buildOperatorWorkbenchSnapshot,
   createOperatorTuiEngine,
   loadOperatorTuiRuntimeContext
-} from "../src/operator-tui.js";
+} from "../plugins/operator-workbench/tui-engine.js";
 import { sanitizeOperatorWorkbenchSnapshot } from "../examples/operator/browser/operator-snapshot-adapter.js";
 
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

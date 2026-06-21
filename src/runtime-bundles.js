@@ -5,7 +5,7 @@ import {
 import {
   CORE_RUNTIME_CAPABILITY_IDS
 } from "./runtime-builtins.js";
-import { renderWidgetPage } from "../plugins/inspect/widget-page.js";
+import { renderWidgetPage } from "./runtime-widget-page.js";
 import { buildRuntimeShellDiagnostics } from "./runtime-shell-contract.js";
 import {
   buildRuntimeAuthoringCapabilityMatrix,

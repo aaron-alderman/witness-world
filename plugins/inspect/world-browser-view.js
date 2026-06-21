@@ -7,6 +7,9 @@ export function renderWorldBrowserViewFactory() {
     const renderWorldWitnessBrowserView = ${renderWorldWitnessBrowserView.toString()};
     const renderWorldProcessExplorerView = ${renderWorldProcessExplorerView.toString()};
     const renderWorldPrimitiveBrowserView = ${renderWorldPrimitiveBrowserView.toString()};
+    const renderWorldSystemOverviewView = ${renderWorldSystemOverviewView.toString()};
+    const renderWorldSystemRows = ${renderWorldSystemRows.toString()};
+    const renderWorldSystemJson = ${renderWorldSystemJson.toString()};
   `;
 }
 
@@ -137,6 +140,64 @@ export function renderWorldWitnessBrowserView({
 
 export function renderWorldProcessExplorerView() {
   return '<div class="world-primitive-browser surface-stack"><h2>Process Explorer</h2><div class="world-primitive-list surface-item-list"><a class="surface-link-item" href="/process"><strong>Open Process View</strong><br><span class="world-node-kind">Dedicated process graph, run inspector, and replay</span></a></div></div>';
+}
+
+export function renderWorldSystemJson(value, escapeHtml = input => String(input ?? "")) {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return escapeHtml(String(value));
+  return '<pre class="surface-code">' + escapeHtml(JSON.stringify(value, null, 2)) + "</pre>";
+}
+
+export function renderWorldSystemRows(rows = [], {
+  empty = "No rows.",
+  escapeHtml = value => String(value ?? "")
+} = {}) {
+  if (!rows.length) return '<div class="surface-empty surface-empty-state">' + escapeHtml(empty) + "</div>";
+  return '<div class="world-primitive-list surface-item-list">'
+    + rows.map(row => {
+      const id = row.id || row.capability || row.file || row.process || row.kind || "row";
+      const meta = [
+        row.kind,
+        row.status,
+        row.source,
+        row.targetKind && row.target ? row.targetKind + ":" + row.target : "",
+        row.capability && row.capability !== id ? row.capability : ""
+      ].filter(Boolean).join(" / ");
+      const details = Object.fromEntries(Object.entries(row).filter(([key]) => !["id", "kind", "status", "source", "targetKind", "target", "capability"].includes(key)));
+      return '<article class="surface-item surface-stack world-system-row"><div><strong>' + escapeHtml(id) + "</strong></div>"
+        + (meta ? '<div class="world-command-meta">' + escapeHtml(meta) + "</div>" : "")
+        + renderWorldSystemJson(details, escapeHtml)
+        + "</article>";
+    }).join("")
+    + "</div>";
+}
+
+export function renderWorldSystemOverviewView({
+  model = null,
+  loading = false,
+  error = "",
+  escapeHtml = value => String(value ?? "")
+} = {}) {
+  if (loading && !model) return '<div class="world-primitive-browser surface-stack" data-world-system-overview><h2>System Overview</h2><div class="surface-empty surface-empty-state">Loading system overview...</div></div>';
+  if (error && !model) return '<div class="world-primitive-browser surface-stack" data-world-system-overview><h2>System Overview</h2><div class="surface-empty surface-empty-state">' + escapeHtml(error) + "</div></div>";
+  const summary = model?.summary ?? {};
+  const summaryRows = Object.entries(summary).map(([key, value]) => ({ id: key, status: value }));
+  return '<div class="world-primitive-browser surface-stack" data-world-system-overview>'
+    + "<h2>System Overview</h2>"
+    + '<div class="world-primitive-grid">'
+    + '<section class="surface-stack"><h3>World</h3>' + renderWorldSystemRows(summaryRows, { empty: "No summary.", escapeHtml }) + "</section>"
+    + '<section class="surface-stack"><h3>Runtime</h3>' + renderWorldSystemRows([model?.runtime ?? {}], { empty: "Runtime health unavailable.", escapeHtml }) + "</section>"
+    + '<section class="surface-stack"><h3>Capabilities</h3>' + renderWorldSystemRows(model?.capabilities?.definitions ?? [], { empty: "No capability definitions.", escapeHtml }) + "</section>"
+    + '<section class="surface-stack"><h3>Capability Installs</h3>' + renderWorldSystemRows(model?.capabilities?.installs ?? [], { empty: "No capability installs.", escapeHtml }) + "</section>"
+    + '<section class="surface-stack"><h3>Boundaries</h3>' + renderWorldSystemRows(model?.boundaries ?? [], { empty: "No boundaries.", escapeHtml }) + "</section>"
+    + '<section class="surface-stack"><h3>Processes</h3>' + renderWorldSystemRows(model?.processes ?? [], { empty: "No recent process observations.", escapeHtml }) + "</section>"
+    + '<section class="surface-stack"><h3>Sources</h3>' + renderWorldSystemRows(model?.sources ?? [], { empty: "No witnessed source files.", escapeHtml }) + "</section>"
+    + '<section class="surface-stack"><h3>Proofs</h3>' + renderWorldSystemRows(model?.proofs ?? [], { empty: "No proof evidence.", escapeHtml }) + "</section>"
+    + '<section class="surface-stack"><h3>External Systems</h3>' + renderWorldSystemRows(model?.externalSystems ?? [], { empty: "No external systems.", escapeHtml }) + "</section>"
+    + '<section class="surface-stack"><h3>Recent Evidence</h3>' + renderWorldSystemRows(model?.recentEvidence ?? [], { empty: "No recent evidence.", escapeHtml }) + "</section>"
+    + "</div>"
+    + (error ? '<div class="surface-empty surface-empty-state">' + escapeHtml(error) + "</div>" : "")
+    + "</div>";
 }
 
 export function renderWorldPrimitiveBrowserView({

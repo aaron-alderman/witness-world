@@ -1,3 +1,8 @@
+// Legacy adapter grammar for the current operator workbench presentation model.
+// Canonical operator truth is ontology-first and must not be inferred from these
+// screen/viewport/surface forms directly.
+import { canonicalOperatorWorkbenchRvmForms } from "./canonical-layout-rvm.js";
+
 const VALID_THEME_MODES = new Set(["ansi16"]);
 const VALID_RIGHT_SHAPES = new Set(["detail", "list-detail", "table-detail"]);
 const VALID_LEFT_SHAPES = new Set(["list", "table", "tree"]);
@@ -9,11 +14,26 @@ const VALID_SECTION_KINDS = new Set(["detail", "list", "table", "kv"]);
 const VALID_SCREEN_PANES = new Set(["right", "left"]);
 const VALID_VIEWPORT_SPLIT_ORIENTATIONS = new Set(["horizontal", "vertical"]);
 const VALID_VIEWPORT_BINDING_VERBS = new Set(["overlay", "action"]);
+const VALID_LAYOUT_PANEL_CONTENT_KINDS = new Set(["left-screen", "screen"]);
 const VALID_OVERLAY_KINDS = new Set(["menu", "doc_view"]);
 const VALID_HANDLE_KINDS = new Set(["splitter"]);
 const VALID_HANDLE_AXES = new Set(["horizontal", "vertical"]);
 const VALID_SURFACE_KINDS = new Set(["status_bar", "command_bar"]);
 const VALID_SURFACE_SCROLL_AXES = new Set(["x", "y"]);
+const VALID_ACTION_KINDS = new Set(["builtin", "sequence"]);
+const VALID_BUILTIN_ACTIONS = new Set([
+  "toggle-help",
+  "open-overlay",
+  "toggle-overlay",
+  "set-right-screen",
+  "set-focused-pane",
+  "activate-primary",
+  "rename",
+  "edit",
+  "change-color",
+  "clone",
+  "emit-info"
+]);
 
 function escapeRegExp(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -65,6 +85,10 @@ function normalizePrimaryAction(value) {
   return VALID_PRIMARY_ACTIONS.has(action) ? action : null;
 }
 
+function isIdentifier(value) {
+  return /^[A-Za-z_][A-Za-z0-9_.:-]*$/u.test(String(value ?? "").trim());
+}
+
 function formName(form) {
   return form?.name ?? form?.payload?.name ?? null;
 }
@@ -106,6 +130,34 @@ function parseOperatorTheme(form) {
     title: readSimpleValue(bodyLines, "title"),
     mode: readSimpleValue(bodyLines, "mode") ?? "ansi16",
     palette: readSimpleValue(bodyLines, "palette") ?? "terminal-dark"
+  };
+}
+
+function parseOperatorAction(form) {
+  const parsed = pluginParsedData(form);
+  if (parsed) return parsed;
+  const bodyLines = formBodyLines(form);
+  return {
+    id: formName(form),
+    title: readSimpleValue(bodyLines, "title"),
+    kind: readSimpleValue(bodyLines, "kind"),
+    builtin: readSimpleValue(bodyLines, "builtin"),
+    overlay: readSimpleValue(bodyLines, "overlay"),
+    screen: readSimpleValue(bodyLines, "screen"),
+    pane: readSimpleValue(bodyLines, "pane"),
+    message: readSimpleValue(bodyLines, "message"),
+    steps: readRepeatedSimpleValues(bodyLines, "step").map(value => String(value))
+  };
+}
+
+function parseOperatorMenu(form) {
+  const parsed = pluginParsedData(form);
+  if (parsed) return parsed;
+  const bodyLines = formBodyLines(form);
+  return {
+    id: formName(form),
+    title: readSimpleValue(bodyLines, "title"),
+    items: readRepeatedSimpleValues(bodyLines, "item").map(value => String(value))
   };
 }
 
@@ -188,6 +240,7 @@ function parseOperatorOverlay(form) {
     id: formName(form),
     title: readSimpleValue(bodyLines, "title"),
     kind: readSimpleValue(bodyLines, "kind") ?? "doc_view",
+    menu: readSimpleValue(bodyLines, "menu"),
     width: readSimpleValue(bodyLines, "width"),
     height: readSimpleValue(bodyLines, "height"),
     resizable: readSimpleValue(bodyLines, "resizable"),
@@ -273,6 +326,99 @@ function parseOperatorViewport(form) {
   };
 }
 
+function parseOperatorLayoutSplitRows(bodyLines) {
+  const rows = [];
+  for (const line of bodyLines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^split\s+([^\s]+)\s+(horizontal|vertical)\s+(\d+)\s+([^\s]+)\s+([^\s]+)$/u);
+    if (!match) continue;
+    rows.push({
+      id: match[1],
+      axis: match[2],
+      weight: Number(match[3]),
+      first: match[4],
+      second: match[5]
+    });
+  }
+  return rows;
+}
+
+function parseOperatorLayoutPanelRows(bodyLines) {
+  const rows = [];
+  for (const line of bodyLines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^panel\s+([^\s]+)\s+(left-screen|screen)\s+([^\s]+)(?:\s+"([^"]*)")?$/u);
+    if (!match) continue;
+    rows.push({
+      id: match[1],
+      contentKind: match[2],
+      targetId: match[3],
+      title: match[4] ?? null
+    });
+  }
+  return rows;
+}
+
+function parseOperatorLayout(form) {
+  const parsed = pluginParsedData(form);
+  if (parsed) return parsed;
+  const bodyLines = formBodyLines(form);
+  return {
+    id: formName(form),
+    title: readSimpleValue(bodyLines, "title"),
+    viewport: readSimpleValue(bodyLines, "viewport"),
+    focusedPanel: readSimpleValue(bodyLines, "focused_panel"),
+    root: readSimpleValue(bodyLines, "root"),
+    savedAt: readSimpleValue(bodyLines, "saved_at"),
+    splits: parseOperatorLayoutSplitRows(bodyLines),
+    panels: parseOperatorLayoutPanelRows(bodyLines)
+  };
+}
+
+function parseOperatorKeymapBindings(bodyLines) {
+  const bindings = [];
+  for (const line of bodyLines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^binding\s+([^\s]+)\s+(action)\s+([^\s]+)$/u);
+    if (!match) continue;
+    bindings.push({
+      trigger: match[1],
+      targetKind: match[2],
+      target: match[3]
+    });
+  }
+  return bindings;
+}
+
+function parseOperatorKeymapPanelRows(bodyLines, key) {
+  const rows = [];
+  const pattern = new RegExp(`^${escapeRegExp(key)}\\s+([^\\s]+)\\s+([^\\s]+)$`, "u");
+  for (const line of bodyLines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(pattern);
+    if (!match) continue;
+    rows.push({
+      panelId: match[1],
+      targetId: match[2]
+    });
+  }
+  return rows;
+}
+
+function parseOperatorKeymap(form) {
+  const parsed = pluginParsedData(form);
+  if (parsed) return parsed;
+  const bodyLines = formBodyLines(form);
+  return {
+    id: formName(form),
+    title: readSimpleValue(bodyLines, "title"),
+    savedAt: readSimpleValue(bodyLines, "saved_at"),
+    bindings: parseOperatorKeymapBindings(bodyLines),
+    panelPrimaryActions: parseOperatorKeymapPanelRows(bodyLines, "panel_primary"),
+    panelSecondaryMenus: parseOperatorKeymapPanelRows(bodyLines, "panel_secondary")
+  };
+}
+
 function validateOperatorTheme(form) {
   const payload = parseOperatorTheme(form);
   if (!VALID_THEME_MODES.has(String(payload.mode))) {
@@ -288,8 +434,41 @@ function validateOperatorDataset(form) {
   if (!VALID_DATASET_PROVIDERS.has(String(payload.provider))) {
     throw new Error(`operator_dataset ${formName(form)} provider must be one of ${[...VALID_DATASET_PROVIDERS].join(", ")}`);
   }
-  if (payload.primaryAction && !normalizePrimaryAction(payload.primaryAction)) {
-    throw new Error(`operator_dataset ${formName(form)} primary_action must be one of ${[...VALID_PRIMARY_ACTIONS].join(", ")}`);
+  if (payload.primaryAction && !normalizePrimaryAction(payload.primaryAction) && !isIdentifier(payload.primaryAction)) {
+    throw new Error(`operator_dataset ${formName(form)} primary_action must be a legacy action or action identifier`);
+  }
+}
+
+function validateOperatorAction(form) {
+  const payload = parseOperatorAction(form);
+  if (!VALID_ACTION_KINDS.has(String(payload.kind))) {
+    throw new Error(`operator_action ${formName(form)} kind must be one of ${[...VALID_ACTION_KINDS].join(", ")}`);
+  }
+  if (payload.kind === "builtin") {
+    if (!VALID_BUILTIN_ACTIONS.has(String(payload.builtin))) {
+      throw new Error(`operator_action ${formName(form)} builtin must be one of ${[...VALID_BUILTIN_ACTIONS].join(", ")}`);
+    }
+    if (payload.overlay && !isIdentifier(payload.overlay)) {
+      throw new Error(`operator_action ${formName(form)} overlay must be an identifier`);
+    }
+    if (payload.screen && !isIdentifier(payload.screen)) {
+      throw new Error(`operator_action ${formName(form)} screen must be an identifier`);
+    }
+  }
+  if (payload.kind === "sequence" && !(Array.isArray(payload.steps) && payload.steps.length)) {
+    throw new Error(`operator_action ${formName(form)} kind sequence requires step rows`);
+  }
+}
+
+function validateOperatorMenu(form) {
+  const payload = parseOperatorMenu(form);
+  if (!(Array.isArray(payload.items) && payload.items.length)) {
+    throw new Error(`operator_menu ${formName(form)} requires item rows`);
+  }
+  for (const itemId of payload.items) {
+    if (!isIdentifier(itemId)) {
+      throw new Error(`operator_menu ${formName(form)} item must be an identifier`);
+    }
   }
 }
 
@@ -372,6 +551,9 @@ function validateOperatorOverlay(form) {
   const payload = parseOperatorOverlay(form);
   if (!VALID_OVERLAY_KINDS.has(String(payload.kind))) {
     throw new Error(`operator_overlay ${formName(form)} kind must be one of ${[...VALID_OVERLAY_KINDS].join(", ")}`);
+  }
+  if (payload.menu && !isIdentifier(payload.menu)) {
+    throw new Error(`operator_overlay ${formName(form)} menu must be an identifier`);
   }
   if (payload.width !== null && payload.width !== undefined && (!Number.isInteger(payload.width) || payload.width <= 0)) {
     throw new Error(`operator_overlay ${formName(form)} width must be a positive integer`);
@@ -480,11 +662,95 @@ function validateOperatorViewport(form) {
   }
 }
 
+function validateOperatorLayout(form) {
+  const payload = parseOperatorLayout(form);
+  if (!cleanValue(payload.root)) {
+    throw new Error(`operator_layout ${formName(form)} must declare root`);
+  }
+  if (!(Array.isArray(payload.panels) && payload.panels.length)) {
+    throw new Error(`operator_layout ${formName(form)} requires panel rows`);
+  }
+  const panelIds = new Set();
+  for (const panel of payload.panels) {
+    if (!panel.id?.trim()) throw new Error(`operator_layout ${formName(form)} panel id is required`);
+    if (panelIds.has(panel.id)) throw new Error(`operator_layout ${formName(form)} duplicate panel id: ${panel.id}`);
+    panelIds.add(panel.id);
+    if (!VALID_LAYOUT_PANEL_CONTENT_KINDS.has(String(panel.contentKind))) {
+      throw new Error(`operator_layout ${formName(form)} panel ${panel.id} content kind must be one of ${[...VALID_LAYOUT_PANEL_CONTENT_KINDS].join(", ")}`);
+    }
+    if (!panel.targetId?.trim()) {
+      throw new Error(`operator_layout ${formName(form)} panel ${panel.id} target is required`);
+    }
+  }
+  const splitIds = new Set();
+  for (const split of payload.splits) {
+    if (!split.id?.trim()) throw new Error(`operator_layout ${formName(form)} split id is required`);
+    if (splitIds.has(split.id)) throw new Error(`operator_layout ${formName(form)} duplicate split id: ${split.id}`);
+    splitIds.add(split.id);
+    if (!VALID_VIEWPORT_SPLIT_ORIENTATIONS.has(String(split.axis))) {
+      throw new Error(`operator_layout ${formName(form)} split ${split.id} axis must be one of ${[...VALID_VIEWPORT_SPLIT_ORIENTATIONS].join(", ")}`);
+    }
+    if (!Number.isInteger(split.weight) || split.weight <= 0) {
+      throw new Error(`operator_layout ${formName(form)} split ${split.id} weight must be a positive integer`);
+    }
+    if (!split.first?.trim() || !split.second?.trim()) {
+      throw new Error(`operator_layout ${formName(form)} split ${split.id} must declare first and second`);
+    }
+  }
+  const splitMap = new Map(payload.splits.map(split => [split.id, split]));
+  const resolveNode = (nodeId, stack = new Set()) => {
+    if (panelIds.has(nodeId)) return;
+    const split = splitMap.get(nodeId);
+    if (!split) throw new Error(`operator_layout ${formName(form)} root reference not found: ${nodeId}`);
+    if (stack.has(nodeId)) throw new Error(`operator_layout ${formName(form)} split cycle detected: ${nodeId}`);
+    const nextStack = new Set(stack);
+    nextStack.add(nodeId);
+    resolveNode(split.first, nextStack);
+    resolveNode(split.second, nextStack);
+  };
+  resolveNode(payload.root);
+}
+
+function validateOperatorKeymap(form) {
+  const payload = parseOperatorKeymap(form);
+  const seenTriggers = new Set();
+  for (const binding of payload.bindings) {
+    if (!binding.trigger?.trim()) throw new Error(`operator_keymap ${formName(form)} binding trigger is required`);
+    if (!binding.target?.trim()) throw new Error(`operator_keymap ${formName(form)} binding target is required`);
+    if (seenTriggers.has(binding.trigger)) {
+      throw new Error(`operator_keymap ${formName(form)} duplicate binding trigger: ${binding.trigger}`);
+    }
+    seenTriggers.add(binding.trigger);
+  }
+}
+
 function serializeOperatorTheme(payload) {
   const lines = [`operator_theme ${payload.id} {`];
   if (payload.title) lines.push(`  title "${payload.title}"`);
   if (payload.mode) lines.push(`  mode ${payload.mode}`);
   if (payload.palette) lines.push(`  palette ${payload.palette}`);
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function serializeOperatorAction(payload) {
+  const lines = [`operator_action ${payload.id} {`];
+  if (payload.title) lines.push(`  title "${payload.title}"`);
+  if (payload.kind) lines.push(`  kind ${payload.kind}`);
+  if (payload.builtin) lines.push(`  builtin ${payload.builtin}`);
+  if (payload.overlay) lines.push(`  overlay ${payload.overlay}`);
+  if (payload.screen) lines.push(`  screen ${payload.screen}`);
+  if (payload.pane) lines.push(`  pane ${payload.pane}`);
+  if (payload.message) lines.push(`  message "${payload.message}"`);
+  for (const stepId of payload.steps ?? []) lines.push(`  step ${stepId}`);
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function serializeOperatorMenu(payload) {
+  const lines = [`operator_menu ${payload.id} {`];
+  if (payload.title) lines.push(`  title "${payload.title}"`);
+  for (const itemId of payload.items ?? []) lines.push(`  item ${itemId}`);
   lines.push("}");
   return lines.join("\n");
 }
@@ -564,6 +830,7 @@ function serializeOperatorOverlay(payload) {
   const lines = [`operator_overlay ${payload.id} {`];
   lines.push(`  kind ${payload.kind ?? "doc_view"}`);
   if (payload.title) lines.push(`  title "${payload.title}"`);
+  if (payload.menu) lines.push(`  menu ${payload.menu}`);
   if (payload.width !== undefined && payload.width !== null) lines.push(`  width ${payload.width}`);
   if (payload.height !== undefined && payload.height !== null) lines.push(`  height ${payload.height}`);
   if (payload.resizable !== undefined && payload.resizable !== null) lines.push(`  resizable ${payload.resizable ? "true" : "false"}`);
@@ -620,6 +887,90 @@ function serializeOperatorViewport(payload) {
   return lines.join("\n");
 }
 
+function serializeLayoutSplitRows(root, prefix) {
+  const rows = [];
+  function visit(node, path = []) {
+    if (!node || typeof node !== "object") return null;
+    if (node.kind === "panel") return node.panelId ?? null;
+    const splitId = `${prefix}${path.length ? `.${path.join(".")}` : ""}`;
+    const first = visit(node.first, [...path, "first"]);
+    const second = visit(node.second, [...path, "second"]);
+    rows.push({
+      id: splitId,
+      axis: node.axis ?? "vertical",
+      weight: Number(node.weight ?? 50) || 50,
+      first,
+      second
+    });
+    return splitId;
+  }
+  const rootId = visit(root, ["root"]);
+  return {
+    rootId,
+    rows
+  };
+}
+
+function serializeOperatorLayout(payload) {
+  const lines = [`operator_layout ${payload.id} {`];
+  if (payload.title) lines.push(`  title "${payload.title}"`);
+  if (payload.viewportId) lines.push(`  viewport ${payload.viewportId}`);
+  if (payload.focusedPanelId) lines.push(`  focused_panel ${payload.focusedPanelId}`);
+  if (payload.savedAt) lines.push(`  saved_at "${payload.savedAt}"`);
+  const splitRows = serializeLayoutSplitRows(payload.root, payload.id);
+  if (splitRows.rootId) lines.push(`  root ${splitRows.rootId}`);
+  for (const split of splitRows.rows) {
+    lines.push(`  split ${split.id} ${split.axis} ${split.weight} ${split.first} ${split.second}`);
+  }
+  const orderedPanelIds = [...new Set([
+    ...collectLayoutPanelIdsForSerialization(payload.root),
+    ...Object.keys(payload.panels ?? {}).sort((left, right) => left.localeCompare(right))
+  ])];
+  for (const panelId of orderedPanelIds) {
+    const panel = payload.panels?.[panelId] ?? null;
+    if (!panel) continue;
+    const targetId = panel.contentKind === "left-screen" ? panel.leftScreenId : panel.screenId;
+    if (!targetId) continue;
+    const title = panel.title ? ` "${panel.title}"` : "";
+    lines.push(`  panel ${panel.id} ${panel.contentKind} ${targetId}${title}`);
+  }
+  lines.push("}");
+  return lines.join("\n");
+}
+
+function collectLayoutPanelIdsForSerialization(root, rows = []) {
+  if (!root || typeof root !== "object") return rows;
+  if (root.kind === "panel" && root.panelId) {
+    rows.push(root.panelId);
+    return rows;
+  }
+  if (root.kind === "split") {
+    collectLayoutPanelIdsForSerialization(root.first, rows);
+    collectLayoutPanelIdsForSerialization(root.second, rows);
+  }
+  return rows;
+}
+
+function serializeOperatorKeymap(payload) {
+  const lines = [`operator_keymap ${payload.id} {`];
+  if (payload.title) lines.push(`  title "${payload.title}"`);
+  if (payload.savedAt) lines.push(`  saved_at "${payload.savedAt}"`);
+  for (const [trigger, binding] of Object.entries(payload.bindings ?? {}).sort(([left], [right]) => left.localeCompare(right))) {
+    if (!binding?.target) continue;
+    lines.push(`  binding ${trigger} ${binding.targetKind ?? "action"} ${binding.target}`);
+  }
+  for (const [panelId, actionId] of Object.entries(payload.panelPrimaryActions ?? {}).sort(([left], [right]) => left.localeCompare(right))) {
+    if (!actionId) continue;
+    lines.push(`  panel_primary ${panelId} ${actionId}`);
+  }
+  for (const [panelId, menuId] of Object.entries(payload.panelSecondaryMenus ?? {}).sort(([left], [right]) => left.localeCompare(right))) {
+    if (!menuId) continue;
+    lines.push(`  panel_secondary ${panelId} ${menuId}`);
+  }
+  lines.push("}");
+  return lines.join("\n");
+}
+
 function normalizeOperatorTheme(node, context) {
   const values = parseOperatorTheme(node.payload);
   return {
@@ -630,6 +981,44 @@ function normalizeOperatorTheme(node, context) {
         title: values.title ?? values.id,
         mode: values.mode ?? "ansi16",
         palette: values.palette ?? "terminal-dark"
+      }, values.id, {
+        pluginId: "plugin.operator-workbench"
+      })
+    ]
+  };
+}
+
+function normalizeOperatorAction(node, context) {
+  const values = parseOperatorAction(node.payload);
+  return {
+    nodes: [],
+    runtimeResiduals: [
+      context.createRuntimeDeclarationResidual("operator_action", {
+        id: values.id,
+        title: values.title ?? values.id,
+        kind: values.kind ?? null,
+        builtin: values.builtin ?? null,
+        overlay: values.overlay ?? null,
+        screen: values.screen ?? null,
+        pane: values.pane ?? null,
+        message: values.message ?? null,
+        steps: Array.isArray(values.steps) ? values.steps : []
+      }, values.id, {
+        pluginId: "plugin.operator-workbench"
+      })
+    ]
+  };
+}
+
+function normalizeOperatorMenu(node, context) {
+  const values = parseOperatorMenu(node.payload);
+  return {
+    nodes: [],
+    runtimeResiduals: [
+      context.createRuntimeDeclarationResidual("operator_menu", {
+        id: values.id,
+        title: values.title ?? values.id,
+        items: Array.isArray(values.items) ? values.items : []
       }, values.id, {
         pluginId: "plugin.operator-workbench"
       })
@@ -650,7 +1039,7 @@ function normalizeOperatorDataset(node, context) {
         rowFilterAction: values.rowFilterAction ?? null,
         columns: Array.isArray(values.columns) ? values.columns : [],
         emptyMessage: values.emptyMessage ?? null,
-        primaryAction: normalizePrimaryAction(values.primaryAction)
+        primaryAction: normalizePrimaryAction(values.primaryAction) ?? values.primaryAction ?? null
       }, values.id, {
         pluginId: "plugin.operator-workbench"
       })
@@ -744,6 +1133,7 @@ function normalizeOperatorOverlay(node, context) {
         id: values.id,
         title: values.title ?? values.id,
         kind: values.kind ?? "doc_view",
+        menu: values.menu ?? null,
         width: values.width ?? null,
         height: values.height ?? null,
         resizable: values.resizable ?? null,
@@ -832,13 +1222,114 @@ function normalizeOperatorViewport(node, context) {
   };
 }
 
-export const operatorWorkbenchRvmForms = Object.freeze([
+function materializeOperatorLayoutRoot(payload, formId) {
+  const panelIds = new Set((payload.panels ?? []).map(panel => panel.id));
+  const splitMap = new Map((payload.splits ?? []).map(split => [split.id, split]));
+  function visit(nodeId, stack = new Set()) {
+    if (panelIds.has(nodeId)) return { kind: "panel", panelId: nodeId };
+    const split = splitMap.get(nodeId);
+    if (!split) {
+      throw new Error(`operator_layout ${formId} root reference not found: ${nodeId}`);
+    }
+    if (stack.has(nodeId)) {
+      throw new Error(`operator_layout ${formId} split cycle detected: ${nodeId}`);
+    }
+    const nextStack = new Set(stack);
+    nextStack.add(nodeId);
+    return {
+      kind: "split",
+      axis: split.axis ?? "vertical",
+      weight: split.weight ?? 50,
+      first: visit(split.first, nextStack),
+      second: visit(split.second, nextStack)
+    };
+  }
+  return visit(payload.root);
+}
+
+function normalizeOperatorLayout(node, context) {
+  const values = parseOperatorLayout(node.payload);
+  const root = materializeOperatorLayoutRoot(values, values.id);
+  const panels = Object.fromEntries(
+    (values.panels ?? []).map(panel => [
+      panel.id,
+      {
+        id: panel.id,
+        title: panel.title ?? panel.id,
+        contentKind: panel.contentKind,
+        screenId: panel.contentKind === "screen" ? panel.targetId : null,
+        leftScreenId: panel.contentKind === "left-screen" ? panel.targetId : null,
+        primaryActionId: null,
+        secondaryMenuId: null
+      }
+    ])
+  );
+  return {
+    nodes: [],
+    runtimeResiduals: [
+      context.createRuntimeDeclarationResidual("operator_layout", {
+        id: values.id,
+        title: values.title ?? values.id,
+        viewport: values.viewport ?? null,
+        focusedPanel: values.focusedPanel ?? null,
+        savedAt: values.savedAt ?? null,
+        root,
+        panels
+      }, values.id, { pluginId: "plugin.operator-workbench" })
+    ]
+  };
+}
+
+function normalizeOperatorKeymap(node, context) {
+  const values = parseOperatorKeymap(node.payload);
+  return {
+    nodes: [],
+    runtimeResiduals: [
+      context.createRuntimeDeclarationResidual("operator_keymap", {
+        id: values.id,
+        title: values.title ?? values.id,
+        savedAt: values.savedAt ?? null,
+        bindings: Object.fromEntries(
+          (values.bindings ?? []).map(binding => [
+            binding.trigger,
+            {
+              target: binding.target,
+              targetKind: binding.targetKind ?? "action"
+            }
+          ])
+        ),
+        panelPrimaryActions: Object.fromEntries(
+          (values.panelPrimaryActions ?? []).map(row => [row.panelId, row.targetId])
+        ),
+        panelSecondaryMenus: Object.fromEntries(
+          (values.panelSecondaryMenus ?? []).map(row => [row.panelId, row.targetId])
+        )
+      }, values.id, { pluginId: "plugin.operator-workbench" })
+    ]
+  };
+}
+
+const legacyOperatorWorkbenchRvmForms = Object.freeze([
   Object.freeze({
     kind: "operator_theme",
     parse: parseOperatorTheme,
     serialize: serializeOperatorTheme,
     validate: validateOperatorTheme,
     normalize: normalizeOperatorTheme
+  }),
+  Object.freeze({
+    kind: "operator_action",
+    parse: parseOperatorAction,
+    serialize: serializeOperatorAction,
+    validate: validateOperatorAction,
+    normalize: normalizeOperatorAction
+  }),
+  Object.freeze({
+    kind: "operator_menu",
+    parse: parseOperatorMenu,
+    serialize: serializeOperatorMenu,
+    validate: validateOperatorMenu,
+    normalize: normalizeOperatorMenu
   }),
   Object.freeze({
     kind: "operator_dataset",
@@ -890,10 +1381,33 @@ export const operatorWorkbenchRvmForms = Object.freeze([
     normalize: normalizeOperatorViewport
   }),
   Object.freeze({
+    kind: "operator_layout",
+    parse: parseOperatorLayout,
+    serialize: serializeOperatorLayout,
+    validate: validateOperatorLayout,
+    normalize: normalizeOperatorLayout
+  }),
+  Object.freeze({
+    kind: "operator_keymap",
+    parse: parseOperatorKeymap,
+    serialize: serializeOperatorKeymap,
+    validate: validateOperatorKeymap,
+    normalize: normalizeOperatorKeymap
+  }),
+  Object.freeze({
     kind: "operator_setup",
     parse: parseOperatorSetup,
     serialize: serializeOperatorSetup,
     validate: validateOperatorSetup,
     normalize: normalizeOperatorSetup
   })
+]);
+
+export const operatorWorkbenchRvmForms = Object.freeze([
+  ...new Map(
+    [
+      ...legacyOperatorWorkbenchRvmForms,
+      ...canonicalOperatorWorkbenchRvmForms
+    ].map(form => [form.kind, form])
+  ).values()
 ]);

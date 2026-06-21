@@ -142,13 +142,6 @@ function appStep(id, chapterId, title, body, target, payload, completeWhen, next
   );
 }
 
-function worldStep(id, chapterId, title, body, target, payload, completeWhen, nextLabel = "Next", scope = null) {
-  return withStepSurfaceContext(
-    withStepScope({ id, chapterId, page: "world", title, body, target, payload, completeWhen, nextLabel }, scope || worldScope("World surface")),
-    "frontend"
-  );
-}
-
 export function todoTutorialDefinition() {
   const blueprint = todoStarterBlueprint();
   const homeRoute = blueprint.routes.find(route => route.id === "home_page_route") || blueprint.routes[0] || null;
@@ -164,8 +157,7 @@ export function todoTutorialDefinition() {
     tutorialConcept("native-page-surface", "Native Page Surface", "Canonical app hosting now lands directly on page.surface nouns instead of widget plus frontendProgram bridges."),
     tutorialConcept("native-process-graph", "Native Process Graph", "Interactive behavior now runs through authored process, message, boundary, and policy semantics."),
     tutorialConcept("app-boundary", "App Boundary", "Crossing into the live route means using the exact app you assembled through bootstrap."),
-    tutorialConcept("native-collection", "Native Collection", "Repeated list content now comes from authored collection and surface repeat semantics."),
-    tutorialConcept("operating-surface", "Operating Surface", "The world page is a real surface for inspecting authored objects, witnessed execution, and hidden modes without leaving the product.")
+    tutorialConcept("native-collection", "Native Collection", "Repeated list content now comes from authored collection and surface repeat semantics.")
   ];
   const bootstrapOperatorScopes = guidanceScopeAnchorsFromBootstrapSections([
     { sectionId: "context-form", label: "Context form", target: "context-form" },
@@ -185,8 +177,7 @@ export function todoTutorialDefinition() {
     ...bootstrapOperatorScopes,
     scopeAnchor(bootstrapStarterScope, "create-todo-starter"),
     ...guidanceScopeAnchorsFromSurfaces("app", blueprint.surfaces),
-    ...guidanceScopeAnchorsFromWidgets("app", blueprint.widgets),
-    ...guidanceScopeAnchorsFromWidgets("world", blueprint.operatingWidgets)
+    ...guidanceScopeAnchorsFromWidgets("app", blueprint.widgets)
   ];
   const steps = [
     tutorialStepWithConcepts(bootstrapStep(
@@ -285,26 +276,15 @@ export function todoTutorialDefinition() {
       "todo-list-panel",
       null,
       { kind: "manualAdvance" },
-      "Next",
-      sectionScope("app", "native_todo_list_panel", "Todo list")
-    ), ["native-collection"]),
-    tutorialStepWithConcepts(worldStep(
-      "world:inspect",
-      "inspect-world",
-      "Inspect the operating surface",
-      "Open `/world` and inspect the native authored app state plus the remaining inspect-only substrate. Click Finish when you are ready to keep exploring on your own.",
-      "world-command-toggle",
-      null,
-      { kind: "manualAdvance" },
       "Finish",
-      widgetScope("world", "world-command-toggle", "World command entry")
-    ), ["app-boundary", "native-process-graph", "native-collection", "operating-surface"])
+      sectionScope("app", "native_todo_list_panel", "Todo list")
+    ), ["native-collection"])
   ];
   return {
     id: TODO_TUTORIAL_ID,
     title: "Build The Todo App From Scratch",
     bootstrapCardBadge: "Guided Tutorial",
-    summary: "This tutorial uses the real bootstrap seam and the real runtime. It teaches identity, runtime wiring, native page.surface authoring through the maintained starter control, and then continues into the live app plus /world to inspect the authored result.",
+    summary: "This tutorial uses the real bootstrap seam and the real runtime. It teaches identity, runtime wiring, native page.surface authoring through the maintained starter control, and then continues into the live app to inspect the authored result.",
     concepts,
     scopes,
     steps

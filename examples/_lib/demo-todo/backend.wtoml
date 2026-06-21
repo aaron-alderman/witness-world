@@ -94,6 +94,12 @@ label = "Todo World Graph Read"
 [[backendProgram]]
 actor = "aaron"
 context = "backend"
+soul = "todo.worldSystem.read"
+label = "Todo World System Read"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
 soul = "todo.processView.read"
 label = "Todo Process View Read"
 
@@ -177,6 +183,13 @@ actor = "aaron"
 context = "backend"
 soul = "todo.worldGraph.read"
 version = "todo.worldGraph.read.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.worldSystem.read"
+version = "todo.worldSystem.read.v1"
 index = 0
 
 [[backendProgramVersion]]
@@ -1126,6 +1139,22 @@ params = { from = "worldGraphResponse" }
 
 [[backendStep]]
 actor = "aaron"
+version = "todo.worldSystem.read.v1"
+event = "request"
+op = "project.read"
+order = 0
+params = { projector = "inspect.worldSystemReadModel", into = "worldSystemResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.worldSystem.read.v1"
+event = "request"
+op = "response.json"
+order = 1
+params = { from = "worldSystemResponse" }
+
+[[backendStep]]
+actor = "aaron"
 version = "todo.processView.read.v1"
 event = "request"
 op = "project.read"
@@ -1392,6 +1421,11 @@ version = "todo.worldGraph.read.v1"
 
 [[activateBackendProgramVersion]]
 actor = "aaron"
+soul = "todo.worldSystem.read"
+version = "todo.worldSystem.read.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
 soul = "todo.processView.read"
 version = "todo.processView.read.v1"
 
@@ -1416,29 +1450,6 @@ params = { rootWidget = "todo_app_widget", frontendProgram = "todo_frontend_prog
 [[serve]]
 serverRunner = "demo_server"
 route = "home_page_route"
-
-[[route]]
-id = "world_page_route"
-method = "GET"
-path = "/world"
-serves = "worldGraphView"
-handler = "page.world"
-params = { rootWidget = "world_graph_page", frontendProgram = "world_graph_program", page = "world" }
-
-[[serve]]
-serverRunner = "demo_server"
-route = "world_page_route"
-
-[[route]]
-id = "process_page_route"
-method = "GET"
-path = "/process"
-serves = "processView"
-handler = "page.process"
-
-[[serve]]
-serverRunner = "demo_server"
-route = "process_page_route"
 
 [[route]]
 id = "canvas_page_route"
@@ -1635,6 +1646,19 @@ backendProgramSoul = "todo.worldGraph.read"
 [[serve]]
 serverRunner = "demo_server"
 route = "world_graph_read_route"
+
+[[route]]
+id = "world_system_read_route"
+method = "GET"
+path = "/api/world-system"
+serves = "worldSystem"
+context = "backend"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.worldSystem.read"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "world_system_read_route"
 
 [[route]]
 id = "process_view_read_route"

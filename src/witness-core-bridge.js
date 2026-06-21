@@ -1,17 +1,17 @@
 import { createHash } from "node:crypto";
 import { createWitnessCoreIpcTransport, normalizeWitnessCoreTransportPipe } from "./witness-core-ipc-transport.js";
-import { createWitnessCoreHttpTransport } from "./witness-core-http-transport.js";
 import {
   WITNESS_CORE_TRANSPORT_METHODS,
   WITNESS_CORE_TRANSPORT_SUBSCRIPTIONS,
   createWitnessCoreTransportCall,
   createWitnessCoreTransportSubscribe
 } from "./witness-core-transport-contract.js";
-
-export {
+import {
   createWitnessCoreRequestError,
   normalizeWitnessCoreUrl
-} from "./witness-core-http-transport.js";
+} from "./witness-core-transport-utils.js";
+
+export { createWitnessCoreRequestError, normalizeWitnessCoreUrl } from "./witness-core-transport-utils.js";
 export { normalizeWitnessCoreTransportPipe } from "./witness-core-ipc-transport.js";
 
 export function latestWitnessCoreGeneration(status = null) {
@@ -73,7 +73,8 @@ function createTransport({
   pipePath = null,
   fetchImpl = null,
   logger = null,
-  transport = null
+  transport = null,
+  requirePipe = false
 } = {}) {
   if (transport) return transport;
   const normalizedPipePath = normalizeWitnessCoreTransportPipe(
@@ -88,11 +89,8 @@ function createTransport({
     });
     if (ipcTransport) return ipcTransport;
   }
-  return createWitnessCoreHttpTransport({
-    coreUrl,
-    fetchImpl: fetchImpl ?? globalThis.fetch,
-    logger
-  });
+  if (requirePipe === true) return null;
+  return null;
 }
 
 function createCallInvoker(transport) {
@@ -128,14 +126,16 @@ export function createWitnessCoreBridge({
   pipePath = null,
   fetchImpl = null,
   logger = null,
-  transport = null
+  transport = null,
+  requirePipe = false
 } = {}) {
   const effectiveTransport = createTransport({
     coreUrl,
     pipePath,
     fetchImpl,
     logger,
-    transport
+    transport,
+    requirePipe
   });
   if (!effectiveTransport) return null;
   const call = createCallInvoker(effectiveTransport);
@@ -586,14 +586,16 @@ export function createWitnessCoreStatusStore({
   fetchImpl = null,
   pollMs = 2500,
   logger = null,
-  transport = null
+  transport = null,
+  requirePipe = false
 } = {}) {
   const effectiveTransport = createTransport({
     coreUrl,
     pipePath,
     fetchImpl,
     logger,
-    transport
+    transport,
+    requirePipe
   });
   if (!effectiveTransport) return null;
   const call = createCallInvoker(effectiveTransport);

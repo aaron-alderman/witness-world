@@ -12,7 +12,7 @@ children = ["process_page_header", "process_page_status", "process_page_shell"]
 [[box]]
 id = "process_page_header"
 class = "surface-header-bar surface-toolbar"
-children = ["process_page_title", "process_page_back_link", "process_page_world_link"]
+children = ["process_page_title", "process_page_back_link"]
 
 [[heading]]
 id = "process_page_title"
@@ -23,12 +23,6 @@ level = 1
 id = "process_page_back_link"
 href = "/"
 text = "Back to Todo"
-class = "surface-link-chip"
-
-[[link]]
-id = "process_page_world_link"
-href = "/world"
-text = "World Graph"
 class = "surface-link-chip"
 
 [[text]]

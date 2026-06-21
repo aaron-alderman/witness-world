@@ -55,8 +55,8 @@ export async function continueBootstrapGuidanceOnPage({
   if (page === "app") {
     return openAppHome({ advance: false });
   }
-  if (page === "bootstrap" || page === "world") {
-    const target = new URL(page === "bootstrap" ? "/_bootstrap" : "/world", currentHref);
+  if (page === "bootstrap") {
+    const target = new URL("/_bootstrap", currentHref);
     if (currentPathname === target.pathname) {
       reload();
       return { continued: true, mode: "reload", target: target.toString() };

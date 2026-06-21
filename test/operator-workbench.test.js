@@ -6,16 +6,28 @@ import {
   buildOperatorTuiState,
   createOperatorTuiEngine,
   loadOperatorTuiRuntimeContext
-} from "../src/operator-tui.js";
-import { createOperatorWorkbenchController } from "../src/operator-workbench/core.js";
-import { renderOperatorWorkbenchPage } from "../src/operator-workbench/page.js";
-import { buildOperatorWorkbenchDefinition } from "../src/operator-screen-specs.js";
+} from "../plugins/operator-workbench/tui-engine.js";
+import { createOperatorWorkbenchController } from "../plugins/operator-workbench/workbench/core.js";
+import { renderOperatorWorkbenchPage } from "../plugins/operator-workbench/workbench/page.js";
+import { buildOperatorWorkbenchDefinition } from "../plugins/operator-workbench/operator-screen-specs.js";
 import {
   renderOperatorWorkbenchState,
   startOperatorWorkbenchRuntime
-} from "../src/operator-workbench/runtime.js";
+} from "../plugins/operator-workbench/workbench/runtime.js";
 
 const exampleRoot = path.resolve("examples", "operator");
+
+function createExtensionModels(models = {}) {
+  const byId = new Map(Object.entries(models));
+  return {
+    byId,
+    values: Object.fromEntries(byId.entries())
+  };
+}
+
+function operatorWorkbenchModel(appProject) {
+  return appProject?.extensionModels?.byId?.get("operatorWorkbench") ?? null;
+}
 
 function makeState() {
   const worldRecords = [
@@ -149,7 +161,11 @@ function withAuthoredScreen(state, {
   sections = [],
   leftScreens = [],
   defaultLeftScreenId = null,
-  leftScreenId = null
+  leftScreenId = null,
+  actions = [],
+  menus = [],
+  overlays = [],
+  viewports = []
 } = {}) {
   const sectionRows = sections.map(section => ({
     name: section.id,
@@ -188,36 +204,97 @@ function withAuthoredScreen(state, {
       }
     }
   }));
+  const actionRows = actions.map(action => ({
+    name: action.id,
+    body: {
+      declarationKind: "operator_action",
+      values: {
+        id: action.id,
+        title: action.title ?? action.id,
+        kind: action.kind ?? "builtin",
+        builtin: action.builtin ?? null,
+        overlay: action.overlay ?? null,
+        screen: action.screen ?? null,
+        pane: action.pane ?? null,
+        message: action.message ?? null,
+        steps: action.steps ?? []
+      }
+    }
+  }));
+  const menuRows = menus.map(menu => ({
+    name: menu.id,
+    body: {
+      declarationKind: "operator_menu",
+      values: {
+        id: menu.id,
+        title: menu.title ?? menu.id,
+        items: menu.items ?? []
+      }
+    }
+  }));
+  const overlayRows = overlays.map(overlay => ({
+    name: overlay.id,
+    body: {
+      declarationKind: "operator_overlay",
+      values: {
+        id: overlay.id,
+        title: overlay.title ?? overlay.id,
+        kind: overlay.kind ?? "doc_view",
+        menu: overlay.menu ?? null,
+        width: overlay.width ?? null,
+        height: overlay.height ?? null,
+        resizable: overlay.resizable ?? null,
+        closeIdsOnOpen: overlay.closeIdsOnOpen ?? [],
+        scroll: overlay.scroll ?? []
+      }
+    }
+  }));
+  const viewportRows = viewports.map(viewport => ({
+    name: viewport.id,
+    body: {
+      declarationKind: "operator_viewport",
+      values: {
+        id: viewport.id,
+        title: viewport.title ?? viewport.id,
+        theme: viewport.theme ?? null,
+        screen: viewport.screen ?? screenId,
+        leftScreen: viewport.leftScreen ?? leftScreenId,
+        overlays: viewport.overlays ?? [],
+        bindings: viewport.bindings ?? []
+      }
+    }
+  }));
   state.runtimeContext.appProject = {
     authoredDesireDocs: [],
-    operatorWorkbench: buildOperatorWorkbenchDefinition({
-      authoredDesireDocs: [{
-        runtimeResiduals: [
-          {
-            name: datasetId,
-            body: {
-              declarationKind: "operator_dataset",
-              values: {
-                id: datasetId,
-                title: "Trace Dataset",
-                provider,
-                columns,
-                primaryAction,
-                rowFilterKind,
-                rowFilterAction
+    extensionModels: createExtensionModels({
+      operatorWorkbench: buildOperatorWorkbenchDefinition({
+        authoredDesireDocs: [{
+          runtimeResiduals: [
+            {
+              name: datasetId,
+              body: {
+                declarationKind: "operator_dataset",
+                values: {
+                  id: datasetId,
+                  title: "Trace Dataset",
+                  provider,
+                  columns,
+                  primaryAction,
+                  rowFilterKind,
+                  rowFilterAction
+                }
               }
-            }
-          },
-          {
-            name: screenId,
-            body: {
-              declarationKind: "operator_screen",
-              values: {
-                id: screenId,
-                title: "Trace",
-                subtitle: "Authored trace screen",
-                pane: "right",
-                shape,
+            },
+            {
+              name: screenId,
+              body: {
+                declarationKind: "operator_screen",
+                values: {
+                  id: screenId,
+                  title: "Trace",
+                  subtitle: "Authored trace screen",
+                  pane: "right",
+                  shape,
                 dataset: datasetId,
                 shortcut,
                 leftScreen: leftScreenId,
@@ -226,6 +303,10 @@ function withAuthoredScreen(state, {
               }
             }
           },
+          ...actionRows,
+          ...menuRows,
+          ...overlayRows,
+          ...viewportRows,
           ...leftScreenRows,
           ...sectionRows,
           {
@@ -236,12 +317,14 @@ function withAuthoredScreen(state, {
                 screens: [screenId, "references", "source", "provenance"],
                 shortcuts: [{ shortcut, screenId }],
                 defaultScreen: screenId,
-                defaultLeftScreen: defaultLeftScreenId
+                defaultLeftScreen: defaultLeftScreenId,
+                defaultViewport: viewports[0]?.id ?? null
+                }
               }
             }
-          }
-        ]
-      }]
+          ]
+        }]
+      })
     })
   };
   return state;
@@ -401,6 +484,154 @@ test("authored operator setup can reference the built-in default viewport explic
   assert.equal(definition.viewportsById.has("builtin.default"), true);
 });
 
+test("authored operator actions, menus, and overlay menu bindings normalize through the shared definition", () => {
+  const definition = buildOperatorWorkbenchDefinition({
+    authoredDesireDocs: [{
+      runtimeResiduals: [
+        {
+          name: "rename_selection",
+          body: {
+            declarationKind: "operator_action",
+            values: {
+              id: "rename_selection",
+              title: "Rename",
+              kind: "builtin",
+              builtin: "rename"
+            }
+          }
+        },
+        {
+          name: "open_refs",
+          body: {
+            declarationKind: "operator_action",
+            values: {
+              id: "open_refs",
+              title: "References",
+              kind: "builtin",
+              builtin: "set-right-screen",
+              screen: "references",
+              pane: "right"
+            }
+          }
+        },
+        {
+          name: "selection_menu",
+          body: {
+            declarationKind: "operator_menu",
+            values: {
+              id: "selection_menu",
+              title: "Selection",
+              items: ["rename_selection", "open_refs"]
+            }
+          }
+        },
+        {
+          name: "context_menu",
+          body: {
+            declarationKind: "operator_overlay",
+            values: {
+              id: "context_menu",
+              title: "Context",
+              kind: "menu",
+              menu: "selection_menu",
+              width: 24,
+              height: 8
+            }
+          }
+        },
+        {
+          name: "trace.dataset",
+          body: {
+            declarationKind: "operator_dataset",
+            values: {
+              id: "trace.dataset",
+              provider: "provenance",
+              primaryAction: "rename_selection"
+            }
+          }
+        },
+        {
+          name: "trace",
+          body: {
+            declarationKind: "operator_screen",
+            values: {
+              id: "trace",
+              title: "Trace",
+              pane: "right",
+              shape: "list-detail",
+              dataset: "trace.dataset"
+            }
+          }
+        },
+        {
+          name: "trace.viewport",
+          body: {
+            declarationKind: "operator_viewport",
+            values: {
+              id: "trace.viewport",
+              screen: "trace",
+              overlays: ["context_menu"],
+              bindings: [{ trigger: "F2", verb: "action", target: "open_refs" }]
+            }
+          }
+        },
+        {
+          name: "shell",
+          body: {
+            declarationKind: "operator_setup",
+            values: {
+              screens: ["trace"],
+              defaultScreen: "trace",
+              defaultViewport: "trace.viewport"
+            }
+          }
+        }
+      ]
+    }]
+  });
+
+  assert.equal(definition.actionsById.get("rename_selection")?.builtin, "rename");
+  assert.equal(definition.menusById.get("selection_menu")?.itemActionIds.length, 2);
+  assert.equal(definition.overlaysById.get("context_menu")?.menuId, "selection_menu");
+  assert.equal(definition.datasetsById.get("trace.dataset")?.primaryAction, "rename_selection");
+  assert.deepEqual(definition.viewportsById.get("trace.viewport")?.bindings, [{ trigger: "F2", verb: "action", target: "open_refs" }]);
+});
+
+test("workbench controller executes authored builtin actions and renders authored context menu items", async () => {
+  const state = withAuthoredScreen(makeState(), {
+    actions: [
+      { id: "open_refs", title: "References", kind: "builtin", builtin: "set-right-screen", screen: "references", pane: "right" },
+      { id: "rename_selection", title: "Rename", kind: "builtin", builtin: "rename" }
+    ],
+    menus: [
+      { id: "selection_menu", title: "Selection", items: ["rename_selection", "open_refs"] }
+    ],
+    overlays: [
+      { id: "context_menu", kind: "menu", title: "Context", menu: "selection_menu", width: 24, height: 8, closeIdsOnOpen: ["help_overlay"] }
+    ],
+    viewports: [
+      {
+        id: "trace.viewport",
+        title: "Trace Viewport",
+        screen: "trace",
+        overlays: ["help_overlay", "context_menu"],
+        bindings: [{ trigger: "F2", verb: "action", target: "open_refs" }]
+      }
+    ]
+  });
+  const engine = createOperatorTuiEngine(state);
+  const controller = createOperatorWorkbenchController({ state, engine });
+
+  let next = await controller.dispatchIntent({ type: "open-overlay", overlayId: "context_menu" });
+  assert.deepEqual(next.snapshot.contextMenu.items.map(item => item.label), ["Rename", "References"]);
+
+  next = await controller.dispatchIntent({ type: "activate-context-menu-item", index: 1 });
+  assert.equal(next.snapshot.rightPane.activeScreenId, "references");
+
+  next = await controller.dispatchIntent({ type: "run-action", actionId: "rename_selection", context: { subject: "Alpha" } });
+  assert.equal(next.result.output, "rename requested: Alpha");
+});
+
 test("workbench controller exposes root tree and primary navigation action", async () => {
   const state = makeState();
   const engine = createOperatorTuiEngine(state);
@@ -408,15 +639,15 @@ test("workbench controller exposes root tree and primary navigation action", asy
 
   const initial = await controller.snapshot();
   assert.equal(initial.leftPane.mode, "tree");
-  assert.deepEqual(initial.leftPane.rows.map(row => row.label), ["Session", "World", "Platform"]);
+  assert.deepEqual(initial.leftPane.rows.map(row => row.label), ["Workbench", "Things", "Types", "Relationships", "Commands", "Witnesses"]);
   assert.equal(initial.leftPane.activeRowIndex, 0);
   assert.equal(initial.leftPane.activeRow?.primaryAction?.command, "open 1");
   assert.equal(initial.leftPane.rows[1].primaryAction?.command, "open 2");
 
   await controller.dispatchIntent({ type: "set-left-cursor", index: 1 });
   const activated = await controller.dispatchIntent({ type: "activate-primary" });
-  assert.equal(activated.snapshot.path, "World");
-  assert.equal(activated.snapshot.leftPane.rows.some(row => row.label === "Things"), true);
+  assert.equal(activated.snapshot.path, "Things");
+  assert.equal(activated.snapshot.leftPane.rows.some(row => row.label === "Contexts"), true);
 });
 
 test("workbench controller inspects records as the primary left-pane action", async () => {
@@ -681,23 +912,23 @@ test("workbench controller routes context-menu state through the shared UI snaps
     context: {
       pane: "left",
       rowIndex: 1,
-      rowLabel: "World"
+      rowLabel: "Things"
     }
   });
   assert.equal(next.snapshot.ui.contextMenuOpen, true);
   assert.deepEqual(next.snapshot.ui.openOverlayIds, ["context_menu"]);
   assert.equal(next.snapshot.ui.contextMenuContext?.pane, "left");
-  assert.equal(next.snapshot.ui.contextMenuContext?.rowLabel, "World");
+  assert.equal(next.snapshot.ui.contextMenuContext?.rowLabel, "Things");
   assert.equal(next.snapshot.contextMenu?.items?.[0]?.label, "Edit");
   assert.equal(next.snapshot.contextMenu?.items?.[2]?.label, "Rename");
-  assert.equal(next.snapshot.contextMenu?.items?.[2]?.action?.hook, "rename");
-  assert.equal(next.snapshot.contextMenu?.subject, "World");
+  assert.equal(next.snapshot.contextMenu?.items?.[2]?.action?.actionId, "builtin.selection.rename");
+  assert.equal(next.snapshot.contextMenu?.subject, "Things");
 
   next = await controller.dispatchIntent({ type: "activate-context-menu-item", index: 2 });
   assert.equal(next.snapshot.ui.contextMenuOpen, false);
   assert.deepEqual(next.snapshot.ui.openOverlayIds, []);
   assert.equal(next.snapshot.ui.contextMenuContext, null);
-  assert.equal(next.snapshot.ui.lastOutput.includes("menu action requested: rename :: World"), true);
+  assert.equal(next.snapshot.ui.lastOutput.includes("rename requested: Things"), true);
 
   await controller.dispatchIntent({
     type: "open-context-menu",
@@ -762,7 +993,7 @@ test("workbench controller routes generic overlay ordering through the shared UI
 
   next = await controller.dispatchIntent({
     type: "open-context-menu",
-    context: { pane: "left", rowLabel: "Session" }
+    context: { pane: "left", rowLabel: "Workbench" }
   });
   assert.deepEqual(next.snapshot.ui.openOverlayIds, ["info_overlay", "context_menu"]);
   assert.equal(next.snapshot.ui.helpOpen, false);
@@ -787,7 +1018,7 @@ test("workbench controller routes context-menu cursor movement and activation th
     type: "open-context-menu",
     context: {
       pane: "left",
-      rowLabel: "World"
+      rowLabel: "Things"
     }
   });
   assert.equal(next.snapshot.contextMenu?.activeItemIndex, 0);
@@ -799,7 +1030,7 @@ test("workbench controller routes context-menu cursor movement and activation th
 
   next = await controller.dispatchIntent({ type: "activate-active-overlay" });
   assert.equal(next.snapshot.ui.contextMenuOpen, false);
-  assert.equal(next.snapshot.ui.lastOutput.includes("menu action requested: change-color :: World"), true);
+  assert.equal(next.snapshot.ui.lastOutput.includes("change-color requested: Things"), true);
 });
 
 test("workbench controller generic overlay open and toggle obey shared overlay close policy", async () => {
@@ -815,7 +1046,7 @@ test("workbench controller generic overlay open and toggle obey shared overlay c
     overlayId: "context_menu",
     context: {
       pane: "left",
-      rowLabel: "World"
+      rowLabel: "Things"
     }
   });
   assert.deepEqual(next.snapshot.ui.openOverlayIds, ["context_menu"]);
@@ -833,7 +1064,7 @@ test("workbench controller routes non-menu overlay horizontal scroll through sha
     appPath: exampleRoot,
     runtimePluginIds: ["plugin.operator-workbench"]
   });
-  runtimeContext.appProject.operatorWorkbench.overlaysById.get("help_overlay").width = 24;
+  operatorWorkbenchModel(runtimeContext.appProject).overlaysById.get("help_overlay").width = 24;
   const state = await buildOperatorTuiState(runtimeContext);
   const engine = createOperatorTuiEngine(state);
   const controller = createOperatorWorkbenchController({ state, engine });
@@ -910,20 +1141,19 @@ test("workbench controller exposes navigation chips and supports top-pane breadc
   const engine = createOperatorTuiEngine(state);
   const controller = createOperatorWorkbenchController({ state, engine });
 
-  await controller.executeCommand("open world");
   await controller.executeCommand("open things");
   await controller.executeCommand("search alpha");
 
   let next = await controller.snapshot();
-  assert.deepEqual(next.topPane.navigation.chips.map(chip => chip.type), ["root", "path", "path", "preview", "view", "mode"]);
+  assert.deepEqual(next.topPane.navigation.chips.map(chip => chip.type), ["root", "path", "preview", "view", "mode"]);
 
   await controller.dispatchIntent({ type: "set-focused-pane", pane: "top" });
   await controller.dispatchIntent({ type: "set-top-cursor", index: 1 });
   next = await controller.dispatchIntent({ type: "activate-primary" });
 
-  assert.equal(next.snapshot.leftPane.mode, "tree");
-  assert.equal(next.snapshot.path, "World");
-  assert.equal(next.snapshot.topPane.navigation.chips.some(chip => chip.type === "view"), false);
+  assert.equal(next.snapshot.leftPane.mode, "results");
+  assert.equal(next.snapshot.path, "Things");
+  assert.equal(next.snapshot.topPane.navigation.chips.some(chip => chip.type === "view"), true);
 });
 
 test("workbench controller cycles inspector modes and escapes back from the top pane", async () => {
@@ -2000,7 +2230,7 @@ test("renderOperatorWorkbenchState gives left-pane containers a distinct canvas 
         columns: [],
         cursor: 1,
         rows: [
-          { index: 1, type: "container", label: "World", summary: "Live modeled world graph", actionable: true },
+          { index: 1, type: "container", label: "Things", summary: "Addressable objects, runtimes, artifacts, and named object families.", actionable: true },
           { index: 2, type: "record", label: "Alpha", summary: "backend/runtime", actionable: true }
         ]
       },
@@ -2029,9 +2259,9 @@ test("renderOperatorWorkbenchState gives left-pane containers a distinct canvas 
 
   const state = documentTarget.__operatorCanvasState;
   const rows = state.buffer.map(row => row.map(cell => cell.ch).join(""));
-  const worldRowIndex = rows.findIndex(line => line.includes("World"));
+  const worldRowIndex = rows.findIndex(line => line.includes("Things"));
   const alphaRowIndex = rows.findIndex(line => line.includes("Alpha"));
-  const worldColumnIndex = rows[worldRowIndex].indexOf("World");
+  const worldColumnIndex = rows[worldRowIndex].indexOf("Things");
   const alphaColumnIndex = rows[alphaRowIndex].indexOf("Alpha");
 
   assert.equal(state.buffer[worldRowIndex][worldColumnIndex].fg, "#8fd8c5");
@@ -2325,7 +2555,7 @@ test("startOperatorWorkbenchRuntime routes top-pane navigation keys through the 
   const { documentTarget } = makeFakeDocument();
   const calls = [];
   const snapshot = {
-    path: "World/Things",
+    path: "Things/Contexts",
     focus: { active: false, kind: null, id: null },
     preview: { available: true, status: "active" },
     topPane: {
@@ -2335,7 +2565,7 @@ test("startOperatorWorkbenchRuntime routes top-pane navigation keys through the 
         selectedIndex: 0,
         chips: [
           { type: "root", label: "root", tone: "default", active: true, helpText: "Return to root." },
-          { type: "path", label: "World", tone: "default", active: false, helpText: "Jump to World." },
+          { type: "path", label: "Things", tone: "default", active: false, helpText: "Jump to Things." },
           { type: "mode", label: "Inspect", tone: "default", active: true, helpText: "Cycle the mode." }
         ]
       }
@@ -2343,7 +2573,7 @@ test("startOperatorWorkbenchRuntime routes top-pane navigation keys through the 
     leftPane: {
       mode: "tree",
       title: "Tree",
-      header: "World/Things",
+      header: "Things/Contexts",
       columns: [],
       cursor: 0,
       rows: []
@@ -2650,6 +2880,74 @@ test("startOperatorWorkbenchRuntime maps authored F5 shortcuts to custom screens
   assert.deepEqual(calls.map(call => `${call.type}:${call.mode ?? call.pane ?? ""}:${call.screenId ?? ""}`), [
     "set-focused-pane:right:",
     "set-right-screen-mode:custom-screen:trace"
+  ]);
+});
+
+test("startOperatorWorkbenchRuntime routes viewport action bindings through the shared bridge", async () => {
+  const { documentTarget } = makeFakeDocument();
+  const calls = [];
+  const snapshot = {
+    path: "root",
+    focus: { active: false, kind: null, id: null },
+    preview: { available: true, status: "active" },
+    viewport: {
+      bindings: [
+        { trigger: "Alt-R", verb: "action", target: "rename_selection" }
+      ]
+    },
+    topPane: { title: "Operator Workbench", subtitle: "global", navigation: { selectedIndex: 0, chips: [] } },
+    leftPane: { mode: "tree", title: "Tree", header: "root", columns: [], cursor: 0, rows: [] },
+    rightPane: {
+      title: "Trace",
+      activeScreenId: "inspect",
+      screen: { title: "Trace", activeSectionIndex: 0, sections: [], rows: [], activeRowIndex: 0, detailLines: [] },
+      tabs: { inspect: true, references: true, source: true, provenance: true },
+      target: { kind: "record", id: "thing.alpha", mode: "record" }
+    },
+    ui: {
+      focusedPane: "left",
+      inspectorTab: "inspect",
+      rightScreenMode: "custom-screen",
+      helpOpen: false,
+      numberBuffer: "",
+      lastOutput: "Ready.",
+      lastStatus: "info",
+      displaySettings: {
+        fontSize: 14,
+        paneSplit: 0.42,
+        viewportTop: 3,
+        viewportBottom: 4,
+        rowDensity: "comfortable",
+        colorMode: "auto",
+        pageSize: 25
+      }
+    }
+  };
+  const windowTarget = {
+    listeners: new Map(),
+    witnessOperatorWorkbench: {
+      async getSnapshot() { return snapshot; },
+      async getAutocomplete() { return { preview: "", matches: [] }; },
+      async runCommand() { return { snapshot }; },
+      async dispatchIntent(intent) {
+        calls.push(intent);
+        return { snapshot };
+      },
+      async updateDisplaySettings() { return { snapshot }; }
+    },
+    addEventListener(type, handler) {
+      this.listeners.set(type, handler);
+    }
+  };
+
+  const runtime = startOperatorWorkbenchRuntime({ windowTarget, documentTarget });
+  await runtime.started;
+
+  const keydown = windowTarget.listeners.get("keydown");
+  await keydown({ altKey: true, ctrlKey: false, metaKey: false, shiftKey: false, key: "r", preventDefault() {}, target: null });
+
+  assert.deepEqual(calls, [
+    { type: "run-action", actionId: "rename_selection", context: null }
   ]);
 });
 

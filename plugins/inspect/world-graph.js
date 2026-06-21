@@ -406,12 +406,8 @@ function inferSurfaceTier(node) {
   }
 
   if (
-    path === "/world"
-    || path === "/process"
-    || path === "/canvas"
+    path === "/canvas"
     || path === "/backend-seams"
-    || handler === "page.world"
-    || handler === "page.process"
     || handler === "page.canvas"
     || handler === "page.edenCanvas"
     || handler === "page.backendSeams"

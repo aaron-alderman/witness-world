@@ -1,7 +1,7 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { createDesirePlusDocument, createDesirePlusNode, createTrace } from "./ir.js";
 import { parseWitnessToml } from "../dsl.js";
+import { runtimeLocalFsModule } from "../runtime-local-fs.js";
 
 const SEMANTIC_WTOML_KINDS = new Set([
   "context",
@@ -67,7 +67,7 @@ export async function compileWtomlFileToDesirePlus(file, options = {}) {
     ? options.readFile
     : options?.requireReadCapability === true
       ? null
-      : (target, encoding) => fs.readFile(target, encoding);
+      : (target, encoding) => runtimeLocalFsModule.readFile(target, encoding);
   if (typeof readFile !== "function") {
     throw createReadCapabilityRequiredError(resolved);
   }

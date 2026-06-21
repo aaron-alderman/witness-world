@@ -43,9 +43,22 @@ const CAP_COMPUTE_EXECUTE: &str = "compute.execute";
 const CAP_VERIFICATION_PERSISTENCE: &str = "verification.persistence";
 const WORKER_CONTROL_PROTOCOL_V1: &str = "witness-worker-control/v1";
 const WORKER_CONTROL_KIND_DESCRIPTOR: &str = "descriptor";
+const RUNTIME_WORKER_TRANSPORT_PROTOCOL_V1: &str = "witness-runtime-worker-transport/v1";
+const RUNTIME_WORKER_TRANSPORT_KIND_CALL: &str = "call";
+const RUNTIME_WORKER_TRANSPORT_KIND_RESULT: &str = "result";
+const RUNTIME_WORKER_TRANSPORT_METHOD_PROCESS_HEALTH_READ: &str = "runtime.process_health.read";
+const RUNTIME_WORKER_TRANSPORT_METHOD_SUPERVISION_ACTIVATE: &str = "runtime.supervision.activate";
+const RUNTIME_WORKER_TRANSPORT_METHOD_SUPERVISION_QUIESCE: &str = "runtime.supervision.quiesce";
+const RUNTIME_WORKER_TRANSPORT_METHOD_APP_SNAPSHOT_RELOAD: &str = "runtime.app_snapshot.reload";
+const RUNTIME_WORKER_TRANSPORT_METHOD_APP_REVISION_READ: &str = "runtime.app_revision.read";
+const RUNTIME_WORKER_TRANSPORT_METHOD_BACKEND_REVISION_READ: &str = "runtime.backend_revision.read";
+const RUNTIME_WORKER_TRANSPORT_METHOD_APP_PREVIEW_SESSION_EVENT_READ: &str = "runtime.app_preview_session.event.read";
+const RUNTIME_WORKER_TRANSPORT_METHOD_APP_HTTP_REQUEST: &str = "runtime.app_http.request";
 const WITNESS_CORE_TRANSPORT_PROTOCOL_V1: &str = "witness-core-transport/v1";
 const WITNESS_CORE_TRANSPORT_PIPE_ENV: &str = "WITNESS_CORE_TRANSPORT_PIPE";
 const WITNESS_CORE_WORKSPACE_ROOT_ENV: &str = "WITNESS_CORE_WORKSPACE_ROOT";
+const WITNESS_RUNTIME_CONTROL_ADDR_ENV: &str = "WITNESS_RUNTIME_CONTROL_ADDR";
+const WITNESS_RUNTIME_TRANSPORT_ONLY_ENV: &str = "WITNESS_RUNTIME_TRANSPORT_ONLY";
 const AUTHORING_WRITE_CONFLICT: &str = "authoring.write.conflict";
 const AUTHORING_WRITE_REJECTED: &str = "authoring.write.rejected";
 const COMPUTE_MODULE_RUNTIME_TARGET_HOST_OPERATION: &str = "engentus.pipeline.health.classify";
@@ -274,6 +287,7 @@ pub struct SuperviseConfig {
     pub working_dir: Option<String>,
     pub control_url: Option<String>,
     pub reload_url: Option<String>,
+    pub transport_only_runtime: bool,
     pub restart_on_exit: bool,
     pub restart_on_unhealthy: bool,
     pub health_url: Option<String>,
@@ -346,6 +360,7 @@ impl Default for CoreConfig {
                 working_dir: None,
                 control_url: None,
                 reload_url: None,
+                transport_only_runtime: false,
                 restart_on_exit: true,
                 restart_on_unhealthy: true,
                 health_url: None,
@@ -413,8 +428,10 @@ pub struct SupervisedProcessState {
     pub reason_codes: Vec<String>,
     pub last_health_sample_at: Option<String>,
     pub control_url: Option<String>,
+    pub control_socket_addr: Option<String>,
     pub health_url: Option<String>,
     pub reload_url: Option<String>,
+    pub runtime_control_channel: Option<RuntimeWorkerControlChannel>,
     pub transport_pipe: Option<String>,
     pub degraded_streak: u64,
     pub unhealthy_streak: u64,
@@ -538,8 +555,10 @@ impl Default for SupervisedProcessState {
             reason_codes: Vec::new(),
             last_health_sample_at: None,
             control_url: None,
+            control_socket_addr: None,
             health_url: None,
             reload_url: None,
+            runtime_control_channel: None,
             transport_pipe: None,
             degraded_streak: 0,
             unhealthy_streak: 0,
@@ -736,6 +755,28 @@ impl SupervisorStore {
         }
     }
 
+    fn reclaim_conflicting_owners(&self) {
+        let Ok(entries) = fs::read_dir(self.owners_dir()) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(owner) = read_supervisor_owner(&path) else {
+                continue;
+            };
+            if owner.core_id == self.owner.core_id {
+                continue;
+            }
+            if owner.workspace_root != self.owner.workspace_root || owner.config_path != self.owner.config_path {
+                continue;
+            }
+            self.sweep_conflicting_owner(&owner);
+        }
+    }
+
     fn sweep_stale_owner(&self, owner: &SupervisorOwnerRecord) {
         let worker_dir = self.worker_dir(&owner.core_id);
         if let Ok(entries) = fs::read_dir(&worker_dir) {
@@ -751,6 +792,31 @@ impl SupervisorStore {
                     continue;
                 }
                 if supervisor_kill_recorded_node_worker(&worker) || !supervisor_pid_exists(worker.node_pid) {
+                    let _ = fs::remove_file(path);
+                }
+            }
+        }
+        if directory_is_empty(&worker_dir) {
+            let _ = fs::remove_dir(&worker_dir);
+            let _ = fs::remove_file(self.owner_path(&owner.core_id));
+        }
+    }
+
+    fn sweep_conflicting_owner(&self, owner: &SupervisorOwnerRecord) {
+        let worker_dir = self.worker_dir(&owner.core_id);
+        if let Ok(entries) = fs::read_dir(&worker_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let Some(worker) = read_supervisor_worker(&path) else {
+                    continue;
+                };
+                if worker.core_id != owner.core_id || worker.core_pid != owner.core_pid {
+                    continue;
+                }
+                if supervisor_force_kill_recorded_node_worker(&worker) || !supervisor_pid_exists(worker.node_pid) {
                     let _ = fs::remove_file(path);
                 }
             }
@@ -780,6 +846,12 @@ fn start_supervisor_lease_thread(supervisor: Arc<SupervisorStore>) {
             thread::sleep(Duration::from_millis(1_000));
         }
     });
+}
+
+fn initialize_supervisor_store(supervisor: &Arc<SupervisorStore>) {
+    let _ = supervisor.heartbeat_owner();
+    supervisor.reclaim_conflicting_owners();
+    supervisor.sweep_stale_owners(SUPERVISOR_STALE_OWNER_MS);
 }
 
 fn write_supervisor_json(path: &Path, content: &str) -> std::io::Result<()> {
@@ -886,6 +958,20 @@ fn supervisor_kill_recorded_node_worker(worker: &SupervisorWorkerRecord) -> bool
         return true;
     };
     if !supervisor_process_matches_worker(process.name(), &process.cmd().join(" "), worker) {
+        return false;
+    }
+    process.kill_with(Signal::Kill).unwrap_or_else(|| process.kill())
+}
+
+fn supervisor_force_kill_recorded_node_worker(worker: &SupervisorWorkerRecord) -> bool {
+    let system = System::new_all();
+    let Some(process) = system.process(Pid::from_u32(worker.node_pid)) else {
+        return true;
+    };
+    let name = process.name().to_ascii_lowercase();
+    let command = process.cmd().join(" ").to_ascii_lowercase();
+    let looks_like_node = name.contains("node") || command.contains("node");
+    if !looks_like_node {
         return false;
     }
     process.kill_with(Signal::Kill).unwrap_or_else(|| process.kill())
@@ -1573,7 +1659,7 @@ pub fn run_host(config_path: PathBuf, addr: String) -> std::io::Result<()> {
         started_at: core_started_at.clone(),
         last_heartbeat_at: core_started_at,
     }));
-    let _ = supervisor.heartbeat_owner();
+    initialize_supervisor_store(&supervisor);
     start_supervisor_lease_thread(Arc::clone(&supervisor));
     let compute_module_runtime = Arc::new(
         ComputeModuleRuntime::new().map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?
@@ -1664,6 +1750,9 @@ pub fn parse_config(text: &str) -> CoreConfig {
             ("supervise", "working_dir") => config.supervise.working_dir = Some(parse_string(value)),
             ("supervise", "control_url") => config.supervise.control_url = Some(parse_string(value)),
             ("supervise", "reload_url") => config.supervise.reload_url = Some(parse_string(value)),
+            ("supervise", "transport_only_runtime") => {
+                config.supervise.transport_only_runtime = matches!(value.trim(), "true" | "1" | "\"true\"");
+            }
             ("supervise", "restart_on_exit") => {
                 config.supervise.restart_on_exit = matches!(value.trim(), "true" | "1" | "\"true\"");
             }
@@ -1734,10 +1823,107 @@ fn refresh_watcher_baseline(cwd: &Path, config: &CoreConfig, watch_state: &Arc<M
     watch_state.lock().expect("watch state lock").previous = current;
 }
 
+fn normalized_source_paths(paths: &[String]) -> Vec<String> {
+    let mut normalized = paths
+        .iter()
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .collect::<Vec<_>>();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+fn should_suppress_duplicate_generation(registry: &Registry, content_hash: &str, changed: &[String]) -> bool {
+    let latest = registry.latest_generation();
+    let Some(latest) = latest else {
+        return false;
+    };
+    if latest.content_hash != content_hash {
+        return false;
+    }
+    if normalized_source_paths(&latest.source_paths) != normalized_source_paths(changed) {
+        return false;
+    }
+    matches!(
+        latest.state,
+        GenerationState::Candidate
+            | GenerationState::ProofRunning
+            | GenerationState::GreenLocal
+            | GenerationState::Stable
+    )
+}
+
+fn matching_generation_for_content(
+    registry: &Registry,
+    content_hash: &str,
+    source_paths: &[String],
+) -> Option<Generation> {
+    let normalized = normalized_source_paths(source_paths);
+    registry
+        .generations()
+        .into_iter()
+        .rev()
+        .find(|generation| {
+            generation.content_hash == content_hash
+                && normalized_source_paths(&generation.source_paths) == normalized
+                && matches!(
+                    generation.state,
+                    GenerationState::Candidate
+                        | GenerationState::ProofRunning
+                        | GenerationState::GreenLocal
+                        | GenerationState::Stable
+                )
+        })
+}
+
+fn wait_for_generation_to_settle(
+    registry: &Arc<Mutex<Registry>>,
+    generation_id: &str,
+    timeout_ms: u64,
+) -> Option<Generation> {
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms.max(1));
+    loop {
+        let generation = registry
+            .lock()
+            .expect("registry lock")
+            .generation(generation_id);
+        match generation {
+            Some(current)
+                if matches!(current.state, GenerationState::Candidate | GenerationState::ProofRunning) =>
+            {
+                if Instant::now() >= deadline {
+                    return Some(current);
+                }
+            }
+            Some(current) => return Some(current),
+            None => return None,
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
 fn run_generation_pipeline(cwd: &Path, config: &CoreConfig, changed: &[String], registry: Arc<Mutex<Registry>>) {
     let generation_id = next_generation_id();
     let parent_id = registry.lock().expect("registry lock").aliases().current_stable;
     let content_hash = format!("sha256:{}", sha256_hex(package_bytes(cwd, config)));
+    {
+        let mut registry_lock = registry.lock().expect("registry lock");
+        if should_suppress_duplicate_generation(&registry_lock, &content_hash, changed) {
+            let latest_generation = registry_lock.latest_generation();
+            let latest_generation_id = latest_generation.as_ref().map(|generation| generation.id.clone());
+            registry_lock.emit(CoreEvent {
+                kind: "generation.suppressed_duplicate".to_string(),
+                capability: CAP_STORAGE_READ.to_string(),
+                generation_id: latest_generation_id,
+                message: Some(changed.join(", ")),
+                generation: latest_generation,
+                serving: None,
+                emitted_at: now_iso(),
+            });
+            return;
+        }
+    }
     let mut generation = Generation {
         id: generation_id,
         state: GenerationState::Candidate,
@@ -2079,6 +2265,7 @@ fn handle_client(
     let raw_path = parts.next().unwrap_or("/");
     let (path, query) = raw_path.split_once('?').unwrap_or((raw_path, ""));
     let mut content_length = 0usize;
+    let mut headers = BTreeMap::new();
     loop {
         let mut line = String::new();
         reader.read_line(&mut line)?;
@@ -2086,6 +2273,7 @@ fn handle_client(
             break;
         }
         if let Some((name, value)) = line.split_once(':') {
+            headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
             if name.trim().eq_ignore_ascii_case("content-length") {
                 content_length = value.trim().parse::<usize>().unwrap_or(0);
             }
@@ -2627,7 +2815,30 @@ fn handle_client(
                 None => write_json(&mut stream, 404, "{\"error\":\"generation not found\"}"),
             }
         }
-        _ => write_json(&mut stream, 404, "{\"error\":\"not found\"}"),
+        _ => {
+            let state = process_state.lock().expect("process state lock").clone();
+            if !state.frontdoor_enabled {
+                if let Some(channel) = state.runtime_control_channel.clone() {
+                    let forwarded_path = if query.is_empty() {
+                        path.to_string()
+                    } else {
+                        format!("{}?{}", path, query)
+                    };
+                    return match proxy_preparsed_request_to_runtime_control(
+                        &mut stream,
+                        &channel,
+                        method,
+                        &forwarded_path,
+                        &headers,
+                        &body,
+                    ) {
+                        Ok(()) => Ok(()),
+                        Err(_) => write_json(&mut stream, 503, "{\"error\":\"runtime unavailable\"}"),
+                    };
+                }
+            }
+            write_json(&mut stream, 404, "{\"error\":\"not found\"}")
+        }
     }
 }
 
@@ -2792,7 +3003,10 @@ fn start_supervised_process(
             .filter(|value| !value.trim().is_empty())
             .map(|value| cwd.join(value))
             .unwrap_or_else(|| cwd.clone());
-        let watchers_enabled = if config.reload_url.as_deref().is_some_and(|value| !value.trim().is_empty())
+        let runtime_control_channel = start_runtime_worker_control_server();
+        let runtime_control_addr = runtime_control_channel.as_ref().map(|channel| channel.address.clone());
+        let watchers_enabled = if runtime_control_addr.is_some()
+            || config.reload_url.as_deref().is_some_and(|value| !value.trim().is_empty())
             || config.control_url.as_deref().is_some_and(|value| !value.trim().is_empty()) {
             "false"
         } else {
@@ -2819,6 +3033,8 @@ fn start_supervised_process(
                 state.reason_codes.clear();
                 state.last_health_sample_at = None;
                 state.control_url = None;
+                state.control_socket_addr = None;
+                state.runtime_control_channel = None;
                 state.degraded_streak = 0;
                 state.unhealthy_streak = 0;
             }
@@ -2833,6 +3049,12 @@ fn start_supervised_process(
                     .env("WITNESS_RUNTIME_ROLE", "active")
                     .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", "true")
                     .env("WITNESS_RUNTIME_WATCHERS_ENABLED", watchers_enabled);
+                if config.transport_only_runtime {
+                    builder.env(WITNESS_RUNTIME_TRANSPORT_ONLY_ENV, "true");
+                }
+                if let Some(control_addr) = runtime_control_addr.as_deref() {
+                    builder.env(WITNESS_RUNTIME_CONTROL_ADDR_ENV, control_addr);
+                }
                 if let Some(pipe_name) = transport_pipe.as_deref().filter(|value| !value.trim().is_empty()) {
                     builder.env(WITNESS_CORE_TRANSPORT_PIPE_ENV, pipe_name);
                 }
@@ -2850,6 +3072,12 @@ fn start_supervised_process(
                     .env("WITNESS_RUNTIME_ROLE", "active")
                     .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", "true")
                     .env("WITNESS_RUNTIME_WATCHERS_ENABLED", watchers_enabled);
+                if config.transport_only_runtime {
+                    builder.env(WITNESS_RUNTIME_TRANSPORT_ONLY_ENV, "true");
+                }
+                if let Some(control_addr) = runtime_control_addr.as_deref() {
+                    builder.env(WITNESS_RUNTIME_CONTROL_ADDR_ENV, control_addr);
+                }
                 if let Some(pipe_name) = transport_pipe.as_deref().filter(|value| !value.trim().is_empty()) {
                     builder.env(WITNESS_CORE_TRANSPORT_PIPE_ENV, pipe_name);
                 }
@@ -2893,10 +3121,13 @@ fn start_supervised_process(
                 state.last_error = None;
                 state.ready = false;
                 state.control_url = config.control_url.clone();
+                state.control_socket_addr = runtime_control_addr.clone();
                 state.health_url = config.health_url.clone();
                 state.reload_url = config.reload_url.clone();
+                state.runtime_control_channel = runtime_control_channel.clone();
                 state.transport_pipe = transport_pipe.clone();
-                state.watchers_enabled = config.reload_url.as_deref().is_none_or(|value| value.trim().is_empty())
+                state.watchers_enabled = runtime_control_addr.is_none()
+                    && config.reload_url.as_deref().is_none_or(|value| value.trim().is_empty())
                     && config.control_url.as_deref().is_none_or(|value| value.trim().is_empty());
                 state.instance_id = Some(instance_id.clone());
                 state.role = Some("active".to_string());
@@ -2919,16 +3150,12 @@ fn start_supervised_process(
                 emitted_at: now_iso(),
             });
 
-            let probe_url = config
-                .control_url
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-                .or_else(|| config.health_url.as_deref().filter(|value| !value.trim().is_empty()));
-            if let Some(health_url) = probe_url {
-                let readiness = wait_for_process_readiness(
-                    health_url,
+            if let Some(channel) = runtime_control_channel.as_ref() {
+                let readiness = wait_for_process_readiness_via_runtime_worker_control_until_exit(
+                    channel,
                     config.health_interval_ms,
                     config.health_timeout_ms,
+                    &mut child,
                 );
                 match readiness {
                     ProcessReadiness::Ready(probe) => {
@@ -2951,7 +3178,7 @@ fn start_supervised_process(
                             kind: "process.ready".to_string(),
                             capability: CAP_NOTIFY_SURFACE.to_string(),
                             generation_id: None,
-                            message: Some(format!("health_url={} status={}", health_url, process_health_probe_message(&probe))),
+                            message: Some(format!("control_addr={} status={}", channel.address, process_health_probe_message(&probe))),
                             generation: None,
                             serving: None,
                             emitted_at: now_iso(),
@@ -2970,11 +3197,71 @@ fn start_supervised_process(
                             kind: "process.unhealthy".to_string(),
                             capability: CAP_NOTIFY_SURFACE.to_string(),
                             generation_id: None,
-                            message: Some(format!("health_url={} status={}", health_url, status)),
+                            message: Some(format!("control_addr={} status={}", channel.address, status)),
                             generation: None,
                             serving: None,
                             emitted_at: now_iso(),
                         });
+                    }
+                }
+            } else {
+                let probe_url = config
+                    .control_url
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .or_else(|| config.health_url.as_deref().filter(|value| !value.trim().is_empty()));
+                if let Some(health_url) = probe_url {
+                    let readiness = wait_for_process_readiness(
+                        health_url,
+                        config.health_interval_ms,
+                        config.health_timeout_ms,
+                    );
+                    match readiness {
+                        ProcessReadiness::Ready(probe) => {
+                            let ready_at = now_iso();
+                            {
+                                let mut state = process_state.lock().expect("process state lock");
+                                state.ready = true;
+                                state.last_ready_at = Some(ready_at);
+                                state.last_health_status = Some("healthy".to_string());
+                                state.status = Some("healthy".to_string());
+                                if let Some(discovered_health_url) = probe.health_url.clone().filter(|value| !value.trim().is_empty()) {
+                                    state.health_url = Some(discovered_health_url);
+                                }
+                                if let Some(reload_url) = probe.reload_url.clone().filter(|value| !value.trim().is_empty()) {
+                                    state.reload_url = Some(reload_url);
+                                }
+                                state.last_error = None;
+                            }
+                            registry.lock().expect("registry lock").emit(CoreEvent {
+                                kind: "process.ready".to_string(),
+                                capability: CAP_NOTIFY_SURFACE.to_string(),
+                                generation_id: None,
+                                message: Some(format!("health_url={} status={}", health_url, process_health_probe_message(&probe))),
+                                generation: None,
+                                serving: None,
+                                emitted_at: now_iso(),
+                            });
+                        }
+                        ProcessReadiness::Unhealthy(status) => {
+                            {
+                                let mut state = process_state.lock().expect("process state lock");
+                                state.ready = false;
+                                state.last_health_status = Some("unhealthy".to_string());
+                                state.status = Some("unhealthy".to_string());
+                                state.reason_codes = vec!["runtime_not_ready".to_string()];
+                                state.last_error = Some(format!("process readiness failed: {}", status));
+                            }
+                            registry.lock().expect("registry lock").emit(CoreEvent {
+                                kind: "process.unhealthy".to_string(),
+                                capability: CAP_NOTIFY_SURFACE.to_string(),
+                                generation_id: None,
+                                message: Some(format!("health_url={} status={}", health_url, status)),
+                                generation: None,
+                                serving: None,
+                                emitted_at: now_iso(),
+                            });
+                        }
                     }
                 }
             }
@@ -2982,23 +3269,19 @@ fn start_supervised_process(
             let health_interval = Duration::from_millis(config.health_interval_ms.max(25));
             let mut next_health_poll_at = Instant::now() + health_interval;
             let exit_status = loop {
-                let probe_url = config
-                    .control_url
-                    .as_deref()
-                    .filter(|value| !value.trim().is_empty())
-                    .or_else(|| config.health_url.as_deref().filter(|value| !value.trim().is_empty()));
-                if let Some(health_url) = probe_url {
+                if let Some(channel) = runtime_control_channel.as_ref() {
                     if Instant::now() >= next_health_poll_at {
                         let previous_status = {
                             process_state.lock().expect("process state lock").status.clone()
                         };
-                        let probe = match probe_process_health(health_url) {
+                        let probe = match probe_process_health_via_runtime_worker_control(channel) {
                             Ok(probe) => probe,
                             Err(_error) => ProcessHealthProbe {
                                 http_status: 503,
                                 ready: false,
                                 status: "unhealthy".to_string(),
                                 reason_codes: vec!["health_probe_failed".to_string()],
+                                startup_mode: None,
                                 sampled_at: Some(now_iso()),
                                 health_url: None,
                                 activation_url: None,
@@ -3053,6 +3336,81 @@ fn start_supervised_process(
                             }
                         }
                         next_health_poll_at = Instant::now() + health_interval;
+                    }
+                } else {
+                    let probe_url = config
+                        .control_url
+                        .as_deref()
+                        .filter(|value| !value.trim().is_empty())
+                        .or_else(|| config.health_url.as_deref().filter(|value| !value.trim().is_empty()));
+                    if let Some(health_url) = probe_url {
+                        if Instant::now() >= next_health_poll_at {
+                            let previous_status = {
+                                process_state.lock().expect("process state lock").status.clone()
+                            };
+                            let probe = match probe_process_health(health_url) {
+                                Ok(probe) => probe,
+                                Err(_error) => ProcessHealthProbe {
+                                    http_status: 503,
+                                    ready: false,
+                                    status: "unhealthy".to_string(),
+                                    reason_codes: vec!["health_probe_failed".to_string()],
+                                    startup_mode: None,
+                                    sampled_at: Some(now_iso()),
+                                    health_url: None,
+                                    activation_url: None,
+                                    quiesce_url: None,
+                                    reload_url: None,
+                                },
+                            };
+                            let updated_state = apply_process_health_probe(&process_state, &probe);
+                            emit_process_health_events(&registry, previous_status.as_deref(), &updated_state, &probe);
+                            if probe.status == "degraded"
+                                && updated_state.degraded_streak == config.degraded_grace_polls.max(1)
+                            {
+                                registry.lock().expect("registry lock").emit(CoreEvent {
+                                    kind: "process.degraded".to_string(),
+                                    capability: CAP_NOTIFY_SURFACE.to_string(),
+                                    generation_id: None,
+                                    message: Some(format!(
+                                        "thresholdReached=true {}",
+                                        process_health_probe_message(&probe)
+                                    )),
+                                    generation: None,
+                                    serving: None,
+                                    emitted_at: now_iso(),
+                                });
+                            }
+                            if probe.status == "unhealthy"
+                                && updated_state.unhealthy_streak >= config.unhealthy_grace_polls.max(1)
+                                && updated_state.restart_requested == false
+                                && updated_state.stop_requested == false
+                            {
+                                let reason = if probe.reason_codes.is_empty() {
+                                    "policy unhealthy".to_string()
+                                } else {
+                                    format!("policy unhealthy: {}", probe.reason_codes.join(","))
+                                };
+                                let serving_status = registry.lock().expect("registry lock").request_serving_mode(ServingMode::Stable);
+                                registry.lock().expect("registry lock").emit(CoreEvent {
+                                    kind: "process.restart.policy_triggered".to_string(),
+                                    capability: CAP_NOTIFY_SURFACE.to_string(),
+                                    generation_id: serving_status.latest_generation_id.clone(),
+                                    message: Some(reason.clone()),
+                                    generation: None,
+                                    serving: None,
+                                    emitted_at: now_iso(),
+                                });
+                                if config.restart_on_unhealthy {
+                                    let _ = request_process_restart_with_reason(
+                                        Arc::clone(&registry),
+                                        Arc::clone(&process_state),
+                                        &reason,
+                                    );
+                                }
+                            }
+                            next_health_poll_at = Instant::now() + health_interval;
+                        }
                     }
                 }
                 let should_terminate = {
@@ -3155,10 +3513,16 @@ fn spawn_frontdoor_instance(
         .clone()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "supervised process is not configured".to_string())?;
-    let port = reserve_loopback_port().ok_or_else(|| "failed to reserve runtime port".to_string())?;
+    let runtime_port = if config.supervise.transport_only_runtime {
+        None
+    } else {
+        Some(reserve_loopback_port().ok_or_else(|| "failed to reserve runtime port".to_string())?)
+    };
     let instance_id = next_instance_id();
     let core_url = format!("http://{}", control_addr);
-    let command = interpolate_runtime_template(&command_template, port, &instance_id, &core_url);
+    let command = interpolate_runtime_template(&command_template, runtime_port, &instance_id, &core_url)?;
+    let runtime_control_channel = start_runtime_worker_control_server();
+    let runtime_control_addr = runtime_control_channel.as_ref().map(|channel| channel.address.clone());
     let working_dir = config
         .supervise
         .working_dir
@@ -3171,21 +3535,30 @@ fn spawn_frontdoor_instance(
         .control_url
         .clone()
         .filter(|value| !value.trim().is_empty())
-        .map(|value| interpolate_runtime_template(&value, port, &instance_id, &core_url));
+        .map(|value| interpolate_runtime_template(&value, runtime_port, &instance_id, &core_url))
+        .transpose()?;
     let health_url = config
         .supervise
         .health_url
         .clone()
         .filter(|value| !value.trim().is_empty())
-        .map(|value| interpolate_runtime_template(&value, port, &instance_id, &core_url));
+        .map(|value| interpolate_runtime_template(&value, runtime_port, &instance_id, &core_url))
+        .transpose()?;
     let probe_url = control_url.clone().or_else(|| health_url.clone());
     let reload_url = config
         .supervise
         .reload_url
         .clone()
         .filter(|value| !value.trim().is_empty())
-        .map(|value| interpolate_runtime_template(&value, port, &instance_id, &core_url));
-    let watchers_enabled = if reload_url.is_some() || control_url.is_some() { "false" } else if role == "active" { "true" } else { "false" };
+        .map(|value| interpolate_runtime_template(&value, runtime_port, &instance_id, &core_url))
+        .transpose()?;
+    let watchers_enabled = if runtime_control_addr.is_some() || reload_url.is_some() || control_url.is_some() {
+        "false"
+    } else if role == "active" {
+        "true"
+    } else {
+        "false"
+    };
     let spawn_direct = || {
         if let Some(direct) = supervised_command(&command) {
             let mut builder = direct;
@@ -3193,11 +3566,16 @@ fn spawn_frontdoor_instance(
                 .current_dir(&working_dir)
                 .env("WITNESS_CORE_URL", &core_url)
                 .env(WITNESS_CORE_WORKSPACE_ROOT_ENV, normalize_path(cwd))
-                .env("WITNESS_RUNTIME_PORT", port.to_string())
                 .env("WITNESS_RUNTIME_INSTANCE_ID", &instance_id)
                 .env("WITNESS_RUNTIME_ROLE", role)
                 .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", if role == "active" { "true" } else { "false" })
                 .env("WITNESS_RUNTIME_WATCHERS_ENABLED", watchers_enabled);
+            if config.supervise.transport_only_runtime {
+                builder.env(WITNESS_RUNTIME_TRANSPORT_ONLY_ENV, "true");
+            }
+            if let Some(control_addr) = runtime_control_addr.as_deref() {
+                builder.env(WITNESS_RUNTIME_CONTROL_ADDR_ENV, control_addr);
+            }
             if let Some(pipe_name) = transport_pipe.filter(|value| !value.trim().is_empty()) {
                 builder.env(WITNESS_CORE_TRANSPORT_PIPE_ENV, pipe_name);
             }
@@ -3212,11 +3590,16 @@ fn spawn_frontdoor_instance(
             .current_dir(&working_dir)
             .env("WITNESS_CORE_URL", &core_url)
             .env(WITNESS_CORE_WORKSPACE_ROOT_ENV, normalize_path(cwd))
-            .env("WITNESS_RUNTIME_PORT", port.to_string())
             .env("WITNESS_RUNTIME_INSTANCE_ID", &instance_id)
             .env("WITNESS_RUNTIME_ROLE", role)
             .env("WITNESS_RUNTIME_MUTATIONS_ENABLED", if role == "active" { "true" } else { "false" })
             .env("WITNESS_RUNTIME_WATCHERS_ENABLED", watchers_enabled);
+        if config.supervise.transport_only_runtime {
+            builder.env(WITNESS_RUNTIME_TRANSPORT_ONLY_ENV, "true");
+        }
+        if let Some(control_addr) = runtime_control_addr.as_deref() {
+            builder.env(WITNESS_RUNTIME_CONTROL_ADDR_ENV, control_addr);
+        }
         if let Some(pipe_name) = transport_pipe.filter(|value| !value.trim().is_empty()) {
             builder.env(WITNESS_CORE_TRANSPORT_PIPE_ENV, pipe_name);
         }
@@ -3228,7 +3611,7 @@ fn spawn_frontdoor_instance(
     let snapshot = ManagedProcessInstanceSnapshot {
         id: instance_id.clone(),
         state: if role == "active" { "starting".to_string() } else { "standby".to_string() },
-        port,
+        port: runtime_port,
         running: true,
         ready: false,
         pid: child_pid,
@@ -3242,7 +3625,7 @@ fn spawn_frontdoor_instance(
     let _ = supervisor.register_worker(
         &instance_id,
         child_pid,
-        Some(port),
+        runtime_port,
         role,
         &command,
         &started_at,
@@ -3251,7 +3634,10 @@ fn spawn_frontdoor_instance(
         registry,
         "process.instance.started",
         &snapshot,
-        Some(format!("instance={} port={} role={} command={}", snapshot.id, port, role, command)),
+        Some(match runtime_port {
+            Some(port) => format!("instance={} port={} role={} command={}", snapshot.id, port, role, command),
+            None => format!("instance={} transport=control-socket role={} command={}", snapshot.id, role, command),
+        }),
     );
     let activation_url = probe_url
         .as_deref()
@@ -3262,6 +3648,7 @@ fn spawn_frontdoor_instance(
     Ok(ManagedProcessInstance {
         snapshot,
         child,
+        runtime_control_channel,
         health_url: probe_url,
         activation_url,
         quiesce_url,
@@ -3275,7 +3662,30 @@ fn wait_for_frontdoor_instance_ready(
     config: &CoreConfig,
     registry: &Arc<Mutex<Registry>>,
 ) -> Result<(), String> {
-    if let Some(health_url) = instance.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(channel) = instance.runtime_control_channel.as_ref() {
+        match wait_for_process_readiness_via_runtime_worker_control_until_exit(
+            channel,
+            config.supervise.health_interval_ms,
+            config.frontdoor.startup_cutover_timeout_ms.max(config.supervise.health_timeout_ms),
+            &mut instance.child,
+        ) {
+            ProcessReadiness::Ready(probe) => {
+                instance.snapshot.ready = true;
+                instance.snapshot.last_health_status = Some("healthy".to_string());
+                emit_instance_event(
+                    registry,
+                    "process.instance.ready",
+                    &instance.snapshot,
+                    Some(format!("instance={} control_addr={} status={}", instance.snapshot.id, channel.address, process_health_probe_message(&probe))),
+                );
+                Ok(())
+            }
+            ProcessReadiness::Unhealthy(status) => {
+                instance.snapshot.last_health_status = Some("unhealthy".to_string());
+                Err(format!("instance readiness failed: {}", status))
+            }
+        }
+    } else if let Some(health_url) = instance.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
         match wait_for_process_readiness(
             health_url,
             config.supervise.health_interval_ms,
@@ -3318,7 +3728,9 @@ fn wait_for_frontdoor_instance_ready(
 }
 
 fn quiesce_frontdoor_instance(instance: &mut ManagedProcessInstance, registry: &Arc<Mutex<Registry>>) {
-    if let Some(url) = instance.quiesce_url.as_deref() {
+    if let Some(channel) = instance.runtime_control_channel.as_ref() {
+        let _ = request_runtime_worker_supervision_action(channel, RUNTIME_WORKER_TRANSPORT_METHOD_SUPERVISION_QUIESCE);
+    } else if let Some(url) = instance.quiesce_url.as_deref() {
         let _ = issue_http_post(url);
     }
     instance.snapshot.state = "draining".to_string();
@@ -3328,7 +3740,9 @@ fn quiesce_frontdoor_instance(instance: &mut ManagedProcessInstance, registry: &
 }
 
 fn activate_frontdoor_instance(instance: &mut ManagedProcessInstance, registry: &Arc<Mutex<Registry>>) {
-    if let Some(url) = instance.activation_url.as_deref() {
+    if let Some(channel) = instance.runtime_control_channel.as_ref() {
+        let _ = request_runtime_worker_supervision_action(channel, RUNTIME_WORKER_TRANSPORT_METHOD_SUPERVISION_ACTIVATE);
+    } else if let Some(url) = instance.activation_url.as_deref() {
         let _ = issue_http_post(url);
     }
     instance.snapshot.state = "active".to_string();
@@ -3400,7 +3814,52 @@ fn start_supervised_process_frontdoor(
             }
 
             if let Some(active_instance) = active.as_mut() {
-                if let Some(health_url) = active_instance.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
+                if let Some(channel) = active_instance.runtime_control_channel.as_ref() {
+                    let previous_status = process_state.lock().expect("process state lock").status.clone();
+                    let probe = match probe_process_health_via_runtime_worker_control(channel) {
+                        Ok(probe) => probe,
+                        Err(_error) => ProcessHealthProbe {
+                            http_status: 503,
+                            ready: false,
+                            status: "unhealthy".to_string(),
+                            reason_codes: vec!["health_probe_failed".to_string()],
+                            startup_mode: None,
+                            sampled_at: Some(now_iso()),
+                            health_url: None,
+                            activation_url: None,
+                            quiesce_url: None,
+                            reload_url: None,
+                        },
+                    };
+                    let updated_state = apply_process_health_probe(&process_state, &probe);
+                    if probe.ready && probe.status != "unhealthy" {
+                        active_instance.snapshot.ready = true;
+                    }
+                    active_instance.snapshot.last_health_status = updated_state.status.clone();
+                    emit_process_health_events(&registry, previous_status.as_deref(), &updated_state, &probe);
+                    if probe.status == "unhealthy"
+                        && updated_state.unhealthy_streak >= config.supervise.unhealthy_grace_polls.max(1)
+                        && config.supervise.restart_on_unhealthy
+                        && !process_state.lock().expect("process state lock").restart_requested
+                    {
+                        let reason = if probe.reason_codes.is_empty() {
+                            "policy unhealthy".to_string()
+                        } else {
+                            format!("policy unhealthy: {}", probe.reason_codes.join(","))
+                        };
+                        let serving_status = registry.lock().expect("registry lock").request_serving_mode(ServingMode::Stable);
+                        registry.lock().expect("registry lock").emit(CoreEvent {
+                            kind: "process.restart.policy_triggered".to_string(),
+                            capability: CAP_NOTIFY_SURFACE.to_string(),
+                            generation_id: serving_status.latest_generation_id.clone(),
+                            message: Some(reason.clone()),
+                            generation: None,
+                            serving: None,
+                            emitted_at: now_iso(),
+                        });
+                        let _ = request_process_restart_with_reason(Arc::clone(&registry), Arc::clone(&process_state), &reason);
+                    }
+                } else if let Some(health_url) = active_instance.health_url.as_deref().filter(|value| !value.trim().is_empty()) {
                     let previous_status = process_state.lock().expect("process state lock").status.clone();
                     let probe = match probe_process_health(health_url) {
                         Ok(probe) => probe,
@@ -3409,6 +3868,7 @@ fn start_supervised_process_frontdoor(
                             ready: false,
                             status: "unhealthy".to_string(),
                             reason_codes: vec!["health_probe_failed".to_string()],
+                            startup_mode: None,
                             sampled_at: Some(now_iso()),
                             health_url: None,
                             activation_url: None,
@@ -3549,11 +4009,32 @@ enum ProcessReadiness {
 }
 
 #[derive(Clone, Debug)]
+pub struct RuntimeWorkerControlChannel {
+    pub address: String,
+    state: Arc<Mutex<RuntimeWorkerControlChannelState>>,
+}
+
+#[derive(Debug, Default)]
+struct RuntimeWorkerControlChannelState {
+    writer: Option<Arc<Mutex<TcpStream>>>,
+    next_request_id: u64,
+    pending: BTreeMap<String, mpsc::Sender<Result<JsonValue, RuntimeWorkerControlCallError>>>,
+}
+
+#[derive(Clone, Debug)]
+struct RuntimeWorkerControlCallError {
+    message: String,
+    code: Option<String>,
+    status: Option<u16>,
+}
+
+#[derive(Clone, Debug)]
 struct ProcessHealthProbe {
     http_status: u16,
     ready: bool,
     status: String,
     reason_codes: Vec<String>,
+    startup_mode: Option<String>,
     sampled_at: Option<String>,
     health_url: Option<String>,
     activation_url: Option<String>,
@@ -3566,6 +4047,7 @@ struct WorkerControlDescriptor {
     ready: bool,
     status: String,
     reason_codes: Vec<String>,
+    startup_mode: Option<String>,
     sampled_at: Option<String>,
     health_url: Option<String>,
     activation_url: Option<String>,
@@ -3602,6 +4084,7 @@ fn probe_process_health(health_url: &str) -> Result<ProcessHealthProbe, String> 
             ready: descriptor.ready,
             status: descriptor.status,
             reason_codes: descriptor.reason_codes,
+            startup_mode: descriptor.startup_mode,
             sampled_at: descriptor.sampled_at,
             health_url: descriptor.health_url,
             activation_url: descriptor.activation_url,
@@ -3626,6 +4109,7 @@ fn probe_process_health(health_url: &str) -> Result<ProcessHealthProbe, String> 
         },
         status,
         reason_codes: extract_json_string_array(&body, "reasonCodes"),
+        startup_mode: extract_json_string(&body, "startupMode"),
         sampled_at: extract_json_string(&body, "sampledAt"),
         health_url: extract_json_string_decoded(&body, "healthUrl").or_else(|| extract_json_string(&body, "healthUrl")),
         activation_url: extract_json_string_decoded(&body, "activationUrl").or_else(|| extract_json_string(&body, "activationUrl")),
@@ -3661,12 +4145,424 @@ fn parse_worker_control_descriptor(body: &str) -> Option<WorkerControlDescriptor
         ready,
         status,
         reason_codes,
+        startup_mode: payload.get("startupMode").and_then(JsonValue::as_str).map(|value| value.to_string()),
         sampled_at: payload.get("sampledAt").and_then(JsonValue::as_str).map(|value| value.to_string()),
         health_url: payload.get("healthUrl").and_then(JsonValue::as_str).map(|value| value.to_string()),
         activation_url: payload.get("activationUrl").and_then(JsonValue::as_str).map(|value| value.to_string()),
         quiesce_url: payload.get("quiesceUrl").and_then(JsonValue::as_str).map(|value| value.to_string()),
         reload_url: payload.get("reloadUrl").and_then(JsonValue::as_str).map(|value| value.to_string()),
     })
+}
+
+fn next_runtime_worker_control_request_id(channel: &RuntimeWorkerControlChannel) -> String {
+    let mut state = channel.state.lock().expect("runtime worker control state lock");
+    state.next_request_id = state.next_request_id.saturating_add(1);
+    format!("runtime-worker-{}", state.next_request_id)
+}
+
+fn start_runtime_worker_control_server() -> Option<RuntimeWorkerControlChannel> {
+    let listener = TcpListener::bind("127.0.0.1:0").ok()?;
+    let address = listener.local_addr().ok()?.to_string();
+    let channel = RuntimeWorkerControlChannel {
+        address,
+        state: Arc::new(Mutex::new(RuntimeWorkerControlChannelState::default())),
+    };
+    let state = Arc::clone(&channel.state);
+    thread::spawn(move || {
+        for incoming in listener.incoming() {
+            let Ok(stream) = incoming else {
+                thread::sleep(Duration::from_millis(25));
+                continue;
+            };
+            let Ok(writer_stream) = stream.try_clone() else {
+                continue;
+            };
+            let writer = Arc::new(Mutex::new(writer_stream));
+            {
+                let mut lock = state.lock().expect("runtime worker control state lock");
+                lock.writer = Some(Arc::clone(&writer));
+            }
+            let reader_state = Arc::clone(&state);
+            thread::spawn(move || {
+                let _ = runtime_worker_control_reader_loop(stream, writer, reader_state);
+            });
+        }
+    });
+    Some(channel)
+}
+
+fn runtime_worker_control_reader_loop(
+    stream: TcpStream,
+    writer: Arc<Mutex<TcpStream>>,
+    state: Arc<Mutex<RuntimeWorkerControlChannelState>>,
+) -> std::io::Result<()> {
+    let mut reader = BufReader::new(stream);
+    loop {
+        let mut line = String::new();
+        let bytes = reader.read_line(&mut line)?;
+        if bytes == 0 {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let parsed: JsonValue = match serde_json::from_str(trimmed) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if parsed.get("protocol").and_then(JsonValue::as_str) != Some(RUNTIME_WORKER_TRANSPORT_PROTOCOL_V1) {
+            continue;
+        }
+        if parsed.get("kind").and_then(JsonValue::as_str) != Some(RUNTIME_WORKER_TRANSPORT_KIND_RESULT) {
+            continue;
+        }
+        let request_id = parsed
+            .get("requestId")
+            .and_then(JsonValue::as_str)
+            .map(|value| value.to_string());
+        let sender = request_id.as_deref().and_then(|id| {
+            state
+                .lock()
+                .expect("runtime worker control state lock")
+                .pending
+                .remove(id)
+        });
+        let Some(sender) = sender else {
+            continue;
+        };
+        let ok = parsed.get("ok").and_then(JsonValue::as_bool).unwrap_or(false);
+        let payload = parsed.get("payload").cloned().unwrap_or(JsonValue::Null);
+        let _ = if ok {
+            sender.send(Ok(payload))
+        } else {
+            let error_message = parsed
+                .get("error")
+                .and_then(|value| {
+                    if let Some(message) = value.get("message").and_then(JsonValue::as_str) {
+                        Some(message.to_string())
+                    } else {
+                        value.as_str().map(|value| value.to_string())
+                    }
+                })
+                .unwrap_or_else(|| "runtime worker control call failed".to_string());
+            let error_code = parsed
+                .get("error")
+                .and_then(|value| value.get("code"))
+                .and_then(JsonValue::as_str)
+                .map(|value| value.to_string());
+            let error_status = parsed
+                .get("error")
+                .and_then(|value| value.get("status"))
+                .and_then(JsonValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok());
+            sender.send(Err(RuntimeWorkerControlCallError {
+                message: error_message,
+                code: error_code,
+                status: error_status,
+            }))
+        };
+    }
+    let pending = {
+        let mut lock = state.lock().expect("runtime worker control state lock");
+        if let Some(existing_writer) = lock.writer.as_ref() {
+            if Arc::ptr_eq(existing_writer, &writer) {
+                lock.writer = None;
+            }
+        }
+        std::mem::take(&mut lock.pending)
+    };
+    for (_, sender) in pending {
+        let _ = sender.send(Err(RuntimeWorkerControlCallError {
+            message: "runtime worker control connection closed".to_string(),
+            code: None,
+            status: None,
+        }));
+    }
+    Ok(())
+}
+
+fn wait_for_runtime_worker_control_writer(
+    channel: &RuntimeWorkerControlChannel,
+    timeout_ms: u64,
+) -> Result<Arc<Mutex<TcpStream>>, String> {
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms.max(1));
+    while Instant::now() <= deadline {
+        if let Some(writer) = channel
+            .state
+            .lock()
+            .expect("runtime worker control state lock")
+            .writer
+            .clone()
+        {
+            return Ok(writer);
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    Err("runtime worker control connection unavailable".to_string())
+}
+
+fn runtime_worker_control_writer_connected(channel: &RuntimeWorkerControlChannel) -> bool {
+    channel
+        .state
+        .lock()
+        .expect("runtime worker control state lock")
+        .writer
+        .is_some()
+}
+
+fn issue_runtime_worker_control_call(
+    channel: &RuntimeWorkerControlChannel,
+    method: &str,
+    args: JsonValue,
+    connect_timeout_ms: u64,
+    response_timeout_ms: u64,
+) -> Result<JsonValue, RuntimeWorkerControlCallError> {
+    let writer = wait_for_runtime_worker_control_writer(channel, connect_timeout_ms).map_err(|message| RuntimeWorkerControlCallError {
+        message,
+        code: None,
+        status: None,
+    })?;
+    let request_id = next_runtime_worker_control_request_id(channel);
+    let (tx, rx) = mpsc::channel();
+    {
+        let mut state = channel.state.lock().expect("runtime worker control state lock");
+        state.pending.insert(request_id.clone(), tx);
+    }
+    let payload = json!({
+        "protocol": RUNTIME_WORKER_TRANSPORT_PROTOCOL_V1,
+        "kind": RUNTIME_WORKER_TRANSPORT_KIND_CALL,
+        "method": method,
+        "requestId": request_id,
+        "args": args,
+    });
+    let write_result = {
+        let mut stream = writer.lock().expect("runtime worker control writer lock");
+        writeln!(stream, "{}", payload)
+    };
+    if let Err(error) = write_result {
+        channel
+            .state
+            .lock()
+            .expect("runtime worker control state lock")
+            .pending
+            .remove(&request_id);
+        return Err(RuntimeWorkerControlCallError {
+            message: format!("runtime worker control write failed: {}", error),
+            code: None,
+            status: None,
+        });
+    }
+    match rx.recv_timeout(Duration::from_millis(response_timeout_ms.max(1))) {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(error),
+        Err(_) => {
+            channel
+                .state
+                .lock()
+                .expect("runtime worker control state lock")
+                .pending
+                .remove(&request_id);
+            Err(RuntimeWorkerControlCallError {
+                message: "runtime worker control response timed out".to_string(),
+                code: None,
+                status: None,
+            })
+        }
+    }
+}
+
+fn probe_process_health_via_runtime_worker_control(
+    channel: &RuntimeWorkerControlChannel,
+) -> Result<ProcessHealthProbe, String> {
+    let payload = issue_runtime_worker_control_call(
+        channel,
+        RUNTIME_WORKER_TRANSPORT_METHOD_PROCESS_HEALTH_READ,
+        JsonValue::Null,
+        5_000,
+        5_000,
+    )
+    .map_err(|error| error.message)?;
+    let ready = payload.get("ready").and_then(JsonValue::as_bool).unwrap_or(false);
+    let status = payload
+        .get("status")
+        .and_then(JsonValue::as_str)
+        .unwrap_or(if ready { "healthy" } else { "unknown" })
+        .to_string();
+    let reason_codes = payload
+        .get("reasonCodes")
+        .and_then(JsonValue::as_array)
+        .map(|rows| {
+            rows.iter()
+                .filter_map(JsonValue::as_str)
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Ok(ProcessHealthProbe {
+        http_status: 200,
+        ready,
+        status,
+        reason_codes,
+        startup_mode: payload.get("startupMode").and_then(JsonValue::as_str).map(|value| value.to_string()),
+        sampled_at: payload.get("sampledAt").and_then(JsonValue::as_str).map(|value| value.to_string()),
+        health_url: None,
+        activation_url: None,
+        quiesce_url: None,
+        reload_url: None,
+    })
+}
+
+fn wait_for_process_readiness_via_runtime_worker_control_until_exit(
+    channel: &RuntimeWorkerControlChannel,
+    interval_ms: u64,
+    timeout_ms: u64,
+    child: &mut std::process::Child,
+) -> ProcessReadiness {
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms.max(1));
+    let interval = Duration::from_millis(interval_ms.max(25));
+    let mut last_status = "not checked".to_string();
+    while Instant::now() <= deadline {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let exit_fragment = status
+                    .code()
+                    .map(|code| format!("exitCode={}", code))
+                    .unwrap_or_else(|| "terminated".to_string());
+                return ProcessReadiness::Unhealthy(format!(
+                    "process exited before runtime control ready: {} ({})",
+                    last_status, exit_fragment
+                ));
+            }
+            Ok(None) => {}
+            Err(error) => {
+                return ProcessReadiness::Unhealthy(format!(
+                    "process status unavailable before runtime control ready: {} ({})",
+                    last_status, error
+                ));
+            }
+        }
+        if !runtime_worker_control_writer_connected(channel) {
+            last_status = "runtime worker control connection unavailable".to_string();
+            thread::sleep(interval);
+            continue;
+        }
+        match probe_process_health_via_runtime_worker_control(channel) {
+            Ok(probe) if (probe.ready || probe.startup_mode.as_deref() == Some("mcp")) && probe.status != "unhealthy" => {
+                return ProcessReadiness::Ready(probe);
+            }
+            Ok(probe) => {
+                last_status = format!("socket status={} ready={}", probe.status, probe.ready);
+            }
+            Err(error) => {
+                last_status = error;
+            }
+        }
+        thread::sleep(interval);
+    }
+    ProcessReadiness::Unhealthy(last_status)
+}
+
+fn request_runtime_worker_supervision_action(
+    channel: &RuntimeWorkerControlChannel,
+    method: &str,
+) -> Result<(), String> {
+    issue_runtime_worker_control_call(channel, method, JsonValue::Null, 2_000, 5_000)
+        .map(|_| ())
+        .map_err(|error| error.message)
+}
+
+fn request_runtime_worker_reload(
+    channel: &RuntimeWorkerControlChannel,
+    changed_paths: &[String],
+) -> Result<String, String> {
+    let payload = issue_runtime_worker_control_call(
+        channel,
+        RUNTIME_WORKER_TRANSPORT_METHOD_APP_SNAPSHOT_RELOAD,
+        json!({
+            "paths": changed_paths,
+            "trigger": "core"
+        }),
+        2_000,
+        10_000,
+    )
+    .map_err(|error| error.message)?;
+    Ok(payload.to_string())
+}
+
+fn request_runtime_worker_revision_payload(
+    channel: &RuntimeWorkerControlChannel,
+    method: &str,
+) -> Result<JsonValue, RuntimeWorkerControlCallError> {
+    issue_runtime_worker_control_call(channel, method, JsonValue::Null, 2_000, 10_000)
+}
+
+fn request_runtime_worker_preview_session_event_payload(
+    channel: &RuntimeWorkerControlChannel,
+    preview_session_id: &str,
+) -> Result<JsonValue, RuntimeWorkerControlCallError> {
+    issue_runtime_worker_control_call(
+        channel,
+        RUNTIME_WORKER_TRANSPORT_METHOD_APP_PREVIEW_SESSION_EVENT_READ,
+        json!({
+            "previewSessionId": preview_session_id,
+        }),
+        2_000,
+        10_000,
+    )
+}
+
+#[derive(Debug)]
+struct RuntimeWorkerHttpResponse {
+    status: u16,
+    headers: BTreeMap<String, String>,
+    body: Vec<u8>,
+}
+
+fn request_runtime_worker_http(
+    channel: &RuntimeWorkerControlChannel,
+    method: &str,
+    path: &str,
+    headers: &BTreeMap<String, String>,
+    body: &[u8],
+) -> Result<RuntimeWorkerHttpResponse, String> {
+    let payload = issue_runtime_worker_control_call(
+        channel,
+        RUNTIME_WORKER_TRANSPORT_METHOD_APP_HTTP_REQUEST,
+        json!({
+            "method": method,
+            "path": path,
+            "headers": headers,
+            "bodyBase64": if body.is_empty() { JsonValue::Null } else { JsonValue::String(BASE64_STANDARD.encode(body)) },
+        }),
+        2_000,
+        120_000,
+    )
+    .map_err(|error| error.message)?;
+    let status = payload
+        .get("status")
+        .and_then(JsonValue::as_u64)
+        .and_then(|value| u16::try_from(value).ok())
+        .unwrap_or(200);
+    let headers = payload
+        .get("headers")
+        .and_then(JsonValue::as_object)
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|(key, value)| value.as_str().map(|text| (key.to_ascii_lowercase(), text.to_string())))
+                .collect::<BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
+    let body = if let Some(encoded) = payload.get("bodyBase64").and_then(JsonValue::as_str) {
+        BASE64_STANDARD
+            .decode(encoded)
+            .map_err(|error| format!("runtime worker response bodyBase64 decode failed: {}", error))?
+    } else if let Some(text) = payload.get("bodyText").and_then(JsonValue::as_str) {
+        text.as_bytes().to_vec()
+    } else {
+        Vec::new()
+    };
+    Ok(RuntimeWorkerHttpResponse { status, headers, body })
 }
 
 struct HttpHealthTarget {
@@ -3694,6 +4590,126 @@ fn parse_http_url(health_url: &str) -> Option<HttpHealthTarget> {
         host_header: authority.to_string(),
         path,
     })
+}
+
+fn write_runtime_worker_http_response(
+    stream: &mut TcpStream,
+    response: RuntimeWorkerHttpResponse,
+) -> Result<(), String> {
+    let status_text = if (200..300).contains(&response.status) { "OK" } else { "Error" };
+    let mut response_headers = response.headers;
+    response_headers.insert("content-length".to_string(), response.body.len().to_string());
+    response_headers
+        .entry("connection".to_string())
+        .or_insert_with(|| "close".to_string());
+    write!(stream, "HTTP/1.1 {} {}\r\n", response.status, status_text).map_err(|error| error.to_string())?;
+    for (name, value) in response_headers {
+        write!(stream, "{}: {}\r\n", name, value).map_err(|error| error.to_string())?;
+    }
+    write!(stream, "\r\n").map_err(|error| error.to_string())?;
+    stream.write_all(&response.body).map_err(|error| error.to_string())?;
+    stream.flush().map_err(|error| error.to_string())
+}
+
+enum RuntimeWorkerSseRequest {
+    AppRevision,
+    BackendRevision,
+    PreviewSessionEvent { preview_session_id: String },
+}
+
+fn runtime_worker_sse_request_for_path(method: &str, path: &str) -> Option<RuntimeWorkerSseRequest> {
+    if !method.eq_ignore_ascii_case("GET") {
+        return None;
+    }
+    let normalized_path = path.split('?').next().unwrap_or(path);
+    match normalized_path {
+        "/api/runtime/app-revisions/events" => Some(RuntimeWorkerSseRequest::AppRevision),
+        "/api/runtime/backend-revisions/events" => Some(RuntimeWorkerSseRequest::BackendRevision),
+        _ => {
+            let prefix = "/api/runtime/app-preview-sessions/";
+            let suffix = "/events";
+            if let Some(rest) = normalized_path.strip_prefix(prefix) {
+                if let Some(preview_session_id) = rest.strip_suffix(suffix) {
+                    let trimmed = preview_session_id.trim_matches('/');
+                    if !trimmed.is_empty() {
+                        return Some(RuntimeWorkerSseRequest::PreviewSessionEvent {
+                            preview_session_id: trimmed.to_string(),
+                        });
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
+fn write_runtime_worker_polled_sse(
+    stream: &mut TcpStream,
+    channel: &RuntimeWorkerControlChannel,
+    request: RuntimeWorkerSseRequest,
+) -> Result<(), String> {
+    let read_payload = |request: &RuntimeWorkerSseRequest| -> Result<JsonValue, RuntimeWorkerControlCallError> {
+        match request {
+            RuntimeWorkerSseRequest::AppRevision => request_runtime_worker_revision_payload(
+                channel,
+                RUNTIME_WORKER_TRANSPORT_METHOD_APP_REVISION_READ,
+            ),
+            RuntimeWorkerSseRequest::BackendRevision => request_runtime_worker_revision_payload(
+                channel,
+                RUNTIME_WORKER_TRANSPORT_METHOD_BACKEND_REVISION_READ,
+            ),
+            RuntimeWorkerSseRequest::PreviewSessionEvent { preview_session_id } => {
+                request_runtime_worker_preview_session_event_payload(channel, preview_session_id)
+            }
+        }
+    };
+    let initial_payload = match read_payload(&request) {
+        Ok(payload) => payload,
+        Err(error) => {
+            let status = error.status.unwrap_or(503);
+            return write_json(
+                stream,
+                status,
+                &json!({
+                    "error": error.message,
+                    "code": error.code,
+                }).to_string(),
+            )
+            .map_err(|write_error| write_error.to_string());
+        }
+    };
+    stream
+        .write_all(
+            b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncache-control: no-cache\r\nconnection: keep-alive\r\n\r\n",
+        )
+        .map_err(|error| error.to_string())?;
+    let mut last_payload = initial_payload.to_string();
+    let initial_frame = format!("data: {}\n\n", last_payload);
+    stream
+        .write_all(initial_frame.as_bytes())
+        .and_then(|_| stream.flush())
+        .map_err(|error| error.to_string())?;
+    loop {
+        thread::sleep(Duration::from_millis(250));
+        let next_payload = match read_payload(&request) {
+            Ok(payload) => payload,
+            Err(_) => break,
+        };
+        let next_serialized = next_payload.to_string();
+        if next_serialized == last_payload {
+            continue;
+        }
+        let frame = format!("data: {}\n\n", next_serialized);
+        if stream
+            .write_all(frame.as_bytes())
+            .and_then(|_| stream.flush())
+            .is_err()
+        {
+            break;
+        }
+        last_payload = next_serialized;
+    }
+    Ok(())
 }
 
 fn request_process_restart(
@@ -3732,7 +4748,7 @@ fn request_process_stop(
 struct ManagedProcessInstanceSnapshot {
     id: String,
     state: String,
-    port: u16,
+    port: Option<u16>,
     running: bool,
     ready: bool,
     pid: u32,
@@ -3747,6 +4763,7 @@ struct ManagedProcessInstanceSnapshot {
 struct ManagedProcessInstance {
     snapshot: ManagedProcessInstanceSnapshot,
     child: std::process::Child,
+    runtime_control_channel: Option<RuntimeWorkerControlChannel>,
     health_url: Option<String>,
     activation_url: Option<String>,
     quiesce_url: Option<String>,
@@ -3767,11 +4784,22 @@ fn reserve_loopback_port() -> Option<u16> {
     Some(port)
 }
 
-fn interpolate_runtime_template(template: &str, runtime_port: u16, instance_id: &str, core_url: &str) -> String {
-    template
-        .replace("{runtime_port}", &runtime_port.to_string())
+fn interpolate_runtime_template(
+    template: &str,
+    runtime_port: Option<u16>,
+    instance_id: &str,
+    core_url: &str,
+) -> Result<String, String> {
+    if runtime_port.is_none() && template.contains("{runtime_port}") {
+        return Err("transport-only supervised runtime template cannot reference {runtime_port}".to_string());
+    }
+    let mut rendered = template
         .replace("{instance_id}", instance_id)
-        .replace("{core_url}", core_url)
+        .replace("{core_url}", core_url);
+    if let Some(port) = runtime_port {
+        rendered = rendered.replace("{runtime_port}", &port.to_string());
+    }
+    Ok(rendered)
 }
 
 fn replace_http_url_path(url: &str, new_path: &str) -> Option<String> {
@@ -4028,10 +5056,21 @@ fn core_event_transport_envelope(event: &CoreEvent, request_id: Option<&str>) ->
     .to_string()
 }
 
-fn active_target_from_state(state: &SupervisedProcessState) -> Option<(String, String)> {
+#[derive(Clone, Debug)]
+enum ActiveProxyTarget {
+    RuntimeControl {
+        channel: RuntimeWorkerControlChannel,
+    },
+    Tcp(String),
+}
+
+fn active_target_from_state(state: &SupervisedProcessState) -> Option<(String, ActiveProxyTarget)> {
     let instance_id = state.frontdoor_active_instance_id.clone()?;
-    let target = state.frontdoor_active_target.clone()?;
-    Some((instance_id, target))
+    let target = state.frontdoor_active_target.clone();
+    if let Some(channel) = state.runtime_control_channel.clone() {
+        return Some((instance_id, ActiveProxyTarget::RuntimeControl { channel }));
+    }
+    Some((instance_id, ActiveProxyTarget::Tcp(target?)))
 }
 
 fn update_proxy_connection_count(process_state: &Arc<Mutex<SupervisedProcessState>>, instance_id: &str, delta: i64) {
@@ -4076,7 +5115,7 @@ fn sync_frontdoor_state(
         next_instances.push(SupervisedProcessInstanceState {
             id: active_instance.snapshot.id.clone(),
             state: active_instance.snapshot.state.clone(),
-            port: Some(active_instance.snapshot.port),
+            port: active_instance.snapshot.port,
             running: active_instance.snapshot.running,
             ready: active_instance.snapshot.ready,
             pid: Some(active_instance.snapshot.pid),
@@ -4093,7 +5132,7 @@ fn sync_frontdoor_state(
         next_instances.push(SupervisedProcessInstanceState {
             id: instance.snapshot.id.clone(),
             state: instance.snapshot.state.clone(),
-            port: Some(instance.snapshot.port),
+            port: instance.snapshot.port,
             running: instance.snapshot.running,
             ready: instance.snapshot.ready,
             pid: Some(instance.snapshot.pid),
@@ -4118,15 +5157,19 @@ fn sync_frontdoor_state(
         state.last_health_status = active_instance.snapshot.last_health_status.clone();
         state.instance_id = Some(active_instance.snapshot.id.clone());
         state.role = Some(active_instance.snapshot.role.clone());
-        state.watchers_enabled = active_instance.snapshot.role == "active" && active_instance.reload_url.is_none();
+        state.control_socket_addr = active_instance.runtime_control_channel.as_ref().map(|channel| channel.address.clone());
+        state.runtime_control_channel = active_instance.runtime_control_channel.clone();
+        state.watchers_enabled = active_instance.snapshot.role == "active"
+            && active_instance.reload_url.is_none()
+            && active_instance.runtime_control_channel.is_none();
         state.mutations_enabled = active_instance.snapshot.role == "active";
         state.frontdoor_active_instance_id = if active_instance.snapshot.ready {
             Some(active_instance.snapshot.id.clone())
         } else {
             None
         };
-        state.frontdoor_active_target = if active_instance.snapshot.ready {
-            Some(format!("127.0.0.1:{}", active_instance.snapshot.port))
+        state.frontdoor_active_target = if active_instance.snapshot.ready && active_instance.runtime_control_channel.is_none() {
+            active_instance.snapshot.port.map(|port| format!("127.0.0.1:{}", port))
         } else {
             None
         };
@@ -4142,6 +5185,8 @@ fn sync_frontdoor_state(
         state.ready = false;
         state.instance_id = None;
         state.role = None;
+        state.control_socket_addr = None;
+        state.runtime_control_channel = None;
         state.watchers_enabled = false;
         state.mutations_enabled = false;
         state.frontdoor_active_instance_id = None;
@@ -4158,7 +5203,56 @@ fn proxy_unavailable(mut stream: TcpStream) {
     let _ = stream.flush();
 }
 
-fn proxy_connection(stream: TcpStream, target: String, process_state: Arc<Mutex<SupervisedProcessState>>, instance_id: String) {
+fn proxy_preparsed_request_to_runtime_control(
+    stream: &mut TcpStream,
+    channel: &RuntimeWorkerControlChannel,
+    method: &str,
+    path: &str,
+    headers: &BTreeMap<String, String>,
+    body: &[u8],
+) -> Result<(), String> {
+    let accept = headers
+        .get("accept")
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_default();
+    let connection = headers
+        .get("connection")
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_default();
+    let upgrade = headers
+        .get("upgrade")
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_default();
+    if accept.contains("text/event-stream") {
+        if let Some(sse_request) = runtime_worker_sse_request_for_path(method, path) {
+            return write_runtime_worker_polled_sse(stream, channel, sse_request);
+        }
+        return write_json(
+            stream,
+            501,
+            &json!({
+                "error": "runtime event-stream transport is not supported for this route",
+                "code": "WITNESS_RUNTIME_TRANSPORT_STREAMING_UNSUPPORTED",
+            }).to_string(),
+        )
+        .map_err(|error| error.to_string());
+    }
+    if connection.contains("upgrade") || !upgrade.trim().is_empty() {
+        return write_json(
+            stream,
+            501,
+            &json!({
+                "error": "runtime upgrade transport is not supported",
+                "code": "WITNESS_RUNTIME_TRANSPORT_UPGRADE_UNSUPPORTED",
+            }).to_string(),
+        )
+        .map_err(|error| error.to_string());
+    }
+    let response = request_runtime_worker_http(channel, method, path, headers, body)?;
+    write_runtime_worker_http_response(stream, response)
+}
+
+fn proxy_connection_tcp(stream: TcpStream, target: String, process_state: Arc<Mutex<SupervisedProcessState>>, instance_id: String) {
     let Ok(target_stream) = TcpStream::connect(target) else {
         update_proxy_connection_count(&process_state, &instance_id, -1);
         proxy_unavailable(stream);
@@ -4188,6 +5282,58 @@ fn proxy_connection(stream: TcpStream, target: String, process_state: Arc<Mutex<
     });
     let _ = upload.join();
     let _ = download.join();
+    update_proxy_connection_count(&process_state, &instance_id, -1);
+}
+
+fn proxy_connection_runtime_control(
+    mut stream: TcpStream,
+    channel: RuntimeWorkerControlChannel,
+    process_state: Arc<Mutex<SupervisedProcessState>>,
+    instance_id: String,
+) {
+    let result = (|| -> Result<(), String> {
+        let mut reader = BufReader::new(stream.try_clone().map_err(|error| error.to_string())?);
+        let mut first_line = String::new();
+        reader.read_line(&mut first_line).map_err(|error| error.to_string())?;
+        let mut parts = first_line.split_whitespace();
+        let method = parts.next().unwrap_or("").trim().to_string();
+        let path = parts.next().unwrap_or("/").trim().to_string();
+        if method.is_empty() {
+            return Err("invalid frontdoor request line".to_string());
+        }
+        let mut headers = BTreeMap::new();
+        let mut content_length = 0usize;
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).map_err(|error| error.to_string())?;
+            if line == "\r\n" || line == "\n" || line.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(':') {
+                let key = name.trim().to_ascii_lowercase();
+                let header_value = value.trim().to_string();
+                if key == "content-length" {
+                    content_length = header_value.parse::<usize>().unwrap_or(0);
+                }
+                headers.insert(key, header_value);
+            }
+        }
+        let mut body = vec![0u8; content_length];
+        if content_length > 0 {
+            reader.read_exact(&mut body).map_err(|error| error.to_string())?;
+        }
+        proxy_preparsed_request_to_runtime_control(
+            &mut stream,
+            &channel,
+            &method,
+            &path,
+            &headers,
+            &body,
+        )
+    })();
+    if result.is_err() {
+        proxy_unavailable(stream);
+    }
     update_proxy_connection_count(&process_state, &instance_id, -1);
 }
 
@@ -4231,7 +5377,14 @@ fn start_frontdoor_proxy(
             };
             update_proxy_connection_count(&process_state, &instance_id, 1);
             let state = Arc::clone(&process_state);
-            thread::spawn(move || proxy_connection(stream, target, state, instance_id));
+            thread::spawn(move || match target {
+                ActiveProxyTarget::RuntimeControl { channel } => {
+                    proxy_connection_runtime_control(stream, channel, state, instance_id);
+                }
+                ActiveProxyTarget::Tcp(target) => {
+                    proxy_connection_tcp(stream, target, state, instance_id);
+                }
+            });
         }
     });
 }
@@ -5825,6 +6978,16 @@ fn shadow_invoke_compute_module(
     }
 }
 
+fn resolve_runtime_control_channel(
+    process_state: &Arc<Mutex<SupervisedProcessState>>,
+) -> Option<RuntimeWorkerControlChannel> {
+    process_state
+        .lock()
+        .expect("process state lock")
+        .runtime_control_channel
+        .clone()
+}
+
 fn resolve_reload_url(process_state: &Arc<Mutex<SupervisedProcessState>>) -> Option<String> {
     let state = process_state.lock().expect("process state lock");
     state
@@ -5840,9 +7003,6 @@ fn maybe_reload_serving_runtime(
     generation_id: &str,
     registry: &Arc<Mutex<Registry>>,
 ) -> Result<bool, String> {
-    let Some(reload_url) = resolve_reload_url(process_state) else {
-        return Ok(false);
-    };
     let body = format!(
         "{{\"paths\":[{}]}}",
         changed_paths.iter().map(|value| json_string(value)).collect::<Vec<_>>().join(",")
@@ -5856,6 +7016,37 @@ fn maybe_reload_serving_runtime(
         serving: None,
         emitted_at: now_iso(),
     });
+    if let Some(channel) = resolve_runtime_control_channel(process_state) {
+        match request_runtime_worker_reload(&channel, changed_paths) {
+            Ok(message) => {
+                registry.lock().expect("registry lock").emit(CoreEvent {
+                    kind: "transaction.activation.passed".to_string(),
+                    capability: CAP_NOTIFY_SURFACE.to_string(),
+                    generation_id: Some(generation_id.to_string()),
+                    message: Some(if message.trim().is_empty() { "ok".to_string() } else { message }),
+                    generation: None,
+                    serving: None,
+                    emitted_at: now_iso(),
+                });
+                return Ok(true);
+            }
+            Err(error) => {
+                registry.lock().expect("registry lock").emit(CoreEvent {
+                    kind: "transaction.activation.failed".to_string(),
+                    capability: CAP_NOTIFY_SURFACE.to_string(),
+                    generation_id: Some(generation_id.to_string()),
+                    message: Some(error.clone()),
+                    generation: None,
+                    serving: None,
+                    emitted_at: now_iso(),
+                });
+                return Err(error);
+            }
+        }
+    }
+    let Some(reload_url) = resolve_reload_url(process_state) else {
+        return Ok(false);
+    };
     match issue_http_post_with_body(&reload_url, &body) {
         Ok(message) => {
             registry.lock().expect("registry lock").emit(CoreEvent {
@@ -5987,6 +7178,27 @@ fn apply_published_authoring_transaction(
         correlation: request.correlation.clone(),
         promotion_decision: None,
     };
+    if let Some(existing_generation) = {
+        let registry_lock = registry.lock().expect("registry lock");
+        matching_generation_for_content(&registry_lock, &generation.content_hash, &generation.source_paths)
+    } {
+        registry.lock().expect("registry lock").emit(CoreEvent {
+            kind: "transaction.published.duplicate_suppressed".to_string(),
+            capability: CAP_STORAGE_WRITE.to_string(),
+            generation_id: Some(existing_generation.id.clone()),
+            message: Some(format!("manifestPath={} editCount={}", request.manifest_path, request.edits.len())),
+            generation: Some(existing_generation.clone()),
+            serving: None,
+            emitted_at: now_iso(),
+        });
+        let settled = wait_for_generation_to_settle(registry, &existing_generation.id, config.transaction.build_timeout_ms)
+            .unwrap_or(existing_generation);
+        let serving_status = registry.lock().expect("registry lock").serving_status();
+        let activated = serving_status.effective_mode == ServingMode::Live
+            && matches!(settled.state, GenerationState::GreenLocal | GenerationState::Stable);
+        let _ = fs::remove_dir_all(&stage_root);
+        return Ok(published_transaction_response_json(&settled, activated, None));
+    }
     registry.lock().expect("registry lock").upsert_generation(generation.clone(), "generation.candidate", CAP_STORAGE_WRITE);
     match run_build_worker(
         cwd,
@@ -7438,6 +8650,7 @@ fn supervised_process_state_to_json(state: &SupervisedProcessState) -> String {
         json_string_array_pair("reasonCodes", &state.reason_codes),
         json_optional_pair("lastHealthSampleAt", state.last_health_sample_at.as_deref()),
         json_optional_pair("controlUrl", state.control_url.as_deref()),
+        json_optional_pair("controlSocketAddr", state.control_socket_addr.as_deref()),
         json_optional_pair("healthUrl", state.health_url.as_deref()),
         json_optional_pair("reloadUrl", state.reload_url.as_deref()),
         json_optional_pair("transportPipe", state.transport_pipe.as_deref()),
@@ -8398,6 +9611,66 @@ printf '207'
     }
 
     #[test]
+    fn supervisor_initialization_reclaims_conflicting_owner_before_runtime_restart() {
+        let root = test_root();
+        let stale_supervisor = test_supervisor(&root, "stale-live-core");
+        let mut child = match Command::new("node")
+            .arg("-e")
+            .arg("setInterval(()=>{},1000)")
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(_) => return,
+        };
+        let stale_owner = SupervisorOwnerRecord {
+            core_id: "stale-live-core".to_string(),
+            core_pid: std::process::id(),
+            workspace_root: normalize_path(&root),
+            config_path: normalize_path(&root.join("witness-core.toml")),
+            started_at: "1".to_string(),
+            last_heartbeat_at: now_iso(),
+        };
+        write_supervisor_json(
+            &stale_supervisor.owner_path(&stale_owner.core_id),
+            &supervisor_owner_to_json(&stale_owner),
+        ).unwrap();
+        let stale_worker = SupervisorWorkerRecord {
+            core_id: stale_owner.core_id.clone(),
+            core_pid: stale_owner.core_pid,
+            instance_id: "runtime-live".to_string(),
+            node_pid: child.id(),
+            port: Some(4017),
+            role: "active".to_string(),
+            command: "node src/cli.js utility-serve fixture --port 4017".to_string(),
+            started_at: "1".to_string(),
+            last_observed_at: "1".to_string(),
+        };
+        write_supervisor_json(
+            &stale_supervisor.worker_path(&stale_worker.core_id, &stale_worker.instance_id),
+            &supervisor_worker_to_json(&stale_worker),
+        ).unwrap();
+
+        let new_supervisor = test_supervisor(&root, "new-core");
+        initialize_supervisor_store(&new_supervisor);
+
+        let deadline = Instant::now() + Duration::from_millis(5_000);
+        let mut exited = false;
+        while Instant::now() < deadline {
+            if child.try_wait().unwrap().is_some() {
+                exited = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        if !exited {
+            let _ = child.kill();
+        }
+        assert!(exited);
+        assert!(!new_supervisor.owner_path("stale-live-core").exists());
+        assert!(!new_supervisor.worker_path("stale-live-core", "runtime-live").exists());
+    }
+
+    #[test]
     fn frontdoor_spawn_registers_and_exit_cleanup_removes_worker_record() {
         let root = test_root();
         let script = root.join("frontdoor-worker.js");
@@ -8504,7 +9777,7 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
     }
 
     #[test]
-    fn checked_in_frontdoor_configs_parse_and_keep_private_worker_health_targets() {
+    fn checked_in_frontdoor_configs_parse_and_use_portless_transport_only_runtimes() {
         let repo_root = checked_in_repo_root();
         let engentus = load_config(&repo_root.join("witness-core.toml")).unwrap();
         let bootstrap = load_config(&repo_root.join("witness-core-bootstrap.toml")).unwrap();
@@ -8516,15 +9789,19 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         assert_eq!(authoring.frontdoor.public_addr.as_deref(), Some("127.0.0.1:3000"));
         assert_eq!(engentus_mcp.frontdoor.public_addr.as_deref(), Some("127.0.0.1:8791"));
 
-        assert_eq!(engentus.supervise.control_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/worker-control"));
-        assert_eq!(bootstrap.supervise.control_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/worker-control"));
-        assert_eq!(authoring.supervise.control_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/worker-control"));
-        assert_eq!(engentus_mcp.supervise.control_url.as_deref(), Some("http://127.0.0.1:{runtime_port}/api/runtime/worker-control"));
+        assert_eq!(engentus.supervise.control_url, None);
+        assert_eq!(bootstrap.supervise.control_url, None);
+        assert_eq!(authoring.supervise.control_url, None);
+        assert_eq!(engentus_mcp.supervise.control_url, None);
 
-        assert_eq!(engentus.supervise.command.as_deref(), Some("node src/cli.js utility-serve examples/engentus --server engentus_server --port {runtime_port} --runtime-profile full --startup-telemetry"));
-        assert_eq!(bootstrap.supervise.command.as_deref(), Some("node src/cli.js utility-bootstrap --port {runtime_port}"));
-        assert_eq!(authoring.supervise.command.as_deref(), Some("node src/cli.js utility-bootstrap --port {runtime_port} --runtime-profile authoring --runtime-plugin plugin.mcp"));
-        assert_eq!(engentus_mcp.supervise.command.as_deref(), Some("node src/cli.js utility-mcp examples/engentus --mcp engentus_mcp --server engentus_server --transport http --port {runtime_port} --runtime-profile full"));
+        assert_eq!(engentus.supervise.command.as_deref(), Some("node src/cli.js utility-serve examples/engentus --server engentus_server --runtime-profile full --startup-telemetry"));
+        assert_eq!(bootstrap.supervise.command.as_deref(), Some("node src/cli.js utility-bootstrap"));
+        assert_eq!(authoring.supervise.command.as_deref(), Some("node src/cli.js utility-bootstrap --runtime-profile authoring --runtime-plugin plugin.mcp"));
+        assert_eq!(engentus_mcp.supervise.command.as_deref(), Some("node src/cli.js utility-mcp examples/engentus --mcp engentus_mcp --server engentus_server --transport http --runtime-profile full"));
+        assert_eq!(engentus.supervise.transport_only_runtime, true);
+        assert_eq!(bootstrap.supervise.transport_only_runtime, true);
+        assert_eq!(authoring.supervise.transport_only_runtime, true);
+        assert_eq!(engentus_mcp.supervise.transport_only_runtime, true);
     }
 
     #[test]
@@ -8910,7 +10187,14 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         let mut response = String::new();
         response_reader.read_line(&mut response).unwrap();
         let mut response_text = response.clone();
-        response_reader.read_to_string(&mut response_text).unwrap();
+        match response_reader.read_to_string(&mut response_text) {
+            Ok(_) => {}
+            Err(error) if matches!(
+                error.kind(),
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::UnexpectedEof
+            ) => {}
+            Err(error) => panic!("failed to read outbound HTTP capability response: {}", error),
+        }
         handle.join().unwrap();
         target_handle.join().unwrap();
         assert!(response.contains("200 OK"));
@@ -9113,6 +10397,34 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
     }
 
     #[test]
+    fn duplicate_generation_suppression_matches_same_hash_and_changed_sources() {
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let mut registry = Registry::new(store);
+        registry.upsert_generation(sample_generation("gen_green", GenerationState::GreenLocal), "generation.green_local", CAP_STORAGE_WRITE);
+
+        assert!(should_suppress_duplicate_generation(
+            &registry,
+            "sha256:test",
+            &["src/a.js".to_string()]
+        ));
+        assert!(should_suppress_duplicate_generation(
+            &registry,
+            "sha256:test",
+            &["src/a.js".to_string(), "src/a.js".to_string()]
+        ));
+        assert!(!should_suppress_duplicate_generation(
+            &registry,
+            "sha256:other",
+            &["src/a.js".to_string()]
+        ));
+        assert!(!should_suppress_duplicate_generation(
+            &registry,
+            "sha256:test",
+            &["src/b.js".to_string()]
+        ));
+    }
+
+    #[test]
     fn registry_replays_journal_after_restart() {
         let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
         let mut registry = Registry::new(Arc::clone(&store));
@@ -9263,6 +10575,7 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
             reason_codes: vec!["rss_over_budget".to_string()],
             last_health_sample_at: Some("sampled".to_string()),
             control_url: Some("http://127.0.0.1:3000/api/runtime/worker-control".to_string()),
+            control_socket_addr: Some("127.0.0.1:45555".to_string()),
             health_url: Some("http://127.0.0.1:3000/api/runtime/process-health".to_string()),
             last_restart_reason: Some("policy unhealthy: sse_clients_over_budget".to_string()),
             ..SupervisedProcessState::default()
@@ -9275,8 +10588,78 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
         assert!(json.contains("\"reasonCodes\":[\"rss_over_budget\"]"));
         assert!(json.contains("\"lastHealthSampleAt\":\"sampled\""));
         assert!(json.contains("\"controlUrl\":\"http://127.0.0.1:3000/api/runtime/worker-control\""));
+        assert!(json.contains("\"controlSocketAddr\":\"127.0.0.1:45555\""));
         assert!(json.contains("\"healthUrl\":\"http://127.0.0.1:3000/api/runtime/process-health\""));
         assert!(json.contains("\"lastRestartReason\":\"policy unhealthy: sse_clients_over_budget\""));
+    }
+
+    #[test]
+    fn serving_runtime_reload_prefers_runtime_control_socket() {
+        let channel = start_runtime_worker_control_server().expect("runtime control server");
+        let channel_addr = channel.address.clone();
+        let handler = thread::spawn(move || {
+            let stream = TcpStream::connect(&channel_addr).expect("connect runtime control socket");
+            let mut reader = BufReader::new(stream.try_clone().expect("clone runtime control socket"));
+            let mut writer = stream;
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("read control request");
+            let request: JsonValue = serde_json::from_str(line.trim()).expect("parse control request");
+            assert_eq!(
+                request.get("method").and_then(JsonValue::as_str),
+                Some(RUNTIME_WORKER_TRANSPORT_METHOD_APP_SNAPSHOT_RELOAD)
+            );
+            assert_eq!(
+                request
+                    .get("args")
+                    .and_then(|value| value.get("paths"))
+                    .and_then(JsonValue::as_array)
+                    .map(|rows| rows.iter().filter_map(JsonValue::as_str).collect::<Vec<_>>()),
+                Some(vec!["app/shell.rvm", "app/content.wtoml"])
+            );
+            let request_id = request
+                .get("requestId")
+                .and_then(JsonValue::as_str)
+                .expect("request id");
+            writeln!(
+                writer,
+                "{}",
+                json!({
+                    "protocol": RUNTIME_WORKER_TRANSPORT_PROTOCOL_V1,
+                    "kind": RUNTIME_WORKER_TRANSPORT_KIND_RESULT,
+                    "method": RUNTIME_WORKER_TRANSPORT_METHOD_APP_SNAPSHOT_RELOAD,
+                    "requestId": request_id,
+                    "ok": true,
+                    "payload": {
+                        "ok": true,
+                        "appRevision": 7,
+                        "changedSources": ["app/shell.rvm", "app/content.wtoml"]
+                    }
+                })
+            )
+            .expect("write control response");
+        });
+        let store: Arc<dyn CoreStore> = Arc::new(MemoryStore::new());
+        let registry = Arc::new(Mutex::new(Registry::new(Arc::clone(&store))));
+        let process_state = Arc::new(Mutex::new(SupervisedProcessState {
+            runtime_control_channel: Some(channel),
+            control_socket_addr: Some("127.0.0.1:45555".to_string()),
+            reload_url: Some("http://127.0.0.1:1/api/runtime/app-snapshot/reload".to_string()),
+            ..SupervisedProcessState::default()
+        }));
+        let changed_paths = vec!["app/shell.rvm".to_string(), "app/content.wtoml".to_string()];
+        let reloaded = maybe_reload_serving_runtime(
+            &process_state,
+            &changed_paths,
+            "gen_socket",
+            &registry,
+        )
+        .expect("socket reload succeeds");
+        assert!(reloaded);
+        handler.join().expect("control handler join");
+        let events = store.read_events().expect("read events").join("\n");
+        assert!(events.contains("transaction.activation.started"));
+        assert!(events.contains("transaction.activation.passed"));
+        assert!(!events.contains("transaction.activation.failed"));
     }
 
     #[cfg_attr(windows, ignore = "flaky on windows localhost readiness timing")]
@@ -9359,6 +10742,7 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
                 command: Some(command),
                 working_dir: None,
                 control_url: None,
+                transport_only_runtime: false,
                 restart_on_exit: false,
                 restart_on_unhealthy: true,
                 health_url: Some(health_url),
@@ -9451,6 +10835,7 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
                 command: Some("exit 0".to_string()),
                 working_dir: None,
                 control_url: None,
+                transport_only_runtime: false,
                 restart_on_exit: false,
                 restart_on_unhealthy: true,
                 health_url: None,
@@ -9464,13 +10849,20 @@ artifact_store_root = ".witness-core/artifacts/compute-modules"
             Arc::clone(&process_state),
             supervisor,
         );
-        thread::sleep(Duration::from_millis(400));
-        let state = process_state.lock().unwrap().clone();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let (state, events) = loop {
+            let state = process_state.lock().unwrap().clone();
+            let events = store.read_events().unwrap().join("\n");
+            if !state.running && events.contains("process.exited") {
+                break (state, events);
+            }
+            assert!(Instant::now() < deadline, "supervised process did not exit in time");
+            thread::sleep(Duration::from_millis(25));
+        };
         assert_eq!(state.running, false);
-        assert_eq!(state.last_exit_code, Some(0));
-        let events = store.read_events().unwrap().join("\n");
         assert!(events.contains("process.started"));
         assert!(events.contains("process.exited"));
+        assert!(events.contains("exit_code=0"));
     }
 
     #[test]

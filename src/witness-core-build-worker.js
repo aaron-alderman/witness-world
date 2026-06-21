@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -10,6 +9,7 @@ import {
   COMPUTE_MODULE_LANGUAGE_V1,
   loadAppProject
 } from "./app-project.js";
+import { runtimeLocalFsModule } from "./runtime-local-fs.js";
 import { createBuildWorkerResultEnvelope } from "./witness-worker-protocol.js";
 
 const MODULE_ARTIFACT_DIR = path.join(".witness-core", "compute-modules");
@@ -75,7 +75,7 @@ function sha256Hex(bytes) {
 
 async function pathExists(targetPath) {
   try {
-    await fs.access(targetPath);
+    await runtimeLocalFsModule.access(targetPath);
     return true;
   } catch {
     return false;
@@ -182,7 +182,7 @@ async function compileComputeModule(computeModule, {
       error: `compute module source not found: ${normalizeSlashes(sourcePath)}`
     };
   }
-  await fs.mkdir(path.dirname(artifactPath), { recursive: true });
+  await runtimeLocalFsModule.mkdir(path.dirname(artifactPath), { recursive: true });
   const ascPath = await resolveAssemblyScriptCompilerScript();
   const compileResult = await runChild(process.execPath, [
     ascPath,
@@ -207,7 +207,7 @@ async function compileComputeModule(computeModule, {
     };
   }
   try {
-    const artifactBytes = await fs.readFile(artifactPath);
+    const artifactBytes = await runtimeLocalFsModule.readFile(artifactPath);
     await verifyCompiledExport(artifactBytes, baseRecord.export, computeModule);
     return {
       ...baseRecord,

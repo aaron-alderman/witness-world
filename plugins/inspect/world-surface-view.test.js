@@ -15,6 +15,8 @@ test("world surface mode menu view renders active mode and command affordance", 
   });
 
   assert.equal(html.includes('data-world-mode="source"'), true);
+  assert.equal(html.includes('data-world-mode="system"'), true);
+  assert.equal(html.includes("System Overview"), true);
   assert.equal(html.includes("surface-toolbar"), true);
   assert.equal(html.includes("surface-toolbar-spacer"), true);
   assert.equal(html.includes("world-mode-active"), true);

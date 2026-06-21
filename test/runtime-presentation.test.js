@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import {
   PAGE_PRESENTATION_REGION_CLASSNAMES,
   SHARED_SURFACE_KIT_CSS,
+  renderPagePresentationHead,
   renderPagePresentationChromeCss,
   renderPagePresentationCssVars,
   resolvePagePresentationTheme
 } from "../src/runtime-presentation.js";
 import { renderBootstrapShellHead } from "../plugins/bootstrap/bootstrap-shell-head.js";
-import { renderWidgetPageHead } from "../plugins/inspect/widget-page-head.js";
 
 test("page presentation theme resolution and css vars are stable across consumers", () => {
   const pageTheme = resolvePagePresentationTheme({
@@ -33,10 +33,10 @@ test("page presentation theme resolution and css vars are stable across consumer
   assert.match(cssVars, /--motion-medium: 180ms ease/);
 });
 
-test("bootstrap and inspect heads both consume the shared presentation contract", () => {
+test("bootstrap and runtime widget heads both consume the shared presentation contract", () => {
   const pageTheme = resolvePagePresentationTheme({ themeId: "straw", material: "wood", typography: "serif" });
   const bootstrapHead = renderBootstrapShellHead();
-  const widgetHead = renderWidgetPageHead("Inspect", pageTheme);
+  const widgetHead = renderPagePresentationHead({ title: "Runtime Widget", pageTheme });
 
   assert.equal(bootstrapHead.includes(SHARED_SURFACE_KIT_CSS.trim()), true);
   assert.equal(widgetHead.includes(SHARED_SURFACE_KIT_CSS.trim()), true);

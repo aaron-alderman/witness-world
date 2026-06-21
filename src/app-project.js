@@ -1,7 +1,6 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { loadRuntimePluginRegistriesForDocs, loadWitnessAppFile } from "./dsl.js";
-import { buildOperatorWorkbenchDefinition } from "./operator-screen-specs.js";
+import { runtimeLocalFsModule } from "./runtime-local-fs.js";
 import { createStableAppOverlayReadFile, readStableAppSourceCache } from "./runtime-stable-source-cache.js";
 
 export const APP_MANIFEST_BASENAME = "app.wtoml";
@@ -14,6 +13,38 @@ function createAppProjectError(code, message, details = {}) {
   error.code = code;
   Object.assign(error, details);
   return error;
+}
+
+function createExtensionModelContainer() {
+  return {
+    byId: new Map(),
+    values: Object.create(null)
+  };
+}
+
+function addExtensionModel(container, modelId, value) {
+  container.byId.set(modelId, value);
+  container.values[modelId] = value;
+}
+
+function buildAppProjectExtensionModels({
+  appProjectBase,
+  witnessDocs,
+  authoredDesireDocs,
+  allDocs,
+  appProjectAssemblers = []
+} = {}) {
+  const extensionModels = createExtensionModelContainer();
+  for (const assembler of appProjectAssemblers) {
+    const model = assembler.build({
+      appProjectBase,
+      witnessDocs,
+      authoredDesireDocs,
+      allDocs
+    });
+    addExtensionModel(extensionModels, assembler.modelId, model);
+  }
+  return extensionModels;
 }
 
 function uniqueByFile(rows = []) {
@@ -94,7 +125,7 @@ function createCapabilityRequiredError(targetPath) {
 
 function createAppProjectSourceFsModule({
   cwd = process.cwd(),
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   generationBridge = null,
   requireGenerationBridgeForCanonicalReads = false
 } = {}) {
@@ -144,7 +175,7 @@ function createAppProjectSourceFsModule({
 function appProjectSourceFsModule(options = {}) {
   return createAppProjectSourceFsModule({
     cwd: options?.cwd ?? process.cwd(),
-    fsModule: options?.fsModule ?? fs,
+    fsModule: options?.fsModule ?? runtimeLocalFsModule,
     generationBridge: options?.generationBridge ?? null,
     requireGenerationBridgeForCanonicalReads: options?.requireGenerationBridgeForCanonicalReads === true
   });
@@ -335,7 +366,7 @@ function selectTarget(kind, rows, overrideId = null) {
 
 export async function resolveAppProjectEntry(entryPath, {
   cwd = process.cwd(),
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   generationBridge = null,
   requireGenerationBridgeForCanonicalReads = false
 } = {}) {
@@ -487,16 +518,13 @@ export async function loadAppProject(entryPath, options = {}) {
     }
   }
 
-  return {
+  const appProjectBase = {
     appRoot,
     manifestPath,
     appId: normalizeId(appDocs[0]?.values?.id),
     witnessDocs: loaded.witnessDocs,
     authoredDesireDocs: loaded.authoredDesireDocs,
     runtimePluginRegistries: pluginRuntime.registries ?? null,
-    operatorWorkbench: buildOperatorWorkbenchDefinition({
-      authoredDesireDocs: loaded.authoredDesireDocs
-    }),
     allDocs: loaded.allDocs,
     sourceFiles,
     importEntries: loaded.importEntries,
@@ -530,6 +558,18 @@ export async function loadAppProject(entryPath, options = {}) {
       imports: groupedImports
     }
   };
+  const extensionModels = buildAppProjectExtensionModels({
+    appProjectBase,
+    witnessDocs: loaded.witnessDocs,
+    authoredDesireDocs: loaded.authoredDesireDocs,
+    allDocs: loaded.allDocs,
+    appProjectAssemblers: pluginRuntime.loadResult?.appProjectAssemblers ?? []
+  });
+
+  return {
+    ...appProjectBase,
+    extensionModels
+  };
 }
 
 export async function loadAppProjectWithStableFallback(entryPath, options = {}) {
@@ -546,12 +586,12 @@ export async function loadAppProjectWithStableFallback(entryPath, options = {}) 
     const cache = resolvedEntry
       ? await readStableAppSourceCache(resolvedEntry.manifestPath, {
           cwd: options?.cwd ?? process.cwd(),
-          fsModule: options?.fsModule ?? fs
+          fsModule: options?.fsModule ?? runtimeLocalFsModule
         })
       : null;
     if (!cache) throw liveError;
     const readFile = createStableAppOverlayReadFile(cache, {
-      fsModule: options?.fsModule ?? fs,
+      fsModule: options?.fsModule ?? runtimeLocalFsModule,
       parentReadFile: options?.readFile ?? ((target, encoding) => sourceFsModule.readFile(target, encoding))
     });
     const appProject = await loadAppProject(entryPath, {

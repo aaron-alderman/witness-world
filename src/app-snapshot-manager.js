@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { createWorld } from "./kernel.js";
 import {
@@ -35,6 +34,7 @@ import {
   persistStableAppSourceCache,
   readStableAppSourceCache
 } from "./runtime-stable-source-cache.js";
+import { runtimeLocalFsModule } from "./runtime-local-fs.js";
 import { latestWitnessCoreGeneration } from "./witness-core-bridge.js";
 
 const MANIFEST_ONLY_DOC_KINDS = new Set(["desktopTarget"]);
@@ -168,7 +168,7 @@ function sourceOverlayContentFor(filePath, sourceOverlayByPath = null) {
   return overlays.has(resolved) ? overlays.get(resolved) : null;
 }
 
-async function readSourceText(filePath, fsModule = fs, sourceOverlayByPath = null) {
+async function readSourceText(filePath, fsModule = runtimeLocalFsModule, sourceOverlayByPath = null) {
   const resolved = path.resolve(filePath);
   const overlay = sourceOverlayContentFor(resolved, sourceOverlayByPath);
   if (typeof overlay === "string") return overlay;
@@ -202,7 +202,7 @@ function parseCapabilityModifiedAt(value) {
 function createCanonicalSourceFsModule({
   appRoot,
   generationBridge = null,
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   requireGenerationBridgeForCanonicalReads = false
 } = {}) {
   if (typeof generationBridge?.readSource !== "function" || typeof generationBridge?.statSource !== "function") {
@@ -289,7 +289,7 @@ function reverseDependentClosure(graph, changedPaths) {
   return dirty;
 }
 
-async function readSourceRecord(filePath, sourceLanguage, fsModule = fs, sourceOverlayByPath = null) {
+async function readSourceRecord(filePath, sourceLanguage, fsModule = runtimeLocalFsModule, sourceOverlayByPath = null) {
   const resolved = path.resolve(filePath);
   const overlay = sourceOverlayContentFor(resolved, sourceOverlayByPath);
   const text = typeof overlay === "string"
@@ -313,7 +313,7 @@ async function compileSourceUnit({
   sourceLanguage,
   appRoot,
   dependencyGraph,
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   sourceOverlayByPath = null,
   rvmFormRegistry = null
 }) {
@@ -394,7 +394,7 @@ async function buildCompiledSnapshot({
   runtimeProfile,
   runtimePluginIds,
   env,
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   sourceOverlayByPath = null,
   previousUnits = null,
   dirtyPaths = null
@@ -604,7 +604,7 @@ export class AppSnapshotManager {
     logger = null,
     generationBridge = null,
     witnessCoreStatusStore = null,
-    fsModule = fs,
+    fsModule = runtimeLocalFsModule,
     watchEnabled = devMode,
     dirtyInputMode = null,
     dirtyDetectionOwner = null,
@@ -666,7 +666,7 @@ export class AppSnapshotManager {
     logger = null,
     generationBridge = null,
     witnessCoreStatusStore = null,
-    fsModule = fs,
+    fsModule = runtimeLocalFsModule,
     watchEnabled = devMode,
     dirtyInputMode = null,
     dirtyDetectionOwner = null,
@@ -2036,7 +2036,7 @@ export class AppPreviewSessionManager {
     appSnapshotManager,
     generationBridge = null,
     logger = null,
-    fsModule = fs,
+    fsModule = runtimeLocalFsModule,
     requireGenerationBridgeForPreviewAccess = false
   } = {}) {
     this.appSnapshotManager = appSnapshotManager ?? null;

@@ -3405,6 +3405,14 @@ export function requestBootstrapRouteDefine(world, {
     });
     return { ok: false, status: 400, error: "page.home is retired; use page.surface and frontend.upliftLegacy", witness };
   }
+  if (input.handler === "page.world" || input.handler === "page.process") {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: `${input.handler} is retired; use page.surface or operator APIs`, handler: input.handler }
+    });
+    return { ok: false, status: 400, error: `${input.handler} is retired; use page.surface or operator APIs`, witness };
+  }
   if (input.handler === "page.world" && !params.rootWidget) {
     const witness = fail(world, {
       process: "route.define.failed",

@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import {
   compileWtomlDocsToDesirePlus,
@@ -11,6 +10,7 @@ import {
 import { registerModuleProjectors } from "./modules.js";
 import { DEFAULT_RUNTIME_PROFILE, runtimeBundleSummaryForProfile } from "./runtime-bundles.js";
 import { collectActiveRuntimeContributions } from "./runtime-active-contributions.js";
+import { runtimeLocalFsModule } from "./runtime-local-fs.js";
 import {
   readRuntimePluginCatalog,
   resolveConfiguredRuntimePluginIds,
@@ -105,7 +105,7 @@ export async function loadWitnessAppFile(
     ? readFile
     : requireReadCapability === true
       ? null
-      : (target, encoding) => fs.readFile(target, encoding);
+      : (target, encoding) => runtimeLocalFsModule.readFile(target, encoding);
   if (typeof readSource !== "function") {
     throw createReadCapabilityRequiredError(resolved);
   }

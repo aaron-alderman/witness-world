@@ -71,7 +71,7 @@ order = 2
 op = "setText"
 on = "click:createBootstrapTodoStarter"
 widget = "bootstrap_starter_status"
-text = "Todo starter created. Open the app at / and inspect it at /world."
+text = "Todo starter created. Open the app at /."
 
 [[step]]
 id = "bootstrap_starter_refresh"

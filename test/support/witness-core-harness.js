@@ -9,13 +9,15 @@ import process from "node:process";
 export const REPO_ROOT = process.cwd();
 export const LIVE_CORE_FIXTURE_ROOT = path.join(REPO_ROOT, "test", "fixtures", "live-core-app");
 export const WITNESS_CORE_MANIFEST = path.join(REPO_ROOT, "substrate", "Cargo.toml");
+export const WITNESS_CORE_HARNESS_TARGET_DIR = path.join(REPO_ROOT, ".tmp-witness-core-harness-target");
 export const WITNESS_CORE_BINARY = path.join(
-  REPO_ROOT,
-  "substrate",
-  "target",
+  WITNESS_CORE_HARNESS_TARGET_DIR,
   "debug",
   process.platform === "win32" ? "witness-core.exe" : "witness-core"
 );
+function witnessCoreCopiedBinaryPath(rootDir) {
+  return path.join(rootDir, process.platform === "win32" ? "witness-core.exe" : "witness-core");
+}
 const WITNESS_CORE_BUILD_INPUTS = [
   WITNESS_CORE_MANIFEST,
   path.join(REPO_ROOT, "substrate", "witness-core", "src", "lib.rs"),
@@ -43,8 +45,13 @@ export async function ensureWitnessCoreBuilt() {
   } catch {}
   if (!witnessCoreBuildPromise) {
     witnessCoreBuildPromise = new Promise((resolve, reject) => {
+      fs.mkdir(WITNESS_CORE_HARNESS_TARGET_DIR, { recursive: true }).catch(() => {});
       const child = spawn("cargo", ["build", "--offline", "--manifest-path", WITNESS_CORE_MANIFEST, "-p", "witness-core"], {
         cwd: REPO_ROOT,
+        env: {
+          ...process.env,
+          CARGO_TARGET_DIR: WITNESS_CORE_HARNESS_TARGET_DIR
+        },
         stdio: ["ignore", "pipe", "pipe"]
       });
       let output = "";
@@ -170,7 +177,7 @@ process.exit(0);
 command = ${tomlString(superviseConfig.command)}
 working_dir = ${tomlString(superviseConfig.workingDir ?? ".")}
 restart_on_exit = ${superviseConfig.restartOnExit === false ? "false" : "true"}
-${superviseConfig.controlUrl ? `control_url = ${tomlString(superviseConfig.controlUrl)}\n` : ""}${superviseConfig.healthUrl ? `health_url = ${tomlString(superviseConfig.healthUrl)}\n` : ""}${superviseConfig.reloadUrl ? `reload_url = ${tomlString(superviseConfig.reloadUrl)}\n` : ""}${Number.isFinite(superviseConfig.healthIntervalMs) ? `health_interval_ms = ${Number(superviseConfig.healthIntervalMs)}\n` : ""}${Number.isFinite(superviseConfig.healthTimeoutMs) ? `health_timeout_ms = ${Number(superviseConfig.healthTimeoutMs)}\n` : ""}${superviseConfig.restartOnUnhealthy === true ? "restart_on_unhealthy = true\n" : superviseConfig.restartOnUnhealthy === false ? "restart_on_unhealthy = false\n" : ""}${Number.isFinite(superviseConfig.degradedGracePolls) ? `degraded_grace_polls = ${Number(superviseConfig.degradedGracePolls)}\n` : ""}${Number.isFinite(superviseConfig.unhealthyGracePolls) ? `unhealthy_grace_polls = ${Number(superviseConfig.unhealthyGracePolls)}\n` : ""}` : "";
+${superviseConfig.controlUrl ? `control_url = ${tomlString(superviseConfig.controlUrl)}\n` : ""}${superviseConfig.healthUrl ? `health_url = ${tomlString(superviseConfig.healthUrl)}\n` : ""}${superviseConfig.reloadUrl ? `reload_url = ${tomlString(superviseConfig.reloadUrl)}\n` : ""}${superviseConfig.transportOnlyRuntime === true ? "transport_only_runtime = true\n" : ""}${Number.isFinite(superviseConfig.healthIntervalMs) ? `health_interval_ms = ${Number(superviseConfig.healthIntervalMs)}\n` : ""}${Number.isFinite(superviseConfig.healthTimeoutMs) ? `health_timeout_ms = ${Number(superviseConfig.healthTimeoutMs)}\n` : ""}${superviseConfig.restartOnUnhealthy === true ? "restart_on_unhealthy = true\n" : superviseConfig.restartOnUnhealthy === false ? "restart_on_unhealthy = false\n" : ""}${Number.isFinite(superviseConfig.degradedGracePolls) ? `degraded_grace_polls = ${Number(superviseConfig.degradedGracePolls)}\n` : ""}${Number.isFinite(superviseConfig.unhealthyGracePolls) ? `unhealthy_grace_polls = ${Number(superviseConfig.unhealthyGracePolls)}\n` : ""}` : "";
   const buildWorkerToml = buildWorkerConfig ? `
 
 [build_worker]
@@ -230,8 +237,11 @@ ${superviseToml}${buildWorkerToml}${transactionToml}${frontdoorToml}
 
 export async function startWitnessCoreProcess({ cwd, configPath, port }) {
   const binaryPath = await ensureWitnessCoreBuilt();
+  const binaryCopyRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-core-bin-"));
+  const copiedBinaryPath = witnessCoreCopiedBinaryPath(binaryCopyRoot);
+  await fs.copyFile(binaryPath, copiedBinaryPath);
   const logs = [];
-  const child = spawn(binaryPath, ["--config", configPath, "--addr", `127.0.0.1:${port}`], {
+  const child = spawn(copiedBinaryPath, ["--config", configPath, "--addr", `127.0.0.1:${port}`], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -242,13 +252,26 @@ export async function startWitnessCoreProcess({ cwd, configPath, port }) {
     logs.push(String(chunk));
   });
   const url = `http://127.0.0.1:${port}`;
-  await waitForWitnessCoreHealth(url, { logs });
+  const initialHealth = await waitForWitnessCoreHealth(url, { logs });
   return {
     child,
     url,
     logs,
+    health: initialHealth,
+    transportPipe: typeof initialHealth?.process?.transportPipe === "string" && initialHealth.process.transportPipe
+      ? initialHealth.process.transportPipe
+      : null,
+    controlSocketAddr: typeof initialHealth?.process?.controlSocketAddr === "string" && initialHealth.process.controlSocketAddr
+      ? initialHealth.process.controlSocketAddr
+      : null,
     async stop() {
-      if (child.exitCode != null) return;
+      const cleanupBinaryCopy = async () => {
+        await fs.rm(binaryCopyRoot, { recursive: true, force: true }).catch(() => {});
+      };
+      if (child.exitCode != null) {
+        await cleanupBinaryCopy();
+        return;
+      }
       try {
         child.kill();
       } catch {}
@@ -265,10 +288,14 @@ export async function startWitnessCoreProcess({ cwd, configPath, port }) {
       }
       const deadline = Date.now() + 5000;
       while (Date.now() < deadline) {
-        if (child.exitCode != null) return;
+        if (child.exitCode != null) {
+          await cleanupBinaryCopy();
+          return;
+        }
         try {
           await fetch(`${url}/health`, { cache: "no-store" });
         } catch {
+          await cleanupBinaryCopy();
           return;
         }
         await delay(100);

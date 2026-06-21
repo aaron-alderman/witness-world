@@ -1,3 +1,3 @@
 [app]
 id = "operator_example"
-imports = ["./shell.rvm"]
+imports = ["./browser/operator.workbench.rvm"]

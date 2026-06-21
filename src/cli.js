@@ -2,16 +2,12 @@ import path from "node:path";
 import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import { launchDesktopProcess } from "./desktop-cli.js";
-import { runOperatorTui } from "./operator-tui.js";
-import { createWorld } from "./kernel.js";
 import {
   DEFAULT_BOOTSTRAP_RUNTIME_PROFILE,
   DEFAULT_RUNTIME_PROFILE,
   resolveRuntimeProfile,
   resolveRuntimeProfileStrict
 } from "./runtime-bundles.js";
-import { resolveRuntimeOperatorPaths } from "./runtime-operator-contract.js";
-import { createRuntimeOperatorService, runtimeOperatorMutations } from "./runtime-operator-service.js";
 import { startBlankRuntime } from "./runtime-local-launcher.js";
 import { createLogger } from "./logger.js";
 import { loadAppProjectWithStableFallback, resolveMcpTarget, resolveServeTarget } from "./app-project.js";
@@ -43,10 +39,6 @@ if (command === "utility-serve") {
   await runDesktop(rest);
 } else if (command === "utility-mcp") {
   await runMcp(rest);
-} else if (command === "operator") {
-  await runOperator(rest);
-} else if (command === "tui") {
-  await runTui(rest);
 } else {
   console.error(usageText());
   process.exit(1);
@@ -55,10 +47,15 @@ if (command === "utility-serve") {
 function startupGenerationBridge(env = process.env) {
   const coreUrl = typeof env?.WITNESS_CORE_URL === "string" ? env.WITNESS_CORE_URL.trim() : "";
   if (!coreUrl) return null;
-  return createWitnessCoreBridge({
+  const bridge = createWitnessCoreBridge({
     coreUrl,
-    logger: createLogger()
+    logger: createLogger(),
+    requirePipe: true
   });
+  if (bridge) return bridge;
+  const error = new Error("witness core bounded transport pipe required for core-connected startup");
+  error.code = "WITNESS_CORE_TRANSPORT_REQUIRED";
+  throw error;
 }
 
 function resolveRuntimeWorkspaceCwd(env = process.env, fallbackCwd = process.cwd()) {
@@ -376,139 +373,6 @@ async function runDesktop(args) {
   }
 }
 
-async function runOperator(args) {
-  const operatorActionSet = new Set(["backup", "export", "restore", "import"]);
-  const firstArg = args[0] ?? null;
-  if (!firstArg || firstArg.startsWith("--") || !operatorActionSet.has(firstArg)) {
-    try {
-      const exitCode = await launchDesktopProcess({
-        args,
-        cwd: process.cwd(),
-        env: process.env,
-        entryScript: path.resolve(process.cwd(), "src", "operator-workbench", "main.js")
-      });
-      process.exit(exitCode ?? 0);
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error));
-      process.exit(1);
-    }
-    return;
-  }
-  const parsed = parseOperatorArgs(args);
-  const operatorContract = await resolveRuntimeOperatorPaths({
-    startupMode: "operator",
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      ...(parsed.worldHome ? { WORLD_HOME: parsed.worldHome } : {})
-    }
-  });
-  const mutationGate = runtimeOperatorMutations(operatorContract);
-  if (!mutationGate.enabled) {
-    console.error(`Operator action unavailable: ${mutationGate.reason}`);
-    console.error(`Persistence: ${operatorContract.persistence.mode}`);
-    process.exit(1);
-  }
-  const world = createWorld({
-    genesis: { system: "witness-world", mode: "operator" },
-    witnessLogPath: operatorContract.canonicalTruth.witnessLogPath,
-    observationLogPath: operatorContract.canonicalTruth.observationLogPath
-  });
-  const operatorService = createRuntimeOperatorService({
-    world,
-    operatorContract
-  });
-
-  if (parsed.action === "backup") {
-    const artifact = await operatorService.backup({
-      label: parsed.label,
-      includeDerived: parsed.includeDerived,
-      actor: "system"
-    });
-    reportOperatorArtifact({
-      label: "Backup complete",
-      artifact,
-      restartRequired: false
-    });
-    return;
-  }
-
-  if (parsed.action === "export") {
-    const artifact = await operatorService.exportWorld({
-      label: parsed.label,
-      actor: "system"
-    });
-    reportOperatorArtifact({
-      label: "Export complete",
-      artifact,
-      restartRequired: false
-    });
-    return;
-  }
-
-  if (!parsed.artifact) {
-    console.error(`Missing --artifact for operator ${parsed.action}.\n${usageText()}`);
-    process.exit(1);
-  }
-
-  const artifactId = resolveManagedArtifactId({
-    artifact: parsed.artifact,
-    rootPath: parsed.action === "restore"
-      ? operatorContract.directories.backupsRoot
-      : operatorContract.directories.importsRoot,
-    cwd: process.cwd()
-  });
-  if (!artifactId) {
-    console.error("Operator --artifact must name a managed artifact directory under the active WORLD_HOME.");
-    process.exit(1);
-  }
-
-  if (parsed.action === "restore") {
-    const result = await operatorService.restore({
-      artifactId,
-      preserveCurrent: parsed.preserveCurrent,
-      actor: "system"
-    });
-    reportOperatorReplace({
-      label: "Restore complete",
-      ...result
-    });
-    return;
-  }
-
-  if (parsed.action === "import") {
-    const result = await operatorService.importWorld({
-      artifactId,
-      preserveCurrent: parsed.preserveCurrent,
-      actor: "system"
-    });
-    reportOperatorReplace({
-      label: "Import complete",
-      ...result
-    });
-    return;
-  }
-
-  console.error(`Unknown operator action: ${parsed.action}\n${usageText()}`);
-  process.exit(1);
-}
-
-async function runTui(args) {
-  try {
-    const exitCode = await runOperatorTui({
-      args,
-      cwd: process.cwd(),
-      env: process.env,
-      stdin: process.stdin,
-      stdout: process.stdout
-    });
-    process.exit(exitCode ?? 0);
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
-}
-
 function parseServeArgs(args) {
   const result = { appPath: null, serverRunnerId: null, port: DEFAULT_DIRECT_SERVE_PORT, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], devMode: true, startupTelemetry: false };
   const queue = [...args];
@@ -624,42 +488,6 @@ function parseMcpArgs(args) {
     }
     if (token === "--startup-telemetry") {
       result.startupTelemetry = true;
-    }
-  }
-  return result;
-}
-
-function parseOperatorArgs(args) {
-  const result = {
-    action: null,
-    worldHome: null,
-    label: "",
-    includeDerived: false,
-    artifact: null,
-    preserveCurrent: false
-  };
-  const queue = [...args];
-  if (queue.length && !queue[0].startsWith("--")) result.action = queue.shift();
-  while (queue.length) {
-    const token = queue.shift();
-    if (token === "--world-home") {
-      result.worldHome = queue.shift() ?? null;
-      continue;
-    }
-    if (token === "--label") {
-      result.label = queue.shift() ?? "";
-      continue;
-    }
-    if (token === "--include-derived") {
-      result.includeDerived = true;
-      continue;
-    }
-    if (token === "--artifact") {
-      result.artifact = queue.shift() ?? null;
-      continue;
-    }
-    if (token === "--preserve-current") {
-      result.preserveCurrent = true;
     }
   }
   return result;
@@ -837,65 +665,12 @@ function reportStartupFailure(result) {
   }
 }
 
-function resolveManagedArtifactId({
-  artifact,
-  rootPath,
-  cwd
-}) {
-  const raw = String(artifact || "").trim();
-  if (!raw) return null;
-  if (!raw.includes("/") && !raw.includes("\\")) return raw;
-  const resolved = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(cwd, raw);
-  const relative = path.relative(rootPath || "", resolved);
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
-  if (relative.includes(path.sep)) return null;
-  const id = path.basename(resolved);
-  return id || null;
-}
-
-function reportOperatorArtifact({
-  label,
-  artifact,
-  restartRequired
-}) {
-  console.log(label);
-  console.log(`Artifact: ${artifact.path}`);
-  console.log(`Artifact id: ${artifact.id}`);
-  console.log(`Kind: ${artifact.kind}`);
-  console.log(`Witnesses: ${artifact.witnessCount}`);
-  console.log(`Observations: ${artifact.observationCount}`);
-  console.log(`Includes derived: ${artifact.includesDerived === true ? "yes" : "no"}`);
-  console.log(`Restart required: ${restartRequired ? "yes" : "no"}`);
-}
-
-function reportOperatorReplace({
-  label,
-  artifact,
-  safetyBackup,
-  restartRequired,
-  reloaded
-}) {
-  console.log(label);
-  console.log(`Artifact: ${artifact.path}`);
-  console.log(`Artifact id: ${artifact.id}`);
-  console.log(`Witnesses: ${reloaded?.witnessCount ?? artifact.witnessCount}`);
-  console.log(`Observations: ${reloaded?.observationCount ?? artifact.observationCount}`);
-  console.log(`Safety backup: ${safetyBackup?.path ?? "(none)"}`);
-  console.log(`Restart required: ${restartRequired ? "yes" : "no"}`);
-}
-
 function usageText() {
   return [
     "Usage:",
     "  node src/cli.js utility-serve <app-dir|app.wtoml> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--release] [--startup-telemetry]  (loopback utility listener)",
     "  node src/cli.js utility-bootstrap [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]  (loopback utility listener)",
     "  node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
-    "  node src/cli.js tui [<app-dir|app.wtoml>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--command <text>]  (legacy raw shell)",
-    "  node src/cli.js utility-mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]  (loopback utility listener)",
-    "  node src/cli.js operator [<app-dir|app.wtoml>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]  (rich workbench)",
-    "  node src/cli.js operator backup --world-home <path> [--label <text>] [--include-derived]",
-    "  node src/cli.js operator export --world-home <path> [--label <text>]",
-    "  node src/cli.js operator restore --world-home <path> --artifact <artifact-dir> [--preserve-current]",
-    "  node src/cli.js operator import --world-home <path> --artifact <artifact-dir> [--preserve-current]"
+    "  node src/cli.js utility-mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--startup-telemetry]  (loopback utility listener)"
   ].join("\n");
 }

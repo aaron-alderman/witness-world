@@ -11,10 +11,10 @@ slow_ms = 15000
 include = ["src/**", "plugins/**", "examples/engentus/**", "examples/_lib/**"]
 
 [supervise]
-command = "node src/cli.js utility-serve examples/engentus --server engentus_server --port {runtime_port} --runtime-profile full --startup-telemetry"
+command = "node src/cli.js utility-serve examples/engentus --server engentus_server --runtime-profile full --startup-telemetry"
 working_dir = "."
 restart_on_exit = true
-control_url = "http://127.0.0.1:{runtime_port}/api/runtime/worker-control"
+transport_only_runtime = true
 health_interval_ms = 1000
 health_timeout_ms = 5000
 restart_on_unhealthy = true

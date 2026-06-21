@@ -263,6 +263,27 @@ function findBinding(viewport, trigger, verb) {
   return viewport.bindings.find(binding => binding.trigger === trigger && binding.verb === verb) || null;
 }
 
+function availableWorkbenchActions(state = {}) {
+  return Array.isArray(state.snapshot?.actions?.available) ? state.snapshot.actions.available : [];
+}
+
+function actionById(state = {}, actionId = null) {
+  const resolvedId = optionalText(actionId);
+  if (!resolvedId) return null;
+  return availableWorkbenchActions(state).find(action => optionalText(action?.id) === resolvedId) ?? null;
+}
+
+function inferredBuiltinForActionId(actionId = null) {
+  const resolvedId = optionalText(actionId);
+  if (resolvedId === "toggle_help") return "toggle-help";
+  if (resolvedId === "open_references") return "set-right-screen";
+  if (resolvedId === "edit_selection") return "edit";
+  if (resolvedId === "change_surface_color") return "change-color";
+  if (resolvedId === "rename_selection") return "rename";
+  if (resolvedId === "clone_selection") return "clone";
+  return "";
+}
+
 function resolvedViewportLayout(state = {}, viewport = {}) {
   const draft = state.hostViewportLayoutDraft && typeof state.hostViewportLayoutDraft === "object"
     ? state.hostViewportLayoutDraft
@@ -1176,6 +1197,53 @@ export function createOperatorBrowserRuntime({
     return false;
   }
 
+  function localActionSubject(context = null) {
+    const resolved = context && typeof context === "object" ? context : {};
+    return optionalText(
+      resolved.rowLabel
+      || resolved.chipLabel
+      || resolved.targetId
+      || resolved.screenId
+      || resolved.pane
+    ) || "selection";
+  }
+
+  async function runBoundAction(actionId, context = null) {
+    const resolvedActionId = optionalText(actionId);
+    if (!resolvedActionId) return false;
+    if (hasLiveIntentBridge()) {
+      return dispatchLiveIntent({
+        type: "run-action",
+        actionId: resolvedActionId,
+        context: context && typeof context === "object" ? context : contextMenuContextForPane(currentFocusedPane(runtimeState))
+      });
+    }
+    if (!isReadOnlyFixtureMode()) return false;
+    const action = actionById(runtimeState, resolvedActionId);
+    const builtin = optionalText(action?.builtin) || inferredBuiltinForActionId(resolvedActionId);
+    if (!builtin && !action) return false;
+    if (builtin === "toggle-help") {
+      toggleOverlay("help_overlay", { closeIds: overlayCloseIdsForOpen(runtimeState, "help_overlay", model.surfaceById.get("help_overlay")) });
+      return true;
+    }
+    if (builtin === "open-overlay" && action?.overlayId) {
+      const closeIds = overlayCloseIdsForOpen(runtimeState, action.overlayId, model.surfaceById.get(action.overlayId));
+      const overlayIds = activeOverlayIds(runtimeState).filter(id => id !== action.overlayId && !closeIds.includes(id));
+      overlayIds.push(action.overlayId);
+      setSnapshotOpenOverlayIds(overlayIds);
+      render();
+      return true;
+    }
+    if (builtin === "toggle-overlay" && action?.overlayId) {
+      toggleOverlay(action.overlayId, { closeIds: overlayCloseIdsForOpen(runtimeState, action.overlayId, model.surfaceById.get(action.overlayId)) });
+      return true;
+    }
+    runtimeState.snapshot.ui.lastOutput = `${builtin || resolvedActionId} requested: ${localActionSubject(context)}`;
+    runtimeState.snapshot.ui.lastStatus = "info";
+    render();
+    return true;
+  }
+
   async function triggerBinding(trigger, verb) {
     const viewport = model.viewportById.get(runtimeState.viewportId || "default");
     const binding = viewport ? findBinding(viewport, trigger, verb) : null;
@@ -1189,6 +1257,9 @@ export function createOperatorBrowserRuntime({
       }
       toggleOverlay(binding.target, { closeIds: overlayCloseIdsForOpen(runtimeState, binding.target, model.surfaceById.get(binding.target)) });
       return true;
+    }
+    if (binding.verb === "action" && binding.target) {
+      return runBoundAction(binding.target, contextMenuContextForPane(currentFocusedPane(runtimeState)));
     }
     return false;
   }
@@ -1456,6 +1527,10 @@ export function createOperatorBrowserRuntime({
       return;
     }
     if (await triggerBinding(event.key, "overlay")) {
+      event.preventDefault();
+      return;
+    }
+    if (await triggerBinding(event.key, "action")) {
       event.preventDefault();
       return;
     }

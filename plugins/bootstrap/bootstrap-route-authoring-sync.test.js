@@ -26,7 +26,7 @@ test("route authoring contracts load from authored WTOML", async () => {
   assert.equal(source.includes('handler = "page.surface"'), true);
   assert.equal(contracts.policiesByRouteKind.backendProgram.responseKind, "json");
   assert.equal(contracts.policiesByRouteKind.resource.responseKind, "resource");
-  assert.equal(contracts.handlerRulesByHandler["page.world"].requiresRootWidget, true);
+  assert.equal(contracts.handlerRulesByHandler["page.world"], undefined);
   assert.equal(contracts.managedFields.includes("rootWidgetRef"), true);
   assert.equal(contracts.managedFields.includes("frontendProgramRef"), false);
   assert.equal(contracts.managedFields.includes("routeStateProcessRef"), true);

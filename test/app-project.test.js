@@ -3,9 +3,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { applyWitnessDocsWithRuntimePlugins } from "../src/dsl.js";
-import { applyDesire } from "../src/desire/index.js";
-import { createWorld } from "../src/kernel.js";
 import {
   APP_MANIFEST_BASENAME,
   loadAppProject,
@@ -20,6 +17,10 @@ import { persistStableAppSourceCache } from "../src/runtime-stable-source-cache.
 async function writeFile(targetPath, contents) {
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await fs.writeFile(targetPath, contents, "utf8");
+}
+
+function operatorWorkbenchModel(appProject) {
+  return appProject.extensionModels.byId.get("operatorWorkbench") ?? null;
 }
 
 test("app project resolver accepts a directory or canonical app.wtoml file", async () => {
@@ -152,19 +153,10 @@ test("app project loads authored runtime plugin registries for later DESIRE appl
   const appProject = await loadAppProject(path.join(process.cwd(), "examples", "engentus"), {
     runtimeProfile: "full"
   });
-  const world = createWorld();
-
-  await applyWitnessDocsWithRuntimePlugins(world, appProject.witnessDocs, {
-    runtimeProfile: "full"
-  });
-  for (const desire of appProject.authoredDesireDocs) {
-    applyDesire(world, desire, {
-      runtimeDeclarationRegistry: appProject.runtimePluginRegistries?.runtimeDeclarationRegistry ?? null
-    });
-  }
 
   assert.equal(appProject.runtimePluginRegistries?.rvmFormRegistry?.knows("sql_table"), true);
   assert.equal(appProject.runtimePluginRegistries?.runtimeDeclarationRegistry?.has("sql_table"), true);
+  assert.equal(appProject.authoredDesireDocs.length > 0, true);
 });
 
 test("app project builds operator workbench definitions from authored operator screen RVM", async () => {
@@ -310,10 +302,12 @@ operator_setup shell {
     const appProject = await loadAppProject(appRoot, {
       runtimePluginIds: ["plugin.operator-workbench"]
     });
-    assert.equal(appProject.operatorWorkbench.themes.some(theme => theme.id === "trace_theme" && theme.mode === "ansi16"), true);
-    assert.equal(appProject.operatorWorkbench.themesById.get("trace_theme")?.palette, "terminal-dark");
-    assert.equal(appProject.operatorWorkbench.datasets.some(dataset => dataset.id === "trace_dataset" && dataset.provider === "provenance"), true);
-    const traceScreen = appProject.operatorWorkbench.screens.find(screen => screen.id === "trace");
+    const workbench = operatorWorkbenchModel(appProject);
+    assert.equal(appProject.extensionModels.values.operatorWorkbench, workbench);
+    assert.equal(workbench.themes.some(theme => theme.id === "trace_theme" && theme.mode === "ansi16"), true);
+    assert.equal(workbench.themesById.get("trace_theme")?.palette, "terminal-dark");
+    assert.equal(workbench.datasets.some(dataset => dataset.id === "trace_dataset" && dataset.provider === "provenance"), true);
+    const traceScreen = workbench.screens.find(screen => screen.id === "trace");
     assert.equal(Boolean(traceScreen), true);
     assert.equal(traceScreen.datasetId, null);
     assert.equal(traceScreen.defaultSectionId, "trace_rows");
@@ -323,17 +317,17 @@ operator_setup shell {
     assert.equal(traceScreen.leftScreenId, "trace_left");
     assert.equal(traceScreen.sections[0].collapsible, false);
     assert.equal(traceScreen.sections[1].collapsed, true);
-    assert.equal(appProject.operatorWorkbench.leftScreens.some(screen => screen.id === "trace_left" && screen.shape === "table"), true);
-    assert.equal(appProject.operatorWorkbench.overlays.some(overlay => overlay.id === "help_overlay" && overlay.kind === "doc_view"), true);
-    assert.equal(appProject.operatorWorkbench.overlays.some(overlay => overlay.id === "context_menu" && overlay.kind === "menu"), true);
-    assert.deepEqual(appProject.operatorWorkbench.overlaysById.get("help_overlay")?.closeIdsOnOpen, ["context_menu"]);
-    assert.deepEqual(appProject.operatorWorkbench.overlaysById.get("context_menu")?.closeIdsOnOpen, ["help_overlay"]);
-    assert.equal(appProject.operatorWorkbench.handles.some(handle => handle.id === "top_handle" && handle.axis === "horizontal"), true);
-    assert.equal(appProject.operatorWorkbench.handles.some(handle => handle.id === "bottom_handle" && handle.axis === "horizontal"), true);
-    assert.equal(appProject.operatorWorkbench.handles.some(handle => handle.id === "split_handle" && handle.axis === "vertical"), true);
-    assert.equal(appProject.operatorWorkbench.surfaces.some(surface => surface.id === "top_status" && surface.kind === "status_bar"), true);
-    assert.equal(appProject.operatorWorkbench.surfaces.some(surface => surface.id === "command_bar" && surface.kind === "command_bar"), true);
-    const traceViewport = appProject.operatorWorkbench.viewports.find(viewport => viewport.id === "trace_default");
+    assert.equal(workbench.leftScreens.some(screen => screen.id === "trace_left" && screen.shape === "table"), true);
+    assert.equal(workbench.overlays.some(overlay => overlay.id === "help_overlay" && overlay.kind === "doc_view"), true);
+    assert.equal(workbench.overlays.some(overlay => overlay.id === "context_menu" && overlay.kind === "menu"), true);
+    assert.deepEqual(workbench.overlaysById.get("help_overlay")?.closeIdsOnOpen, ["context_menu"]);
+    assert.deepEqual(workbench.overlaysById.get("context_menu")?.closeIdsOnOpen, ["help_overlay"]);
+    assert.equal(workbench.handles.some(handle => handle.id === "top_handle" && handle.axis === "horizontal"), true);
+    assert.equal(workbench.handles.some(handle => handle.id === "bottom_handle" && handle.axis === "horizontal"), true);
+    assert.equal(workbench.handles.some(handle => handle.id === "split_handle" && handle.axis === "vertical"), true);
+    assert.equal(workbench.surfaces.some(surface => surface.id === "top_status" && surface.kind === "status_bar"), true);
+    assert.equal(workbench.surfaces.some(surface => surface.id === "command_bar" && surface.kind === "command_bar"), true);
+    const traceViewport = workbench.viewports.find(viewport => viewport.id === "trace_default");
     assert.equal(Boolean(traceViewport), true);
     assert.equal(traceViewport.theme, "trace_theme");
     assert.equal(traceViewport.screenId, "trace");
@@ -351,13 +345,23 @@ operator_setup shell {
       "F1:overlay:help_overlay",
       "MouseSecondary:overlay:context_menu"
     ]);
-    assert.equal(appProject.operatorWorkbench.defaultScreen, "trace");
-    assert.equal(appProject.operatorWorkbench.defaultLeftScreen, "trace_left");
-    assert.equal(appProject.operatorWorkbench.defaultViewport, "trace_default");
-    assert.equal(appProject.operatorWorkbench.shortcuts.get("F5"), "trace");
+    assert.equal(workbench.defaultScreen, "trace");
+    assert.equal(workbench.defaultLeftScreen, "trace_left");
+    assert.equal(workbench.defaultViewport, "trace_default");
+    assert.equal(workbench.shortcuts.get("F5"), "trace");
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("app project leaves extension models empty when no app-project assembler plugin is active", async () => {
+  const appProject = await loadAppProject(path.join(process.cwd(), "examples", "engentus"), {
+    runtimeProfile: "full"
+  });
+
+  assert.equal(appProject.extensionModels.byId.size, 0);
+  assert.deepEqual(Object.keys(appProject.extensionModels.values), []);
+  assert.equal(operatorWorkbenchModel(appProject), null);
 });
 
 test("app project rejects operator overlay close_on_open references that do not resolve", async () => {

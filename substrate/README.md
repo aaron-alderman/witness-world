@@ -50,11 +50,11 @@ Execution-boundary roadmap:
 
 `npm run platform:core` starts the Rust substrate only. It does not launch an app worker.
 
-`npm run platform:supervised` uses the checked-in development config in `witness-core.toml`, supervises the example app worker on a private loopback port, and exposes the supported public app surface through the Rust frontdoor at `http://127.0.0.1:3000`.
+`npm run platform:supervised` uses the checked-in development config in `witness-core.toml`, supervises the example app worker in transport-only mode, and exposes the supported public app surface through the Rust frontdoor at `http://127.0.0.1:3000`.
 
 `npm run engentus` and `npm run engentus:core` now point at that Rust-supervised frontdoor path.
 
-`npm run engentus:mcp` now also uses a checked-in Rust-supervised frontdoor config for the HTTP MCP surface, exposing the supported MCP ingress through the core at `http://127.0.0.1:8791/mcp/engentus_mcp` while keeping the Node worker on a private loopback port.
+`npm run engentus:mcp` now also uses a checked-in Rust-supervised frontdoor config for the HTTP MCP surface, exposing the supported MCP ingress through the core at `http://127.0.0.1:8791/mcp/engentus_mcp` while keeping the Node worker on Rust-owned control transport with no Node HTTP listener.
 
 `npm run bootstrap` and `npm run authoring:server` now also use checked-in Rust-supervised frontdoor configs for blank-world/bootstrap startup and authoring bootstrap startup, instead of launching a direct default-port Node listener as the primary convenience path.
 
@@ -104,21 +104,20 @@ drain_timeout_ms = 15000
 startup_cutover_timeout_ms = 45000
 ```
 
-For supervised children behind the front door, use command and health templates that let `witness-core` allocate a private loopback port per instance:
+For standalone utility listeners, keep `--port` on the direct Node command. For supervised children behind the front door, use transport-only commands that do not interpolate a worker port:
 
 ```toml
 [supervise]
-command = "node src/cli.js utility-serve <app-root> --server app --port {runtime_port} --runtime-profile authoring"
-control_url = "http://127.0.0.1:{runtime_port}/api/runtime/worker-control"
+command = "node src/cli.js utility-serve <app-root> --server app --runtime-profile authoring"
+transport_only_runtime = true
 restart_on_exit = true
 restart_on_unhealthy = true
 ```
 
-When `witness-core` supervises a Node runtime, prefer `[supervise].control_url` so the worker advertises its full control surface through one versioned descriptor:
+When `witness-core` supervises a Node runtime, the maintained checked-in configs now rely on the Rust-provided `WITNESS_RUNTIME_CONTROL_ADDR` socket instead of requiring `[supervise].control_url` for readiness, health, supervision, reload, or MCP ingress. Standalone utility commands can still bind a loopback listener, but the checked-in supervised control plane no longer depends on any Node HTTP listener.
 
 ```toml
 [supervise]
-control_url = "http://127.0.0.1:3000/api/runtime/worker-control"
 health_interval_ms = 1000
 health_timeout_ms = 5000
 restart_on_unhealthy = true
@@ -126,4 +125,4 @@ degraded_grace_polls = 10
 unhealthy_grace_polls = 3
 ```
 
-Legacy `health_url` and `reload_url` config fields still exist as compatibility fallback for older supervised setups, but the maintained checked-in configs now use `control_url`.
+Legacy `control_url`, `health_url`, and `reload_url` config fields still exist as compatibility fallback for older supervised setups, but the maintained checked-in configs now use the Rust-owned control socket path.

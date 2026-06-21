@@ -11,6 +11,7 @@ import {
 import { activateWidgetVersion, defineWidgetVersion, defineWidgetVersionTransition } from "../../src/widgets.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { processRunProjection, processViewProjection, renderProcessPage } from "./process-view.js";
+import { inspectWorldSystemReadModel } from "./world-system.js";
 import { renderWidgetPage } from "./widget-page.js";
 import {
   createHandlers,
@@ -18,6 +19,7 @@ import {
   inspectProcessViewReadModel,
   inspectWitnessesReadModel,
   inspectWorldGraphReadModel,
+  inspectWorldSystemReadModelForRuntime,
   recordInspectProcessEventRequest,
   providers
 } from "./runtime.js";
@@ -27,7 +29,11 @@ test("inspect plugin owns inspect bundle catalog, routes, and surfaces", async (
   const source = await readFile(new URL("./runtime.js", import.meta.url), "utf8");
   assert.equal(source.includes('bundleId = "bundle-inspect"'), true);
   assert.equal(source.includes('"worldGraph.read"'), true);
-  assert.equal(source.includes('id: "surface:world"'), true);
+  assert.equal(source.includes('"worldSystem.read"'), true);
+  assert.equal(source.includes('id: "surface:world"'), false);
+  assert.equal(source.includes("page.world"), false);
+  assert.equal(source.includes("page.process"), false);
+  assert.equal(source.includes('from "../../src/inspect-runtime-shared.js"'), true);
 });
 
 test("inspect handlers tolerate a missing logger for world graph reads", async () => {
@@ -76,7 +82,8 @@ test("inspect plugin owns world graph projections without a src compatibility fa
   assert.deepEqual(graph.nodes.some(node => node.id === "genesis"), true);
   assert.equal(pluginWorldGraph.includes("export function worldGraphProjection"), true);
   assert.equal(pluginWorldGraph.includes("export function astNodesProjection"), true);
-  assert.equal(runtimeSource.includes('from "./world-graph.js"'), true);
+  assert.equal(runtimeSource.includes('from "./world-graph.js"'), false);
+  assert.equal(runtimeSource.includes('from "../../src/inspect-runtime-shared.js"'), true);
   await assert.rejects(readFile(new URL("../../src/world-graph.js", import.meta.url), "utf8"));
 });
 
@@ -106,7 +113,8 @@ test("inspect plugin owns process view projections and page rendering without a 
   assert.equal(pluginProcessView.includes("function injectBeforeFrontendProgram"), false);
   assert.equal(runtimePageStateSource.includes("export function renderRuntimePageInitialStateScript"), true);
   assert.equal(runtimePageStateSource.includes("export function injectRuntimePageMarkupBeforeProgram"), true);
-  assert.equal(runtimeSource.includes('from "./process-view.js"'), true);
+  assert.equal(runtimeSource.includes('from "./process-view.js"'), false);
+  assert.equal(runtimeSource.includes('from "../../src/inspect-runtime-shared.js"'), true);
   await assert.rejects(readFile(new URL("../../src/process-view.js", import.meta.url), "utf8"));
 });
 
@@ -199,6 +207,7 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(pluginWidgetPage.includes("renderWorldWitnessBrowserView({"), true);
   assert.equal(pluginWidgetPage.includes("renderWorldProcessExplorerView()"), true);
   assert.equal(pluginWidgetPage.includes("renderWorldPrimitiveBrowserView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldSystemOverviewView({"), true);
   assert.equal(pluginWidgetPage.includes("renderWorldInspectorView({"), true);
   assert.equal(pluginWidgetPage.includes("renderWorldGraphCanvasView({"), true);
   assert.equal(pluginWidgetPage.includes("bindWorldGraphActions({"), true);
@@ -328,6 +337,7 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(worldBrowserViewSource.includes("export function renderWorldWitnessBrowserView"), true);
   assert.equal(worldBrowserViewSource.includes("export function renderWorldProcessExplorerView"), true);
   assert.equal(worldBrowserViewSource.includes("export function renderWorldPrimitiveBrowserView"), true);
+  assert.equal(worldBrowserViewSource.includes("export function renderWorldSystemOverviewView"), true);
   assert.equal(worldBrowserViewSource.includes("export function renderWorldBrowserViewFactory"), true);
   assert.equal(worldBrowserViewSource.includes("No witnessed source files."), true);
   assert.equal(worldBrowserViewSource.includes("surface-empty-state"), true);
@@ -435,7 +445,7 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(runtimeSurfaceTutorialSource.includes("@keyframes tutorial-focus-pulse"), true);
   assert.equal(themeSource.includes("renderEdenPageThemeCssVars"), true);
   assert.equal(themeSource.includes('../../src/runtime-presentation.js'), true);
-  assert.equal(runtimeSource.includes('from "./widget-page.js"'), true);
+  assert.equal(runtimeSource.includes('from "./widget-page.js"'), false);
   assert.equal(srcWidgets.includes("function renderDocument"), false);
   assert.equal(srcWidgets.includes("renderGuidanceClient"), false);
   assert.equal(srcWidgets.includes("tutorialDefinition"), false);
@@ -555,17 +565,19 @@ test("inspect runtime exports module projectors for shared read models", () => {
       "inspect.processRunReadModel",
       "inspect.processViewReadModel",
       "inspect.witnessesReadModel",
-      "inspect.worldGraphReadModel"
+      "inspect.worldGraphReadModel",
+      "inspect.worldSystemReadModel"
     ]
   );
   assert.equal(projectorProvider.projectors["inspect.witnessesReadModel"], inspectWitnessesReadModel);
   assert.equal(projectorProvider.projectors["inspect.worldGraphReadModel"], inspectWorldGraphReadModel);
+  assert.equal(projectorProvider.projectors["inspect.worldSystemReadModel"], inspectWorldSystemReadModelForRuntime);
   assert.equal(projectorProvider.projectors["inspect.processViewReadModel"], inspectProcessViewReadModel);
   assert.equal(projectorProvider.projectors["inspect.processRunReadModel"], inspectProcessRunReadModel);
   assert.equal(typeof processProvider.handlers["inspect.processEventRecord"], "function");
 });
 
-test("inspect witness and world-graph read models honor visible witness projection", () => {
+test("inspect witness, world-graph, and world-system read models honor visible witness projection", () => {
   const world = createWorld();
   const visibleWitness = world.emit({
     process: "todo.created",
@@ -602,6 +614,16 @@ test("inspect witness and world-graph read models honor visible witness projecti
   assert.equal(graphModel.graph.nodes.some(node => node.id === "genesis"), true);
   assert.equal(typeof graphModel.astNodes.byFile, "object");
   assert.equal(Array.isArray(graphModel.astNodes.byTarget[visibleWitness.body.id] ?? []), true);
+
+  const systemModel = inspectWorldSystemReadModel(world.allWitnesses(), {
+    requestActor: "alice",
+    appContext,
+    observations: [{ id: "o1", process: "backend.request.finish", actor: "backendHost", body: { statusCode: 200 } }]
+  });
+  assert.equal(systemModel.summary.witnesses, 1);
+  assert.equal(systemModel.summary.observations, 1);
+  assert.equal(Array.isArray(systemModel.boundaries), true);
+  assert.equal(systemModel.recentEvidence.some(row => row.id === visibleWitness.id), true);
 });
 
 test("inspect process read models use observations, filter hidden witness ids, and preserve missing-run status", () => {

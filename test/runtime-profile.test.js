@@ -50,21 +50,46 @@ route = "home_route"
 `);
 }
 
-function applyWorldPageDsl(world) {
+function applyInspectServiceDsl(world) {
   applyWitnessToml(world, `
 [[route]]
 actor = "adam"
-id = "world_route"
-path = "/world"
-serves = "page"
+id = "world_graph_route"
+path = "/api/world-graph"
+serves = "worldGraph"
 method = "GET"
-handler = "page.world"
-params = { rootWidget = "home_widget", frontendProgram = "home_program" }
+handler = "worldGraph.read"
 
 [[serve]]
 actor = "adam"
 serverRunner = "server_runner"
-route = "world_route"
+route = "world_graph_route"
+
+[[route]]
+actor = "adam"
+id = "world_system_route"
+path = "/api/world-system"
+serves = "worldSystem"
+method = "GET"
+handler = "worldSystem.read"
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "world_system_route"
+
+[[route]]
+actor = "adam"
+id = "process_view_route"
+path = "/api/process-view"
+serves = "processView"
+method = "GET"
+handler = "processView.read"
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "process_view_route"
 `);
 }
 
@@ -325,8 +350,8 @@ test("runtime surface contributions vary by active runtime profile", async () =>
     assert.equal(minimalMatchers.has("/world"), false);
     assert.equal(minimalMatchers.has("/platform"), false);
     assert.equal(fullMatchers.has("/_bootstrap"), true);
-    assert.equal(full.surfaces.some(surface => surface.id === "surface:process-view"), true);
-    assert.equal(full.surfaces.some(surface => surface.id === "surface:world"), true);
+    assert.equal(full.surfaces.some(surface => surface.id === "surface:process-view"), false);
+    assert.equal(full.surfaces.some(surface => surface.id === "surface:world"), false);
     assert.equal(fullMatchers.has("/platform"), true);
   } finally {
     await minimalServer.close();
@@ -602,10 +627,10 @@ test("full runtime exposes platform console and platform self-model API", async 
   }
 });
 
-test("minimal runtime plus plugin.inspect exposes inspect routes and surfaces", async () => {
+test("minimal runtime plus plugin.inspect keeps low-level inspect endpoints but no inspect pages or surfaces", async () => {
   const world = createWorld();
   applyMinimalPageDsl(world);
-  applyWorldPageDsl(world);
+  applyInspectServiceDsl(world);
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
 
@@ -620,13 +645,72 @@ test("minimal runtime plus plugin.inspect exposes inspect routes and surfaces", 
   assert.equal(server.ok, true);
 
   try {
-    const response = await fetch(`${server.url}/world`);
-    assert.notEqual(response.status, 404);
+    assert.equal((await fetch(`${server.url}/world`)).status, 404);
+    assert.equal((await fetch(`${server.url}/process`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/world-graph`)).status, 200);
+    assert.equal((await fetch(`${server.url}/api/world-system`)).status, 200);
+    assert.equal((await fetch(`${server.url}/api/process-view`)).status, 200);
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
     assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.inspect"]);
     assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-inspect"]);
     assert.equal(diagnostics.plugins.loadedRuntimeCount, 1);
+    assert.equal(diagnostics.surfaces.some(surface => surface.id === "surface:world"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.operator-workbench exposes canonical operator api endpoints", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.operator-workbench"]
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-operator-workbench"), true);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.operator-workbench"]);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/operator/snapshot" && route.handler === "operator.snapshot.read"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/operator/command" && route.handler === "operator.command.run"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/operator/intent" && route.handler === "operator.intent.dispatch"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/operator/display-settings" && route.handler === "operator.displaySettings.update"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/operator/autocomplete" && route.handler === "operator.autocomplete.read"), true);
+
+    const snapshot = await fetch(`${server.url}/api/operator/snapshot`).then(result => result.json());
+    const command = await fetch(`${server.url}/api/operator/command`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ command: "inspect" })
+    }).then(result => result.json());
+    const intent = await fetch(`${server.url}/api/operator/intent`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "set-focused-pane", pane: "right" })
+    }).then(result => result.json());
+    const display = await fetch(`${server.url}/api/operator/display-settings`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ paneSplit: 0.33 })
+    }).then(result => result.json());
+    const autocomplete = await fetch(`${server.url}/api/operator/autocomplete?line=${encodeURIComponent("ins")}`).then(result => result.json());
+
+    assert.equal(typeof snapshot.leftPane?.title, "string");
+    assert.equal(typeof command.snapshot?.leftPane?.title, "string");
+    assert.equal(typeof intent.snapshot?.leftPane?.title, "string");
+    assert.equal(display.snapshot?.viewport?.layout?.leftWeight != null, true);
+    assert.equal(Array.isArray(autocomplete.matches), true);
+    assert.equal(typeof autocomplete.preview, "string");
   } finally {
     await server.close();
   }
@@ -1145,7 +1229,7 @@ test("minimal runtime plus plugin.backend-seams exposes backend seams without un
 test("authoring runtime plus plugin.inspect composes both bundle sets", async () => {
   const world = createWorld();
   applyMinimalPageDsl(world);
-  applyWorldPageDsl(world);
+  applyInspectServiceDsl(world);
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "authoring" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "authoring" });
 
@@ -1161,7 +1245,7 @@ test("authoring runtime plus plugin.inspect composes both bundle sets", async ()
 
   try {
     assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 200);
-    assert.notEqual((await fetch(`${server.url}/world`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/world-graph`)).status, 200);
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring-core"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
@@ -1266,8 +1350,7 @@ test("runtime diagnostics endpoint exposes full-profile bundle and handler-set c
     assert.equal(body.activeProfile, "full");
     assert.equal(body.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
     assert.equal(body.activeBundles.find(bundle => bundle.id === "bundle-demo")?.ownerClass, "runtime-plugin");
-    assert.equal(body.surfaces.some(surface => surface.id === "surface:world"), true);
-    assert.equal(body.surfaces.find(surface => surface.id === "surface:world")?.ownerClass, "runtime-plugin");
+    assert.equal(body.surfaces.some(surface => surface.id === "surface:world"), false);
     assert.equal(body.providedCapabilities.includes("db.sql"), true);
     assert.equal(body.handlerSets.some(entry => entry.id === "demo"), true);
     assert.equal(body.handlerSets.find(entry => entry.id === "demo")?.ownerClass, "handler-set");
@@ -1328,7 +1411,7 @@ test("runtime plugins endpoint exposes local plugin package metadata and activat
     assert.equal(inspectPlugin.activation.requested, true);
     assert.equal(inspectPlugin.activation.active, true);
     assert.equal(inspectPlugin.resolvedBundles.some(row => row.id === "bundle-inspect"), true);
-    assert.equal(inspectPlugin.resolvedRuntimeContributions.surfaces.some(row => row.id === "surface:world"), true);
+    assert.deepEqual(inspectPlugin.resolvedRuntimeContributions.surfaces, []);
     assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].routeKind, "stream");
     assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
     assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].ownerPluginId, "plugin.inspect");
@@ -1470,8 +1553,8 @@ test("maintained demo runs on minimal plus authored runtime plugins", async () =
     assert.deepEqual(canvasPlugin.runtimeModule.bundleIds, ["bundle-canvas"]);
 
     assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 200);
-    assert.equal((await fetch(`${server.url}/world`)).status, 200);
-    assert.equal((await fetch(`${server.url}/process`)).status, 200);
+    assert.equal((await fetch(`${server.url}/world`)).status, 404);
+    assert.equal((await fetch(`${server.url}/process`)).status, 404);
     assert.equal((await fetch(`${server.url}/canvas`)).status, 200);
   } finally {
     await server.close();
@@ -1895,7 +1978,7 @@ handlerSet = "demo"
 test("mounted routes with handlers from inactive bundles return not found", async () => {
   const world = createWorld();
   applyMinimalPageDsl(world);
-  applyWorldPageDsl(world);
+  applyInspectServiceDsl(world);
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "full" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "full" });
 
@@ -1909,7 +1992,7 @@ test("mounted routes with handlers from inactive bundles return not found", asyn
   assert.equal(server.ok, true);
 
   try {
-    const response = await fetch(`${server.url}/world`);
+    const response = await fetch(`${server.url}/api/world-graph`);
     assert.equal(response.status, 404);
   } finally {
     await server.close();

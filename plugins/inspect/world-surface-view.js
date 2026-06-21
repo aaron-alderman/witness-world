@@ -13,6 +13,7 @@ export function renderWorldModeMenuView({
 } = {}) {
   const modeButton = (mode, label) => '<button class="world-mode-button ' + (currentMode === mode ? "world-mode-active" : "") + '" data-world-mode="' + escapeHtml(mode) + '">' + escapeHtml(label) + "</button>";
   return '<nav class="surface-header-bar surface-toolbar world-mode-menu">'
+    + modeButton("system", "System Overview")
     + modeButton("graph", "Graph")
     + modeButton("things", "Thing List")
     + modeButton("primitive", "Primitive Browser")

@@ -40,7 +40,7 @@ test("static bundle catalogs are core-only and optional catalogs arrive through 
   const options = await loadedOptions("minimal", ["plugin.inspect"]);
   const summary = runtimeBundleSummaryForProfile("minimal", options);
   assert.equal(summary.dispatchHandlers.includes("events.stream"), true);
-  assert.equal(summary.pageHandlers.includes("page.world"), true);
+  assert.equal(summary.pageHandlers.includes("page.world"), false);
   assert.equal(summary.handlerMetadata["events.stream"].routeKind, "stream");
 });
 
@@ -77,7 +77,6 @@ test("active bundle handler composition filters inactive implementations and rep
   const availableHandlers = {
     __sessionStore: new Map(),
     "page.surface": () => {},
-    "page.world": () => {},
     "events.stream": () => {},
     "db.sql.query": () => {}
   };
@@ -87,8 +86,8 @@ test("active bundle handler composition filters inactive implementations and rep
     availableHandlers,
     reservedHandlerIds: ["__sessionStore"]
   });
-  assert.equal(Object.prototype.hasOwnProperty.call(minimal.handlers, "page.world"), false);
-  assert.equal(minimal.diagnostics.extraHandlerIds.includes("page.world"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(minimal.handlers, "events.stream"), false);
+  assert.equal(minimal.diagnostics.extraHandlerIds.includes("events.stream"), true);
 
   const inspect = composeRuntimeBundleHandlers({
     activeBundleIds: summary.bundleIds,
@@ -96,7 +95,6 @@ test("active bundle handler composition filters inactive implementations and rep
     reservedHandlerIds: ["__sessionStore"],
     handlerCatalogsByBundleId: Object.fromEntries(summary.bundles.map(bundle => [bundle.id, bundle.handlerCatalog]))
   });
-  assert.equal(Object.prototype.hasOwnProperty.call(inspect.handlers, "page.world"), true);
   assert.equal(Object.prototype.hasOwnProperty.call(inspect.handlers, "events.stream"), true);
   assert.equal(Object.prototype.hasOwnProperty.call(inspect.handlers, "db.sql.query"), false);
 });
@@ -144,7 +142,7 @@ test("handler sets, routes, and surfaces are absent until owning plugin runtimes
   const fullSurfaces = runtimeSurfaceEntriesForProfile("full", "world-command", fullOptions);
 
   assert.equal(Object.prototype.hasOwnProperty.call(fullHandlerSets, "demo"), true);
-  assert.equal(fullSurfaces.some(surface => surface.id === "surface:world-mode:graph"), true);
+  assert.equal(fullSurfaces.some(surface => surface.id === "surface:world-mode:graph"), false);
 });
 
 test("route and dispatch ownership varies by loaded plugin composition", async () => {
@@ -281,8 +279,7 @@ test("runtime diagnostics summarize seed profile and loaded composition separate
   assert.deepEqual(diagnostics.profilePluginIds, []);
   assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
   assert.equal(diagnostics.activeBundles.find(bundle => bundle.id === "bundle-inspect")?.ownerClass, "runtime-plugin");
-  assert.equal(diagnostics.surfaces.some(surface => surface.id === "surface:process-view"), true);
-  assert.equal(diagnostics.surfaces.find(surface => surface.id === "surface:process-view")?.ownerClass, "runtime-plugin");
+  assert.equal(diagnostics.surfaces.some(surface => surface.id === "surface:process-view"), false);
   assert.equal(diagnostics.handlerMetadata["events.stream"].routeKind, "stream");
   assert.equal(diagnostics.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
   assert.equal(diagnostics.routes.find(route => route.handler === "events.stream")?.ownerClass, "runtime-plugin");

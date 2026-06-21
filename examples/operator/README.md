@@ -1,6 +1,6 @@
 # Operator Example
 
-`examples/operator` is a browser-first operator workbench prototype.
+`examples/operator` is the plugin-owned operator workbench example fixture.
 
 It is intentionally not tied to Electron. The product boundary here is:
 
@@ -13,9 +13,19 @@ It is intentionally not tied to Electron. The product boundary here is:
 This example has two authoring layers:
 
 - `shell.rvm`
-  - uses the repo's current `operator_screen` / `operator_setup` forms so the existing app-project loader can ingest the example today
+  - uses the repo's current `operator_*` plugin grammar
+  - this is a legacy adapter over the deeper canonical operator model
 - `browser/operator.workbench.rvm`
-  - a deeper prototype ontology for browser-first operator surfaces, overlays, bindings, and split panes
+  - browser-first prototype layout grammar
+  - this is an experimental presentation adapter, not canonical ontology truth
+
+The canonical operator model now lives above both of those authoring layers:
+
+1. compact ontology root
+2. session sidecar
+3. legacy browse projection mappings
+4. adapter mappings for current workbench grammars
+5. later presentation layout and appearance phases
 
 ## Run
 
@@ -29,13 +39,24 @@ Or, on Windows:
 examples\operator\run.cmd
 ```
 
-If you only want the local server without auto-opening the browser:
+If you want the browser-only prototype without the Electron shell:
 
 ```bash
-npm run utility:operator-browser
+npm run operator:example:browser
 ```
 
-The `operator:example` launcher opens the browser automatically and keeps the local server running until you stop it.
+If you want the plugin-owned raw shell adapter explicitly:
+
+```bash
+npm run operator:example:shell
+```
+
+`operator:example` now launches the plugin-owned workbench against this example fixture.
+
+`operator:example:browser` keeps the browser-first prototype path available as an explicit utility surface.
+
+`operator:example:shell` keeps the moved raw shell available as a plugin utility instead of a top-level CLI product command.
+
 Offline fixture boot is intentionally a lower-level developer/testing path, not a primary product launcher:
 
 ```bash

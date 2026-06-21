@@ -134,10 +134,11 @@ Event:
 - `src/witness-worker-protocol.js` exports shared request/result/event helpers plus operation profiles so all worker classes can use the same stable outer contract even before each worker class is fully adopted.
 - `src/runtime-worker-transport-contract.js` defines the sibling `witness-runtime-worker-transport/v1` method inventory for runtime control (`runtime.control.describe`, `runtime.process_health.read`, `runtime.supervision.activate`, `runtime.supervision.quiesce`, `runtime.app_snapshot.reload`).
 - `src/runtime-worker-transport.js` centralizes those runtime-worker control semantics in one dispatcher, and the current HTTP routes in `src/runtime-server.js` plus `src/runtime-core-handlers.js` delegate through that dispatcher instead of owning separate route-local implementations.
+- `src/runtime-worker-control-client.js` lets a runtime worker connect outward to a Rust-provided control socket and answer those same `witness-runtime-worker-transport/v1` calls without requiring inbound HTTP control requests.
 - `substrate/witness-core/src/lib.rs` accepts the versioned envelope when parsing build-worker output.
 - `docs/WITNESS-CORE-TRANSPORT.md` and `src/witness-core-transport-contract.js` now define the sibling request/subscribe contract used by runtime-side witness-core control calls, and the supervised IPC carrier now uses that named payload inventory instead of inheriting raw HTTP endpoint knowledge from the old fetch bridge.
 
 ## Not Yet Done
 
 - `evaluate`, `render`, `inspect`, and `bounded_compute` now have explicit protocol profiles and helper support, but they are not yet implemented as shipped Rust-launched worker request/result paths.
-- The broader worker runtime still uses a private HTTP listener as the concrete carrier for the runtime-worker control contract, and `src/witness-core-http-transport.js` still survives as the fallback/manual witness-core control-plane adapter. Those carriers remain open replacement work even though the semantics are now versioned and shared.
+- The broader worker runtime still uses a private HTTP listener as the concrete carrier for the runtime-worker control contract. The old standalone witness-core HTTP transport has been removed from product `src/`; only a test-side compatibility adapter remains for fixture coverage. The private runtime listener remains open replacement work even though the semantics are now versioned and shared.

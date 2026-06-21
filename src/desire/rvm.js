@@ -1,6 +1,6 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { createDesirePlusDocument, createDesirePlusNode, createTrace, validateDesirePlusDocument } from "./ir.js";
+import { runtimeLocalFsModule } from "../runtime-local-fs.js";
 
 export const RVM_LOWERED_RUNTIME_KINDS = new Set([
   "atom",
@@ -28,7 +28,7 @@ export async function compileRvmFileToDesirePlus(file, options = {}) {
     ? options.readFile
     : options?.requireReadCapability === true
       ? null
-      : (target, encoding) => fs.readFile(target, encoding);
+      : (target, encoding) => runtimeLocalFsModule.readFile(target, encoding);
   if (typeof readFile !== "function") {
     throw createReadCapabilityRequiredError(resolved);
   }

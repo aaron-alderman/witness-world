@@ -20,6 +20,7 @@ test("runtime worker transport contract defines a versioned method inventory", (
   assert.equal(RUNTIME_WORKER_TRANSPORT_METHODS.supervisionActivate, "runtime.supervision.activate");
   assert.equal(RUNTIME_WORKER_TRANSPORT_METHODS.supervisionQuiesce, "runtime.supervision.quiesce");
   assert.equal(RUNTIME_WORKER_TRANSPORT_METHODS.appSnapshotReload, "runtime.app_snapshot.reload");
+  assert.equal(RUNTIME_WORKER_TRANSPORT_METHODS.appPreviewSessionEventRead, "runtime.app_preview_session.event.read");
 });
 
 test("runtime worker transport helpers round-trip call and result envelopes", () => {
@@ -45,6 +46,7 @@ test("runtime worker transport descriptor hides reload when mutations are disabl
 
   assert.equal(active.methods.reload, RUNTIME_WORKER_TRANSPORT_METHODS.appSnapshotReload);
   assert.equal(draining.methods.reload, null);
+  assert.equal(active.methods.readPreviewSessionEvent, RUNTIME_WORKER_TRANSPORT_METHODS.appPreviewSessionEventRead);
 });
 
 test("runtime worker transport contract rejects unknown methods", () => {

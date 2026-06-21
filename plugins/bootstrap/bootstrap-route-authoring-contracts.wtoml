@@ -9,7 +9,7 @@ missingBackendProgramSoulIssue = "choose a backend program soul"
 routeKind = "page"
 responseKind = "page"
 enabledFields = ["page", "rootWidget", "rootWidgetRef", "rootSurface", "rootSurfaceRef", "routeStateProcess", "routeStateProcessRef", "routeStateState", "routeStateStateRef", "liveProjection"]
-fieldSummary = "Enabled fields depend on the page handler. Canonical app hosting uses page.surface with root surface and route state. page.world remains inspect-only and uses root widget. Legacy frontend-program route params are retired."
+fieldSummary = "Enabled fields depend on the page handler. Canonical app hosting uses page.surface with root surface and route state. Legacy frontend-program route params are retired."
 
 [[bootstrapRouteAuthoringPolicy]]
 routeKind = "stream"
@@ -34,9 +34,3 @@ handler = "page.surface"
 requiresRootSurface = true
 disabledFields = ["page", "rootWidget", "rootWidgetRef", "frontendProgram", "frontendProgramRef", "liveProjection"]
 missingRootSurfaceIssue = "choose a root surface for this page handler"
-
-[[bootstrapRouteAuthoringHandlerRule]]
-handler = "page.world"
-requiresRootWidget = true
-disabledFields = ["rootSurface", "rootSurfaceRef"]
-missingRootWidgetIssue = "choose a root widget for this page handler"

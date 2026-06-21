@@ -518,21 +518,10 @@
       "context": "frontend"
     },
     {
-      "id": "world_graph_process_link",
-      "kind": "Link",
-      "parent": "world_graph_page",
-      "order": 1,
-      "href": "/process",
-      "text": "Open Process View",
-      "class": "world-graph-link",
-      "guidanceTarget": "world-process-link",
-      "context": "frontend"
-    },
-    {
       "id": "world_session",
       "kind": "Box",
       "parent": "world_graph_page",
-      "order": 2,
+      "order": 1,
       "class": "surface-card surface-stack session-panel",
       "role": "session-panel",
       "guidanceTarget": "world-session-panel",
@@ -695,6 +684,11 @@
       "context": "backend"
     },
     {
+      "soul": "todo.worldSystem.read",
+      "label": "Todo World System Read",
+      "context": "backend"
+    },
+    {
       "soul": "todo.processView.read",
       "label": "Todo Process View Read",
       "context": "backend"
@@ -768,6 +762,12 @@
     {
       "soul": "todo.worldGraph.read",
       "version": "todo.worldGraph.read.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.worldSystem.read",
+      "version": "todo.worldSystem.read.v1",
       "index": 0,
       "context": "backend"
     },
@@ -1605,6 +1605,20 @@
       "paramsJson": "{\"from\":\"worldGraphResponse\"}"
     },
     {
+      "version": "todo.worldSystem.read.v1",
+      "event": "request",
+      "op": "project.read",
+      "order": 0,
+      "paramsJson": "{\"projector\":\"inspect.worldSystemReadModel\",\"into\":\"worldSystemResponse\"}"
+    },
+    {
+      "version": "todo.worldSystem.read.v1",
+      "event": "request",
+      "op": "response.json",
+      "order": 1,
+      "paramsJson": "{\"from\":\"worldSystemResponse\"}"
+    },
+    {
       "version": "todo.processView.read.v1",
       "event": "request",
       "op": "project.read",
@@ -1835,6 +1849,10 @@
     {
       "soul": "todo.worldGraph.read",
       "version": "todo.worldGraph.read.v1"
+    },
+    {
+      "soul": "todo.worldSystem.read",
+      "version": "todo.worldSystem.read.v1"
     },
     {
       "soul": "todo.processView.read",
@@ -2338,23 +2356,21 @@
   ],
   "operatingRoutes": [
     {
-      "id": "world_page_route",
-      "path": "/world",
-      "serves": "worldGraphView",
-      "method": "GET",
-      "handler": "page.world",
-      "rootWidget": "world_graph_page",
-      "frontendProgram": "world_graph_program",
-      "page": "world",
-      "context": "frontend"
-    },
-    {
       "id": "world_graph_read_route",
       "path": "/api/world-graph",
       "serves": "worldGraph",
       "method": "GET",
       "handler": "backendProgram.run",
       "backendProgramSoul": "todo.worldGraph.read",
+      "context": "backend"
+    },
+    {
+      "id": "world_system_read_route",
+      "path": "/api/world-system",
+      "serves": "worldSystem",
+      "method": "GET",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.worldSystem.read",
       "context": "backend"
     },
     {
@@ -2374,13 +2390,6 @@
       "handler": "backendProgram.run",
       "backendProgramSoul": "todo.processRun.read",
       "context": "backend"
-    },
-    {
-      "id": "process_page_route",
-      "path": "/process",
-      "serves": "processView",
-      "method": "GET",
-      "handler": "page.process"
     }
   ],
   "serves": [
@@ -2446,11 +2455,11 @@
     },
     {
       "serverRunner": "demo_server",
-      "route": "world_page_route"
+      "route": "world_graph_read_route"
     },
     {
       "serverRunner": "demo_server",
-      "route": "world_graph_read_route"
+      "route": "world_system_read_route"
     },
     {
       "serverRunner": "demo_server",
@@ -2459,10 +2468,6 @@
     {
       "serverRunner": "demo_server",
       "route": "process_run_read_route"
-    },
-    {
-      "serverRunner": "demo_server",
-      "route": "process_page_route"
     }
   ]
 }

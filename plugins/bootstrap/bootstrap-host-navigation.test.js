@@ -48,7 +48,7 @@ test("bootstrap host navigation re-checks freshness and handles same-url handoff
   assert.equal(calls.includes("reload-app"), true);
 });
 
-test("bootstrap guidance page continuation delegates app handoff and reloads same-page bootstrap/world routes", async () => {
+test("bootstrap guidance page continuation delegates app handoff and only keeps bootstrap as an internal page target", async () => {
   const calls = [];
   const appResult = { opened: true, mode: "assign", target: "http://bootstrap.local/" };
   assert.deepEqual(await continueBootstrapGuidanceOnPage({
@@ -73,8 +73,9 @@ test("bootstrap guidance page continuation delegates app handoff and reloads sam
     currentPathname: "/_bootstrap",
     assign(target) { calls.push(["assign-world", target]); }
   });
-  assert.deepEqual(worldResult, { continued: true, mode: "assign", target: "http://bootstrap.local/world" });
+  assert.deepEqual(worldResult, { continued: false, mode: "ignored" });
   assert.equal(calls.some(entry => Array.isArray(entry) && entry[0] === "openAppHome"), true);
+  assert.equal(calls.some(entry => Array.isArray(entry) && entry[0] === "assign-world"), false);
   assert.equal(continueBootstrapTutorialOnPage, continueBootstrapGuidanceOnPage);
 });
 

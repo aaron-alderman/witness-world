@@ -1,4 +1,4 @@
-const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
+﻿const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
   "mode": "detached",
   "path": "root",
   "focus": {
@@ -44,7 +44,7 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
   "contextMenu": {
     "frameTitle": "Context",
     "title": "Context",
-    "subject": "Session",
+    "subject": "Workbench",
     "placement": "center",
     "marginX": 2,
     "marginY": 1,
@@ -61,21 +61,21 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
     "lines": [
       "1. Edit :: pane:left",
       "2. Change Color :: surface theme",
-      "3. Rename :: Session",
-      "4. Clone :: Session"
+      "3. Rename :: Workbench",
+      "4. Clone :: Workbench"
     ],
     "visibleLines": [
       "1. Edit :: pane:left",
       "2. Change Color :: …",
-      "3. Rename :: Session",
-      "4. Clone :: Session"
+      "3. Rename :: Workbe…",
+      "4. Clone :: Workben…"
     ],
     "context": {
       "pane": "left",
       "rowIndex": 0,
       "rowType": "container",
-      "rowLabel": "Session",
-      "targetId": "session",
+      "rowLabel": "Workbench",
+      "targetId": null,
       "primaryCommand": "open 1"
     },
     "items": [
@@ -88,13 +88,13 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
         "action": {
           "kind": "hook",
           "hook": "edit",
-          "subject": "Session",
+          "subject": "Workbench",
           "context": {
             "pane": "left",
             "rowIndex": 0,
             "rowType": "container",
-            "rowLabel": "Session",
-            "targetId": "session",
+            "rowLabel": "Workbench",
+            "targetId": null,
             "primaryCommand": "open 1"
           }
         }
@@ -108,13 +108,13 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
         "action": {
           "kind": "hook",
           "hook": "change-color",
-          "subject": "Session",
+          "subject": "Workbench",
           "context": {
             "pane": "left",
             "rowIndex": 0,
             "rowType": "container",
-            "rowLabel": "Session",
-            "targetId": "session",
+            "rowLabel": "Workbench",
+            "targetId": null,
             "primaryCommand": "open 1"
           }
         }
@@ -123,18 +123,18 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
         "id": "rename",
         "label": "Rename",
         "shortcut": "3",
-        "detail": "Session",
+        "detail": "Workbench",
         "enabled": true,
         "action": {
           "kind": "hook",
           "hook": "rename",
-          "subject": "Session",
+          "subject": "Workbench",
           "context": {
             "pane": "left",
             "rowIndex": 0,
             "rowType": "container",
-            "rowLabel": "Session",
-            "targetId": "session",
+            "rowLabel": "Workbench",
+            "targetId": null,
             "primaryCommand": "open 1"
           }
         }
@@ -143,18 +143,18 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
         "id": "clone",
         "label": "Clone",
         "shortcut": "4",
-        "detail": "Session",
+        "detail": "Workbench",
         "enabled": true,
         "action": {
           "kind": "hook",
           "hook": "clone",
-          "subject": "Session",
+          "subject": "Workbench",
           "context": {
             "pane": "left",
             "rowIndex": 0,
             "rowType": "container",
-            "rowLabel": "Session",
-            "targetId": "session",
+            "rowLabel": "Workbench",
+            "targetId": null,
             "primaryCommand": "open 1"
           }
         }
@@ -375,7 +375,7 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
   "helpOverlay": {
     "frameTitle": "Help",
     "context": "Operator Navigation | Authored",
-    "summary": "Move the active row, then Enter to open Session.",
+    "summary": "Move the active row, then Enter to open Workbench.",
     "placement": "center",
     "marginX": 2,
     "marginY": 1,
@@ -393,13 +393,13 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
       "F1 opens the authored help surface.",
       "Right click opens the centered context menu surface.",
       "Drag pane handles to resize the authored split layout.",
-      "Active right pane: Session."
+      "Active right pane: Workbench."
     ],
     "visibleLines": [
       "F1 opens the authored help surface.",
       "Right click opens the centered context menu surface.",
       "Drag pane handles to resize the authored split layout.",
-      "Active right pane: Session."
+      "Active right pane: Workbench."
     ]
   },
   "overlays": [
@@ -423,13 +423,13 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
         "F1 opens the authored help surface.",
         "Right click opens the centered context menu surface.",
         "Drag pane handles to resize the authored split layout.",
-        "Active right pane: Session."
+        "Active right pane: Workbench."
       ],
       "visibleLines": [
         "F1 opens the authored help surface.",
         "Right click opens the centered context menu surface.",
         "Drag pane handles to resize the authored split layout.",
-        "Active right pane: Session."
+        "Active right pane: Workbench."
       ],
       "id": "help_overlay",
       "kind": "doc_view",
@@ -466,15 +466,15 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
       "lines": [
         "1. Edit :: pane:left",
         "2. Change Color :: surface theme",
-        "3. Rename :: Session",
-        "4. Clone :: Session"
+        "3. Rename :: Workbench",
+        "4. Clone :: Workbench"
       ],
       "visibleLines": [
-        "1. Edit :: pane:left",
-        "2. Change Color :: â€¦",
-        "3. Rename :: Session",
-        "4. Clone :: Session"
-      ],
+      "1. Edit :: pane:left",
+      "2. Change Color :: …",
+      "3. Rename :: Workbe…",
+      "4. Clone :: Workben…"
+    ],
       "id": "context_menu",
       "kind": "menu",
       "policy": {
@@ -504,76 +504,20 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
     "origin": "authored",
     "overlay": false,
     "columns": [],
-    "rows": [
-      {
-        "index": 1,
-        "type": "container",
-        "actionable": true,
-        "primaryAction": {
-          "command": "open 1",
-          "label": "open"
-        },
-        "selected": false,
-        "summary": "Selection, aliases, notes, preview session, and mini-programs.",
-        "label": "Session",
-        "columns": null,
-        "target": "session"
-      },
-      {
-        "index": 2,
-        "type": "container",
-        "actionable": true,
-        "primaryAction": {
-          "command": "open 2",
-          "label": "open"
-        },
-        "selected": false,
-        "summary": "Live modeled world graph in detached mode.",
-        "label": "World",
-        "columns": null,
-        "target": "world"
-      },
-      {
-        "index": 3,
-        "type": "container",
-        "actionable": true,
-        "primaryAction": {
-          "command": "open 3",
-          "label": "open"
-        },
-        "selected": false,
-        "summary": "Platform self-model, docs, tests, and runtime inventory.",
-        "label": "Platform",
-        "columns": null,
-        "target": "platform"
-      }
-    ],
+    "rows": canonicalRootRows(),
     "cursor": 0,
     "activeRowIndex": 0,
-    "activeRow": {
-      "index": 1,
-      "type": "container",
-      "actionable": true,
-      "primaryAction": {
-        "command": "open 1",
-        "label": "open"
-      },
-      "selected": false,
-      "summary": "Selection, aliases, notes, preview session, and mini-programs.",
-      "label": "Session",
-      "columns": null,
-      "target": "session"
-    },
-    "rowCount": 3,
+    "activeRow": canonicalRootRows()[0],
+    "rowCount": 6,
     "paging": null
   },
   "rightPane": {
-    "title": "Session",
+    "title": "Workbench",
     "screenMode": "custom-screen",
     "activeScreenId": "inspect",
     "screen": {
       "id": "inspect",
-      "title": "Session",
+      "title": "Workbench",
       "subtitle": "Record and container detail for the current selection.",
       "shape": "detail",
       "dataSource": "inspect",
@@ -586,7 +530,7 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
       "activeRowIndex": 0,
       "activeSectionIndex": 0,
       "activeSectionId": "inspect.main",
-      "activeSectionTitle": "Session",
+      "activeSectionTitle": "Workbench",
       "activeSectionRowCount": 0,
       "activeSectionActionable": false,
       "activeSectionCollapsible": true,
@@ -594,7 +538,7 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
       "sections": [
         {
           "id": "inspect.main",
-          "title": "Session",
+          "title": "Workbench",
           "kind": "detail",
           "shape": "detail",
           "dataSource": "inspect",
@@ -605,10 +549,10 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
           "rows": [],
           "activeRowIndex": 0,
           "detailLines": [
-            "Session",
-            "id: session",
+            "Workbench",
+            "id: workbench",
             "kind: container",
-            "summary: Selection, aliases, notes, preview session, and mini-programs."
+            "summary: Operator-local session, views, pane state, viewport state, and display controls."
           ],
           "collapsible": true,
           "collapsed": false,
@@ -617,17 +561,17 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
         }
       ],
       "detailLines": [
-        "Session",
-        "id: session",
+        "Workbench",
+        "id: workbench",
         "kind: container",
-        "summary: Selection, aliases, notes, preview session, and mini-programs."
+        "summary: Operator-local session, views, pane state, viewport state, and display controls."
       ],
       "origin": "builtin",
       "shortcut": null
     },
     "activeSection": {
       "id": "inspect.main",
-      "title": "Session",
+      "title": "Workbench",
       "rowCount": 0,
       "actionable": false,
       "collapsible": true,
@@ -635,14 +579,14 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
     },
     "tab": "inspect",
     "bodyLines": [
-      "Session",
-      "id: session",
+      "Workbench",
+      "id: workbench",
       "kind: container",
-      "summary: Selection, aliases, notes, preview session, and mini-programs."
+      "summary: Operator-local session, views, pane state, viewport state, and display controls."
     ],
     "references": [],
     "referencesWorkbench": {
-      "title": "Session References",
+      "title": "Workbench References",
       "groups": [],
       "rows": [],
       "activeRowIndex": 0,
@@ -678,8 +622,8 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
     "cursor": 0,
     "target": {
       "kind": "container",
-      "id": "session",
-      "label": "Session",
+      "id": "workbench",
+      "label": "Workbench",
       "pinned": false,
       "mode": "container"
     },
@@ -693,8 +637,180 @@ const OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE = {
   }
 };
 
+function canonicalRootRows() {
+  return [
+    {
+      index: 1,
+      type: "container",
+      actionable: true,
+      primaryAction: { command: "open 1", label: "open" },
+      selected: false,
+      summary: "Operator-local session, views, pane state, viewport state, and display controls.",
+      label: "Workbench",
+      columns: null,
+      target: "workbench"
+    },
+    {
+      index: 2,
+      type: "container",
+      actionable: true,
+      primaryAction: { command: "open 2", label: "open" },
+      selected: false,
+      summary: "Addressable objects, runtimes, artifacts, and named object families.",
+      label: "Things",
+      columns: null,
+      target: "things"
+    },
+    {
+      index: 3,
+      type: "container",
+      actionable: true,
+      primaryAction: { command: "open 3", label: "open" },
+      selected: false,
+      summary: "Declared shapes, classifications, policies, and reusable semantic categories.",
+      label: "Types",
+      columns: null,
+      target: "types"
+    },
+    {
+      index: 4,
+      type: "container",
+      actionable: true,
+      primaryAction: { command: "open 4", label: "open" },
+      selected: false,
+      summary: "Explicit edges, visibility rules, authority links, and attachment/install structure.",
+      label: "Relationships",
+      columns: null,
+      target: "relationships"
+    },
+    {
+      index: 5,
+      type: "container",
+      actionable: true,
+      primaryAction: { command: "open 5", label: "open" },
+      selected: false,
+      summary: "Intent-bearing actions, messages, queries, and execution verbs.",
+      label: "Commands",
+      columns: null,
+      target: "commands"
+    },
+    {
+      index: 6,
+      type: "container",
+      actionable: true,
+      primaryAction: { command: "open 6", label: "open" },
+      selected: false,
+      summary: "Evidence, traces, source-backed artifacts, and proof of current state.",
+      label: "Witnesses",
+      columns: null,
+      target: "witnesses"
+    }
+  ];
+}
+
+function normalizeCanonicalWorkbenchFixture(snapshot) {
+  const rows = canonicalRootRows();
+  snapshot.path = "root";
+  if (snapshot.leftPane) {
+    snapshot.leftPane.path = "root";
+    snapshot.leftPane.header = "root";
+    snapshot.leftPane.rows = rows;
+    snapshot.leftPane.rowCount = rows.length;
+    snapshot.leftPane.cursor = 0;
+    snapshot.leftPane.activeRowIndex = 0;
+    snapshot.leftPane.activeRow = structuredClone(rows[0]);
+  }
+  if (snapshot.contextMenu) {
+    snapshot.contextMenu.lines = [
+      "1. Edit :: pane:left",
+      "2. Change Color :: surface theme",
+      "3. Rename :: Workbench",
+      "4. Clone :: Workbench"
+    ];
+    snapshot.contextMenu.visibleLines = [
+      "1. Edit :: pane:left",
+      "2. Change Color :: â€¦",
+      "3. Rename :: Workbeâ€¦",
+      "4. Clone :: Workbenâ€¦"
+    ];
+    snapshot.contextMenu.subject = "Workbench";
+    if (snapshot.contextMenu.context) {
+      snapshot.contextMenu.context.rowLabel = "Workbench";
+      snapshot.contextMenu.context.targetId = null;
+      snapshot.contextMenu.context.primaryCommand = "open 1";
+    }
+    for (const item of snapshot.contextMenu.items ?? []) {
+      if (item.detail === "Session") item.detail = "Workbench";
+      if (item.action?.subject) item.action.subject = "Workbench";
+      if (item.action?.context) {
+        item.action.context.rowLabel = "Workbench";
+        item.action.context.targetId = null;
+        item.action.context.primaryCommand = "open 1";
+      }
+    }
+  }
+  if (snapshot.helpOverlay) {
+    snapshot.helpOverlay.lines = [
+      "F1 opens the authored help surface.",
+      "Right click opens the centered context menu surface.",
+      "Drag pane handles to resize the authored split layout.",
+      "Active right pane: Workbench."
+    ];
+    snapshot.helpOverlay.visibleLines = [...snapshot.helpOverlay.lines];
+    snapshot.helpOverlay.summary = "Move the active row, then Enter to open Workbench.";
+  }
+  if (snapshot.rightPane) {
+    snapshot.rightPane.title = "Workbench";
+    snapshot.rightPane.bodyLines = [
+      "Workbench",
+      "id: workbench",
+      "kind: container",
+      "summary: Operator-local session, views, pane state, viewport state, and display controls."
+    ];
+    snapshot.rightPane.target = {
+      kind: "container",
+      id: "workbench",
+      label: "Workbench",
+      pinned: false,
+      mode: "container"
+    };
+    if (snapshot.rightPane.screen) {
+      snapshot.rightPane.screen.title = "Workbench";
+      snapshot.rightPane.screen.activeSectionTitle = "Workbench";
+      snapshot.rightPane.screen.detailLines = [...snapshot.rightPane.bodyLines];
+      if (snapshot.rightPane.screen.sections?.[0]) {
+        snapshot.rightPane.screen.sections[0].title = "Workbench";
+        snapshot.rightPane.screen.sections[0].detailLines = [...snapshot.rightPane.bodyLines];
+        snapshot.rightPane.screen.sections[0].rowHeaderLabel = "Workbench rows";
+      }
+    }
+    if (snapshot.rightPane.activeSection) {
+      snapshot.rightPane.activeSection.title = "Workbench";
+      snapshot.rightPane.activeSection.rowHeaderLabel = "Workbench rows";
+    }
+  }
+  if (Array.isArray(snapshot.overlays)) {
+    for (const overlay of snapshot.overlays) {
+      if (overlay?.id === "help_overlay") {
+        overlay.lines = [...snapshot.helpOverlay.lines];
+        overlay.visibleLines = [...snapshot.helpOverlay.visibleLines];
+        overlay.summary = snapshot.helpOverlay.summary;
+      }
+      if (overlay?.id === "context_menu") {
+        overlay.lines = [...snapshot.contextMenu.lines];
+        overlay.visibleLines = [...snapshot.contextMenu.visibleLines];
+        overlay.subject = snapshot.contextMenu.subject;
+        overlay.context = structuredClone(snapshot.contextMenu.context);
+        overlay.items = structuredClone(snapshot.contextMenu.items);
+      }
+    }
+  }
+  return snapshot;
+}
+
 export function createOperatorWorkbenchSnapshotFixture() {
   return structuredClone(OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE);
 }
 
 export { OPERATOR_WORKBENCH_SNAPSHOT_FIXTURE };
+

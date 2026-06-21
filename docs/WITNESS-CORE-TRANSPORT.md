@@ -4,10 +4,10 @@
 
 This document defines the versioned transport contract used by Node runtime code to talk to `witness-core`, independent of the concrete transport.
 
-Today there are two concrete adapters:
+Today there are two concrete adapters in the broader toolchain:
 
-- HTTP in `src/witness-core-http-transport.js`
 - supervised worker IPC in `src/witness-core-ipc-transport.js`
+- test-only HTTP compatibility adapter in `test/support/witness-core-http-compat-transport.js`
 
 The point of this contract is to let the concrete carrier change without rewriting every runtime consumer.
 
@@ -114,13 +114,13 @@ Event:
 
 ## Current Adoption
 
-- `src/witness-core-bridge.js` now targets this contract through an injected transport interface with `call(...)` and `subscribe(...)`.
-- `src/witness-core-http-transport.js` implements that contract over the current HTTP control plane.
+- `src/witness-core-bridge.js` targets this contract through an injected transport interface with `call(...)` and `subscribe(...)`, and no longer constructs or owns an HTTP control-plane transport.
 - `src/witness-core-ipc-transport.js` implements that contract over the Rust-injected supervised worker pipe, including `core.events` subscription forwarding.
+- `test/support/witness-core-http-compat-transport.js` exists only as a test-only compatibility adapter so bridge/status-store serialization can still be exercised against HTTP-shaped fixtures without restoring runtime `fetch(...)` ownership to `src/`.
 - `test/witness-core-transport-contract.test.js` freezes the version, method inventory, subscription inventory, and envelope parsing rules.
 
 ## Not Yet Done
 
-- HTTP still exists as the fallback/manual adapter.
-- The supervised IPC carrier is not yet the only authoritative path everywhere.
-- The remaining end-state work is to remove direct `fetch` ownership from authoritative supervised/runtime paths entirely and retire the HTTP adapter as a required carrier there.
+- The supervised IPC carrier is the authoritative checked-in runtime path, but the worker runtime still has a separate private HTTP listener that has not yet been retired.
+- Non-SQLite `db.sql` live proof still needs stronger real-target evidence.
+- Final zero-direct-ownership guardrails still need to tighten after the remaining runtime listener work is gone.

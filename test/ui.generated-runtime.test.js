@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import { applyWitnessToml } from "../src/dsl.js";
-import { renderWidgetPage } from "../plugins/inspect/widget-page.js";
+import { renderWidgetPage } from "../src/runtime-widget-page.js";
 import { expectNoRuntimeErrors, launchBrowser, startBlankUiServer, startUiDemoServer, waitForAppReady } from "./support/harness.js";
 
 function bodyInner(html) {

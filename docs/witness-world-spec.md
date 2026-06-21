@@ -126,7 +126,7 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
   - direct CLI startup remains available as a raw loopback-only Node utility path, and its default listener ports are explicit utility ports rather than the canonical public frontdoor port
   - `npm run bootstrap` and `npm run authoring:server` are the checked-in convenience frontdoor paths for blank-world/bootstrap startup and authoring bootstrap startup
   - worker-port example launches should prefer the explicit utility commands such as `npm run utility:demo` and `npm run utility:engentus-worker`
-  - `npm run engentus:mcp` is the checked-in convenience frontdoor path for the Engentus HTTP MCP surface and keeps the Node worker on a private loopback port behind the Rust-owned ingress
+  - `npm run engentus:mcp` is the checked-in convenience frontdoor path for the Engentus HTTP MCP surface and keeps the supervised Node worker on Rust-owned control transport instead of a private MCP listener
 - Runtime selection is driven by authored `serverRunner` + `serve` definitions.
 - Current public/runtime surface includes:
   - pages:

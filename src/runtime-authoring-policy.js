@@ -367,9 +367,9 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       }),
       widget: capabilityState({
         publicActions: ["widget.create", "widget.update"],
-        runtimeConsumers: ["page.world"],
+        runtimeConsumers: [],
         status: "legacy_only",
-        reason: "widgets remain only as inspect and historical-analysis records; legacy app-serving routes must uplift onto canonical page.surface before they can run"
+        reason: "widgets remain only as inspect and historical-analysis records; they are no longer served through inspect-owned browser routes"
       }),
       frontendProgram: capabilityState({
         runtimeConsumers: [],

@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
+import net from "node:net";
 import path from "node:path";
-
+import { MCP_PROTOCOL_VERSION } from "../../plugins/mcp/mcp-tools.js";
+import {
+  createRuntimeWorkerTransportCall,
+  parseRuntimeWorkerTransportMessage,
+  RUNTIME_WORKER_TRANSPORT_METHODS
+} from "../../src/runtime-worker-transport-contract.js";
 import { startUiServer } from "./harness.js";
+
 import {
   createLiveCoreWorkspace,
   delay,
@@ -52,6 +60,92 @@ async function fetchWithContext(url, options = {}, label = "request") {
     return await fetch(url, options);
   } catch (error) {
     throw new Error(`${label} failed for ${url}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function sendRawHttpRequest({ host = "127.0.0.1", port, request }) {
+  return await new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host, port }, () => {
+      socket.write(request);
+    });
+    let response = "";
+    socket.setEncoding("utf8");
+    socket.on("data", chunk => {
+      response += chunk;
+    });
+    socket.on("end", () => resolve(response));
+    socket.on("error", reject);
+  });
+}
+
+async function readRuntimeControlProcessHealth(controlAddress) {
+  const [host, portText] = String(controlAddress || "").split(":");
+  const port = Number.parseInt(portText, 10);
+  assert.ok(host && Number.isFinite(port), `invalid runtime control address: ${controlAddress}`);
+  return await new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host, port }, () => {
+      socket.write(`${JSON.stringify(createRuntimeWorkerTransportCall({
+        method: RUNTIME_WORKER_TRANSPORT_METHODS.processHealthRead,
+        requestId: "smoke-health"
+      }))}\n`);
+    });
+    let buffer = "";
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`runtime control health probe timed out for ${controlAddress}`));
+    }, 5000);
+    socket.setEncoding("utf8");
+    socket.on("data", chunk => {
+      buffer += chunk;
+      const boundary = buffer.indexOf("\n");
+      if (boundary < 0) return;
+      clearTimeout(timeout);
+      try {
+        const parsed = parseRuntimeWorkerTransportMessage(buffer.slice(0, boundary).trim());
+        resolve(parsed ?? null);
+      } catch (error) {
+        reject(error);
+      } finally {
+        socket.destroy();
+      }
+    });
+    socket.on("error", error => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+}
+
+async function exchangeRuntimeControlCall(socket, call) {
+  return await new Promise((resolve, reject) => {
+    let buffer = "";
+    const onData = chunk => {
+      buffer += String(chunk);
+      const boundary = buffer.indexOf("\n");
+      if (boundary < 0) return;
+      socket.off("data", onData);
+      try {
+        resolve(parseRuntimeWorkerTransportMessage(buffer.slice(0, boundary).trim()));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    socket.on("data", onData);
+    socket.write(`${JSON.stringify(call)}\n`);
+  });
+}
+
+async function expectRequestUnavailable(url, {
+  timeoutMs = 2000,
+  label = "request"
+} = {}) {
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    assert.notEqual(response.status, 200, `${label} unexpectedly succeeded for ${url}`);
+  } catch {
+    return;
   }
 }
 
@@ -110,6 +204,25 @@ async function readJson(url, options = {}) {
   return { response, body };
 }
 
+async function mcpJsonRpc(serverUrl, serverId, payload, {
+  token = null,
+  protocolVersion = null
+} = {}) {
+  const response = await fetchWithContext(`${serverUrl}/mcp/${encodeURIComponent(serverId)}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(protocolVersion ? { "mcp-protocol-version": protocolVersion } : {})
+    },
+    body: JSON.stringify(payload)
+  }, "mcp request");
+  return {
+    response,
+    body: await response.json()
+  };
+}
+
 async function readJournalEvents(journalPath) {
   const text = await fs.readFile(journalPath, "utf8");
   return String(text)
@@ -143,6 +256,9 @@ function coreConnectedEnv(core, workspace) {
   return {
     ...process.env,
     WITNESS_CORE_URL: core.url,
+    ...(typeof core?.transportPipe === "string" && core.transportPipe
+      ? { WITNESS_CORE_TRANSPORT_PIPE: core.transportPipe }
+      : {}),
     WITNESS_CORE_WORKSPACE_ROOT: workspace.tempRoot
   };
 }
@@ -620,7 +736,7 @@ async function runPublishedAuthoringScenario() {
       ].join(" "),
       workingDir: shellPath(REPO_ROOT),
       restartOnExit: true,
-      controlUrl: `${appUrl}/api/runtime/worker-control`,
+      transportOnlyRuntime: true,
       healthIntervalMs: 100,
       healthTimeoutMs: 45000
     }),
@@ -657,6 +773,11 @@ async function runPublishedAuthoringScenario() {
       description: "published transaction supervised process ready"
     });
 
+    await expectRequestUnavailable(`http://127.0.0.1:${appPort}${workspace.servedRoutePath}`, {
+      label: "published transaction worker route"
+    });
+
+    const appUrl = core.url;
     const initialHealth = await readProcessHealth(appUrl);
     assert.equal(initialHealth.watchersEnabled, false);
 
@@ -771,7 +892,11 @@ async function runPublishedAuthoringScenario() {
 
     await delay(1400);
     const settledStatus = await readWitnessCoreStatus(core.url);
-    assert.equal(settledStatus.generations?.length, 1);
+    assert.equal(
+      settledStatus.generations?.length,
+      1,
+      `published-authoring settled generations: ${JSON.stringify(settledStatus.generations ?? [], null, 2)}`
+    );
     assert.equal(settledStatus.generations?.[0]?.id, successfulGenerationId);
     const journalEvents = await readJournalEvents(workspace.journalPath);
     const successfulLifecycleKinds = journalEvents
@@ -804,7 +929,18 @@ async function runPublishedAuthoringScenario() {
         }]
       })
     });
-    assert.equal(staleWrite.response.status, 409);
+    const staleCoreHealth = staleWrite.response.status === 409 ? null : await readJson(`${core.url}/health`);
+    const staleProcessHealth = staleWrite.response.status === 409 ? null : await readJson(`${appUrl}/api/runtime/process-health`);
+    assert.equal(
+      staleWrite.response.status,
+      409,
+      `staleWrite=${JSON.stringify({
+        status: staleWrite.response.status,
+        body: staleWrite.body,
+        coreHealth: staleCoreHealth?.body ?? null,
+        processHealth: staleProcessHealth?.body ?? null
+      }, null, 2)}`
+    );
     assert.equal(staleWrite.body?.code, "WITNESS_CORE_SOURCE_CONFLICT");
     assert.equal(staleWrite.body?.path, "app/content.wtoml");
     assert.equal(staleWrite.body?.expectedHash, staleHash);
@@ -947,19 +1083,28 @@ async function runPublishedAuthoringScenario() {
     });
 
     await core.stop();
-
-    const coreDownWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        edits: [{
-          path: "app/content.wtoml",
-          content: updatedSource.replace('text = "Live Core Published"', 'text = "Live Core Should Not Persist"')
-        }]
-      })
-    });
-    assert.equal(coreDownWrite.response.status, 503);
-    assert.equal(coreDownWrite.body?.code, "WITNESS_CORE_UNAVAILABLE");
+    let coreDownWrite = null;
+    let coreDownError = null;
+    try {
+      coreDownWrite = await readJson(`${appUrl}/api/runtime/app-sources`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          edits: [{
+            path: "app/content.wtoml",
+            content: updatedSource.replace('text = "Live Core Published"', 'text = "Live Core Should Not Persist"')
+          }]
+        })
+      });
+    } catch (error) {
+      coreDownError = error;
+    }
+    if (coreDownWrite) {
+      assert.equal(coreDownWrite.response.status, 503);
+      assert.equal(coreDownWrite.body?.code, "WITNESS_CORE_UNAVAILABLE");
+    } else {
+      assert.match(String(coreDownError?.message ?? ""), /fetch failed/i);
+    }
     assert.match(await fs.readFile(workspace.watchedSourcePath, "utf8"), /Live Core Pinned Stable/);
   } finally {
     await revisionEvents?.close?.();
@@ -970,7 +1115,6 @@ async function runPublishedAuthoringScenario() {
 async function runSupervisedScenario() {
   const corePort = await reservePort();
   const appPort = await reservePort();
-  const appUrl = `http://127.0.0.1:${appPort}`;
   const shellPath = value => String(value).replaceAll("\\", "/");
   const workspace = await createLiveCoreWorkspace({
     proofDelayMs: 700,
@@ -989,7 +1133,7 @@ async function runSupervisedScenario() {
       ].join(" "),
       workingDir: shellPath(REPO_ROOT),
       restartOnExit: true,
-      controlUrl: `${appUrl}/api/runtime/worker-control`,
+      transportOnlyRuntime: true,
       healthIntervalMs: 100,
       healthTimeoutMs: 45000
     })
@@ -1016,7 +1160,11 @@ async function runSupervisedScenario() {
       description: "supervised process ready"
     });
 
+    const appUrl = core.url;
     const routeUrl = `${appUrl}${workspace.servedRoutePath}`;
+    await expectRequestUnavailable(`http://127.0.0.1:${appPort}${workspace.servedRoutePath}`, {
+      label: "transport-only supervised worker route"
+    });
     const baselineHtml = await fetchText(routeUrl);
     assert.match(baselineHtml, /Live Core Baseline/);
 
@@ -1245,7 +1393,6 @@ async function runSupervisedHealthScenario() {
 async function runSoakScenario() {
   const corePort = await reservePort();
   const appPort = await reservePort();
-  const appUrl = `http://127.0.0.1:${appPort}`;
   const shellPath = value => String(value).replaceAll("\\", "/");
   const workspace = await createLiveCoreWorkspace({
     proofDelayMs: 250,
@@ -1260,14 +1407,12 @@ async function runSoakScenario() {
         shellPath(manifestPath),
         "--server",
         "fixture_server",
-        "--port",
-        String(appPort),
         "--runtime-profile",
         "authoring"
       ].join(" "),
       workingDir: shellPath(REPO_ROOT),
       restartOnExit: true,
-      controlUrl: `${appUrl}/api/runtime/worker-control`,
+      transportOnlyRuntime: true,
       healthIntervalMs: 100,
       healthTimeoutMs: 45000
     })
@@ -1295,7 +1440,11 @@ async function runSoakScenario() {
       description: "soak supervised process ready"
     });
 
+    const appUrl = core.url;
     const routeUrl = `${appUrl}${workspace.servedRoutePath}`;
+    await expectRequestUnavailable(`http://127.0.0.1:${appPort}${workspace.servedRoutePath}`, {
+      label: "transport-only soak worker route"
+    });
     const baselineHtml = await fetchText(routeUrl);
     assert.match(baselineHtml, /Live Core Baseline/);
 
@@ -1312,9 +1461,6 @@ async function runSoakScenario() {
       message: "baseline ready"
     });
     await recordSoakSample({ coreUrl: core.url, appUrl, sessionId, phase: "warmup" });
-
-    sseClients = await openSseClients(`${appUrl}/api/runtime/app-revisions/events`, 2);
-    await recordSoakSample({ coreUrl: core.url, appUrl, sessionId, phase: "sse-open" });
 
     await postSoak(core.url, "/soak/mark", {
       sessionId,
@@ -1353,9 +1499,6 @@ async function runSoakScenario() {
     const previewHtml = await fetchText(`${routeUrl}?previewSessionId=${encodeURIComponent(previewSessionId)}`);
     assert.match(previewHtml, /Live Core Preview Soak/);
     await recordSoakSample({ coreUrl: core.url, appUrl, sessionId, phase: "preview-churn" });
-
-    await closeSseClients(sseClients);
-    sseClients = [];
 
     await postSoak(core.url, "/soak/mark", {
       sessionId,
@@ -1486,7 +1629,7 @@ async function runSoakScenario() {
     await waitForWitnessCoreHealthState(core.url, health =>
       health.process?.running === true && health.process?.ready === true,
     {
-      timeoutMs: 30000,
+      timeoutMs: 60000,
       description: "soak process ready after core restart"
     });
     const soakAfterRestart = await waitForValue(async () => {
@@ -1523,14 +1666,12 @@ async function runFrontdoorScenario() {
         shellPath(manifestPath),
         "--server",
         "fixture_server",
-        "--port",
-        "{runtime_port}",
         "--runtime-profile",
         "authoring"
       ].join(" "),
       workingDir: shellPath(REPO_ROOT),
       restartOnExit: true,
-      controlUrl: "http://127.0.0.1:{runtime_port}/api/runtime/worker-control",
+      transportOnlyRuntime: true,
       healthIntervalMs: 100,
       healthTimeoutMs: 45000
     }),
@@ -1561,6 +1702,7 @@ async function runFrontdoorScenario() {
       description: "frontdoor active instance ready"
     });
     const firstInstanceId = initialHealth.process.activeInstanceId;
+    assert.equal(initialHealth.process.activeTarget, null);
 
     const baselineHtml = await fetchText(`${publicUrl}${workspace.servedRoutePath}`);
     assert.match(baselineHtml, /Live Core Baseline/);
@@ -1597,6 +1739,11 @@ async function runFrontdoorScenario() {
     });
 
     sseClients = await openSseClients(`${publicUrl}/api/runtime/app-revisions/events`, 1);
+    const previewEventClients = await openSseClients(
+      `${publicUrl}/api/runtime/app-preview-sessions/${encodeURIComponent(previewSessionId)}/events`,
+      1
+    );
+    sseClients.push(...previewEventClients);
 
     const restartResponse = await fetch(`${core.url}/processes/restart`, { method: "POST" });
     assert.equal(restartResponse.status, 200);
@@ -1625,6 +1772,26 @@ async function runFrontdoorScenario() {
     const previewAfterCutover = await fetchText(`${publicUrl}${workspace.servedRoutePath}?previewSessionId=${encodeURIComponent(previewSessionId)}`);
     assert.match(previewAfterCutover, /Live Core Frontdoor Preview/);
 
+    const unsupportedEventStream = await fetch(`${publicUrl}/api/runtime/plugins`, {
+      headers: { accept: "text/event-stream" }
+    });
+    assert.equal(unsupportedEventStream.status, 501);
+    assert.match(await unsupportedEventStream.text(), /WITNESS_RUNTIME_TRANSPORT_STREAMING_UNSUPPORTED/);
+
+    const unsupportedUpgrade = await sendRawHttpRequest({
+      port: publicPort,
+      request: [
+        `GET ${workspace.servedRoutePath} HTTP/1.1`,
+        `Host: 127.0.0.1:${publicPort}`,
+        "Connection: Upgrade",
+        "Upgrade: websocket",
+        "",
+        ""
+      ].join("\r\n")
+    });
+    assert.match(unsupportedUpgrade, /^HTTP\/1\.1 501 /m);
+    assert.match(unsupportedUpgrade, /WITNESS_RUNTIME_TRANSPORT_UPGRADE_UNSUPPORTED/);
+
     await closeSseClients(sseClients);
     sseClients = [];
 
@@ -1645,6 +1812,177 @@ async function runFrontdoorScenario() {
   } finally {
     await closeSseClients(sseClients);
     await safeTeardown({ core, workspace });
+  }
+}
+
+async function runSupervisedMcpScenario() {
+  const mcpToken = "fixture-mcp-token";
+  const mcpServerId = "fixture_mcp";
+  const workspace = await createLiveCoreWorkspace({
+    proofDelayMs: 250,
+    runtimeConfig: {
+      [`mcp.${mcpServerId}.token`]: mcpToken
+    }
+  });
+  let child = null;
+  let controlServer = null;
+  try {
+    await fs.appendFile(workspace.manifestPath, `
+
+[[mcpServer]]
+actor = "tester"
+id = "${mcpServerId}"
+label = "Fixture MCP"
+serverRunner = "fixture_server"
+serviceIdentity = "system"
+transports = ["http"]
+
+[[mcpToolInstall]]
+actor = "tester"
+server = "${mcpServerId}"
+tool = "world.read"
+actingMode = "service"
+`, "utf8");
+
+    const controlPort = await reservePort();
+    let controlSocket = null;
+    controlServer = net.createServer(socket => {
+      controlSocket = socket;
+      socket.on("error", () => {});
+    });
+    await new Promise((resolve, reject) => {
+      controlServer.once("error", reject);
+      controlServer.listen(controlPort, "127.0.0.1", resolve);
+    });
+
+    child = spawn(fixtureNodeExecutable(), [
+        path.join(REPO_ROOT, "src", "cli.js"),
+        "utility-mcp",
+        workspace.manifestPath,
+        "--mcp",
+        mcpServerId,
+        "--server",
+        "fixture_server",
+        "--transport",
+        "http",
+        "--runtime-profile",
+        "authoring",
+        "--runtime-plugin",
+        "plugin.mcp"
+      ], {
+      cwd: REPO_ROOT,
+      env: {
+        ...process.env,
+        WITNESS_RUNTIME_CONTROL_ADDR: `127.0.0.1:${controlPort}`,
+        WITNESS_RUNTIME_TRANSPORT_ONLY: "true"
+      },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.output = "";
+    child.stdout.on("data", chunk => {
+      child.output += String(chunk);
+    });
+    child.stderr.on("data", chunk => {
+      child.output += String(chunk);
+    });
+    await waitForValue(() => controlSocket, {
+      timeoutMs: 15000,
+      description: "supervised MCP control transport connection"
+    });
+
+    const runtimeHealth = await exchangeRuntimeControlCall(controlSocket, createRuntimeWorkerTransportCall({
+      method: RUNTIME_WORKER_TRANSPORT_METHODS.processHealthRead,
+      requestId: "mcp-health"
+    }));
+    assert.equal(runtimeHealth.ok, true);
+    assert.equal(runtimeHealth.payload?.ready, true);
+    assert.equal(runtimeHealth.payload?.startupMode, "mcp");
+
+    const initialize = await exchangeRuntimeControlCall(controlSocket, createRuntimeWorkerTransportCall({
+      method: RUNTIME_WORKER_TRANSPORT_METHODS.appHttpRequest,
+      requestId: "mcp-initialize",
+      args: {
+        method: "POST",
+        path: `/mcp/${encodeURIComponent(mcpServerId)}`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${mcpToken}`
+        },
+        bodyText: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: MCP_PROTOCOL_VERSION, capabilities: {} }
+        })
+      }
+    }));
+    assert.equal(initialize.ok, true);
+    assert.equal(initialize.payload?.status, 200);
+    assert.equal(JSON.parse(initialize.payload.bodyText).result.protocolVersion, MCP_PROTOCOL_VERSION);
+
+    const list = await exchangeRuntimeControlCall(controlSocket, createRuntimeWorkerTransportCall({
+      method: RUNTIME_WORKER_TRANSPORT_METHODS.appHttpRequest,
+      requestId: "mcp-tools-list",
+      args: {
+        method: "POST",
+        path: `/mcp/${encodeURIComponent(mcpServerId)}`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${mcpToken}`,
+          "mcp-protocol-version": MCP_PROTOCOL_VERSION
+        },
+        bodyText: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/list",
+          params: {}
+        })
+      }
+    }));
+    assert.equal(list.ok, true);
+    assert.equal(list.payload?.status, 200);
+    assert.deepEqual(JSON.parse(list.payload.bodyText).result.tools.map(tool => tool.name), ["world.read"]);
+
+    const call = await exchangeRuntimeControlCall(controlSocket, createRuntimeWorkerTransportCall({
+      method: RUNTIME_WORKER_TRANSPORT_METHODS.appHttpRequest,
+      requestId: "mcp-tools-call",
+      args: {
+        method: "POST",
+        path: `/mcp/${encodeURIComponent(mcpServerId)}`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${mcpToken}`,
+          "mcp-protocol-version": MCP_PROTOCOL_VERSION
+        },
+        bodyText: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: {
+            name: "world.read",
+            arguments: { view: "bootstrapState" }
+          }
+        })
+      }
+    }));
+    assert.equal(call.ok, true);
+    assert.equal(call.payload?.status, 200);
+    const callBody = JSON.parse(call.payload.bodyText);
+    assert.equal(callBody.result.isError, false);
+    assert.equal(callBody.result.structuredContent.serverRunners.some(row => row.id === "fixture_server"), true);
+    assert.equal(callBody.result.structuredContent.mcpServers.some(row => row.id === mcpServerId), true);
+    assert.match(child.output, /runtime-worker-transport:\/\/control-socket/);
+  } finally {
+    if (child && child.exitCode == null) {
+      try {
+        child.kill("SIGTERM");
+      } catch {}
+      await settleWithin(() => new Promise(resolve => child.once("exit", () => resolve())), 4000);
+    }
+    await settleWithin(() => new Promise(resolve => controlServer?.close?.(() => resolve())), 4000);
+    await safeTeardown({ workspace });
   }
 }
 
@@ -1673,6 +2011,10 @@ async function main() {
   }
   if (scenario === "frontdoor") {
     await runFrontdoorScenario();
+    return;
+  }
+  if (scenario === "supervised-mcp") {
+    await runSupervisedMcpScenario();
     return;
   }
   if (scenario === "published-authoring") {

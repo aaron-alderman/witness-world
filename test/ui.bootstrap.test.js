@@ -232,6 +232,8 @@ test("blank world can bootstrap into a working todo app purely through the UI", 
     assert.equal(bootstrapState.backendPrograms.filter(row => row.soul === "todo.network.simulateError").length, 1);
     assert.equal(bootstrapState.backendPrograms.some(row => row.soul === "todo.worldGraph.read"), true);
     assert.equal(bootstrapState.backendPrograms.filter(row => row.soul === "todo.worldGraph.read").length, 1);
+    assert.equal(bootstrapState.backendPrograms.some(row => row.soul === "todo.worldSystem.read"), true);
+    assert.equal(bootstrapState.backendPrograms.filter(row => row.soul === "todo.worldSystem.read").length, 1);
     assert.equal(bootstrapState.backendPrograms.some(row => row.soul === "todo.processView.read"), true);
     assert.equal(bootstrapState.backendPrograms.filter(row => row.soul === "todo.processView.read").length, 1);
     assert.equal(bootstrapState.backendPrograms.some(row => row.soul === "todo.processRun.read"), true);
@@ -252,6 +254,8 @@ test("blank world can bootstrap into a working todo app purely through the UI", 
     assert.equal(bootstrapState.backendProgramVersions.filter(row => row.version === "todo.network.simulateError.v1").length, 1);
     assert.equal(bootstrapState.backendProgramVersions.some(row => row.version === "todo.worldGraph.read.v1" && row.active === true), true);
     assert.equal(bootstrapState.backendProgramVersions.filter(row => row.version === "todo.worldGraph.read.v1").length, 1);
+    assert.equal(bootstrapState.backendProgramVersions.some(row => row.version === "todo.worldSystem.read.v1" && row.active === true), true);
+    assert.equal(bootstrapState.backendProgramVersions.filter(row => row.version === "todo.worldSystem.read.v1").length, 1);
     assert.equal(bootstrapState.backendProgramVersions.some(row => row.version === "todo.processView.read.v1" && row.active === true), true);
     assert.equal(bootstrapState.backendProgramVersions.filter(row => row.version === "todo.processView.read.v1").length, 1);
     assert.equal(bootstrapState.backendProgramVersions.some(row => row.version === "todo.processRun.read.v1" && row.active === true), true);
@@ -272,6 +276,7 @@ test("blank world can bootstrap into a working todo app purely through the UI", 
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.network.simulateError.v1" && row.op === "response.error"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.worldGraph.read.v1" && row.op === "project.read"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.worldGraph.read.v2" && row.op === "run"), true);
+    assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.worldSystem.read.v1" && row.op === "project.read"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.processView.read.v1" && row.op === "project.read"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.processView.read.v2" && row.op === "run"), true);
     assert.equal(bootstrapState.backendSteps.some(row => row.version === "todo.processRun.read.v1" && row.op === "project.read"), true);

@@ -5,3 +5,5 @@ tmp
 .tmp-runtime-profile-check
 .witness-core
 substrate/target
+
+.tmp-witness-core-harness-target

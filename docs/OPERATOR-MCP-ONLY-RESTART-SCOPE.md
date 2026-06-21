@@ -230,7 +230,7 @@ These should be treated as reference material, not as the new root architecture.
 
 Do not found the restart on:
 
-- [`src/operator-tui.js`](C:\Users\aaron\Documents\world\src\operator-tui.js) as the product brain
+- [`plugins/operator-workbench/tui-engine.js`](C:\Users\aaron\Documents\world\plugins\operator-workbench\tui-engine.js) as the product brain
 - [`examples/operator/browser/operator-runtime.js`](C:\Users\aaron\Documents\world\examples\operator\browser\operator-runtime.js) as the place where semantics emerge
 - compatibility mirror shapes such as parallel top-level overlay exports
 - pane-derived semantic concepts such as "left screen" as core product truth

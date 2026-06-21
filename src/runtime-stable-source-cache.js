@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
+import { runtimeLocalFsModule } from "./runtime-local-fs.js";
 
 function hashText(value) {
   return crypto.createHash("sha256").update(String(value ?? ""), "utf8").digest("hex");
@@ -16,7 +16,7 @@ export function stableSourceCachePath(manifestPath, {
 
 export async function readStableAppSourceCache(manifestPath, {
   cwd = process.cwd(),
-  fsModule = fs
+  fsModule = runtimeLocalFsModule
 } = {}) {
   const cachePath = stableSourceCachePath(manifestPath, { cwd });
   try {
@@ -47,7 +47,7 @@ export async function readStableAppSourceCache(manifestPath, {
 
 export async function persistStableAppSourceCache(manifestPath, snapshot, {
   cwd = process.cwd(),
-  fsModule = fs
+  fsModule = runtimeLocalFsModule
 } = {}) {
   const cachePath = stableSourceCachePath(manifestPath, { cwd });
   const compiledUnits = snapshot?.compiledUnits instanceof Map
@@ -75,7 +75,7 @@ export async function persistStableAppSourceCache(manifestPath, snapshot, {
 }
 
 export function createStableAppOverlayReadFile(cache, {
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   parentReadFile = null
 } = {}) {
   const sourceMap = new Map((cache?.sources ?? []).map(row => [path.resolve(String(row.file || "")), String(row.content ?? "")]));

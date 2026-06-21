@@ -226,7 +226,7 @@ test("witness core suggestions expose promote and rollback actions from status a
       last_good: "gen_stable"
     },
     process: {
-      command: "node src/cli.js utility-serve examples/engentus --server engentus_server --port {runtime_port} --runtime-profile full --startup-telemetry",
+      command: "node src/cli.js utility-serve examples/engentus --server engentus_server --runtime-profile full --startup-telemetry",
       workingDir: ".",
       running: true,
       pid: 1234,

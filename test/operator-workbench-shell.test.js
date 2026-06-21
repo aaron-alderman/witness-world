@@ -6,12 +6,12 @@ import path from "node:path";
 import {
   OPERATOR_WORKBENCH_IPC_CHANNELS,
   createWitnessOperatorWorkbenchApi
-} from "../src/operator-workbench/bridge.js";
+} from "../plugins/operator-workbench/workbench/bridge.js";
 import {
   createOperatorWorkbenchSettingsStore,
   createOperatorWorkbenchWorkspaceKey
-} from "../src/operator-workbench/settings.js";
-import { createOperatorWorkbenchShell } from "../src/operator-workbench/main.js";
+} from "../plugins/operator-workbench/workbench/settings.js";
+import { createOperatorWorkbenchShell } from "../plugins/operator-workbench/workbench/main.js";
 
 test("operator workbench preload bridge exposes only explicit workbench methods", async () => {
   const calls = [];
@@ -96,11 +96,14 @@ test("operator workbench settings store persists normalized workspace-scoped dis
   }
 });
 
-test("package scripts promote the rich tui host while keeping the raw shell explicit", async () => {
+test("package scripts expose the plugin-owned workbench through primary and compatibility launchers", async () => {
   const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(packageJson.scripts.tui, "node scripts/run-tui.mjs");
-  assert.equal(packageJson.scripts["tui:shell"], "node src/cli.js tui");
-  assert.equal(packageJson.scripts.operator, "node src/cli.js operator examples/operator --runtime-plugin plugin.operator-workbench");
+  assert.equal(packageJson.scripts.tui, "node scripts/run-operator-workbench.mjs");
+  assert.equal(packageJson.scripts["tui:shell"], "node scripts/run-operator-shell.mjs");
+  assert.equal(packageJson.scripts.operator, "node scripts/run-operator-workbench.mjs");
+  assert.equal(packageJson.scripts["operator:example"], "node scripts/run-operator-workbench.mjs");
+  assert.equal(packageJson.scripts["operator:example:shell"], "node scripts/run-operator-shell.mjs");
+  assert.equal(packageJson.scripts["operator:example:browser"], "node scripts/run-operator-browser-example.mjs --open");
 });
 
 test("operator workbench shell registers IPC handlers, loads a generated html page, and cleans up once", async () => {
@@ -252,7 +255,7 @@ test("operator workbench shell registers IPC handlers, loads a generated html pa
     assert.equal(Boolean(createCoreOptions), true);
     assert.equal(windows.length, 1);
     assert.equal(windows[0].options.width, 1480);
-    assert.equal(windows[0].options.title, "Operator TUI");
+    assert.equal(windows[0].options.title, "Operator Workbench");
     assert.equal(windows[0].options.frame, false);
     assert.equal(windows[0].options.autoHideMenuBar, true);
     assert.equal(windows[0].menuRemoved, true);

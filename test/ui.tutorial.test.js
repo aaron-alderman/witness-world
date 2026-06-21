@@ -195,15 +195,6 @@ async function completeStep(page, serverUrl) {
     case stepId === "app:review-collection":
       await page.locator("#tutorial-next").click();
       break;
-    case stepId === "world:inspect":
-      if (!page.url().endsWith("/world")) {
-        await clickCompanionGuidanceAction(page);
-        await page.waitForURL(`${serverUrl}/world`);
-      }
-      await page.waitForLoadState("domcontentloaded");
-      await page.locator('[data-world-command-toggle]').waitFor();
-      await page.locator('[data-world-tutorial-next]').click();
-      break;
     default:
       throw new Error(`unknown tutorial step: ${stepId}`);
   }
@@ -740,7 +731,7 @@ test("bootstrap tutorial shows disabled guidance surfaces and can recover them w
   }
 });
 
-test("frontend context disable is visible and recoverable across app, bootstrap, and world surfaces", { timeout: 60000 }, async () => {
+test("frontend context disable is visible and recoverable across app and bootstrap surfaces", { timeout: 60000 }, async () => {
   const silentLogger = { info() {}, error() {} };
   const { server, close: closeServer } = await startBlankUiServer({ logger: silentLogger });
   const { page, runtime, close: closeBrowser } = await launchBrowser();
@@ -766,12 +757,6 @@ test("frontend context disable is visible and recoverable across app, bootstrap,
     await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("Frontend context"));
     await page.locator('button[data-disabled-context="frontend"]').click();
     await page.waitForFunction(() => (window.__witnessTutorial?.disabledContextIds || []).length === 0);
-
-    await page.goto(`${server.url}/world`);
-    await page.waitForLoadState("domcontentloaded");
-    await page.waitForFunction(() => document.body.dataset.surfaceContext === "frontend");
-    await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "offpage");
-    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-panel]')?.textContent.includes("Current guidance continues on the App surface"));
 
     await page.goto(`${server.url}/`);
     await waitForAppReady(page);

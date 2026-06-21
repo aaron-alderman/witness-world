@@ -30,10 +30,8 @@ test("tutorial runtime actions navigate, submit, and restart through the shared 
 
   assert.equal(await continueTutorialOnPage({ page: "bootstrap", windowTarget }), true);
   assert.equal(navigations[0], "https://example.test/_bootstrap");
-  windowTarget.location.href = "https://example.test/world";
-  windowTarget.location.pathname = "/world";
-  assert.equal(await continueTutorialOnPage({ page: "world", windowTarget }), true);
-  assert.equal(reloads, 1);
+  assert.equal(await continueTutorialOnPage({ page: "world", windowTarget }), false);
+  assert.equal(reloads, 0);
 
   const submitter = {
     clicks: 0,

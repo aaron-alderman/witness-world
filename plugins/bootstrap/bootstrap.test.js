@@ -532,7 +532,7 @@ test("bootstrap shell implementation is plugin-owned without a src compatibility
   assert.equal(routeAuthoringSyncHelperSource.includes("export function renderBootstrapRouteAuthoringSyncFactory"), true);
   assert.equal(routeAuthoringSyncHelperSource.includes("bootstrapRouteAuthoringContracts"), true);
   assert.equal(routeAuthoringContractsSource.includes('routeKind = "page"'), true);
-  assert.equal(routeAuthoringContractsSource.includes('handler = "page.world"'), true);
+  assert.equal(routeAuthoringContractsSource.includes('handler = "page.world"'), false);
   assert.equal(runtimePluginReviewSyncHelperSource.includes("export function resolveBootstrapRuntimePluginReviewSelection"), true);
   assert.equal(runtimePluginReviewSyncHelperSource.includes("export async function loadBootstrapRuntimePluginReview"), true);
   assert.equal(runtimePluginReviewSyncHelperSource.includes("export function selectBootstrapRuntimePluginReviewPlugin"), true);

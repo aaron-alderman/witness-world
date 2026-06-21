@@ -9,6 +9,14 @@ import {
   normalizeWitnessCoreUrl,
   previewGenerationContentHash
 } from "../src/witness-core-bridge.js";
+import { createWitnessCoreHttpCompatTransport } from "./support/witness-core-http-compat-transport.js";
+
+function createHttpCompatibilityTransport(fetchImpl) {
+  return createWitnessCoreHttpCompatTransport({
+    coreUrl: "http://127.0.0.1:8788/",
+    fetchImpl
+  });
+}
 
 test("normalizeWitnessCoreUrl trims and removes trailing slash", () => {
   assert.equal(normalizeWitnessCoreUrl(" http://127.0.0.1:8788/ "), "http://127.0.0.1:8788");
@@ -88,7 +96,7 @@ test("createWitnessCoreStatusStore merges generation and health process state", 
             ok: true,
             service: "witness-core",
             process: {
-              command: "node src/cli.js utility-serve examples/engentus --server engentus_server --port {runtime_port} --runtime-profile full --startup-telemetry",
+              command: "node src/cli.js utility-serve examples/engentus --server engentus_server --runtime-profile full --startup-telemetry",
               workingDir: ".",
               running: true,
               pid: 4242,
@@ -110,8 +118,7 @@ test("createWitnessCoreStatusStore merges generation and health process state", 
   };
 
   const store = createWitnessCoreStatusStore({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl,
+    transport: createHttpCompatibilityTransport(fetchImpl),
     pollMs: 60_000
   });
   assert.ok(store);
@@ -213,8 +220,7 @@ test("createWitnessCoreStatusStore consumes witness-core SSE events and publishe
   };
 
   const store = createWitnessCoreStatusStore({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl,
+    transport: createHttpCompatibilityTransport(fetchImpl),
     pollMs: 60_000
   });
   assert.ok(store);
@@ -264,8 +270,7 @@ test("createWitnessCoreBridge source capability helpers serialize requests", asy
     };
   };
   const bridge = createWitnessCoreBridge({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl
+    transport: createHttpCompatibilityTransport(fetchImpl)
   });
 
   const listing = await bridge.listSourceDirectory({ path: "plugins" });
@@ -320,8 +325,7 @@ test("createWitnessCoreBridge sqlite capability helpers serialize requests", asy
     };
   };
   const bridge = createWitnessCoreBridge({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl
+    transport: createHttpCompatibilityTransport(fetchImpl)
   });
 
   await bridge.sqliteTestConnection({ path: "app/db/main.sqlite", migrationTable: "witness_sql_migrations" });
@@ -387,8 +391,7 @@ test("createWitnessCoreBridge SQL capability helpers serialize requests", async 
     };
   };
   const bridge = createWitnessCoreBridge({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl
+    transport: createHttpCompatibilityTransport(fetchImpl)
   });
 
   await bridge.sqlTestConnection({
@@ -517,8 +520,7 @@ test("createWitnessCoreBridge verification persistence helper serializes request
     };
   };
   const bridge = createWitnessCoreBridge({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl
+    transport: createHttpCompatibilityTransport(fetchImpl)
   });
 
   const payload = await bridge.verificationPersistenceRequest({
@@ -558,8 +560,7 @@ test("createWitnessCoreBridge http outbound helper serializes requests", async (
     };
   };
   const bridge = createWitnessCoreBridge({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl
+    transport: createHttpCompatibilityTransport(fetchImpl)
   });
 
   const response = await bridge.executeHttpOutbound({
@@ -595,8 +596,7 @@ test("createWitnessCoreBridge http outbound helper serializes requests", async (
 
 test("createWitnessCoreBridge maps source conflicts and unavailability into typed errors", async () => {
   const bridge = createWitnessCoreBridge({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl: async (url, options = {}) => {
+    transport: createHttpCompatibilityTransport(async (url, options = {}) => {
       if ((options.method ?? "GET") === "PUT") {
         return {
           ok: false,
@@ -616,7 +616,7 @@ test("createWitnessCoreBridge maps source conflicts and unavailability into type
         };
       }
       throw new Error("connect ECONNREFUSED");
-    }
+    })
   });
 
   await assert.rejects(
@@ -650,8 +650,7 @@ test("createWitnessCoreBridge serving and generation control helpers serialize r
     };
   };
   const bridge = createWitnessCoreBridge({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl
+    transport: createHttpCompatibilityTransport(fetchImpl)
   });
 
   await bridge.promoteGeneration({ id: "gen-green" });
@@ -696,8 +695,7 @@ test("createWitnessCoreBridge soak helpers serialize requests", async () => {
     };
   };
   const bridge = createWitnessCoreBridge({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl
+    transport: createHttpCompatibilityTransport(fetchImpl)
   });
 
   assert.equal((await bridge.readSoak())?.lastSession?.id, "soak-1");
@@ -767,8 +765,7 @@ test("createWitnessCoreBridge preview session helpers serialize requests", async
     };
   };
   const bridge = createWitnessCoreBridge({
-    coreUrl: "http://127.0.0.1:8788/",
-    fetchImpl
+    transport: createHttpCompatibilityTransport(fetchImpl)
   });
 
   const session = {
@@ -795,6 +792,52 @@ test("createWitnessCoreBridge preview session helpers serialize requests", async
 test("createWitnessCoreBridge returns null without a usable core URL", () => {
   assert.equal(createWitnessCoreBridge({ coreUrl: "" }), null);
   assert.equal(createWitnessCoreBridge({ coreUrl: null }), null);
+  assert.equal(createWitnessCoreBridge({ coreUrl: "http://127.0.0.1:8788/" }), null);
+  assert.equal(createWitnessCoreStatusStore({ coreUrl: "http://127.0.0.1:8788/" }), null);
+});
+
+test("createWitnessCoreBridge and status store require the bounded transport pipe when requested", () => {
+  assert.equal(
+    createWitnessCoreBridge({
+      coreUrl: "http://127.0.0.1:8788/",
+      requirePipe: true
+    }),
+    null
+  );
+  assert.equal(
+    createWitnessCoreStatusStore({
+      coreUrl: "http://127.0.0.1:8788/",
+      requirePipe: true
+    }),
+    null
+  );
+});
+
+test("createWitnessCoreBridge and status store allow explicit HTTP compatibility transport injection", () => {
+  const bridge = createWitnessCoreBridge({
+    transport: createHttpCompatibilityTransport(async () => ({
+      ok: true,
+      async json() {
+        return { ok: true };
+      }
+    }))
+  });
+  const store = createWitnessCoreStatusStore({
+    transport: createHttpCompatibilityTransport(async url => {
+      if (String(url).endsWith("/events")) {
+        return { ok: true, body: new ReadableStream({ start(controller) { controller.close(); } }) };
+      }
+      return {
+        ok: true,
+        async json() {
+          return { ok: true, generations: [], aliases: {} };
+        }
+      };
+    })
+  });
+  assert.ok(bridge);
+  assert.ok(store);
+  store.close();
 });
 
 test("createWitnessCoreBridge delegates through an injected transport without owning fetch directly", async () => {

@@ -716,7 +716,7 @@ test("serve CLI rejects authored plugin.canvas when runtime.js is missing", asyn
     runtime: { entry: "./runtime.js" },
     activatesBundles: ["bundle-inspect"],
     contributes: {}
-  }, `export const bundleId = "bundle-inspect"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["page.world"], handlerMetadata: {} }; export const routes = []; export const surfaces = []; export function createHandlers() { return { "page.world": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  }, `export const bundleId = "bundle-inspect"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["events.stream"], handlerMetadata: {} }; export const routes = []; export const surfaces = []; export function createHandlers() { return { "events.stream": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
   await writePlugin("demo", {
     id: "plugin.demo",
     version: "0.1.0",

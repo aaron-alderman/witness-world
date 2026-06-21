@@ -1,57 +1,193 @@
-theme ansi16 {
+# Canonical operator workbench example authoring.
+# This file is shared as the current authored source of truth for both the
+# plugin-backed workbench model and the browser prototype adapter.
+
+operator_theme ansi16 {
+  title "ANSI 16"
   mode ansi16
   palette terminal-dark
 }
 
-surface top_status {
+operator_content operator_nav_content {
+  title "Operator Navigation"
+  kind tree
+  surface_kind tree
+  max_primary_chars 12
+}
+
+operator_panel operator_left {
+  title "Operator Navigation"
+  role left
+  content operator_nav_content
+}
+
+operator_content operator_summary {
+  title "Summary"
+  kind detail
+  data_source inspect
+  collapsible false
+  priority 1
+}
+
+operator_content operator_links {
+  title "Links"
+  kind table
+  data_source references
+  collapsed false
+  priority 2
+}
+
+operator_content operator_trace_content {
+  title "Operator Trace"
+  subtitle "Browser-first operator example"
+  kind sectioned
+  screen_shape list-detail
+  surface_kind text_reader
+  left_panel operator_left
+  default_section operator_links
+  section operator_summary
+  section operator_links
+  shortcut F5
+}
+
+operator_panel operator_trace {
+  title "Operator Trace"
+  role right
+  content operator_trace_content
+}
+
+operator_action toggle_help {
+  title "Help"
+  kind builtin
+  builtin toggle-help
+}
+
+operator_action open_references {
+  title "References"
+  kind builtin
+  builtin set-right-screen
+  screen references
+  pane right
+}
+
+operator_action edit_selection {
+  title "Edit"
+  kind builtin
+  builtin edit
+}
+
+operator_action change_surface_color {
+  title "Change Color"
+  kind builtin
+  builtin change-color
+}
+
+operator_action rename_selection {
+  title "Rename"
+  kind builtin
+  builtin rename
+}
+
+operator_action clone_selection {
+  title "Clone"
+  kind builtin
+  builtin clone
+}
+
+operator_menu operator_context_actions {
+  title "Context"
+  item edit_selection
+  item change_surface_color
+  item rename_selection
+  item clone_selection
+}
+
+operator_chrome top_status {
   kind status_bar
   title "Status"
 }
 
-surface nav_tree {
-  kind tree
-  title "Tree"
-  max_primary_chars 12
-}
-
-surface session_reader {
-  kind text_reader
-  title "Session"
-  scroll x y
-}
-
-surface command_bar {
+operator_chrome command_bar {
   kind command_bar
   title "Command"
 }
 
-surface help_overlay {
+operator_overlay help_overlay {
   kind doc_view
   title "Help"
-  resizable true
   width 56
   height 10
+  resizable true
   close_on_open context_menu
 }
 
-surface context_menu {
+operator_overlay context_menu {
   kind menu
   title "Context"
+  menu operator_context_actions
   width 24
   height 8
   close_on_open help_overlay
 }
 
-viewport default {
+operator_handle top_handle {
+  kind splitter
+  axis horizontal
+  size 1
+  draggable true
+}
+
+operator_handle bottom_handle {
+  kind splitter
+  axis horizontal
+  size 1
+  draggable true
+}
+
+operator_handle split_handle {
+  kind splitter
+  axis vertical
+  size 1
+  draggable true
+}
+
+operator_split operator_main_split {
+  title "Main Split"
+  axis horizontal
+  first operator_left
+  second operator_trace
+  first_weight 28
+  second_weight 72
+  handle split_handle
+}
+
+operator_window operator_default {
+  title "Default Browser Workbench"
   theme ansi16
-  size 80 30
-  top 3 top_status
-  bottom 4 command_bar
-  center split horizontal 28 72 nav_tree session_reader
+  root operator_main_split
+  left_panel operator_left
+  right_panel operator_trace
+  top_chrome top_status
+  bottom_chrome command_bar
+  top_handle top_handle
+  bottom_handle bottom_handle
+  width 80
+  height 30
+  top 3
+  bottom 4
   overlay help_overlay
   overlay context_menu
-  binding F1 overlay help_overlay
+  binding F1 action toggle_help
   binding MouseSecondary overlay context_menu
-  binding Alt-R action rename
-  binding F2 action rename
+  binding Alt-R action rename_selection
+  binding F2 action open_references
+}
+
+operator_setup operator_shell {
+  screen operator_trace
+  screen references
+  shortcut F5 operator_trace
+  default_screen operator_trace
+  default_left_screen operator_left
+  default_viewport operator_default
 }

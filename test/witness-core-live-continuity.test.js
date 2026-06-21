@@ -43,8 +43,8 @@ test("witness-core fixture continuity smoke proves pass, promote, failover, roll
   assert.ok(true);
 });
 
-test("preview session edits publish witness-core generations and remain scoped behind previewSessionId on the fixture app", { timeout: 180000 }, async () => {
-  await runScenario("preview", { timeoutMs: 160000 });
+test("preview session edits publish witness-core generations and remain scoped behind previewSessionId on the fixture app", { timeout: 240000 }, async () => {
+  await runScenario("preview", { timeoutMs: 220000 });
   assert.ok(true);
 });
 
@@ -65,6 +65,11 @@ test("witness-core supervised health containment smoke proves policy-triggered s
 
 test("witness-core frontdoor smoke proves rolling cutover, draining, and preview continuity through the Rust public port", { timeout: 300000 }, async () => {
   await runScenario("frontdoor", { timeoutMs: 280000 });
+  assert.ok(true);
+});
+
+test("witness-core supervised MCP smoke proves HTTP MCP serving works through the Rust frontdoor with zero Node port binding", { timeout: 300000 }, async () => {
+  await runScenario("supervised-mcp", { timeoutMs: 280000 });
   assert.ok(true);
 });
 

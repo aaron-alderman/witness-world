@@ -1349,12 +1349,15 @@ test("maintained demo backend source defines inspect-backed reads through projec
   assert.equal(backendSource.includes('projector = "inspect.witnessesReadModel"'), true);
   assert.equal(backendSource.includes('version = "todo.worldGraph.read.v1"\nevent = "request"\nop = "project.read"'), true);
   assert.equal(backendSource.includes('projector = "inspect.worldGraphReadModel"'), true);
+  assert.equal(backendSource.includes('version = "todo.worldSystem.read.v1"\nevent = "request"\nop = "project.read"'), true);
+  assert.equal(backendSource.includes('projector = "inspect.worldSystemReadModel"'), true);
   assert.equal(backendSource.includes('version = "todo.processView.read.v1"\nevent = "request"\nop = "project.read"'), true);
   assert.equal(backendSource.includes('projector = "inspect.processViewReadModel"'), true);
   assert.equal(backendSource.includes('version = "todo.processRun.read.v1"\nevent = "request"\nop = "project.read"'), true);
   assert.equal(backendSource.includes('projector = "inspect.processRunReadModel"'), true);
   assert.equal(backendSource.includes('handler = "witnesses.list"'), false);
   assert.equal(backendSource.includes('handler = "worldGraph.read"'), false);
+  assert.equal(backendSource.includes('handler = "worldSystem.read"'), false);
   assert.equal(backendSource.includes('handler = "processView.read"'), false);
   assert.equal(backendSource.includes('handler = "processRun.read"'), false);
 });

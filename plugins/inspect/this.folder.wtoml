@@ -239,6 +239,11 @@ to = "file:plugins/inspect/world-surface-view.test.js"
 [[relation]]
 from = "folder:plugins/inspect"
 rel = "contains"
+to = "file:plugins/inspect/world-system.js"
+
+[[relation]]
+from = "folder:plugins/inspect"
+rel = "contains"
 to = "file:plugins/inspect/world-tutorial-actions.js"
 
 [[relation]]

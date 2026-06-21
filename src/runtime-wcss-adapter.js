@@ -1,6 +1,6 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { runtimeLocalFsModule } from "./runtime-local-fs.js";
 
 let runtimeWcssAdapterMaterializationSequence = 0;
 
@@ -111,7 +111,7 @@ async function resolveExistingModuleSourceId(generationBridge, fromSourceId, spe
 async function materializeWcssAdapterModuleFromWitnessCore(identity, {
   generationBridge = null,
   cwd = process.cwd(),
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   scratchRoot = null,
   requireGenerationBridgeForCanonicalImports = false
 } = {}) {
@@ -211,7 +211,7 @@ export async function loadWcssAdapterExport({
   adapterExport,
   requestSnapshot,
   importModule = specifier => import(specifier),
-  fsModule = fs,
+  fsModule = runtimeLocalFsModule,
   generationBridge = null,
   cwd = process.cwd(),
   scratchRoot = null,
