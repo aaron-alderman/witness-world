@@ -17,8 +17,6 @@ export const handlerCatalog = Object.freeze({
     "doc.put",
     "repos.read",
     "repo.announce",
-    "repo.open",
-    "repo.close",
     "repo.live",
     "repo.unlive",
     "live.read",

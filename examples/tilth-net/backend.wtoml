@@ -15,18 +15,58 @@ actor = "aaron"
 serverRunner = "tilth_net_server"
 plugin = "plugin.tilth-net"
 
-# Browser surface at /
+# Browser surface — four routed pages, each its own rootWidget + program + serves.
+# Activity (landing)
 [[route]]
 id = "tilth_net_home_route"
 method = "GET"
 path = "/"
-serves = "tilthNetView"
+serves = "tilthNetActivityView"
 handler = "page.home"
-params = { rootWidget = "tilth_net_page", frontendProgram = "tilth_net_program", page = "home" }
+params = { rootWidget = "tn_activity_page", frontendProgram = "tn_activity_program", page = "activity" }
 
 [[serve]]
 serverRunner = "tilth_net_server"
 route = "tilth_net_home_route"
+
+# Share out
+[[route]]
+id = "tilth_net_share_route"
+method = "GET"
+path = "/share"
+serves = "tilthNetShareView"
+handler = "page.home"
+params = { rootWidget = "tn_share_page", frontendProgram = "tn_share_program", page = "share" }
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_share_route"
+
+# Pull in  (named "inbox" everywhere — "pull" collided with the /api/commons/pull* routes)
+[[route]]
+id = "tilth_net_inbox_route"
+method = "GET"
+path = "/inbox"
+serves = "tilthNetInboxView"
+handler = "page.home"
+params = { rootWidget = "tn_pull_page", frontendProgram = "tn_pull_program", page = "inbox" }
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_inbox_route"
+
+# Members
+[[route]]
+id = "tilth_net_members_route"
+method = "GET"
+path = "/members"
+serves = "tilthNetMembersView"
+handler = "page.home"
+params = { rootWidget = "tn_members_page", frontendProgram = "tn_members_program", page = "members" }
+
+[[serve]]
+serverRunner = "tilth_net_server"
+route = "tilth_net_members_route"
 
 # Docs projection (canonical heads + history) as JSON
 [[route]]
@@ -159,29 +199,6 @@ handler = "repo.announce"
 [[serve]]
 serverRunner = "tilth_net_server"
 route = "tilth_net_repo_announce_route"
-
-# Browser toggles sharing open / closed
-[[route]]
-id = "tilth_net_repo_open_route"
-method = "POST"
-path = "/api/repos/:name/open"
-serves = "tilthNetRepos"
-handler = "repo.open"
-
-[[serve]]
-serverRunner = "tilth_net_server"
-route = "tilth_net_repo_open_route"
-
-[[route]]
-id = "tilth_net_repo_close_route"
-method = "POST"
-path = "/api/repos/:name/close"
-serves = "tilthNetRepos"
-handler = "repo.close"
-
-[[serve]]
-serverRunner = "tilth_net_server"
-route = "tilth_net_repo_close_route"
 
 # Browser toggles continuous live sync on / off for a repo
 [[route]]

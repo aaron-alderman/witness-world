@@ -23,11 +23,50 @@ method = "GET"
 path = "/"
 serves = "tilthView"
 handler = "page.home"
-params = { rootWidget = "tilth_page_workbench_v9", frontendProgram = "tilth_program_workbench_v9", page = "home" }
+params = { rootWidget = "tilth_home_page_v1", frontendProgram = "tilth_program_home_v1", page = "home" }
 
 [[serve]]
 serverRunner = "tilth_server"
 route = "tilth_home_route"
+
+# Repos list page.
+[[route]]
+id = "tilth_repos_page_route"
+method = "GET"
+path = "/repos"
+serves = "tilthReposView"
+handler = "page.home"
+params = { rootWidget = "tilth_repos_page_v1", frontendProgram = "tilth_program_repos_v1", page = "repos" }
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_repos_page_route"
+
+# Sessions list page.
+[[route]]
+id = "tilth_sessions_page_route"
+method = "GET"
+path = "/sessions"
+serves = "tilthSessionsView"
+handler = "page.home"
+params = { rootWidget = "tilth_sessions_page_v1", frontendProgram = "tilth_program_sessions_v1", page = "sessions" }
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_sessions_page_route"
+
+# Jobs list page.
+[[route]]
+id = "tilth_jobs_page_route"
+method = "GET"
+path = "/jobs"
+serves = "tilthJobsView"
+handler = "page.home"
+params = { rootWidget = "tilth_jobs_page_v1", frontendProgram = "tilth_program_jobs_v1", page = "jobs" }
+
+[[serve]]
+serverRunner = "tilth_server"
+route = "tilth_jobs_page_route"
 
 # Focused session detail page.
 [[route]]

@@ -5,6 +5,400 @@
 context = "frontend"
 program = "tilth_program_workbench_v9"
 
+# --- shared navigation ------------------------------------------------------
+[[heading]]
+id = "tilth_title_v1"
+text = "Tilth"
+level = 1
+
+[[box]]
+id = "tilth_nav_v1"
+children = ["tilth_nav_home_v1", "tilth_nav_repos_v1", "tilth_nav_sessions_v1", "tilth_nav_jobs_v1"]
+role = "navigation"
+class = "surface-actions"
+
+[[link]]
+id = "tilth_nav_home_v1"
+text = "Home"
+href = "/"
+class = "surface-inline-link"
+
+[[link]]
+id = "tilth_nav_repos_v1"
+text = "Repos"
+href = "/repos"
+class = "surface-inline-link"
+
+[[link]]
+id = "tilth_nav_sessions_v1"
+text = "Sessions"
+href = "/sessions"
+class = "surface-inline-link"
+
+[[link]]
+id = "tilth_nav_jobs_v1"
+text = "Jobs"
+href = "/jobs"
+class = "surface-inline-link"
+
+# --- home page --------------------------------------------------------------
+[[page]]
+id = "tilth_home_page_v1"
+children = ["tilth_title_v1", "tilth_nav_v1", "tilth_home_status_v1", "tilth_home_primary_links_v1", "tilth_home_health_v1", "tilth_home_desire_heading_v1", "tilth_home_desire_list_v1", "tilth_home_repos_heading_v1", "tilth_home_repo_list_v1"]
+title = "Tilth"
+
+[[text]]
+id = "tilth_home_status_v1"
+text = "Loading Tilth..."
+class = "status"
+role = "app-status"
+
+[[box]]
+id = "tilth_home_primary_links_v1"
+children = ["tilth_home_repos_link_v1", "tilth_home_sessions_link_v1", "tilth_home_jobs_link_v1"]
+class = "surface-actions"
+
+[[link]]
+id = "tilth_home_repos_link_v1"
+text = "Browse repos"
+href = "/repos"
+class = "surface-inline-link"
+
+[[link]]
+id = "tilth_home_sessions_link_v1"
+text = "Browse sessions"
+href = "/sessions"
+class = "surface-inline-link"
+
+[[link]]
+id = "tilth_home_jobs_link_v1"
+text = "Check jobs"
+href = "/jobs"
+class = "surface-inline-link"
+
+[[box]]
+id = "tilth_home_health_v1"
+children = ["tilth_home_jobs_status_v1", "tilth_home_daemons_status_v1"]
+class = "surface-actions"
+
+[[text]]
+id = "tilth_home_jobs_status_v1"
+text = "Jobs: loading"
+class = "surface-status"
+
+[[text]]
+id = "tilth_home_daemons_status_v1"
+text = "Daemons: loading"
+class = "surface-status"
+
+[[heading]]
+id = "tilth_home_desire_heading_v1"
+text = "Recent DESIRE"
+level = 2
+
+[[box]]
+id = "tilth_home_desire_list_v1"
+class = "surface-list"
+
+[[heading]]
+id = "tilth_home_repos_heading_v1"
+text = "Top repos"
+level = 2
+
+[[box]]
+id = "tilth_home_repo_list_v1"
+class = "surface-list"
+
+[[frontendProgram]]
+id = "tilth_program_home_v1"
+rootWidget = "tilth_home_page_v1"
+
+# --- repos page -------------------------------------------------------------
+[[page]]
+id = "tilth_repos_page_v1"
+children = ["tilth_title_v1", "tilth_nav_v1", "tilth_repos_status_v1", "tilth_repos_search_box_v1", "tilth_repos_filter_bar_v1", "tilth_repos_recognition_form_v1", "tilth_repos_recognition_status_v1", "tilth_repos_list_v1"]
+title = "Tilth repos"
+
+[[text]]
+id = "tilth_repos_status_v1"
+text = "Loading repos..."
+class = "status"
+role = "app-status"
+
+[[box]]
+id = "tilth_repos_search_box_v1"
+children = ["tilth_repos_search_input_v1", "tilth_repos_search_clear_v1"]
+role = "search"
+class = "surface-actions"
+
+[[input]]
+id = "tilth_repos_search_input_v1"
+name = "q"
+placeholder = "search repos, remotes, paths"
+type = "search"
+
+[[button]]
+id = "tilth_repos_search_clear_v1"
+text = "Clear"
+type = "button"
+action = "clearRepoSearch"
+
+[[box]]
+id = "tilth_repos_filter_bar_v1"
+children = ["tilth_repos_filter_all_v1", "tilth_repos_filter_desire_v1", "tilth_repos_filter_indexed_v1"]
+role = "filter-bar"
+class = "surface-actions"
+
+[[button]]
+id = "tilth_repos_filter_all_v1"
+text = "All ✓"
+type = "button"
+action = "filterReposAll"
+disabled = true
+
+[[button]]
+id = "tilth_repos_filter_desire_v1"
+text = "DESIRE"
+type = "button"
+action = "filterReposDesire"
+
+[[button]]
+id = "tilth_repos_filter_indexed_v1"
+text = "Indexed"
+type = "button"
+action = "filterReposIndexed"
+
+[[form]]
+id = "tilth_repos_recognition_form_v1"
+children = ["tilth_repos_recognition_input_v1", "tilth_repos_recognition_submit_v1"]
+role = "repo-recognition-form"
+class = "surface-actions"
+
+[[input]]
+id = "tilth_repos_recognition_input_v1"
+name = "path"
+placeholder = "recognize repo path, e.g. ~/work/my-repo"
+
+[[button]]
+id = "tilth_repos_recognition_submit_v1"
+text = "Recognize repo"
+type = "submit"
+
+[[text]]
+id = "tilth_repos_recognition_status_v1"
+text = ""
+class = "surface-status"
+
+[[box]]
+id = "tilth_repos_list_v1"
+role = "repo-index-list"
+class = "surface-list"
+
+[[frontendProgram]]
+id = "tilth_program_repos_v1"
+rootWidget = "tilth_repos_page_v1"
+
+# --- sessions page ----------------------------------------------------------
+[[page]]
+id = "tilth_sessions_page_v1"
+children = ["tilth_title_v1", "tilth_nav_v1", "tilth_sessions_status_v1", "tilth_sessions_search_box_v1", "tilth_sessions_filter_bar_v1", "tilth_sessions_list_v1"]
+title = "Tilth sessions"
+
+[[text]]
+id = "tilth_sessions_status_v1"
+text = "Loading sessions..."
+class = "status"
+role = "app-status"
+
+[[box]]
+id = "tilth_sessions_search_box_v1"
+children = ["tilth_sessions_search_input_v1", "tilth_sessions_search_clear_v1"]
+role = "search"
+class = "surface-actions"
+
+[[input]]
+id = "tilth_sessions_search_input_v1"
+name = "q"
+placeholder = "search sessions, summaries, projects"
+type = "search"
+
+[[button]]
+id = "tilth_sessions_search_clear_v1"
+text = "Clear"
+type = "button"
+action = "clearSessionSearch"
+
+[[box]]
+id = "tilth_sessions_filter_bar_v1"
+children = ["tilth_sessions_filter_all_v1", "tilth_sessions_filter_desire_v1", "tilth_sessions_filter_indexed_v1"]
+role = "filter-bar"
+class = "surface-actions"
+
+[[button]]
+id = "tilth_sessions_filter_all_v1"
+text = "All ✓"
+type = "button"
+action = "filterSessionsAll"
+disabled = true
+
+[[button]]
+id = "tilth_sessions_filter_desire_v1"
+text = "DESIRE"
+type = "button"
+action = "filterSessionsDesire"
+
+[[button]]
+id = "tilth_sessions_filter_indexed_v1"
+text = "Indexed"
+type = "button"
+action = "filterSessionsIndexed"
+
+[[box]]
+id = "tilth_sessions_list_v1"
+role = "session-list"
+class = "surface-list"
+
+[[frontendProgram]]
+id = "tilth_program_sessions_v1"
+rootWidget = "tilth_sessions_page_v1"
+
+# --- jobs page --------------------------------------------------------------
+[[page]]
+id = "tilth_jobs_page_v1"
+children = ["tilth_title_v1", "tilth_nav_v1", "tilth_jobs_status_v1", "tilth_jobs_summary_bar_v1", "tilth_jobs_daemons_heading_v1", "tilth_jobs_daemons_list_v1", "tilth_jobs_heading_v1", "tilth_jobs_filter_bar_v1", "tilth_jobs_list_v1"]
+title = "Tilth jobs"
+
+[[text]]
+id = "tilth_jobs_status_v1"
+text = "Loading jobs..."
+class = "status"
+role = "app-status"
+
+[[box]]
+id = "tilth_jobs_summary_bar_v1"
+children = ["tilth_jobs_work_summary_v1", "tilth_jobs_artifact_summary_v1", "tilth_jobs_daemon_summary_v1"]
+class = "surface-actions"
+
+[[text]]
+id = "tilth_jobs_work_summary_v1"
+text = "Work: loading"
+class = "surface-status"
+
+[[text]]
+id = "tilth_jobs_artifact_summary_v1"
+text = "Artifacts: loading"
+class = "surface-status"
+
+[[text]]
+id = "tilth_jobs_daemon_summary_v1"
+text = "Daemons: loading"
+class = "surface-status"
+
+[[heading]]
+id = "tilth_jobs_daemons_heading_v1"
+text = "Daemons"
+level = 2
+
+[[box]]
+id = "tilth_jobs_daemons_list_v1"
+role = "daemon-list"
+class = "surface-list"
+
+[[heading]]
+id = "tilth_jobs_heading_v1"
+text = "Recent work"
+level = 2
+
+[[box]]
+id = "tilth_jobs_filter_bar_v1"
+children = ["tilth_jobs_filter_all_v1", "tilth_jobs_filter_failed_v1", "tilth_jobs_filter_pending_v1", "tilth_jobs_filter_completed_v1"]
+class = "surface-actions"
+
+[[button]]
+id = "tilth_jobs_filter_all_v1"
+text = "All ✓"
+type = "button"
+action = "filterJobsPageAll"
+disabled = true
+
+[[button]]
+id = "tilth_jobs_filter_failed_v1"
+text = "Failed"
+type = "button"
+action = "filterJobsPageFailed"
+
+[[button]]
+id = "tilth_jobs_filter_pending_v1"
+text = "Pending"
+type = "button"
+action = "filterJobsPagePending"
+
+[[button]]
+id = "tilth_jobs_filter_completed_v1"
+text = "Completed"
+type = "button"
+action = "filterJobsPageCompleted"
+
+[[box]]
+id = "tilth_jobs_list_v1"
+role = "jobs-list"
+class = "surface-list"
+
+[[frontendProgram]]
+id = "tilth_program_jobs_v1"
+rootWidget = "tilth_jobs_page_v1"
+
+# --- home templates ---------------------------------------------------------
+[[box]]
+id = "tilth_home_session_link_template_v1"
+template = true
+children = ["tilth_home_session_link_title_v1", "tilth_home_session_link_meta_v1", "tilth_home_session_link_status_v1"]
+class = "surface-card session-card"
+
+[[link]]
+id = "tilth_home_session_link_title_v1"
+template = true
+text = "${item.title || item.id}"
+href = "${'/session?id=' + encodeURIComponent(item.id || '')}"
+class = "surface-card-title"
+
+[[text]]
+id = "tilth_home_session_link_meta_v1"
+template = true
+text = "${item.project + ' · ' + item.msgCount + ' msgs' + (item.lastMessageRelativeText ? ' · updated ' + item.lastMessageRelativeText : '')}"
+class = "surface-status"
+
+[[text]]
+id = "tilth_home_session_link_status_v1"
+template = true
+text = "${(item.repoStatusText || 'Repos not indexed') + ' · ' + (item.transcriptStatusText || 'Text not loaded') + ' · ' + (item.aiStatusText || 'Summary not run')}"
+class = "surface-status"
+
+[[box]]
+id = "tilth_home_repo_link_template_v1"
+template = true
+children = ["tilth_home_repo_link_title_v1", "tilth_home_repo_link_meta_v1", "tilth_home_repo_link_status_v1"]
+class = "surface-card repo-card"
+
+[[link]]
+id = "tilth_home_repo_link_title_v1"
+template = true
+text = "${item.name || item.displayRoot || item.repoId}"
+href = "${'/repo?id=' + encodeURIComponent(item.repoId || item.displayRoot || item.root || '')}"
+class = "surface-card-title"
+
+[[text]]
+id = "tilth_home_repo_link_meta_v1"
+template = true
+text = "${(item.displayRoot || item.root || '') + ' · ' + item.sessionCount + ' ' + (item.sessionCount === 1 ? 'session' : 'sessions') + ' · ' + (item.mentionText || '')}"
+class = "surface-status"
+
+[[text]]
+id = "tilth_home_repo_link_status_v1"
+template = true
+text = "${item.snapshotText || 'Snapshot not prepared'}"
+class = "surface-status"
+
 [[page]]
 id = "tilth_page_workbench_v9"
 children = ["tilth_title_repo_filters", "tilth_status_repo_filters", "tilth_search_box", "tilth_nav_repo_filters", "tilth_filter_bar_repo_filters", "repo_section_repo_filters", "sessions_section_repo_filters", "jobs_section_ops_v1"]
@@ -297,119 +691,95 @@ rootWidget = "tilth_repo_detail_page"
 
 # --- repo template ----------------------------------------------------------
 [[box]]
-id = "repo_item_template_clean"
+id = "repo_scan_card_template_v1"
 template = true
-children = ["repo_item_title_clean", "repo_item_open_link", "repo_item_meta_clean", "repo_item_recognition_clean", "repo_item_snapshot_clean", "repo_item_remote_clean", "repo_item_sessions_clean", "repo_item_paths_preview_clean", "repo_item_paths_details_clean"]
+children = ["repo_scan_title_v1", "repo_scan_open_link_v1", "repo_scan_meta_v1", "repo_scan_recognition_v1", "repo_scan_snapshot_v1", "repo_scan_remote_v1", "repo_scan_paths_preview_v1"]
 class = "surface-card repo-card"
 
 [[heading]]
-id = "repo_item_title_clean"
+id = "repo_scan_title_v1"
 template = true
 text = "${item.name || item.root}"
 level = 3
 
 [[text]]
-id = "repo_item_meta_clean"
+id = "repo_scan_meta_v1"
 template = true
 text = "${item.displayRoot || item.root} · ${item.sessionCount} ${item.sessionCount === 1 ? 'session' : 'sessions'} · ${item.mentionText || (item.mentionCount + ' mentions')}"
 class = "surface-status"
 
 [[link]]
-id = "repo_item_open_link"
+id = "repo_scan_open_link_v1"
 template = true
 text = "Open repo"
 href = "${'/repo?id=' + encodeURIComponent(item.repoId || item.displayRoot || item.root || '')}"
 class = "surface-inline-link"
 
 [[text]]
-id = "repo_item_recognition_clean"
+id = "repo_scan_recognition_v1"
 template = true
 text = "${item.recognitionText || 'Recognition source unknown'}"
 class = "surface-status"
 
 [[text]]
-id = "repo_item_snapshot_clean"
+id = "repo_scan_snapshot_v1"
 template = true
 text = "${item.snapshotText || 'Snapshot not prepared'}"
 class = "surface-status"
 
 [[text]]
-id = "repo_item_sessions_clean"
-template = true
-text = "${item.sessionText || 'No indexed sessions yet'}"
-class = "surface-lede"
-
-[[text]]
-id = "repo_item_remote_clean"
+id = "repo_scan_remote_v1"
 template = true
 text = "${item.remoteText ? 'Remote: ' + item.remoteText : 'Remote: none'}"
 class = "surface-status"
 
 [[text]]
-id = "repo_item_paths_preview_clean"
+id = "repo_scan_paths_preview_v1"
 template = true
 text = "${item.pathPreviewText ? 'Mentioned paths: ' + item.pathPreviewText : 'No displayable mentioned paths'}"
 class = "surface-status"
 
-[[details]]
-id = "repo_item_paths_details_clean"
-template = true
-children = ["repo_item_paths_summary_clean", "repo_item_paths_detail_clean"]
-class = "repo-paths-panel"
-
-[[summary]]
-id = "repo_item_paths_summary_clean"
-template = true
-text = "Show paths"
-class = "surface-card-title"
-
-[[text]]
-id = "repo_item_paths_detail_clean"
-template = true
-text = "${item.pathDetailText || 'No displayable mentioned paths'}"
-class = "surface-state-list surface-note surface-mono repo-paths-list"
-
 # --- session template -------------------------------------------------------
 [[box]]
-id = "session_card_v4_template"
+id = "session_scan_card_template_v1"
 template = true
-children = ["session_card_v2_title", "session_card_open_link", "session_card_v2_meta", "session_card_v4_latest", "session_card_v2_preview", "session_card_v2_desire_button", "session_card_v2_transcript_button", "session_card_v2_ai_summary_button", "session_card_v2_repo_button", "session_card_v2_status_line", "session_card_v2_repo_chips", "session_card_v2_ai_summary_details", "session_card_v2_repo_details", "session_card_v2_transcript_details"]
+children = ["session_scan_title_v1", "session_scan_open_link_v1", "session_scan_meta_v1", "session_scan_latest_v1", "session_scan_preview_v1", "session_scan_desire_button_v1", "session_scan_transcript_button_v1", "session_scan_ai_summary_button_v1", "session_scan_repo_button_v1", "session_scan_status_line_v1", "session_scan_repo_chips_v1"]
 class = "${item.desire ? 'surface-card session-card desire' : 'surface-card session-card'}"
 
 [[heading]]
-id = "session_card_v2_title"
+id = "session_scan_title_v1"
 template = true
 text = "${item.title || item.id}"
 level = 3
 class = "session-title"
 
 [[link]]
-id = "session_card_open_link"
+id = "session_scan_open_link_v1"
 template = true
 text = "Open session"
 href = "${'/session?id=' + encodeURIComponent(item.id || '')}"
 class = "surface-inline-link"
 
 [[text]]
-id = "session_card_v2_meta"
+id = "session_scan_meta_v1"
 template = true
 text = "${item.project} · ${item.msgCount} msgs · origin ${item.origin || '—'}${item.lastMessageRelativeText ? ' · updated ' + item.lastMessageRelativeText : ''}${item.lastMessageExactText ? ' · ' + item.lastMessageExactText : ''}${item.desire ? ' · marked by ' + (item.markedBy || '—') : ''}"
 class = "surface-status"
 
 [[text]]
-id = "session_card_v4_latest"
+id = "session_scan_latest_v1"
 template = true
 text = "${item.lastMessageLine || ''}"
 class = "surface-status"
 
 [[text]]
-id = "session_card_v2_preview"
+id = "session_scan_preview_v1"
 template = true
 text = "${item.previewBrief || item.preview || ''}"
 class = "surface-lede session-preview"
 
 [[button]]
-id = "session_card_v2_desire_button"
+id = "session_scan_desire_button_v1"
 template = true
 text = "${item.desire ? 'DESIRE ✓' : 'Mark DESIRE'}"
 type = "button"
@@ -417,7 +787,7 @@ action = "markDesire"
 data-id = "${item.id}"
 
 [[button]]
-id = "session_card_v2_transcript_button"
+id = "session_scan_transcript_button_v1"
 template = true
 text = "${item.transcriptPreview && item.transcriptPreview.actionText ? item.transcriptPreview.actionText : 'Preview text'}"
 type = "button"
@@ -425,7 +795,7 @@ action = "previewTranscript"
 data-id = "${item.id}"
 
 [[button]]
-id = "session_card_v2_ai_summary_button"
+id = "session_scan_ai_summary_button_v1"
 template = true
 text = "${item.aiSummary && item.aiSummary.actionText ? item.aiSummary.actionText : 'Summarize'}"
 type = "button"
@@ -433,7 +803,7 @@ action = "summarizeSession"
 data-id = "${item.id}"
 
 [[button]]
-id = "session_card_v2_repo_button"
+id = "session_scan_repo_button_v1"
 template = true
 text = "${item.repoIndex && item.repoIndex.actionText ? item.repoIndex.actionText : 'Index repos'}"
 type = "button"
@@ -441,112 +811,16 @@ action = "indexRepos"
 data-id = "${item.id}"
 
 [[text]]
-id = "session_card_v2_status_line"
+id = "session_scan_status_line_v1"
 template = true
 text = "${(item.repoStatusText || 'Repos not indexed') + ' · ' + (item.transcriptStatusText || 'Text not loaded') + ' · ' + (item.aiStatusText || 'Summary not run')}"
 class = "surface-status"
 
 [[text]]
-id = "session_card_v2_repo_chips"
+id = "session_scan_repo_chips_v1"
 template = true
 text = "${item.repoChipText ? item.repoChipText : ''}"
 class = "surface-status surface-mono"
-
-[[details]]
-id = "session_card_v2_ai_summary_details"
-template = true
-children = ["session_card_v2_ai_summary_summary", "session_card_v2_ai_summary_version", "session_card_v2_ai_summary_error", "session_card_v2_ai_summary_text", "session_card_v2_ai_summary_bullets"]
-class = "session-transcript-panel"
-
-[[summary]]
-id = "session_card_v2_ai_summary_summary"
-template = true
-text = "Summary"
-class = "surface-card-title"
-
-[[text]]
-id = "session_card_v2_ai_summary_version"
-template = true
-text = "${item.aiSummary && item.aiSummary.versionText ? item.aiSummary.versionText : ''}"
-class = "surface-status"
-
-[[text]]
-id = "session_card_v2_ai_summary_text"
-template = true
-text = "${item.aiSummary && item.aiSummary.text ? item.aiSummary.text : ''}"
-class = "surface-note"
-
-[[text]]
-id = "session_card_v2_ai_summary_error"
-template = true
-text = "${item.aiSummary && item.aiSummary.errorText ? item.aiSummary.errorText : ''}"
-class = "surface-state-list surface-note surface-mono session-transcript-preview"
-
-[[text]]
-id = "session_card_v2_ai_summary_bullets"
-template = true
-text = "${item.aiSummary && item.aiSummary.bulletText ? item.aiSummary.bulletText : ''}"
-class = "surface-state-list surface-note session-transcript-preview"
-
-[[details]]
-id = "session_card_v2_repo_details"
-template = true
-children = ["session_card_v2_repo_summary", "session_card_v2_repo_version", "session_card_v2_repo_error", "session_card_v2_repo_result"]
-class = "session-transcript-panel"
-
-[[summary]]
-id = "session_card_v2_repo_summary"
-template = true
-text = "Repos"
-class = "surface-card-title"
-
-[[text]]
-id = "session_card_v2_repo_version"
-template = true
-text = "${item.repoIndex && item.repoIndex.versionText ? item.repoIndex.versionText : ''}"
-class = "surface-status"
-
-[[text]]
-id = "session_card_v2_repo_error"
-template = true
-text = "${item.repoIndex && item.repoIndex.errorText ? item.repoIndex.errorText : ''}"
-class = "surface-state-list surface-note surface-mono session-transcript-preview"
-
-[[text]]
-id = "session_card_v2_repo_result"
-template = true
-text = "${item.repoIndex && item.repoIndex.detailText ? item.repoIndex.detailText : ''}"
-class = "surface-note"
-
-[[details]]
-id = "session_card_v2_transcript_details"
-template = true
-children = ["session_card_v2_transcript_summary", "session_card_v2_transcript_version", "session_card_v2_transcript_error", "session_card_v2_transcript_text"]
-class = "session-transcript-panel"
-
-[[summary]]
-id = "session_card_v2_transcript_summary"
-template = true
-text = "Transcript"
-class = "surface-card-title"
-
-[[text]]
-id = "session_card_v2_transcript_version"
-template = true
-text = "${item.transcriptPreview && item.transcriptPreview.versionText ? item.transcriptPreview.versionText : ''}"
-class = "surface-status"
-
-[[text]]
-id = "session_card_v2_transcript_error"
-template = true
-text = "${item.transcriptPreview && item.transcriptPreview.errorText ? item.transcriptPreview.errorText : ''}"
-class = "surface-state-list surface-note surface-mono session-transcript-preview"
-
-[[text]]
-id = "session_card_v2_transcript_text"
-template = true
-text = "${item.transcriptPreview && item.transcriptPreview.text ? item.transcriptPreview.text : ''}"
-class = "surface-state-list surface-note surface-mono session-transcript-preview"
 
 # --- job templates ----------------------------------------------------------
 [[box]]
@@ -979,6 +1253,850 @@ on = "load"
 widget = "repo_detail_status"
 text = "${state.repoDetailResponse && state.repoDetailResponse.repo ? 'Repo detail · ' + state.repoDetailResponse.sessions.length + ' sessions · ' + state.repoDetailResponse.jobs.length + ' jobs' : 'Repo not found'}"
 
+# --- top-level page loads ---------------------------------------------------
+[[step]]
+program = "tilth_program_home_v1"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/sessions"
+into = "homeSessionsResponse"
+
+[[step]]
+program = "tilth_program_home_v1"
+order = 1
+op = "fetchJson"
+on = "load"
+url = "/api/sessions?filter=desire"
+into = "homeDesireSessionsResponse"
+
+[[step]]
+program = "tilth_program_home_v1"
+order = 2
+op = "fetchJson"
+on = "load"
+url = "/api/repo-index/repos"
+into = "homeRepoIndexResponse"
+
+[[step]]
+program = "tilth_program_home_v1"
+order = 3
+op = "fetchJson"
+on = "load"
+url = "/api/jobs"
+into = "homeJobsResponse"
+
+[[step]]
+program = "tilth_program_home_v1"
+order = 4
+op = "fetchJson"
+on = "load"
+url = "/api/daemons"
+into = "homeDaemonsResponse"
+
+[[step]]
+program = "tilth_program_home_v1"
+order = 5
+op = "renderCollection"
+on = "load"
+widget = "tilth_home_desire_list_v1"
+from = "homeDesireSessionsResponse.sessions"
+template = "tilth_home_session_link_template_v1"
+
+[[step]]
+program = "tilth_program_home_v1"
+order = 6
+op = "renderCollection"
+on = "load"
+widget = "tilth_home_repo_list_v1"
+from = "homeRepoIndexResponse.repos"
+template = "tilth_home_repo_link_template_v1"
+
+[[step]]
+program = "tilth_program_home_v1"
+order = 7
+op = "setText"
+on = "load"
+widget = "tilth_home_status_v1"
+text = "${state.homeSessionsResponse && state.homeSessionsResponse.sessions ? state.homeSessionsResponse.sessions.length + ' conversations · ' + ((state.homeDesireSessionsResponse && state.homeDesireSessionsResponse.sessions) ? state.homeDesireSessionsResponse.sessions.length : 0) + ' DESIRE · ' + ((state.homeRepoIndexResponse && state.homeRepoIndexResponse.repos) ? state.homeRepoIndexResponse.repos.length : 0) + ' repos' : 'Tilth'}"
+
+[[step]]
+program = "tilth_program_home_v1"
+order = 8
+op = "setText"
+on = "load"
+widget = "tilth_home_jobs_status_v1"
+text = "${state.homeJobsResponse && state.homeJobsResponse.summary ? 'Jobs: ' + state.homeJobsResponse.summary.workText : 'Jobs: unavailable'}"
+
+[[step]]
+program = "tilth_program_home_v1"
+order = 9
+op = "setText"
+on = "load"
+widget = "tilth_home_daemons_status_v1"
+text = "${state.homeJobsResponse && state.homeJobsResponse.summary ? 'Daemons: ' + state.homeJobsResponse.summary.daemonText : 'Daemons: unavailable'}"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/repo-index/repos"
+into = "reposPageResponse"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "tilth_repos_list_v1"
+from = "reposPageResponse.repos"
+template = "repo_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 2
+op = "setText"
+on = "load"
+widget = "tilth_repos_status_v1"
+text = "${state.reposPageResponse && state.reposPageResponse.repos ? state.reposPageResponse.repos.length + ' repos' : 'No repos yet'}"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/sessions"
+into = "sessionsPageResponse"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "tilth_sessions_list_v1"
+from = "sessionsPageResponse.sessions"
+template = "session_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 2
+op = "setText"
+on = "load"
+widget = "tilth_sessions_status_v1"
+text = "${state.sessionsPageResponse && state.sessionsPageResponse.sessions ? state.sessionsPageResponse.sessions.length + ' conversations' : 'No conversations yet'}"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/jobs"
+into = "jobsPageResponse"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 1
+op = "fetchJson"
+on = "load"
+url = "/api/daemons"
+into = "daemonsPageResponse"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 2
+op = "renderCollection"
+on = "load"
+widget = "tilth_jobs_daemons_list_v1"
+from = "daemonsPageResponse.daemons"
+template = "daemon_status_template_workbench"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 3
+op = "renderCollection"
+on = "load"
+widget = "tilth_jobs_list_v1"
+from = "jobsPageResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 4
+op = "setText"
+on = "load"
+widget = "tilth_jobs_status_v1"
+text = "${state.jobsPageResponse && state.jobsPageResponse.summary ? state.jobsPageResponse.summary.statusText : 'Jobs'}"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 5
+op = "setText"
+on = "load"
+widget = "tilth_jobs_work_summary_v1"
+text = "${state.jobsPageResponse && state.jobsPageResponse.summary ? state.jobsPageResponse.summary.workText : 'Work: unavailable'}"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 6
+op = "setText"
+on = "load"
+widget = "tilth_jobs_artifact_summary_v1"
+text = "${state.jobsPageResponse && state.jobsPageResponse.summary ? state.jobsPageResponse.summary.artifactText : 'Artifacts: unavailable'}"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 7
+op = "setText"
+on = "load"
+widget = "tilth_jobs_daemon_summary_v1"
+text = "${state.jobsPageResponse && state.jobsPageResponse.summary ? state.jobsPageResponse.summary.daemonText : 'Daemons: unavailable'}"
+
+# --- top-level page filters/search -----------------------------------------
+[[step]]
+program = "tilth_program_repos_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterReposAll"
+url = "/api/repo-index/repos"
+into = "reposPageResponse"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterReposAll"
+widget = "tilth_repos_list_v1"
+from = "reposPageResponse.repos"
+template = "repo_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 2
+op = "setText"
+on = "click:filterReposAll"
+widget = "tilth_repos_status_v1"
+text = "${state.reposPageResponse && state.reposPageResponse.repos ? 'All · ' + state.reposPageResponse.repos.length + ' repos' : 'All repos'}"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 3
+op = "setText"
+on = "click:filterReposAll"
+widget = "tilth_repos_filter_all_v1"
+text = "All ✓"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 4
+op = "setText"
+on = "click:filterReposAll"
+widget = "tilth_repos_filter_desire_v1"
+text = "DESIRE"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 5
+op = "setText"
+on = "click:filterReposAll"
+widget = "tilth_repos_filter_indexed_v1"
+text = "Indexed"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterReposDesire"
+url = "/api/repo-index/repos?filter=desire"
+into = "reposPageResponse"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterReposDesire"
+widget = "tilth_repos_list_v1"
+from = "reposPageResponse.repos"
+template = "repo_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 2
+op = "setText"
+on = "click:filterReposDesire"
+widget = "tilth_repos_status_v1"
+text = "${state.reposPageResponse && state.reposPageResponse.repos ? 'DESIRE · ' + state.reposPageResponse.repos.length + ' repos' : 'DESIRE repos'}"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 3
+op = "setText"
+on = "click:filterReposDesire"
+widget = "tilth_repos_filter_all_v1"
+text = "All"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 4
+op = "setText"
+on = "click:filterReposDesire"
+widget = "tilth_repos_filter_desire_v1"
+text = "DESIRE ✓"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 5
+op = "setText"
+on = "click:filterReposDesire"
+widget = "tilth_repos_filter_indexed_v1"
+text = "Indexed"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterReposIndexed"
+url = "/api/repo-index/repos?filter=indexed"
+into = "reposPageResponse"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterReposIndexed"
+widget = "tilth_repos_list_v1"
+from = "reposPageResponse.repos"
+template = "repo_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 2
+op = "setText"
+on = "click:filterReposIndexed"
+widget = "tilth_repos_status_v1"
+text = "${state.reposPageResponse && state.reposPageResponse.repos ? 'Indexed · ' + state.reposPageResponse.repos.length + ' repos' : 'Indexed repos'}"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 3
+op = "setText"
+on = "click:filterReposIndexed"
+widget = "tilth_repos_filter_all_v1"
+text = "All"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 4
+op = "setText"
+on = "click:filterReposIndexed"
+widget = "tilth_repos_filter_desire_v1"
+text = "DESIRE"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 5
+op = "setText"
+on = "click:filterReposIndexed"
+widget = "tilth_repos_filter_indexed_v1"
+text = "Indexed ✓"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 0
+op = "fetchJson"
+on = "input:tilth_repos_search_input_v1"
+url = "/api/repo-index/repos?q=${encodeURIComponent(event.value || '')}"
+into = "reposPageResponse"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 1
+op = "renderCollection"
+on = "input:tilth_repos_search_input_v1"
+widget = "tilth_repos_list_v1"
+from = "reposPageResponse.repos"
+template = "repo_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 2
+op = "setText"
+on = "input:tilth_repos_search_input_v1"
+widget = "tilth_repos_status_v1"
+text = "${state.reposPageResponse && state.reposPageResponse.repos ? (event.value ? 'Search · ' + state.reposPageResponse.repos.length + ' repos' : state.reposPageResponse.repos.length + ' repos') : 'No repos'}"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 0
+op = "setValue"
+on = "click:clearRepoSearch"
+widget = "tilth_repos_search_input_v1"
+value = ""
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 1
+op = "run"
+on = "click:clearRepoSearch"
+event = "filterReposAll"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterSessionsAll"
+url = "/api/sessions"
+into = "sessionsPageResponse"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterSessionsAll"
+widget = "tilth_sessions_list_v1"
+from = "sessionsPageResponse.sessions"
+template = "session_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 2
+op = "setText"
+on = "click:filterSessionsAll"
+widget = "tilth_sessions_status_v1"
+text = "${state.sessionsPageResponse && state.sessionsPageResponse.sessions ? 'All · ' + state.sessionsPageResponse.sessions.length + ' conversations' : 'All sessions'}"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 3
+op = "setText"
+on = "click:filterSessionsAll"
+widget = "tilth_sessions_filter_all_v1"
+text = "All ✓"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 4
+op = "setText"
+on = "click:filterSessionsAll"
+widget = "tilth_sessions_filter_desire_v1"
+text = "DESIRE"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 5
+op = "setText"
+on = "click:filterSessionsAll"
+widget = "tilth_sessions_filter_indexed_v1"
+text = "Indexed"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterSessionsDesire"
+url = "/api/sessions?filter=desire"
+into = "sessionsPageResponse"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterSessionsDesire"
+widget = "tilth_sessions_list_v1"
+from = "sessionsPageResponse.sessions"
+template = "session_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 2
+op = "setText"
+on = "click:filterSessionsDesire"
+widget = "tilth_sessions_status_v1"
+text = "${state.sessionsPageResponse && state.sessionsPageResponse.sessions ? 'DESIRE · ' + state.sessionsPageResponse.sessions.length + ' conversations' : 'DESIRE sessions'}"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 3
+op = "setText"
+on = "click:filterSessionsDesire"
+widget = "tilth_sessions_filter_all_v1"
+text = "All"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 4
+op = "setText"
+on = "click:filterSessionsDesire"
+widget = "tilth_sessions_filter_desire_v1"
+text = "DESIRE ✓"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 5
+op = "setText"
+on = "click:filterSessionsDesire"
+widget = "tilth_sessions_filter_indexed_v1"
+text = "Indexed"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterSessionsIndexed"
+url = "/api/sessions?filter=indexed"
+into = "sessionsPageResponse"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterSessionsIndexed"
+widget = "tilth_sessions_list_v1"
+from = "sessionsPageResponse.sessions"
+template = "session_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 2
+op = "setText"
+on = "click:filterSessionsIndexed"
+widget = "tilth_sessions_status_v1"
+text = "${state.sessionsPageResponse && state.sessionsPageResponse.sessions ? 'Indexed · ' + state.sessionsPageResponse.sessions.length + ' conversations' : 'Indexed sessions'}"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 3
+op = "setText"
+on = "click:filterSessionsIndexed"
+widget = "tilth_sessions_filter_all_v1"
+text = "All"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 4
+op = "setText"
+on = "click:filterSessionsIndexed"
+widget = "tilth_sessions_filter_desire_v1"
+text = "DESIRE"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 5
+op = "setText"
+on = "click:filterSessionsIndexed"
+widget = "tilth_sessions_filter_indexed_v1"
+text = "Indexed ✓"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 0
+op = "fetchJson"
+on = "input:tilth_sessions_search_input_v1"
+url = "/api/sessions?q=${encodeURIComponent(event.value || '')}"
+into = "sessionsPageResponse"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 1
+op = "renderCollection"
+on = "input:tilth_sessions_search_input_v1"
+widget = "tilth_sessions_list_v1"
+from = "sessionsPageResponse.sessions"
+template = "session_scan_card_template_v1"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 2
+op = "setText"
+on = "input:tilth_sessions_search_input_v1"
+widget = "tilth_sessions_status_v1"
+text = "${state.sessionsPageResponse && state.sessionsPageResponse.sessions ? (event.value ? 'Search · ' + state.sessionsPageResponse.sessions.length + ' conversations' : state.sessionsPageResponse.sessions.length + ' conversations') : 'No sessions'}"
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 0
+op = "setValue"
+on = "click:clearSessionSearch"
+widget = "tilth_sessions_search_input_v1"
+value = ""
+
+[[step]]
+program = "tilth_program_sessions_v1"
+order = 1
+op = "run"
+on = "click:clearSessionSearch"
+event = "filterSessionsAll"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterJobsPageAll"
+url = "/api/jobs"
+into = "jobsPageResponse"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterJobsPageAll"
+widget = "tilth_jobs_list_v1"
+from = "jobsPageResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 2
+op = "setText"
+on = "click:filterJobsPageAll"
+widget = "tilth_jobs_status_v1"
+text = "${state.jobsPageResponse && state.jobsPageResponse.summary ? state.jobsPageResponse.summary.statusText : 'Jobs'}"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 3
+op = "setText"
+on = "click:filterJobsPageAll"
+widget = "tilth_jobs_filter_all_v1"
+text = "All ✓"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 4
+op = "setText"
+on = "click:filterJobsPageAll"
+widget = "tilth_jobs_filter_failed_v1"
+text = "Failed"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 5
+op = "setText"
+on = "click:filterJobsPageAll"
+widget = "tilth_jobs_filter_pending_v1"
+text = "Pending"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 6
+op = "setText"
+on = "click:filterJobsPageAll"
+widget = "tilth_jobs_filter_completed_v1"
+text = "Completed"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterJobsPageFailed"
+url = "/api/jobs?status=failed"
+into = "jobsPageResponse"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterJobsPageFailed"
+widget = "tilth_jobs_list_v1"
+from = "jobsPageResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 2
+op = "setText"
+on = "click:filterJobsPageFailed"
+widget = "tilth_jobs_status_v1"
+text = "${state.jobsPageResponse && state.jobsPageResponse.jobs ? state.jobsPageResponse.jobs.length + ' failed jobs' : 'Failed jobs'}"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 3
+op = "setText"
+on = "click:filterJobsPageFailed"
+widget = "tilth_jobs_filter_all_v1"
+text = "All"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 4
+op = "setText"
+on = "click:filterJobsPageFailed"
+widget = "tilth_jobs_filter_failed_v1"
+text = "Failed ✓"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 5
+op = "setText"
+on = "click:filterJobsPageFailed"
+widget = "tilth_jobs_filter_pending_v1"
+text = "Pending"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 6
+op = "setText"
+on = "click:filterJobsPageFailed"
+widget = "tilth_jobs_filter_completed_v1"
+text = "Completed"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterJobsPagePending"
+url = "/api/jobs?status=pending"
+into = "jobsPageResponse"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterJobsPagePending"
+widget = "tilth_jobs_list_v1"
+from = "jobsPageResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 2
+op = "setText"
+on = "click:filterJobsPagePending"
+widget = "tilth_jobs_status_v1"
+text = "${state.jobsPageResponse && state.jobsPageResponse.jobs ? state.jobsPageResponse.jobs.length + ' pending jobs' : 'Pending jobs'}"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 3
+op = "setText"
+on = "click:filterJobsPagePending"
+widget = "tilth_jobs_filter_all_v1"
+text = "All"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 4
+op = "setText"
+on = "click:filterJobsPagePending"
+widget = "tilth_jobs_filter_failed_v1"
+text = "Failed"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 5
+op = "setText"
+on = "click:filterJobsPagePending"
+widget = "tilth_jobs_filter_pending_v1"
+text = "Pending ✓"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 6
+op = "setText"
+on = "click:filterJobsPagePending"
+widget = "tilth_jobs_filter_completed_v1"
+text = "Completed"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 0
+op = "fetchJson"
+on = "click:filterJobsPageCompleted"
+url = "/api/jobs?status=completed"
+into = "jobsPageResponse"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 1
+op = "renderCollection"
+on = "click:filterJobsPageCompleted"
+widget = "tilth_jobs_list_v1"
+from = "jobsPageResponse.jobs"
+template = "job_item_template_workbench"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 2
+op = "setText"
+on = "click:filterJobsPageCompleted"
+widget = "tilth_jobs_status_v1"
+text = "${state.jobsPageResponse && state.jobsPageResponse.jobs ? state.jobsPageResponse.jobs.length + ' completed jobs' : 'Completed jobs'}"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 3
+op = "setText"
+on = "click:filterJobsPageCompleted"
+widget = "tilth_jobs_filter_all_v1"
+text = "All"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 4
+op = "setText"
+on = "click:filterJobsPageCompleted"
+widget = "tilth_jobs_filter_failed_v1"
+text = "Failed"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 5
+op = "setText"
+on = "click:filterJobsPageCompleted"
+widget = "tilth_jobs_filter_pending_v1"
+text = "Pending"
+
+[[step]]
+program = "tilth_program_jobs_v1"
+order = 6
+op = "setText"
+on = "click:filterJobsPageCompleted"
+widget = "tilth_jobs_filter_completed_v1"
+text = "Completed ✓"
+
+# --- repos page submit ------------------------------------------------------
+[[step]]
+program = "tilth_program_repos_v1"
+order = 0
+op = "readForm"
+on = "submit:tilth_repos_recognition_form_v1"
+widget = "tilth_repos_recognition_form_v1"
+into = "repoRecognitionDraft"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 1
+op = "setText"
+on = "submit:tilth_repos_recognition_form_v1"
+widget = "tilth_repos_recognition_status_v1"
+text = "${state.repoRecognitionDraft && state.repoRecognitionDraft.path ? 'Requesting recognition...' : 'Enter a repo path first.'}"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 2
+op = "postJson"
+on = "submit:tilth_repos_recognition_form_v1"
+url = "/api/repos/recognitions/request"
+method = "POST"
+body = { path = "${state.repoRecognitionDraft.path || ''}" }
+into = "repoRecognitionRequest"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 3
+op = "setText"
+on = "submit:tilth_repos_recognition_form_v1"
+widget = "tilth_repos_recognition_status_v1"
+text = "${state.repoRecognitionRequest && state.repoRecognitionRequest.ok ? 'Repo recognition requested. Refresh in a few seconds.' : (state.repoRecognitionRequest && state.repoRecognitionRequest.error ? state.repoRecognitionRequest.error : 'Repo recognition request sent.')}"
+
+[[step]]
+program = "tilth_program_repos_v1"
+order = 4
+op = "clearForm"
+on = "submit:tilth_repos_recognition_form_v1"
+widget = "tilth_repos_recognition_form_v1"
+
 # --- load -------------------------------------------------------------------
 [[step]]
 order = 0
@@ -1021,7 +2139,7 @@ op = "renderCollection"
 on = "load"
 widget = "repo_index_list_repo_filters"
 from = "repoIndexResponse.repos"
-template = "repo_item_template_clean"
+template = "repo_scan_card_template_v1"
 
 [[step]]
 order = 6
@@ -1029,7 +2147,7 @@ op = "renderCollection"
 on = "load"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v4_template"
+template = "session_scan_card_template_v1"
 
 [[step]]
 order = 7
@@ -1601,7 +2719,7 @@ op = "renderCollection"
 on = "click:filterAll"
 widget = "repo_index_list_repo_filters"
 from = "repoIndexResponse.repos"
-template = "repo_item_template_clean"
+template = "repo_scan_card_template_v1"
 
 [[step]]
 order = 4
@@ -1609,7 +2727,7 @@ op = "renderCollection"
 on = "click:filterAll"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v4_template"
+template = "session_scan_card_template_v1"
 
 [[step]]
 order = 5
@@ -1694,7 +2812,7 @@ op = "renderCollection"
 on = "click:filterDesire"
 widget = "repo_index_list_repo_filters"
 from = "repoIndexResponse.repos"
-template = "repo_item_template_clean"
+template = "repo_scan_card_template_v1"
 
 [[step]]
 order = 4
@@ -1702,7 +2820,7 @@ op = "renderCollection"
 on = "click:filterDesire"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v4_template"
+template = "session_scan_card_template_v1"
 
 [[step]]
 order = 5
@@ -1787,7 +2905,7 @@ op = "renderCollection"
 on = "click:filterIndexed"
 widget = "repo_index_list_repo_filters"
 from = "repoIndexResponse.repos"
-template = "repo_item_template_clean"
+template = "repo_scan_card_template_v1"
 
 [[step]]
 order = 4
@@ -1795,7 +2913,7 @@ op = "renderCollection"
 on = "click:filterIndexed"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v4_template"
+template = "session_scan_card_template_v1"
 
 [[step]]
 order = 5
@@ -1881,7 +2999,7 @@ op = "renderCollection"
 on = "input:tilth_search_input"
 widget = "repo_index_list_repo_filters"
 from = "repoIndexResponse.repos"
-template = "repo_item_template_clean"
+template = "repo_scan_card_template_v1"
 
 [[step]]
 order = 4
@@ -1889,7 +3007,7 @@ op = "renderCollection"
 on = "input:tilth_search_input"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v4_template"
+template = "session_scan_card_template_v1"
 
 [[step]]
 order = 5
@@ -1967,7 +3085,7 @@ op = "renderCollection"
 on = "click:clearSearch"
 widget = "repo_index_list_repo_filters"
 from = "repoIndexResponse.repos"
-template = "repo_item_template_clean"
+template = "repo_scan_card_template_v1"
 
 [[step]]
 order = 4
@@ -1975,7 +3093,7 @@ op = "renderCollection"
 on = "click:clearSearch"
 widget = "sessions_list_repo_filters"
 from = "sessionsResponse.sessions"
-template = "session_card_v4_template"
+template = "session_scan_card_template_v1"
 
 [[step]]
 order = 5

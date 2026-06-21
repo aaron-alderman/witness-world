@@ -1,32 +1,85 @@
-# tilth-net frontend: your node, two flows, progressively disclosed.
-#   Share out — your work moving into the commons   (could put up / put up ✓)
-#   Pull in   — peers' work coming to your disk      (could pull / pulled ✓)
-#   Members   — identity
-# Each group is a collapsible <details> with a live count; conversation cards
-# tuck their AI summary behind a toggle. No keys here — the daemon signs/syncs.
+# tilth-net frontend: your node, as four routed pages with a shared nav.
+#   /         Activity   — what's flowing through your node
+#   /share    Share out  — conversations + repos moving into the commons
+#   /pull     Pull in    — the commons catalog + your pulled copies
+#   /members  Members    — identity + recognition
+# Each page is self-contained (own rootWidget + program + serves); the nav and the
+# card templates are shared. No keys here — the daemon signs/syncs.
 
 [[defaults]]
 context = "frontend"
-program = "tilth_net_program"
+program = "tn_activity_program"
 
-[[page]]
-id = "tilth_net_page"
-children = ["tn_title", "g_shareout", "g_pullin", "g_members"]
-title = "Tilth-Net — your node"
-
+# ===== shared: title + nav ==================================================
 [[heading]]
 id = "tn_title"
 text = "Your node"
 level = 1
 
-# ===== SHARE OUT (collapsible group) ========================================
-[[details]]
-id = "g_shareout"
-children = ["g_shareout_sum", "sh_couldput_h", "tn_convos", "tn_repos", "sh_putup_h", "tn_putup"]
+[[box]]
+id = "tn_nav"
+role = "navigation"
+class = "surface-actions"
+children = ["nav_activity", "nav_share", "nav_pull", "nav_members"]
 
-[[summary]]
-id = "g_shareout_sum"
+[[link]]
+id = "nav_activity"
+text = "Activity"
+href = "/"
+class = "surface-inline-link"
+
+[[link]]
+id = "nav_share"
 text = "Share out"
+href = "/share"
+class = "surface-inline-link"
+
+[[link]]
+id = "nav_pull"
+text = "Pull in"
+href = "/inbox"
+class = "surface-inline-link"
+
+[[link]]
+id = "nav_members"
+text = "Members"
+href = "/members"
+class = "surface-inline-link"
+
+# ===== ACTIVITY widgets =====================================================
+[[heading]]
+id = "act_page_h"
+text = "Activity"
+level = 2
+
+[[button]]
+id = "act_refresh_btn"
+text = "Refresh"
+type = "button"
+action = "refreshNode"
+
+[[box]]
+id = "tn_activity"
+role = "activity-list"
+class = "surface-list"
+
+[[box]]
+id = "act_tpl"
+template = true
+children = ["act_text"]
+class = "surface-card"
+
+[[text]]
+id = "act_text"
+template = true
+text = "${item.when} · ${item.text}"
+class = "surface-status"
+
+# ===== SHARE OUT widgets ====================================================
+[[heading]]
+id = "share_page_h"
+text = "Share out"
+level = 2
 
 [[heading]]
 id = "sh_couldput_h"
@@ -49,6 +102,7 @@ id = "convo_title"
 template = true
 text = "${item.title}"
 level = 4
+class = "surface-card-title"
 
 [[details]]
 id = "convo_summary_d"
@@ -89,7 +143,7 @@ class = "surface-list"
 [[box]]
 id = "repo_tpl"
 template = true
-children = ["repo_name", "repo_meta", "repo_btn", "repo_live_btn"]
+children = ["repo_name", "repo_meta", "repo_live_btn"]
 class = "${item.live ? 'surface-card desire' : 'surface-card'}"
 
 [[heading]]
@@ -97,21 +151,13 @@ id = "repo_name"
 template = true
 text = "${item.repoName}"
 level = 4
+class = "surface-card-title"
 
 [[text]]
 id = "repo_meta"
 template = true
 text = "${item.fileCount} files${item.sessionsText ? ' · ' + item.sessionsText : ''}"
 class = "surface-status"
-
-[[button]]
-id = "repo_btn"
-template = true
-text = "Open sync"
-type = "button"
-action = "toggleSync"
-data-name = "${item.repoName}"
-data-target = "open"
 
 [[button]]
 id = "repo_live_btn"
@@ -135,7 +181,7 @@ class = "surface-list"
 [[box]]
 id = "putup_tpl"
 template = true
-children = ["putup_name", "putup_meta"]
+children = ["putup_name", "putup_meta", "putup_live_btn"]
 class = "surface-card desire"
 
 [[heading]]
@@ -143,31 +189,39 @@ id = "putup_name"
 template = true
 text = "${item.kind} · ${item.displayName}"
 level = 4
+class = "surface-card-title"
 
 [[text]]
 id = "putup_meta"
 template = true
-text = "in the commons · ${item.integrityText}"
+text = "in the commons · ${item.integrityText}${item.live ? ' · live → commons' : ''}"
 class = "surface-status"
 
-# ===== PULL IN (collapsible group, open by default) =========================
-[[details]]
-id = "g_pullin"
-children = ["g_pullin_sum", "tn_folder_current", "tn_folder_form", "pl_couldpull_h", "tn_couldpull", "pl_pulled_h", "tn_pulled"]
+[[button]]
+id = "putup_live_btn"
+template = true
+text = "${item.live ? 'Stop live' : 'Go live'}"
+type = "button"
+action = "toggleLive"
+data-name = "${item.name}"
+data-target = "${item.live ? 'unlive' : 'live'}"
 
-[[summary]]
-id = "g_pullin_sum"
+# ===== PULL IN widgets ======================================================
+[[heading]]
+id = "pull_page_h"
 text = "Pull in"
+level = 2
 
 [[text]]
 id = "tn_folder_current"
 text = "Pulls sync into: ~/tilth-pulled"
-class = "surface-status"
+class = "surface-status surface-mono"
 
 [[form]]
 id = "tn_folder_form"
 children = ["folder_input", "folder_btn"]
 role = "pull-folder-form"
+class = "surface-actions"
 
 [[input]]
 id = "folder_input"
@@ -200,6 +254,7 @@ id = "cp_name"
 template = true
 text = "${item.kind} · ${item.displayName}"
 level = 4
+class = "surface-card-title"
 
 [[text]]
 id = "cp_from"
@@ -243,35 +298,34 @@ id = "pl_name"
 template = true
 text = "${item.kind} · ${item.displayName}"
 level = 4
+class = "surface-card-title"
 
 [[text]]
 id = "pl_status"
 template = true
-text = "${item.statusText}${item.live ? ' · live ⇄' : ''}"
+text = "${item.statusText}${item.live ? ' · keeping updated' : ''}"
 class = "surface-status"
 
 [[button]]
 id = "pl_live_btn"
 template = true
-text = "${item.live ? 'Stop live' : 'Go live'}"
+text = "${item.live ? 'Stop updating' : 'Keep updated'}"
 type = "button"
 action = "toggleLive"
 data-name = "${item.name}"
 data-target = "${item.live ? 'unlive' : 'live'}"
 
-# ===== MEMBERS (collapsible group) ==========================================
-[[details]]
-id = "g_members"
-children = ["g_members_sum", "tn_addpeer", "tn_members"]
-
-[[summary]]
-id = "g_members_sum"
+# ===== MEMBERS widgets ======================================================
+[[heading]]
+id = "members_page_h"
 text = "Members"
+level = 2
 
 [[form]]
 id = "tn_addpeer"
 children = ["addpeer_input", "addpeer_btn"]
 role = "add-peer-form"
+class = "surface-actions"
 
 [[input]]
 id = "addpeer_input"
@@ -299,12 +353,13 @@ id = "m_label"
 template = true
 text = "${item.label} ${item.recognized ? '✓' : '· pending'}"
 level = 4
+class = "surface-card-title"
 
 [[text]]
 id = "m_meta"
 template = true
 text = "${item.scheme} · ${item.id} · ${item.recognized ? 'recognized by ' + item.recognizedBy : 'awaiting recognition'}"
-class = "surface-status"
+class = "surface-status surface-mono"
 
 [[button]]
 id = "m_btn"
@@ -315,12 +370,47 @@ action = "recognizeMember"
 data-id = "${item.id}"
 data-label = "${item.label}"
 
-[[frontendProgram]]
-id = "tilth_net_program"
-rootWidget = "tilth_net_page"
+# ===== PAGES (one rootWidget per route) =====================================
+[[page]]
+id = "tn_activity_page"
+title = "Tilth-Net — Activity"
+children = ["tn_title", "tn_nav", "act_page_h", "act_refresh_btn", "tn_activity"]
 
-# --- load -------------------------------------------------------------------
+[[page]]
+id = "tn_share_page"
+title = "Tilth-Net — Share out"
+children = ["tn_title", "tn_nav", "share_page_h", "sh_couldput_h", "tn_convos", "tn_repos", "sh_putup_h", "tn_putup"]
+
+[[page]]
+id = "tn_pull_page"
+title = "Tilth-Net — Pull in"
+children = ["tn_title", "tn_nav", "pull_page_h", "tn_folder_current", "tn_folder_form", "pl_couldpull_h", "tn_couldpull", "pl_pulled_h", "tn_pulled"]
+
+[[page]]
+id = "tn_members_page"
+title = "Tilth-Net — Members"
+children = ["tn_title", "tn_nav", "members_page_h", "tn_addpeer", "tn_members"]
+
+# ===== PROGRAMS + STEPS =====================================================
+[[frontendProgram]]
+id = "tn_activity_program"
+rootWidget = "tn_activity_page"
+
+[[frontendProgram]]
+id = "tn_share_program"
+rootWidget = "tn_share_page"
+
+[[frontendProgram]]
+id = "tn_pull_program"
+rootWidget = "tn_pull_page"
+
+[[frontendProgram]]
+id = "tn_members_program"
+rootWidget = "tn_members_page"
+
+# --- ACTIVITY: load + refresh ---
 [[step]]
+program = "tn_activity_program"
 order = 0
 op = "fetchJson"
 on = "load"
@@ -328,14 +418,33 @@ url = "/api/commons"
 into = "commonsResponse"
 
 [[step]]
+program = "tn_activity_program"
 order = 1
-op = "fetchJson"
+op = "renderCollection"
 on = "load"
-url = "/api/identities"
-into = "identitiesResponse"
+widget = "tn_activity"
+from = "commonsResponse.activity"
+template = "act_tpl"
 
 [[step]]
-order = 2
+program = "tn_activity_program"
+order = 0
+op = "run"
+on = "click:refreshNode"
+event = "load"
+
+# --- SHARE OUT: load + toggleLive + shareConversation ---
+[[step]]
+program = "tn_share_program"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/commons"
+into = "commonsResponse"
+
+[[step]]
+program = "tn_share_program"
+order = 1
 op = "renderCollection"
 on = "load"
 widget = "tn_convos"
@@ -343,7 +452,8 @@ from = "commonsResponse.couldShareConvos"
 template = "convo_tpl"
 
 [[step]]
-order = 3
+program = "tn_share_program"
+order = 2
 op = "renderCollection"
 on = "load"
 widget = "tn_repos"
@@ -351,7 +461,8 @@ from = "commonsResponse.couldOpenRepos"
 template = "repo_tpl"
 
 [[step]]
-order = 4
+program = "tn_share_program"
+order = 3
 op = "renderCollection"
 on = "load"
 widget = "tn_putup"
@@ -359,7 +470,51 @@ from = "commonsResponse.putUp"
 template = "putup_tpl"
 
 [[step]]
-order = 5
+program = "tn_share_program"
+order = 0
+op = "postJson"
+on = "click:toggleLive"
+url = "/api/repos/${event.name}/${event.target}"
+method = "POST"
+body = {}
+into = "liveToggled"
+
+[[step]]
+program = "tn_share_program"
+order = 1
+op = "run"
+on = "click:toggleLive"
+event = "load"
+
+[[step]]
+program = "tn_share_program"
+order = 0
+op = "postJson"
+on = "click:shareConversation"
+url = "/api/sessions/${event.id}/${event.target}"
+method = "POST"
+body = {}
+into = "shared"
+
+[[step]]
+program = "tn_share_program"
+order = 1
+op = "run"
+on = "click:shareConversation"
+event = "load"
+
+# --- PULL IN: load + folder + pull + toggleLive (Keep updated) ---
+[[step]]
+program = "tn_pull_program"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/commons"
+into = "commonsResponse"
+
+[[step]]
+program = "tn_pull_program"
+order = 1
 op = "renderCollection"
 on = "load"
 widget = "tn_couldpull"
@@ -367,7 +522,8 @@ from = "commonsResponse.couldPull"
 template = "couldpull_tpl"
 
 [[step]]
-order = 6
+program = "tn_pull_program"
+order = 2
 op = "renderCollection"
 on = "load"
 widget = "tn_pulled"
@@ -375,43 +531,15 @@ from = "commonsResponse.pulled"
 template = "pulled_tpl"
 
 [[step]]
-order = 7
-op = "renderCollection"
-on = "load"
-widget = "tn_members"
-from = "identitiesResponse.identities"
-template = "member_tpl"
-
-[[step]]
-order = 8
+program = "tn_pull_program"
+order = 3
 op = "setText"
 on = "load"
 widget = "tn_folder_current"
 text = "Pulls sync into: ${state.commonsResponse.pullFolder || '~/tilth-pulled'}"
 
 [[step]]
-order = 10
-op = "setText"
-on = "load"
-widget = "g_shareout_sum"
-text = "Share out — ${state.commonsResponse.couldShareConvos.length + state.commonsResponse.couldOpenRepos.length} to put up · ${state.commonsResponse.putUp.length} up"
-
-[[step]]
-order = 11
-op = "setText"
-on = "load"
-widget = "g_pullin_sum"
-text = "Pull in — ${state.commonsResponse.couldPull.length} to pull · ${state.commonsResponse.pulled.length} pulled"
-
-[[step]]
-order = 12
-op = "setText"
-on = "load"
-widget = "g_members_sum"
-text = "Members — ${state.identitiesResponse.identities.length}"
-
-# --- submit: set the local folder pulls sync into ---------------------------
-[[step]]
+program = "tn_pull_program"
 order = 0
 op = "readForm"
 on = "submit:tn_folder_form"
@@ -419,6 +547,7 @@ widget = "tn_folder_form"
 into = "folderDraft"
 
 [[step]]
+program = "tn_pull_program"
 order = 1
 op = "postJson"
 on = "submit:tn_folder_form"
@@ -429,13 +558,14 @@ pick = ["folder"]
 into = "folderSet"
 
 [[step]]
+program = "tn_pull_program"
 order = 2
 op = "run"
 on = "submit:tn_folder_form"
 event = "load"
 
-# --- click: pull a commons bundle into the sync folder ----------------------
 [[step]]
+program = "tn_pull_program"
 order = 0
 op = "postJson"
 on = "click:pullBundle"
@@ -445,45 +575,14 @@ body = { repoName = "${event.name}", signerId = "${event.signer}" }
 into = "pullQueued"
 
 [[step]]
+program = "tn_pull_program"
 order = 1
 op = "run"
 on = "click:pullBundle"
 event = "load"
 
-# --- click: share / unshare a conversation ----------------------------------
 [[step]]
-order = 0
-op = "postJson"
-on = "click:shareConversation"
-url = "/api/sessions/${event.id}/${event.target}"
-method = "POST"
-body = {}
-into = "shared"
-
-[[step]]
-order = 1
-op = "run"
-on = "click:shareConversation"
-event = "load"
-
-# --- click: open/close repo sharing -----------------------------------------
-[[step]]
-order = 0
-op = "postJson"
-on = "click:toggleSync"
-url = "/api/repos/${event.name}/${event.target}"
-method = "POST"
-body = {}
-into = "toggled"
-
-[[step]]
-order = 1
-op = "run"
-on = "click:toggleSync"
-event = "load"
-
-# --- click: go live / stop live on a repo -----------------------------------
-[[step]]
+program = "tn_pull_program"
 order = 0
 op = "postJson"
 on = "click:toggleLive"
@@ -493,13 +592,32 @@ body = {}
 into = "liveToggled"
 
 [[step]]
+program = "tn_pull_program"
 order = 1
 op = "run"
 on = "click:toggleLive"
 event = "load"
 
-# --- submit: add a peer by pasting their identity card ----------------------
+# --- MEMBERS: load + add peer + recognize ---
 [[step]]
+program = "tn_members_program"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/identities"
+into = "identitiesResponse"
+
+[[step]]
+program = "tn_members_program"
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "tn_members"
+from = "identitiesResponse.identities"
+template = "member_tpl"
+
+[[step]]
+program = "tn_members_program"
 order = 0
 op = "readForm"
 on = "submit:tn_addpeer"
@@ -507,6 +625,7 @@ widget = "tn_addpeer"
 into = "peerCard"
 
 [[step]]
+program = "tn_members_program"
 order = 1
 op = "postJson"
 on = "submit:tn_addpeer"
@@ -517,13 +636,14 @@ pick = ["card"]
 into = "addedPeer"
 
 [[step]]
+program = "tn_members_program"
 order = 2
 op = "run"
 on = "submit:tn_addpeer"
 event = "load"
 
-# --- click: recognize a pending peer (intent; the daemon signs it) ----------
 [[step]]
+program = "tn_members_program"
 order = 0
 op = "postJson"
 on = "click:recognizeMember"
@@ -533,6 +653,7 @@ body = { ofLabel = "${event.label}", ofId = "${event.id}" }
 into = "recognizeQueued"
 
 [[step]]
+program = "tn_members_program"
 order = 1
 op = "run"
 on = "click:recognizeMember"

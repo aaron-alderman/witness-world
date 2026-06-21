@@ -773,9 +773,7 @@ function kindLabel(kind) {
 }
 
 function jobSort(a, b) {
-  const statusDelta = jobStatusRank(a.status) - jobStatusRank(b.status);
-  if (statusDelta !== 0) return statusDelta;
-  return String(b.requestedAt || b.completedAt || "").localeCompare(String(a.requestedAt || a.completedAt || ""))
+  return String(b.completedAt || b.requestedAt || "").localeCompare(String(a.completedAt || a.requestedAt || ""))
     || String(a.requestId).localeCompare(String(b.requestId));
 }
 

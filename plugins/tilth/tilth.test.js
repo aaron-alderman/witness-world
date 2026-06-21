@@ -50,39 +50,88 @@ function importSession(world, id = "session-1", overrides = {}) {
   });
 }
 
-test("tilth session template stays flat to avoid duplicated controls", () => {
+test("tilth session list card stays scannable and leaves evidence to detail pages", () => {
   const source = readFileSync(new URL("../../examples/tilth/frontend.wtoml", import.meta.url), "utf8");
-  const templateMatch = source.match(/id = "session_card_v4_template"[\s\S]*?children = \[([^\]]+)\]/);
+  const templateMatch = source.match(/id = "session_scan_card_template_v1"[\s\S]*?children = \[([^\]]+)\]/);
   assert.ok(templateMatch);
   assert.doesNotMatch(templateMatch[1], /session_card_v2_actions/);
   assert.doesNotMatch(templateMatch[1], /session_item_actions_repo_clean/);
   assert.doesNotMatch(templateMatch[1], /session_item_statuses_repo_clean/);
+  assert.doesNotMatch(templateMatch[1], /session_card_v2_ai_summary_details/);
+  assert.doesNotMatch(templateMatch[1], /session_card_v2_repo_details/);
+  assert.doesNotMatch(templateMatch[1], /session_card_v2_transcript_details/);
   assert.doesNotMatch(source, /id = "session_card_v2_actions"/);
   assert.doesNotMatch(source, /id = "session_item_actions_repo_clean"/);
   assert.doesNotMatch(source, /id = "session_item_statuses_repo_clean"/);
   assert.doesNotMatch(source, /session_item_template_repo_clean/);
-  assert.match(source, /template = "session_card_v4_template"/);
-  assert.match(templateMatch[1], /session_card_v2_repo_chips/);
-  assert.match(templateMatch[1], /session_card_v4_latest/);
-  assert.match(source, /session_card_v2_ai_summary_version/);
-  assert.match(source, /session_card_v2_repo_version/);
-  assert.match(source, /session_card_v2_transcript_version/);
+  assert.doesNotMatch(source, /id = "session_card_v2_ai_summary_details"/);
+  assert.doesNotMatch(source, /id = "session_card_v2_repo_details"/);
+  assert.doesNotMatch(source, /id = "session_card_v2_transcript_details"/);
+  assert.doesNotMatch(source, /template = "session_card_v4_template"/);
+  assert.match(source, /template = "session_scan_card_template_v1"/);
+  assert.match(templateMatch[1], /session_scan_repo_chips_v1/);
+  assert.match(templateMatch[1], /session_scan_latest_v1/);
+  assert.match(templateMatch[1], /session_scan_transcript_button_v1/);
+  assert.match(templateMatch[1], /session_scan_ai_summary_button_v1/);
+  assert.match(templateMatch[1], /session_scan_repo_button_v1/);
+  assert.match(source, /id = "session_detail_summary_details"/);
+  assert.match(source, /id = "session_detail_repo_details"/);
+  assert.match(source, /id = "session_detail_transcript_details"/);
   assert.doesNotMatch(source, /'Repos: ' \+ item\.repoIndex\.summary/);
+});
+
+test("tilth repo list card stays compact and leaves full paths to detail pages", () => {
+  const source = readFileSync(new URL("../../examples/tilth/frontend.wtoml", import.meta.url), "utf8");
+  const templateMatch = source.match(/id = "repo_scan_card_template_v1"[\s\S]*?children = \[([^\]]+)\]/);
+  assert.ok(templateMatch);
+  assert.match(templateMatch[1], /repo_scan_open_link_v1/);
+  assert.match(templateMatch[1], /repo_scan_paths_preview_v1/);
+  assert.doesNotMatch(templateMatch[1], /repo_item_sessions_clean/);
+  assert.doesNotMatch(templateMatch[1], /repo_item_paths_details_clean/);
+  assert.doesNotMatch(source, /template = "repo_item_template_clean"/);
+  assert.match(source, /template = "repo_scan_card_template_v1"/);
+  assert.doesNotMatch(source, /id = "repo_item_sessions_clean"/);
+  assert.doesNotMatch(source, /id = "repo_item_paths_details_clean"/);
+  assert.match(source, /id = "repo_detail_paths_details"/);
 });
 
 test("tilth jobs view keeps ops controls flat and raw detail collapsed", () => {
   const source = readFileSync(new URL("../../examples/tilth/frontend.wtoml", import.meta.url), "utf8");
-  const sectionMatch = source.match(/id = "jobs_section_ops_v1"[\s\S]*?children = \[([^\]]+)\]/);
+  const sectionMatch = source.match(/id = "tilth_jobs_page_v1"[\s\S]*?children = \[([^\]]+)\]/);
   assert.ok(sectionMatch);
-  assert.match(sectionMatch[1], /ops_summary_bar_workbench/);
-  assert.match(sectionMatch[1], /jobs_filter_bar_workbench/);
-  assert.equal((sectionMatch[1].match(/daemon_status_list_ops_v1/g) || []).length, 1);
-  assert.equal((sectionMatch[1].match(/jobs_list_ops_v1/g) || []).length, 1);
+  assert.match(sectionMatch[1], /tilth_jobs_summary_bar_v1/);
+  assert.match(sectionMatch[1], /tilth_jobs_filter_bar_v1/);
+  assert.equal((sectionMatch[1].match(/tilth_jobs_daemons_list_v1/g) || []).length, 1);
+  assert.equal((sectionMatch[1].match(/tilth_jobs_list_v1/g) || []).length, 1);
   assert.match(source, /\[\[details\]\]\nid = "job_item_raw_details_workbench"/);
   assert.doesNotMatch(source, /id = "job_item_error_workbench"/);
   assert.match(source, /url = "\/api\/jobs\?status=failed"/);
   assert.match(source, /url = "\/api\/jobs\?status=pending"/);
   assert.match(source, /url = "\/api\/jobs\?status=completed"/);
+});
+
+test("tilth top-level views are routed as pages with page-specific controls", () => {
+  const frontend = readFileSync(new URL("../../examples/tilth/frontend.wtoml", import.meta.url), "utf8");
+  const backend = readFileSync(new URL("../../examples/tilth/backend.wtoml", import.meta.url), "utf8");
+  for (const path of ["/", "/repos", "/sessions", "/jobs"]) {
+    assert.match(backend, new RegExp(`path = "${path.replace("/", "\\/")}"`));
+  }
+  assert.match(backend, /rootWidget = "tilth_home_page_v1"/);
+  assert.match(backend, /rootWidget = "tilth_repos_page_v1"/);
+  assert.match(backend, /rootWidget = "tilth_sessions_page_v1"/);
+  assert.match(backend, /rootWidget = "tilth_jobs_page_v1"/);
+  assert.match(frontend, /id = "tilth_home_page_v1"/);
+  assert.match(frontend, /id = "tilth_repos_page_v1"/);
+  assert.match(frontend, /id = "tilth_sessions_page_v1"/);
+  assert.match(frontend, /id = "tilth_jobs_page_v1"/);
+  assert.match(frontend, /href = "\/repos"/);
+  assert.match(frontend, /href = "\/sessions"/);
+  assert.match(frontend, /href = "\/jobs"/);
+  const jobsPage = frontend.match(/id = "tilth_jobs_page_v1"[\s\S]*?children = \[([^\]]+)\]/);
+  assert.ok(jobsPage);
+  assert.doesNotMatch(jobsPage[1], /tilth_repos_filter_bar_v1/);
+  assert.doesNotMatch(jobsPage[1], /tilth_sessions_filter_bar_v1/);
+  assert.match(jobsPage[1], /tilth_jobs_filter_bar_v1/);
 });
 
 test("tilth frontend exposes session and repo detail pages", () => {
@@ -733,10 +782,10 @@ test("tilth jobs projection aggregates visible local work", () => {
   });
 
   const jobs = projectJobs(world.allWitnesses());
-  assert.equal(jobs[0].kind, "repo-snapshot");
-  assert.equal(jobs[0].status, "pending");
-  assert.equal(jobs[0].worker, "tilth-daemon");
-  assert.equal(jobs[0].label, "meta/tilth-net");
+  const snapshotJob = jobs.find(job => job.kind === "repo-snapshot");
+  assert.equal(snapshotJob.status, "pending");
+  assert.equal(snapshotJob.worker, "tilth-daemon");
+  assert.equal(snapshotJob.label, "meta/tilth-net");
   assert.equal(jobs.some(job => job.kind === "repo-recognition" && job.status === "completed"), true);
 });
 
@@ -865,7 +914,42 @@ test("tilth jobs projection keeps raw error detail out of collapsed text", () =>
   assert.equal(job.rawDetailText, job.error);
 });
 
-test("tilth jobs projection sorts failed work before pending and completed work", () => {
+test("tilth jobs projection sorts by recent activity by default", () => {
+  const world = createWorld();
+  importSession(world, "old", { title: "Old failed chat" });
+  importSession(world, "new", { title: "New completed chat" });
+  requestSessionMarkDesire(world, { actor: "callan", backendHost: "backendHost", id: "old" });
+  requestSessionMarkDesire(world, { actor: "callan", backendHost: "backendHost", id: "new" });
+  const failed = requestSessionAiSummary(world, { actor: "callan", backendHost: "backendHost", id: "old" });
+  completeSessionAiSummary(world, {
+    actor: "tilth-daemon",
+    backendHost: "backendHost",
+    body: {
+      requestId: failed.requestId,
+      status: "failed",
+      error: "model unavailable",
+      completedAt: "2026-06-20T00:00:00.000Z"
+    }
+  });
+  const completed = requestSessionTranscriptPreview(world, { actor: "callan", backendHost: "backendHost", id: "new" });
+  completeSessionTranscriptPreview(world, {
+    actor: "tilth-claude-code-daemon",
+    backendHost: "backendHost",
+    body: {
+      requestId: completed.requestId,
+      status: "completed",
+      text: "You:\nNew work.",
+      completedAt: "2026-06-20T00:10:00.000Z"
+    }
+  });
+
+  const jobs = projectJobs(world.allWitnesses());
+  assert.equal(jobs[0].status, "completed");
+  assert.equal(jobs[0].targetId, "new");
+  assert.equal(projectJobs(world.allWitnesses(), { status: "failed" })[0].targetId, "old");
+});
+
+test("tilth jobs failed filter still isolates failed work", () => {
   const world = createWorld();
   importSession(world);
   requestSessionMarkDesire(world, { actor: "callan", backendHost: "backendHost", id: "session-1" });
@@ -883,8 +967,8 @@ test("tilth jobs projection sorts failed work before pending and completed work"
     body: { requestId: summary.requestId, status: "failed", error: "model unavailable" }
   });
 
-  const jobs = projectJobs(world.allWitnesses());
-  assert.deepEqual(jobs.slice(0, 3).map(job => job.status), ["failed", "pending", "completed"]);
+  const failedJobs = projectJobs(world.allWitnesses(), { status: "failed" });
+  assert.deepEqual(failedJobs.map(job => job.status), ["failed"]);
 });
 
 test("tilth ops summary counts jobs daemons and artifact freshness", () => {

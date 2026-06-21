@@ -438,21 +438,9 @@ export function requestRepoAnnounce(world, { body }) {
   return { ok: true, status: 201, repoName, witness };
 }
 
-export function requestRepoSetSync(world, { repoName, open }) {
-  const name = stringOrNull(repoName);
-  if (!name) return { ok: false, status: 400, error: "repoName required" };
-  const witness = world.emit({
-    process: open ? "repo.sync.open" : "repo.sync.close",
-    actor: "local",                              // your node's policy, not signed
-    claims: [relation(`repo:${name}`, "syncState", open ? "open" : "closed")],
-    body: { repoName: name, open: !!open, at: new Date().toISOString() }
-  });
-  return { ok: true, status: 200, repoName: name, open: !!open, witness };
-}
-
-// "Go live" — mark a repo for continuous two-way sync (browser policy, unsigned).
-// The daemon picks it up and watches/publishes/applies its local copy. Works for
-// your own repos (Share out) and repos you've pulled (Pull in) alike.
+// Live toggle (browser policy, unsigned). The daemon picks it up by role: a repo you
+// OWN broadcasts ("Go live"); a repo you PULLED keeps its local copy updated from the
+// source ("Keep updated"). Same witness; the daemon decides direction.
 export function requestRepoSetLive(world, { repoName, live }) {
   const name = stringOrNull(repoName);
   if (!name) return { ok: false, status: 400, error: "repoName required" };
@@ -485,12 +473,8 @@ export function projectRepos(witnesses) {
         repoName: b.repoName,
         remote: String(b.remote || ""),
         fileCount: Number(b.fileCount || 0),
-        sessions: Array.isArray(b.sessions) ? b.sessions : (ex ? ex.sessions : []),
-        open: ex ? ex.open : false
+        sessions: Array.isArray(b.sessions) ? b.sessions : (ex ? ex.sessions : [])
       });
-    } else if ((w.process === "repo.sync.open" || w.process === "repo.sync.close") && b.repoName) {
-      const ex = repos.get(b.repoName) || { repoName: b.repoName, remote: "", fileCount: 0, sessions: [], open: false };
-      repos.set(b.repoName, { ...ex, open: w.process === "repo.sync.open" });
     }
   }
   return [...repos.values()].map(r => ({
@@ -631,6 +615,50 @@ export function projectCommons(witnesses, items) {
   }).sort((a, b) => b.lastSeq - a.lastSeq);
 }
 
+// --- activity: a reverse-chron view of what's flowing through your node --------
+// Peers' broadcasts (from the couriered commons feed) + your own gestures (from the
+// witness log). Read-only, computed per request — updates on load / Refresh.
+function relTime(iso) {
+  const t = Date.parse(String(iso || ""));
+  if (Number.isNaN(t)) return "";
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+export function projectActivity(witnesses, items) {
+  const recognized = projectRecognized(witnesses);
+  const pulledNames = new Set([...projectPulls(witnesses).values()].filter(p => p.status === "completed").map(p => p.repoName));
+  const events = [];
+  // peers' broadcasts (signed by a recognized peer, not you)
+  for (const it of (items || [])) {
+    if (it.kind !== "doc.put" || !it.docId || !it.id || it.id === FOUNDER.id) continue;
+    const member = recognized.get(it.id);
+    if (!member) continue;
+    const what = String(it.docId).startsWith("conversation/") ? "a conversation" : it.docId;
+    events.push({ at: String(it.at || ""), seq: Number(it.seq || 0), text: `${member.label} broadcast ${what}` });
+  }
+  // your own gestures (from the witness log)
+  for (const w of witnesses) {
+    const b = w.body ?? {};
+    const at = String(b.at || "");
+    if (w.process === "repo.live.on" && b.repoName)
+      events.push({ at, text: pulledNames.has(b.repoName) ? `you started keeping ${b.repoName} updated` : `you went live on ${b.repoName}` });
+    else if (w.process === "repo.live.off" && b.repoName)
+      events.push({ at, text: pulledNames.has(b.repoName) ? `you stopped updating ${b.repoName}` : `you stopped broadcasting ${b.repoName}` });
+    else if (w.process === "commons.pull.completed" && b.repoName)
+      events.push({ at, text: `you pulled ${b.repoName}` });
+    else if (w.process === "identity.recognize" && b.ofLabel)
+      events.push({ at, text: `you recognized ${b.ofLabel}` });
+    else if (w.process === "session.share" && b.sessionId)
+      events.push({ at, text: `you shared a conversation` });
+  }
+  events.sort((a, b) => (b.at || "").localeCompare(a.at || "") || (b.seq || 0) - (a.seq || 0));
+  return events.slice(0, 30).map((e, i) => ({ id: `act_${i}`, text: e.text, when: relTime(e.at) }));
+}
+
 export function createTilthNetHandlers({ world, sendJson, readJson }) {
   const dispatch = (fn) => async ({ req, res }) => {
     await ensureModel();
@@ -663,14 +691,6 @@ export function createTilthNetHandlers({ world, sendJson, readJson }) {
       sendJson(res, 200, { repos: projectRepos(world.allWitnesses()) });
     },
     "repo.announce": dispatch(requestRepoAnnounce),
-    "repo.open": async ({ res, params }) => {
-      const r = requestRepoSetSync(world, { repoName: params?.name, open: true });
-      sendJson(res, r.status, r.ok ? r : { error: r.error });
-    },
-    "repo.close": async ({ res, params }) => {
-      const r = requestRepoSetSync(world, { repoName: params?.name, open: false });
-      sendJson(res, r.status, r.ok ? r : { error: r.error });
-    },
     "repo.live": async ({ res, params }) => {
       const r = requestRepoSetLive(world, { repoName: params?.name, live: true });
       sendJson(res, r.status, r.ok ? r : { error: r.error });
@@ -705,15 +725,20 @@ export function createTilthNetHandlers({ world, sendJson, readJson }) {
       const repos = projectRepos(w);
       const title = new Map(sessions.map(s => [s.sessionId, s.title]));
       const named = (b) => ({ ...b, displayName: b.kind === "conversation" ? (title.get(b.name) || b.name) : b.name });
+      const putUp = commons.filter(b => b.mine).map(named);    // my stuff already in the commons
+      const inCommons = new Set(putUp.filter(b => b.kind === "repo").map(b => b.name));
       sendJson(res, 200, {
         pullFolder: projectPullFolder(w),
-        // SHARE OUT — mine
+        // SHARE OUT — mine. Sharing IS "go live": a repo is either not-yet-shared
+        // ("could put up") or already in the commons ("put up", with a live toggle).
         couldShareConvos: sessions.filter(s => !s.shared),     // could put up
-        couldOpenRepos: repos.filter(r => !r.open),            // could put up
-        putUp: commons.filter(b => b.mine).map(named),         // put up ✓ (confirmed in commons)
+        couldOpenRepos: repos.filter(r => !inCommons.has(r.repoName)),  // not yet shared
+        putUp,                                                 // put up ✓ (in commons; live on/off)
         // PULL IN — peers'
         couldPull: commons.filter(b => !b.mine && b.pullable).map(named),  // could pull
         pulled: commons.filter(b => b.pulled).map(named),                  // pulled ✓
+        // ACTIVITY — what's flowing through the node (peers' broadcasts + your gestures)
+        activity: projectActivity(w, observedCommons),
         commons   // full list (back-compat)
       });
     },
