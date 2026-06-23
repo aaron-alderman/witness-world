@@ -17,6 +17,7 @@ import {
   applyWitnessDocsWithRuntimePlugins,
   parseWitnessToml
 } from "./dsl.js";
+import { declareBackendHost, declareFrontendHost } from "./host.js";
 import { loadAppProject } from "./app-project.js";
 import {
   applyDesire,
@@ -377,6 +378,17 @@ async function buildSnapshotWorld({
       mode: "app-snapshot"
     }
   });
+  const serverTargets = Array.isArray(appProject?.targets?.server) ? appProject.targets.server : [];
+  const backendHosts = new Set();
+  const frontendHosts = new Set();
+  for (const row of serverTargets) {
+    const backendHost = typeof row?.values?.backendHost === "string" ? row.values.backendHost.trim() : "";
+    const frontendHost = typeof row?.values?.frontendHost === "string" ? row.values.frontendHost.trim() : "";
+    if (backendHost) backendHosts.add(backendHost);
+    if (frontendHost) frontendHosts.add(frontendHost);
+  }
+  for (const id of backendHosts) declareBackendHost(world, { actor: "system", id, runtimeProfile });
+  for (const id of frontendHosts) declareFrontendHost(world, { actor: "system", id, runtimeProfile });
   await applyWitnessDocsWithRuntimePlugins(world, witnessDocs, {
     runtimeProfile,
     runtimePluginIds,

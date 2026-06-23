@@ -16,6 +16,30 @@ export function resolveStartupPersistenceCommitMode(appProject, serverRunnerId =
   return configured === "pre-ready" ? "pre-ready" : "post-ready";
 }
 
+export function declareAppProjectHosts(world, {
+  appProject,
+  actor = "system",
+  runtimeProfile
+} = {}) {
+  const serverTargets = Array.isArray(appProject?.targets?.server) ? appProject.targets.server : [];
+  const backendHosts = new Set();
+  const frontendHosts = new Set();
+
+  for (const row of serverTargets) {
+    const backendHost = typeof row?.values?.backendHost === "string" ? row.values.backendHost.trim() : "";
+    const frontendHost = typeof row?.values?.frontendHost === "string" ? row.values.frontendHost.trim() : "";
+    if (backendHost) backendHosts.add(backendHost);
+    if (frontendHost) frontendHosts.add(frontendHost);
+  }
+
+  for (const id of backendHosts) {
+    declareBackendHost(world, { actor, id, runtimeProfile });
+  }
+  for (const id of frontendHosts) {
+    declareFrontendHost(world, { actor, id, runtimeProfile });
+  }
+}
+
 export async function startAppRuntime({
   appProject,
   startupMode = "serve",
@@ -62,6 +86,11 @@ export async function startAppRuntime({
   });
 
   try {
+    declareAppProjectHosts(world, {
+      appProject,
+      actor: "system",
+      runtimeProfile: runtimeProfileInfo.id
+    });
     await startupTelemetry.runPhase("world.applyWitnessDocs", () => applyWitnessDocsWithRuntimePlugins(world, appProject.witnessDocs, {
       runtimeProfile: runtimeProfileInfo.id,
       runtimePluginIds: runtimePluginIds.length ? runtimePluginIds : null,
@@ -111,17 +140,6 @@ export async function startAppRuntime({
     error.runner = runner;
     throw error;
   }
-
-  declareBackendHost(world, {
-    actor: "system",
-    id: runner.backendHost,
-    runtimeProfile: runtimeProfileInfo.id
-  });
-  declareFrontendHost(world, {
-    actor: "system",
-    id: runner.frontendHost,
-    runtimeProfile: runtimeProfileInfo.id
-  });
 
   const server = await startupTelemetry.runPhase("server.start", () => startServer(world, {
     actor: "system",

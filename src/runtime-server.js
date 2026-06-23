@@ -97,6 +97,16 @@ function uniqueStrings(values = []) {
   return [...new Set((values ?? []).map(String).filter(Boolean))];
 }
 
+function verificationPersistenceUnavailable(persistence = null) {
+  const inspected = persistence?.inspect?.();
+  if (!inspected || typeof inspected !== "object") return false;
+  if (String(inspected?.ledgerBackend?.boundaryAvailability || "") === "unavailable") return true;
+  if (String(inspected?.artifactBackend?.boundaryAvailability || "") === "unavailable") return true;
+  if (String(inspected?.cacheBackend?.boundaryAvailability || "") === "unavailable") return true;
+  return Array.isArray(inspected.diagnostics)
+    && inspected.diagnostics.some(row => String(row?.code || "") === "verification_persistence_witness_core_required");
+}
+
 function resolveWitnessCoreWorkspaceRoot(env = process.env, fallbackCwd = process.cwd()) {
   const configured = typeof env?.[WITNESS_CORE_WORKSPACE_ROOT_ENV] === "string"
     ? env[WITNESS_CORE_WORKSPACE_ROOT_ENV].trim()
@@ -2030,6 +2040,12 @@ export async function startRuntimeServer(world, {
     effectiveBackgroundStartupPolicy.testMonitor,
     async () => {
       await verificationPersistenceReady;
+      if (verificationPersistenceUnavailable(appContext.verificationPersistence)) {
+        return {
+          initialized: false,
+          skipped: "verification persistence unavailable"
+        };
+      }
       await appContext.providerRuntimes?.["platform.testMonitor"]?.initialize?.();
       return { initialized: true };
     }

@@ -273,6 +273,73 @@ test("AppSnapshotManager rebuilds canonical app sources through witness-core sou
   }
 });
 
+test("AppSnapshotManager.create declares authored server target hosts before snapshot witness docs apply", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-app-snapshot-hosts-"));
+  const appRoot = path.join(tempRoot, "examples", "engentus");
+  try {
+    await writeFile(path.join(appRoot, "app.wtoml"), `
+[app]
+id = "snapshot_host_app"
+imports = ["../_lib/common.wtoml"]
+
+[[serverRunner]]
+actor = "aaron"
+id = "engentus_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+default = true
+`);
+    await writeFile(path.join(tempRoot, "examples", "_lib", "common.wtoml"), `
+[context.backend]
+actor = "backendHost"
+capabilities = ["http.serve", "fs.json.read", "fs.json.write"]
+
+[context.frontend]
+actor = "frontendHost"
+capabilities = ["dom.render", "http.fetch"]
+
+[[contextBinding]]
+actor = "system"
+context = "backend"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "backend"
+name = "frontendHost"
+target = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "frontend"
+name = "backendHost"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "frontend"
+name = "frontendHost"
+target = "frontendHost"
+`);
+
+    const appProject = await loadAppProject(appRoot);
+    const manager = await AppSnapshotManager.create({
+      appProject,
+      runtimeProfile: "full",
+      cacheCwd: tempRoot,
+      devMode: false
+    });
+
+    const witnesses = manager.getActiveSnapshot()?.world?.allWitnesses?.() ?? [];
+    assert.equal(witnesses.some(witness => witness.process === "declareBackendHost" && witness.body?.id === "backendHost"), true);
+    assert.equal(witnesses.some(witness => witness.process === "declareFrontendHost" && witness.body?.id === "frontendHost"), true);
+    manager.close();
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("AppSnapshotManager fails closed when a core-connected canonical read targets a path outside app/shared-lib scope", async () => {
   const manager = new AppSnapshotManager({
     manifestPath: "C:/tmp/app.wtoml",

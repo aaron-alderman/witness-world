@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
@@ -1982,7 +1983,14 @@ fn run_proof(cwd: &Path, name: &str, command: &str, slow_ms: u64, generation_id:
         duration_ms: None,
         exit_code: None,
     };
-    let spawn_result = shell_command(command).current_dir(cwd).spawn();
+    let spawn_result = if let Some(mut direct) = supervised_command(command) {
+        normalize_windows_path_env(&mut direct);
+        direct.current_dir(cwd).spawn()
+    } else {
+        let mut shell = shell_command(command);
+        normalize_windows_path_env(&mut shell);
+        shell.current_dir(cwd).spawn()
+    };
     let Ok(mut child) = spawn_result else {
         record.status = ProofStatus::Failed;
         record.finished_at = Some(now_iso());
@@ -3041,6 +3049,7 @@ fn start_supervised_process(
 
             let instance_id = next_instance_id();
             let spawn_result = if let Some(mut direct) = supervised_command(&command) {
+                normalize_windows_path_env(&mut direct);
                 let builder = direct
                     .current_dir(&working_dir)
                     .env("WITNESS_CORE_URL", format!("http://{}", addr))
@@ -3064,6 +3073,7 @@ fn start_supervised_process(
             };
             let mut child = match spawn_result.or_else(|_| {
                 let mut builder = shell_command(&command);
+                normalize_windows_path_env(&mut builder);
                 builder
                     .current_dir(&working_dir)
                     .env("WITNESS_CORE_URL", format!("http://{}", addr))
@@ -3562,6 +3572,7 @@ fn spawn_frontdoor_instance(
     let spawn_direct = || {
         if let Some(direct) = supervised_command(&command) {
             let mut builder = direct;
+            normalize_windows_path_env(&mut builder);
             builder
                 .current_dir(&working_dir)
                 .env("WITNESS_CORE_URL", &core_url)
@@ -3586,6 +3597,7 @@ fn spawn_frontdoor_instance(
     };
     let child = spawn_direct().or_else(|_| {
         let mut builder = shell_command(&command);
+        normalize_windows_path_env(&mut builder);
         builder
             .current_dir(&working_dir)
             .env("WITNESS_CORE_URL", &core_url)
@@ -6403,6 +6415,7 @@ fn run_build_worker(
         .map(|value| cwd.join(value))
         .unwrap_or_else(|| cwd.to_path_buf());
     let spawn = |mut cmd: Command| {
+        normalize_windows_path_env(&mut cmd);
         cmd.current_dir(&working_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -8857,13 +8870,85 @@ fn shell_command(command: &str) -> Command {
     }
 }
 
+#[cfg(windows)]
+fn normalize_windows_path_env(command: &mut Command) {
+    let path_value = std::env::var_os("Path").or_else(|| std::env::var_os("PATH"));
+    command.env_remove("Path");
+    command.env_remove("PATH");
+    if let Some(value) = path_value {
+        command.env("Path", value);
+    }
+}
+
+#[cfg(not(windows))]
+fn normalize_windows_path_env(_command: &mut Command) {}
+
+#[cfg(windows)]
+fn resolve_windows_program_path_from_path_var(
+    program: &str,
+    path_value: Option<&OsStr>,
+    path_ext_value: Option<&OsStr>,
+) -> Option<PathBuf> {
+    let trimmed = program.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let as_path = Path::new(trimmed);
+    if as_path.components().count() > 1 {
+        return None;
+    }
+    let extensions: Vec<String> = if as_path.extension().is_some() {
+        vec![String::new()]
+    } else {
+        path_ext_value
+            .unwrap_or_else(|| OsStr::new(".COM;.EXE;.BAT;.CMD"))
+            .to_string_lossy()
+            .split(';')
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string())
+            .collect()
+    };
+    let path_value = path_value?;
+    for root in std::env::split_paths(path_value) {
+        for extension in &extensions {
+            let candidate = if extension.is_empty() {
+                root.join(trimmed)
+            } else {
+                root.join(format!("{}{}", trimmed, extension))
+            };
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+fn resolve_windows_program_path(program: &str) -> Option<PathBuf> {
+    let path_value = std::env::var_os("Path").or_else(|| std::env::var_os("PATH"));
+    let path_ext_value = std::env::var_os("PATHEXT");
+    resolve_windows_program_path_from_path_var(
+        program,
+        path_value.as_deref(),
+        path_ext_value.as_deref(),
+    )
+}
+
+#[cfg(not(windows))]
+fn resolve_windows_program_path(_program: &str) -> Option<PathBuf> {
+    None
+}
+
 fn supervised_command(command: &str) -> Option<Command> {
     if command.contains('>') || command.contains('<') || command.contains('|') || command.contains('&') || command.contains(';') {
         return None;
     }
     let mut parts = command.split_whitespace();
     let program = parts.next()?;
-    let mut cmd = Command::new(program);
+    let resolved = resolve_windows_program_path(program).unwrap_or_else(|| PathBuf::from(program));
+    let mut cmd = Command::new(resolved);
     cmd.args(parts);
     Some(cmd)
 }
@@ -9706,6 +9791,27 @@ printf '207'
             thread::sleep(Duration::from_millis(50));
         }
         assert!(!worker_path.exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_windows_program_path_from_path_var_finds_node_like_executable() {
+        let root = test_root();
+        let bin = root.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let node = bin.join("node.exe");
+        fs::write(&node, "stub").unwrap();
+
+        let path_value = std::env::join_paths([bin.clone()]).unwrap();
+        let resolved = resolve_windows_program_path_from_path_var(
+            "node",
+            Some(path_value.as_os_str()),
+            Some(OsStr::new(".EXE;.CMD")),
+        );
+        assert_eq!(
+            resolved.map(|path| normalize_path(&path).to_ascii_lowercase()),
+            Some(normalize_path(&node).to_ascii_lowercase())
+        );
     }
 
     #[test]

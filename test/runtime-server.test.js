@@ -185,6 +185,111 @@ test("runtime server emits a startup failure when runner resolution fails", asyn
   assert.equal(world.allWitnesses().at(-1)?.body?.serverRunner, "missing");
 });
 
+test("runtime server skips platform test monitor initialization when verification persistence is unavailable", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost"
+  };
+  let testMonitorInitialized = false;
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} }
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: (_world, hostId) => hostId === "backendHost"
+      ? new Set(["http.serve", "runtime.config"])
+      : new Set(["dom.render", "http.fetch"]),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    readRuntimePluginCatalog: async input => ({
+      pluginRoot: input.pluginRoot,
+      activeProfile: input.runtimeProfile,
+      packages: [],
+      summary: {},
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: [],
+      configuredPluginIds: [],
+      activePluginIds: [],
+      rejectedPlugins: [],
+      addedBundleIds: [],
+      selection: { hasBlockingErrors: false }
+    }),
+    loadRuntimePluginModules: async () => ({
+      bundleOverrides: {},
+      failures: [],
+      hasBlockingErrors: false
+    }),
+    applyRuntimePluginLoadState: catalog => catalog,
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: [] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render", "http.fetch"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      runtimeConfig: {},
+      providerRuntimes: {
+        "platform.testMonitor": {
+          async initialize() {
+            testMonitorInitialized = true;
+          },
+          close() {}
+        }
+      },
+      close() {},
+      visibleWitnesses: () => []
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map(),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    createRuntimeVerificationPersistence: async () => ({
+      inspect: () => ({
+        ledgerBackend: { boundaryAvailability: "unavailable" },
+        artifactBackend: { boundaryAvailability: "unavailable" },
+        cacheBackend: { boundaryAvailability: "unavailable" },
+        diagnostics: [{ code: "verification_persistence_witness_core_required" }]
+      }),
+      close() {}
+    }),
+    httpModule: {
+      createServer() {
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  assert.equal(server.ok, true);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(testMonitorInitialized, false);
+  await server.close();
+});
+
 test("runtime server fails startup when witness-core authority is declared without the bounded transport pipe", async () => {
   const world = createWitnessWorld();
   const runner = {
