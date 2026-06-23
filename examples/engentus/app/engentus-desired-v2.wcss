@@ -2961,11 +2961,11 @@ lowering
           background = #fde68a
           border = 1px solid #fbbf24
         rule trait bs-item
+          position = relative
           border = 1px solid var(--brd)
           border-radius = 6px
-          margin-bottom = 6px
+          margin = 26px 0 6px
           background = rgba(0,0,0,.12)
-          overflow = hidden
         rule trait bs-head
           display = flex
           align-items = center
@@ -2986,8 +2986,16 @@ lowering
           font-size = 12px
           font-weight = 500
         rule trait bs-actions
+          position = absolute
+          top = -24px
+          right = 8px
           display = flex
           gap = 2px
+          padding = 1px 3px
+          background = var(--mid)
+          border = 1px solid var(--brd)
+          border-bottom = none
+          border-radius = 6px 6px 0 0
         rule trait bs-act
           background = none
           border = none
@@ -3018,15 +3026,15 @@ lowering
         rule trait bs-params variant open
           display = block
         rule trait bs-chev
-          appearance = none
-          border = 0
-          background = transparent
           color = var(--t2)
-          cursor = pointer
           font = inherit
           padding = 0 2px
           line-height = 1
-        rule trait bs-chev pseudo hover
+          display = inline-block
+          transition = transform .15s, color .1s
+        rule trait bs-chev variant open
+          transform = rotate(90deg)
+        rule selector ".bs-head:hover .bs-chev"
           color = var(--t1)
         rule trait bs-ef-row
           display = flex
