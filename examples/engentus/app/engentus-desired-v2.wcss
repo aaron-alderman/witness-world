@@ -2834,8 +2834,6 @@ lowering
           cursor = pointer
         rule trait goodman-speed-slider
           width = 72px
-          accent-color = var(--blue)
-          cursor = pointer
         rule trait goodman-speed-label
           min-width = 34px
           text-align = right
@@ -3010,10 +3008,48 @@ lowering
           font-size = 11px
           color = var(--blue)
           font-weight = 600
-        rule trait mill-slider
+        rule traits mill-slider mill-force-slider goodman-static-control-input goodman-time-slider goodman-speed-slider
+          height = 16px
+          appearance = none
+          -webkit-appearance = none
+          background = transparent
+          cursor = pointer
+          margin = 0
+        rule traits mill-slider mill-force-slider goodman-static-control-input
           width = 100%
-          accent-color = var(--blue)
-          height = 3px
+        rule selector ".mill-slider::-webkit-slider-runnable-track, .mill-force-slider::-webkit-slider-runnable-track, .goodman-static-control-input::-webkit-slider-runnable-track, .goodman-time-slider::-webkit-slider-runnable-track, .goodman-speed-slider::-webkit-slider-runnable-track"
+          height = 4px
+          border-radius = 999px
+          background = rgba(140,196,212,.25)
+          border = none
+          overflow = hidden
+        rule selector ".mill-slider::-webkit-slider-thumb, .mill-force-slider::-webkit-slider-thumb, .goodman-static-control-input::-webkit-slider-thumb, .goodman-time-slider::-webkit-slider-thumb, .goodman-speed-slider::-webkit-slider-thumb"
+          -webkit-appearance = none
+          appearance = none
+          width = 10px
+          height = 4px
+          margin-top = 0
+          border-radius = 999px
+          background = #ffffff
+          border = none
+          box-shadow = -1000px 0 0 1000px var(--blue)
+          cursor = pointer
+        rule selector ".mill-slider::-moz-range-track, .mill-force-slider::-moz-range-track, .goodman-static-control-input::-moz-range-track, .goodman-time-slider::-moz-range-track, .goodman-speed-slider::-moz-range-track"
+          height = 4px
+          border-radius = 999px
+          background = rgba(140,196,212,.25)
+          border = none
+        rule selector ".mill-slider::-moz-range-progress, .mill-force-slider::-moz-range-progress, .goodman-static-control-input::-moz-range-progress, .goodman-time-slider::-moz-range-progress, .goodman-speed-slider::-moz-range-progress"
+          height = 4px
+          border-radius = 999px
+          background = var(--blue)
+        rule selector ".mill-slider::-moz-range-thumb, .mill-force-slider::-moz-range-thumb, .goodman-static-control-input::-moz-range-thumb, .goodman-time-slider::-moz-range-thumb, .goodman-speed-slider::-moz-range-thumb"
+          width = 12px
+          height = 12px
+          border-radius = 999px
+          background = #ffffff
+          border = none
+          box-shadow = 0 1px 2px rgba(0,0,0,.35)
           cursor = pointer
         rule trait mill-preset-btn
           display = block
@@ -3154,12 +3190,6 @@ lowering
           overflow = hidden
           position = relative
           background = var(--dk)
-        rule trait mill-force-slider
-          width = 100%
-          height = 4px
-          border-radius = 2px
-          background = var(--brd)
-          cursor = pointer
         rule trait mill-force-result-row
           display = flex
           justify-content = space-between
