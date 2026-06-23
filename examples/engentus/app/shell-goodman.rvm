@@ -1427,7 +1427,7 @@ view GoodmanBoltSetPrimaryCloneAction {
   class bs-act
   prop tag = "button"
   prop buttonType = "button"
-  prop label = "⎘"
+  prop label = "⧉"
 }
 
 view GoodmanBoltSetPrimaryDeleteAction {
@@ -2694,7 +2694,7 @@ view GoodmanBoltSetMaintenanceCloneAction {
   class bs-act
   prop tag = "button"
   prop buttonType = "button"
-  prop label = "⎘"
+  prop label = "⧉"
 }
 
 view GoodmanBoltSetMaintenanceDeleteAction {
