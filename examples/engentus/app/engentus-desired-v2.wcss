@@ -3087,13 +3087,63 @@ lowering
         rule trait sim-setup-body
           flex = 1
           overflow = auto
-          padding = 22px 28px
+          padding = 0
           background = var(--dk)
         rule trait sim-setup-head
           display = flex
           align-items = center
-          gap = 12px
-          margin-bottom = 4px
+          gap = 13px
+          margin = 0
+          padding = 10px 18px
+          background = var(--mid)
+          border-bottom = 1px solid var(--brd)
+        rule trait sim-setup-titleblock
+          flex = 1
+        rule trait sim-ctl
+          display = inline-flex
+          align-items = center
+          gap = 7px
+          color = var(--t2)
+          font-size = 11.5px
+        rule trait sim-ctl-input
+          width = 62px
+          background = var(--dk)
+          border = 1px solid var(--brd)
+          color = var(--t1)
+          border-radius = 6px
+          padding = 5px 8px
+          font = inherit
+        rule trait sim-head-btn
+          font = inherit
+          font-size = 12px
+          border-radius = 6px
+          cursor = pointer
+          border = 1px solid var(--brd)
+          background = rgba(255,255,255,.05)
+          color = var(--t1)
+          padding = 7px 12px
+        rule trait sim-head-btn variant sim-head-btn-run
+          background = var(--blue)
+          color = var(--dk)
+          border-color = var(--blue)
+          font-weight = 650
+        rule trait sim-set-head-dup
+          font = inherit
+          font-size = 11.5px
+          background = transparent
+          color = var(--t2)
+          border = 1px solid var(--brd)
+          border-radius = 6px
+          padding = 6px 10px
+          cursor = pointer
+          margin-left = 6px
+        rule trait pname-text
+          font-weight = 550
+        rule trait pname-unit
+          color = var(--t2)
+          font-weight = 400
+          font-size = 11px
+          margin-left = 3px
         rule trait sim-setup-back
           background = transparent
           border = none
@@ -3107,13 +3157,14 @@ lowering
           background = rgba(255,255,255,.06)
           color = var(--t1)
         rule trait sim-setup-title
-          font-size = 18px
-          font-weight = 680
+          font-size = 15px
+          font-weight = 650
           letter-spacing = -.02em
+          margin = 0
         rule trait sim-setup-sub
           color = var(--t2)
-          font-size = 12.5px
-          margin-bottom = 22px
+          font-size = 11.5px
+          margin = 0
         rule trait sim-setup-placeholder
           color = var(--t2)
           font-size = 13px
@@ -3137,8 +3188,7 @@ lowering
           max-width = 760px
           margin = 26px auto 12px
         rule trait sim-setup-sub
-          max-width = 760px
-          margin = 0 auto 22px
+          margin = 0
         rule trait edit-group
           background = var(--mid)
           border = 1px solid var(--brd)
@@ -3178,6 +3228,9 @@ lowering
           gap = 6px
           cursor = pointer
           flex-shrink = 0
+          background = transparent
+          border = none
+          padding = 0
         rule trait tog-track
           width = 30px
           height = 18px
@@ -3234,7 +3287,7 @@ lowering
         rule selector ".dig label"
           font-size = 10px
           color = var(--t2)
-          text-transform = uppercase
+          text-transform = none
           letter-spacing = .04em
         rule selector ".dig input"
           background = var(--dk)
@@ -3253,6 +3306,8 @@ lowering
           display = none
         rule selector ".edit-group .prow .pval"
           display = none
+        rule selector ".edit-group .prow .tog-lbl"
+          display = none
         rule trait sim-spark
           width = 96px
           height = 30px
@@ -3266,6 +3321,13 @@ lowering
         rule selector ".edit-group .prow-top"
           flex = 0 0 230px
           margin-bottom = 0
+        rule selector ".sim-setup-main .prow-top"
+          flex = 0 0 400px
+          gap = 14px
+        rule selector ".sim-setup-main .prow-top .free-tog"
+          order = -1
+        rule selector ".sim-setup-main .prow-top .plabel"
+          order = 0
         rule selector ".edit-group .dist-box.open"
           display = flex
           flex-direction = row
@@ -3281,6 +3343,8 @@ lowering
           width = 132px
           margin-bottom = 0
           flex-shrink = 0
+        rule selector ".sim-setup-main .prow:has(.dist-box.is-fixed)"
+          opacity = .55
         rule selector ".edit-group .dist-inputs"
           flex = 0 1 auto
           flex-wrap = nowrap
@@ -3295,15 +3359,14 @@ lowering
           flex-shrink = 0
         rule trait sim-setup-layout
           display = flex
-          gap = 26px
-          align-items = flex-start
-          max-width = 1040px
-          margin = 0 auto
+          gap = 0
+          align-items = stretch
         rule trait sim-rail
-          width = 200px
+          width = 230px
           flex-shrink = 0
-          position = sticky
-          top = 0
+          background = var(--mid)
+          border-right = 1px solid var(--brd)
+          padding = 16px 14px
           display = flex
           flex-direction = column
           gap = 6px
@@ -3455,9 +3518,20 @@ lowering
         rule trait sim-setup-main
           flex = 1
           min-width = 0
+          padding = 20px 26px 40px
         rule selector ".sim-setup-main .edit-group"
           max-width = none
-          margin = 0 0 14px
+          margin = 0 0 22px
+          background = none
+          border = none
+          padding = 0
+        rule trait edit-group-rows
+          border = 1px solid var(--brd)
+          border-radius = 8px
+          background = rgba(0,0,0,.10)
+          overflow = hidden
+        rule selector ".sim-setup-main .edit-group-rows .prow"
+          padding = 9px 14px
         rule selector ".sim-setup-main .sim-setup-set-heading"
           max-width = none
           margin = 0 0 14px

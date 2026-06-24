@@ -3769,12 +3769,92 @@ view GoodmanSimulationSetupSubtitle {
   prop text = "Define how each bolt set's inputs vary for the Monte Carlo run."
 }
 
+view GoodmanSimulationSetupTitleBlock {
+  kind group
+  class sim-setup-titleblock
+  children {
+    GoodmanSimulationSetupTitle
+    GoodmanSimulationSetupSubtitle
+  }
+}
+
+view GoodmanSimulationSetupSamplesLabel {
+  kind text
+  class sim-ctl-label
+  prop tag = "span"
+  prop text = "Samples"
+}
+
+view GoodmanSimulationSetupSamplesInput {
+  kind input
+  class sim-ctl-input
+  prop tag = "input"
+  prop inputType = "text"
+  prop value = "2000"
+}
+
+view GoodmanSimulationSetupSamples {
+  kind group
+  class sim-ctl
+  children {
+    GoodmanSimulationSetupSamplesLabel
+    GoodmanSimulationSetupSamplesInput
+  }
+}
+
+view GoodmanSimulationSetupSeedLabel {
+  kind text
+  class sim-ctl-label
+  prop tag = "span"
+  prop text = "Seed"
+}
+
+view GoodmanSimulationSetupSeedInput {
+  kind input
+  class sim-ctl-input
+  prop tag = "input"
+  prop inputType = "text"
+  prop value = "42"
+}
+
+view GoodmanSimulationSetupSeed {
+  kind group
+  class sim-ctl
+  children {
+    GoodmanSimulationSetupSeedLabel
+    GoodmanSimulationSetupSeedInput
+  }
+}
+
+view GoodmanSimulationSetupCancel {
+  kind action
+  class sim-head-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Cancel"
+  interactions {
+    on click self deliver EngentusNavigateGoodmanRequested
+  }
+}
+
+view GoodmanSimulationSetupRun {
+  kind action
+  class sim-head-btn sim-head-btn-run
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "▶ Run simulation"
+}
+
 view GoodmanSimulationSetupHeader {
   kind row
   class sim-setup-head
   children {
     GoodmanSimulationSetupBackAction
-    GoodmanSimulationSetupTitle
+    GoodmanSimulationSetupTitleBlock
+    GoodmanSimulationSetupSamples
+    GoodmanSimulationSetupSeed
+    GoodmanSimulationSetupCancel
+    GoodmanSimulationSetupRun
   }
 }
 
@@ -3844,6 +3924,14 @@ view GoodmanSimSetupNoJemtecStat {
   }
 }
 
+view GoodmanSimSetupNoJemtecDuplicate {
+  kind action
+  class sim-set-head-dup
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Duplicate set"
+}
+
 view GoodmanSimSetupNoJemtecHeading {
   kind group
   class sim-set-head
@@ -3851,6 +3939,7 @@ view GoodmanSimSetupNoJemtecHeading {
     GoodmanSimSetupNoJemtecDot
     GoodmanSimSetupNoJemtecMeta
     GoodmanSimSetupNoJemtecStat
+    GoodmanSimSetupNoJemtecDuplicate
   }
 }
 
@@ -3906,6 +3995,14 @@ view GoodmanSimSetupJemtecStat {
   }
 }
 
+view GoodmanSimSetupJemtecDuplicate {
+  kind action
+  class sim-set-head-dup
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Duplicate set"
+}
+
 view GoodmanSimSetupJemtecHeading {
   kind group
   class sim-set-head
@@ -3913,6 +4010,7 @@ view GoodmanSimSetupJemtecHeading {
     GoodmanSimSetupJemtecDot
     GoodmanSimSetupJemtecMeta
     GoodmanSimSetupJemtecStat
+    GoodmanSimSetupJemtecDuplicate
   }
 }
 
@@ -4160,7 +4258,6 @@ view GoodmanSimulationSetupBody {
   prop domId = "sim-setup-body"
   children {
     GoodmanSimulationSetupHeader
-    GoodmanSimulationSetupSubtitle
     GoodmanSimSetupLayout
   }
 }
