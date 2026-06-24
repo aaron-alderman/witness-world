@@ -9,6 +9,7 @@ enum EngentusShellRoute {
     login
     home
     goodman
+    goodman-simulation-setup
     mill-charge
     mill-force
     access-denied
@@ -72,6 +73,13 @@ enum GoodmanMode {
     static
     mc
     edit
+  }
+}
+
+enum GoodmanSimSetTarget {
+  cases {
+    rubber
+    jemtec
   }
 }
 
@@ -463,6 +471,10 @@ state MillForceMcHeightFree: bool {
 
 state GoodmanActiveMode: GoodmanMode {
   initial static
+}
+
+state GoodmanSimSetupActiveSet: GoodmanSimSetTarget {
+  initial rubber
 }
 
 state GoodmanCdfWindowVisible: bool {
@@ -1011,6 +1023,12 @@ event EngentusNavigateHomeRequested {
 event EngentusNavigateGoodmanRequested {
   writes {
     EngentusShellActiveRoute: goodman
+  }
+}
+
+event EngentusNavigateSimulationSetupRequested {
+  writes {
+    EngentusShellActiveRoute: goodman-simulation-setup
   }
 }
 
@@ -2033,6 +2051,18 @@ event GoodmanShowStaticRequested {
   }
 }
 
+event GoodmanSimSetupShowRubberRequested {
+  writes {
+    GoodmanSimSetupActiveSet: rubber
+  }
+}
+
+event GoodmanSimSetupShowJemtecRequested {
+  writes {
+    GoodmanSimSetupActiveSet: jemtec
+  }
+}
+
 event GoodmanShowMonteCarloRequested {
   writes {
     GoodmanActiveMode: mc
@@ -2286,6 +2316,7 @@ process EngentusShellNavigation {
     MillForceMcPercentSolidsFree
     MillForceMcHeightFree
     GoodmanActiveMode
+    GoodmanSimSetupActiveSet
     GoodmanCdfWindowVisible
     GoodmanStatsWindowVisible
     GoodmanAnovaWindowVisible
@@ -2339,6 +2370,7 @@ process EngentusShellNavigation {
     EngentusSessionClosed
     EngentusNavigateHomeRequested
     EngentusNavigateGoodmanRequested
+    EngentusNavigateSimulationSetupRequested
     EngentusNavigateMillChargeRequested
     EngentusNavigateMillForceRequested
     EngentusNavigatePlatformConfigRequested
@@ -2394,6 +2426,8 @@ process EngentusShellNavigation {
     GoodmanShowStaticRequested
     GoodmanShowMonteCarloRequested
     GoodmanShowEditRequested
+    GoodmanSimSetupShowRubberRequested
+    GoodmanSimSetupShowJemtecRequested
     GoodmanSaveStaticSimulationRequested
     GoodmanCreateSimulationRequested
     GoodmanToggleCdfWindowRequested
@@ -2700,6 +2734,7 @@ view EngentusRoot {
     EngentusLogin
     EngentusHome
     EngentusApp
+    EngentusSimulationSetupApp
     EngentusMillChargeApp
     EngentusMillForceApp
     EngentusAccessDenied

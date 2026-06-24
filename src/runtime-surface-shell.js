@@ -151,6 +151,9 @@ function matchSurfaceByDefaultScreen({
 
 function staticTextValue(props, key) {
   const value = props?.[key];
+  // Numeric/boolean literals are coerced by the RVM parser (e.g. `prop text = "13"`
+  // becomes Number 13); render them as their string form rather than dropping them.
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;

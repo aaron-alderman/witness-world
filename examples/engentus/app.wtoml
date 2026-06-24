@@ -484,6 +484,20 @@ route = "engentus_goodman_route"
 
 [[route]]
 actor = "aaron"
+id = "engentus_goodman_simulation_setup_route"
+method = "GET"
+path = "/engentus/goodman/simulation-setup"
+serves = "engentusGoodmanSimulationSetup"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "goodman-simulation-setup", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.goodman", resumeRouteKey = "goodman-simulation-setup", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_goodman_simulation_setup_route"
+
+[[route]]
+actor = "aaron"
 id = "engentus_mill_charge_route"
 method = "GET"
 path = "/engentus/mill-charge"

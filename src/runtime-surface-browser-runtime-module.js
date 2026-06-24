@@ -112,7 +112,8 @@ import {
   trimmedIdSet,
   addToGroupedSet,
   addToIndexedSet,
-  buildProcessWitnessCatalog
+  buildProcessWitnessCatalog,
+  syncSurfaceRuntimeManifestScript
 } from "./runtime-surface-interaction-runtime.js";
 
 function browserHelpersSource() {
@@ -210,6 +211,7 @@ const PROCESS_WITNESS_KINDS = new Set([
     supportsSameDocumentRouteReplacement.toString(),
     domParserForWindow.toString(),
     readSurfaceRuntimeManifest.toString(),
+    syncSurfaceRuntimeManifestScript.toString(),
     parseRouteSurfacePage.toString(),
     loadRouteSurfacePage.toString(),
     capabilityBootIssueId.toString(),

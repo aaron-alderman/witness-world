@@ -3071,6 +3071,396 @@ lowering
           font-size = 10px
           cursor = pointer
           font-weight = 600
+        rule trait goodman-setup-sim-btn
+          margin-top = 12px
+          width = 100%
+          background = var(--blue)
+          color = var(--dk)
+          border = none
+          border-radius = 6px
+          padding = 9px 12px
+          font = inherit
+          font-weight = 600
+          cursor = pointer
+        rule trait goodman-setup-sim-btn pseudo hover
+          background = var(--blu2)
+        rule trait sim-setup-body
+          flex = 1
+          overflow = auto
+          padding = 22px 28px
+          background = var(--dk)
+        rule trait sim-setup-head
+          display = flex
+          align-items = center
+          gap = 12px
+          margin-bottom = 4px
+        rule trait sim-setup-back
+          background = transparent
+          border = none
+          color = var(--t2)
+          font = inherit
+          font-size = 12.5px
+          cursor = pointer
+          padding = 6px 8px
+          border-radius = 6px
+        rule trait sim-setup-back pseudo hover
+          background = rgba(255,255,255,.06)
+          color = var(--t1)
+        rule trait sim-setup-title
+          font-size = 18px
+          font-weight = 680
+          letter-spacing = -.02em
+        rule trait sim-setup-sub
+          color = var(--t2)
+          font-size = 12.5px
+          margin-bottom = 22px
+        rule trait sim-setup-placeholder
+          color = var(--t2)
+          font-size = 13px
+          padding = 30px
+          border = 1px dashed var(--brd)
+          border-radius = 8px
+          text-align = center
+        rule trait sim-setup-set-heading
+          font-size = 15px
+          font-weight = 680
+          color = var(--t1)
+          margin = 24px 0 10px
+          padding-bottom = 8px
+          border-bottom = 1px solid var(--brd)
+        rule trait bs-moved-note
+          font-size = 11px
+          color = var(--t2)
+          line-height = 1.5
+          padding = 6px 2px
+        rule trait sim-setup-set-heading
+          max-width = 760px
+          margin = 26px auto 12px
+        rule trait sim-setup-sub
+          max-width = 760px
+          margin = 0 auto 22px
+        rule trait edit-group
+          background = var(--mid)
+          border = 1px solid var(--brd)
+          border-radius = 8px
+          padding = 14px 16px
+          margin = 0 auto 14px
+          max-width = 760px
+        rule trait edit-group-title
+          display = flex
+          justify-content = space-between
+          align-items = baseline
+          gap = 10px
+          margin-bottom = 12px
+        rule selector ".edit-group .prow"
+          margin = 0
+          padding = 10px 0
+          border-top = 1px solid rgba(61,88,128,.45)
+        rule selector ".edit-group .prow:first-of-type"
+          border-top = none
+          padding-top = 0
+        rule selector ".edit-group .prow-top"
+          display = flex
+          align-items = center
+          gap = 10px
+          margin-bottom = 7px
+        rule selector ".edit-group .plabel"
+          flex = 1
+          font-size = 12.5px
+          color = var(--t1)
+        rule selector ".edit-group .pval"
+          font-size = 12px
+          color = var(--blue)
+          font-variant-numeric = tabular-nums
+        rule trait free-tog
+          display = inline-flex
+          align-items = center
+          gap = 6px
+          cursor = pointer
+          flex-shrink = 0
+        rule trait tog-track
+          width = 30px
+          height = 18px
+          background = var(--brd)
+          border-radius = 999px
+          position = relative
+          transition = background .15s
+          flex-shrink = 0
+        rule trait tog-track variant on
+          background = var(--blue)
+        rule trait tog-knob
+          width = 14px
+          height = 14px
+          background = #ffffff
+          border-radius = 50%
+          position = absolute
+          top = 2px
+          left = 2px
+          transition = left .15s
+        rule selector ".tog-track.on .tog-knob"
+          left = 14px
+        rule trait tog-lbl
+          font-size = 10px
+          color = var(--t2)
+        rule trait dist-box
+          background = rgba(0,0,0,.18)
+          border = 1px solid var(--brd)
+          border-radius = 6px
+          padding = 10px 11px
+          margin-top = 8px
+          display = none
+        rule trait dist-box variant open
+          display = block
+        rule trait dist-sel
+          width = 100%
+          background = var(--dk)
+          color = var(--t1)
+          border = 1px solid var(--brd)
+          border-radius = 6px
+          padding = 6px 8px
+          font-size = 12px
+          margin-bottom = 9px
+          cursor = pointer
+        rule trait dist-inputs
+          display = flex
+          gap = 10px
+          flex-wrap = wrap
+        rule trait dig
+          display = flex
+          flex-direction = column
+          gap = 4px
+          flex = 1
+          min-width = 80px
+        rule selector ".dig label"
+          font-size = 10px
+          color = var(--t2)
+          text-transform = uppercase
+          letter-spacing = .04em
+        rule selector ".dig input"
+          background = var(--dk)
+          color = var(--t1)
+          border = 1px solid var(--brd)
+          border-radius = 6px
+          padding = 6px 8px
+          font-size = 12px
+          font-variant-numeric = tabular-nums
+        rule selector ".edit-group .prow"
+          flex-direction = row
+          align-items = center
+          flex-wrap = wrap
+          gap = 14px
+        rule selector ".edit-group .prow .mill-slider"
+          display = none
+        rule selector ".edit-group .prow .pval"
+          display = none
+        rule trait sim-spark
+          width = 96px
+          height = 30px
+          flex-shrink = 0
+          align-self = center
+          margin-left = auto
+        rule selector ".sim-spark svg"
+          display = block
+          width = 96px
+          height = 30px
+        rule selector ".edit-group .prow-top"
+          flex = 0 0 230px
+          margin-bottom = 0
+        rule selector ".edit-group .dist-box.open"
+          display = flex
+          flex-direction = row
+          align-items = center
+          gap = 12px
+          flex = 1
+          min-width = 300px
+          margin-top = 0
+          padding = 0
+          background = none
+          border = none
+        rule selector ".edit-group .dist-sel"
+          width = 132px
+          margin-bottom = 0
+          flex-shrink = 0
+        rule selector ".edit-group .dist-inputs"
+          flex = 0 1 auto
+          flex-wrap = nowrap
+        rule selector ".edit-group .dig"
+          flex-direction = row
+          align-items = center
+          gap = 6px
+        rule selector ".edit-group .dig label"
+          flex-shrink = 0
+        rule selector ".edit-group .dig input"
+          width = 84px
+          flex-shrink = 0
+        rule trait sim-setup-layout
+          display = flex
+          gap = 26px
+          align-items = flex-start
+          max-width = 1040px
+          margin = 0 auto
+        rule trait sim-rail
+          width = 200px
+          flex-shrink = 0
+          position = sticky
+          top = 0
+          display = flex
+          flex-direction = column
+          gap = 6px
+        rule trait sim-rail-title
+          font-size = 9.5px
+          font-weight = 700
+          text-transform = uppercase
+          letter-spacing = .08em
+          color = var(--t2)
+          margin-bottom = 6px
+        rule trait sim-rail-item
+          display = grid
+          grid-template-columns = auto 1fr
+          column-gap = 9px
+          align-items = center
+          text-align = left
+          background = transparent
+          border = 1px solid transparent
+          border-radius = 8px
+          padding = 9px 11px
+          cursor = pointer
+          color = var(--t1)
+          font = inherit
+          font-weight = 600
+        rule trait sim-rail-dot
+          width = 11px
+          height = 11px
+          border-radius = 50%
+          flex-shrink = 0
+          grid-row = 1 / 3
+        rule trait sim-rail-name
+          font-weight = 600
+        rule trait sim-rail-sub
+          grid-column = 2
+          font-size = 10.5px
+          font-weight = 400
+          color = var(--t2)
+        rule trait sim-rail-add
+          width = 100%
+          background = transparent
+          color = var(--blue)
+          border = 1px dashed var(--brd)
+          border-radius = 8px
+          padding = 9px 11px
+          margin-top = 10px
+          cursor = pointer
+          font = inherit
+        rule trait sim-rail-note
+          margin-top = 16px
+          font-size = 10.5px
+          line-height = 1.5
+          color = var(--t2)
+        rule trait sim-toolbar
+          display = flex
+          align-items = center
+          gap = 14px
+          margin = 16px 0 18px
+        rule trait sim-search
+          flex = 0 0 280px
+          background = var(--mid)
+          border = 1px solid var(--brd)
+          color = var(--t1)
+          border-radius = 7px
+          padding = 8px 11px
+          font = inherit
+        rule trait sim-chk
+          display = inline-flex
+          align-items = center
+          gap = 6px
+          color = var(--t2)
+          font-size = 11.5px
+          cursor = pointer
+        rule selector ".sim-chk input"
+          accent-color = var(--blue)
+        rule trait sim-legend
+          display = inline-flex
+          align-items = center
+          font-size = 11px
+          color = var(--t2)
+          margin-left = auto
+        rule trait sim-lg
+          display = inline-block
+          width = 10px
+          height = 10px
+          border-radius = 3px
+          margin-right = 6px
+        rule trait sim-lg variant sim-lg-vary
+          background = var(--blue)
+        rule trait sim-lg variant sim-lg-fixed
+          background = var(--brd)
+        rule trait sim-lg-text
+          margin-right = 12px
+        rule trait eg-title-text
+          font-size = 10.5px
+          font-weight = 700
+          text-transform = uppercase
+          letter-spacing = .09em
+          color = var(--blue)
+        rule trait eg-title-count
+          font-size = 10.5px
+          font-weight = 400
+          text-transform = none
+          letter-spacing = normal
+          color = var(--t2)
+        rule trait sim-rail-item pseudo hover
+          background = rgba(255,255,255,.04)
+        rule trait sim-rail-item variant active
+          background = rgba(140,196,212,.12)
+          border-color = rgba(140,196,212,.35)
+          color = var(--blue)
+        rule trait sim-set-group variant off
+          display = none
+        rule trait sim-set-head
+          display = flex
+          align-items = center
+          gap = 13px
+          padding-bottom = 16px
+          margin-bottom = 14px
+          border-bottom = 1px solid var(--brd)
+        rule trait sim-set-head-dot
+          width = 15px
+          height = 15px
+          border-radius = 50%
+          flex-shrink = 0
+        rule trait sim-set-head-meta
+          flex = 1
+        rule selector ".sim-set-head-meta h2"
+          font-size = 19px
+          font-weight = 680
+          letter-spacing = -.02em
+        rule selector ".sim-set-head-meta p"
+          color = var(--t2)
+          font-size = 12px
+          margin-top = 3px
+        rule trait sim-set-head-stat
+          text-align = right
+          margin-right = 6px
+        rule selector ".sim-set-head-stat strong"
+          display = block
+          font-size = 20px
+          color = var(--blue)
+          font-variant-numeric = tabular-nums
+          line-height = 1
+        rule trait sim-set-head-stat-label
+          font-size = 10px
+          color = var(--t2)
+          text-transform = uppercase
+          letter-spacing = .06em
+        rule trait sim-setup-main
+          flex = 1
+          min-width = 0
+        rule selector ".sim-setup-main .edit-group"
+          max-width = none
+          margin = 0 0 14px
+        rule selector ".sim-setup-main .sim-setup-set-heading"
+          max-width = none
+          margin = 0 0 14px
 
       slice mill-charge
         mode native-browser

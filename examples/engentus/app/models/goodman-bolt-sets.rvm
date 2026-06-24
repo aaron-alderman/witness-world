@@ -3315,39 +3315,119 @@ view GoodmanBoltParamEBoltGPa {
   prop jemtecStd = 0
 }
 
-view GoodmanBoltSetRubberCategoryPreloadTitle {
+view GoodmanBoltSetRubberCategoryPreloadTitleText {
   kind text
-  class edit-group-title
-  prop tag = "div"
+  class eg-title-text
+  prop tag = "span"
   prop text = "Preload & Relaxation"
 }
 
-view GoodmanBoltSetRubberCategoryLoadTitle {
+view GoodmanBoltSetRubberCategoryPreloadTitleCount {
   kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "5 of 5 vary"
+}
+
+view GoodmanBoltSetRubberCategoryPreloadTitle {
+  kind group
   class edit-group-title
-  prop tag = "div"
+  children {
+    GoodmanBoltSetRubberCategoryPreloadTitleText
+    GoodmanBoltSetRubberCategoryPreloadTitleCount
+  }
+}
+
+view GoodmanBoltSetRubberCategoryLoadTitleText {
+  kind text
+  class eg-title-text
+  prop tag = "span"
   prop text = "Load"
 }
 
-view GoodmanBoltSetRubberCategoryJointTitle {
+view GoodmanBoltSetRubberCategoryLoadTitleCount {
   kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "2 of 3 vary"
+}
+
+view GoodmanBoltSetRubberCategoryLoadTitle {
+  kind group
   class edit-group-title
-  prop tag = "div"
+  children {
+    GoodmanBoltSetRubberCategoryLoadTitleText
+    GoodmanBoltSetRubberCategoryLoadTitleCount
+  }
+}
+
+view GoodmanBoltSetRubberCategoryJointTitleText {
+  kind text
+  class eg-title-text
+  prop tag = "span"
   prop text = "Joint Properties"
 }
 
-view GoodmanBoltSetRubberCategoryGeometryTitle {
+view GoodmanBoltSetRubberCategoryJointTitleCount {
   kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "3 of 10 vary"
+}
+
+view GoodmanBoltSetRubberCategoryJointTitle {
+  kind group
   class edit-group-title
-  prop tag = "div"
+  children {
+    GoodmanBoltSetRubberCategoryJointTitleText
+    GoodmanBoltSetRubberCategoryJointTitleCount
+  }
+}
+
+view GoodmanBoltSetRubberCategoryGeometryTitleText {
+  kind text
+  class eg-title-text
+  prop tag = "span"
   prop text = "Bolt Geometry"
 }
 
-view GoodmanBoltSetRubberCategoryFatigueTitle {
+view GoodmanBoltSetRubberCategoryGeometryTitleCount {
   kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "1 of 6 vary"
+}
+
+view GoodmanBoltSetRubberCategoryGeometryTitle {
+  kind group
   class edit-group-title
-  prop tag = "div"
+  children {
+    GoodmanBoltSetRubberCategoryGeometryTitleText
+    GoodmanBoltSetRubberCategoryGeometryTitleCount
+  }
+}
+
+view GoodmanBoltSetRubberCategoryFatigueTitleText {
+  kind text
+  class eg-title-text
+  prop tag = "span"
   prop text = "Material & Fatigue"
+}
+
+view GoodmanBoltSetRubberCategoryFatigueTitleCount {
+  kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "2 of 5 vary"
+}
+
+view GoodmanBoltSetRubberCategoryFatigueTitle {
+  kind group
+  class edit-group-title
+  children {
+    GoodmanBoltSetRubberCategoryFatigueTitleText
+    GoodmanBoltSetRubberCategoryFatigueTitleCount
+  }
 }
 
 view GoodmanBoltRubberParamPreloadStressMPaLabel {
@@ -3387,7 +3467,7 @@ view GoodmanBoltRubberParamPreloadStressMPaToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamPreloadStressMPaFreeToggle {
@@ -3829,6 +3909,7 @@ view GoodmanBoltRubberParamPreloadStressMPaRow {
     GoodmanBoltRubberParamPreloadStressMPaTop
     GoodmanBoltRubberParamPreloadStressMPaSlider
     GoodmanBoltRubberParamPreloadStressMPaDistBox
+    GoodmanBoltRubberParamPreloadStressMPaSpark
   }
 }
 
@@ -3869,7 +3950,7 @@ view GoodmanBoltRubberParamPreloadUtilisationToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamPreloadUtilisationFreeToggle {
@@ -4311,6 +4392,7 @@ view GoodmanBoltRubberParamPreloadUtilisationRow {
     GoodmanBoltRubberParamPreloadUtilisationTop
     GoodmanBoltRubberParamPreloadUtilisationSlider
     GoodmanBoltRubberParamPreloadUtilisationDistBox
+    GoodmanBoltRubberParamPreloadUtilisationSpark
   }
 }
 
@@ -4351,7 +4433,7 @@ view GoodmanBoltRubberParamTauAToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamTauAFreeToggle {
@@ -4793,6 +4875,7 @@ view GoodmanBoltRubberParamTauARow {
     GoodmanBoltRubberParamTauATop
     GoodmanBoltRubberParamTauASlider
     GoodmanBoltRubberParamTauADistBox
+    GoodmanBoltRubberParamTauASpark
   }
 }
 
@@ -4833,7 +4916,7 @@ view GoodmanBoltRubberParamTauBToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamTauBFreeToggle {
@@ -5275,6 +5358,7 @@ view GoodmanBoltRubberParamTauBRow {
     GoodmanBoltRubberParamTauBTop
     GoodmanBoltRubberParamTauBSlider
     GoodmanBoltRubberParamTauBDistBox
+    GoodmanBoltRubberParamTauBSpark
   }
 }
 
@@ -5315,7 +5399,7 @@ view GoodmanBoltRubberParamTauCToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamTauCFreeToggle {
@@ -5757,6 +5841,7 @@ view GoodmanBoltRubberParamTauCRow {
     GoodmanBoltRubberParamTauCTop
     GoodmanBoltRubberParamTauCSlider
     GoodmanBoltRubberParamTauCDistBox
+    GoodmanBoltRubberParamTauCSpark
   }
 }
 
@@ -5797,7 +5882,7 @@ view GoodmanBoltRubberParamFAltAppliedNToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamFAltAppliedNFreeToggle {
@@ -6239,6 +6324,7 @@ view GoodmanBoltRubberParamFAltAppliedNRow {
     GoodmanBoltRubberParamFAltAppliedNTop
     GoodmanBoltRubberParamFAltAppliedNSlider
     GoodmanBoltRubberParamFAltAppliedNDistBox
+    GoodmanBoltRubberParamFAltAppliedNSpark
   }
 }
 
@@ -6279,7 +6365,7 @@ view GoodmanBoltRubberParamAngularSpanFactorToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamAngularSpanFactorFreeToggle {
@@ -6721,6 +6807,7 @@ view GoodmanBoltRubberParamAngularSpanFactorRow {
     GoodmanBoltRubberParamAngularSpanFactorTop
     GoodmanBoltRubberParamAngularSpanFactorSlider
     GoodmanBoltRubberParamAngularSpanFactorDistBox
+    GoodmanBoltRubberParamAngularSpanFactorSpark
   }
 }
 
@@ -6761,7 +6848,7 @@ view GoodmanBoltRubberParamRpmToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamRpmFreeToggle {
@@ -7203,6 +7290,7 @@ view GoodmanBoltRubberParamRpmRow {
     GoodmanBoltRubberParamRpmTop
     GoodmanBoltRubberParamRpmSlider
     GoodmanBoltRubberParamRpmDistBox
+    GoodmanBoltRubberParamRpmSpark
   }
 }
 
@@ -7260,6 +7348,7 @@ view GoodmanBoltRubberParamJemtecEnabledRow {
   process GoodmanBoltSetEditor
   children {
     GoodmanBoltRubberParamJemtecEnabledTop
+    GoodmanBoltRubberParamJemtecEnabledSpark
   }
 }
 
@@ -7300,7 +7389,7 @@ view GoodmanBoltRubberParamMuJointToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamMuJointFreeToggle {
@@ -7742,6 +7831,7 @@ view GoodmanBoltRubberParamMuJointRow {
     GoodmanBoltRubberParamMuJointTop
     GoodmanBoltRubberParamMuJointSlider
     GoodmanBoltRubberParamMuJointDistBox
+    GoodmanBoltRubberParamMuJointSpark
   }
 }
 
@@ -7782,7 +7872,7 @@ view GoodmanBoltRubberParamNBoltsToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamNBoltsFreeToggle {
@@ -8224,6 +8314,7 @@ view GoodmanBoltRubberParamNBoltsRow {
     GoodmanBoltRubberParamNBoltsTop
     GoodmanBoltRubberParamNBoltsSlider
     GoodmanBoltRubberParamNBoltsDistBox
+    GoodmanBoltRubberParamNBoltsSpark
   }
 }
 
@@ -8264,7 +8355,7 @@ view GoodmanBoltRubberParamNInterfacesToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamNInterfacesFreeToggle {
@@ -8706,6 +8797,7 @@ view GoodmanBoltRubberParamNInterfacesRow {
     GoodmanBoltRubberParamNInterfacesTop
     GoodmanBoltRubberParamNInterfacesSlider
     GoodmanBoltRubberParamNInterfacesDistBox
+    GoodmanBoltRubberParamNInterfacesSpark
   }
 }
 
@@ -8746,7 +8838,7 @@ view GoodmanBoltRubberParamRubberShoreAToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamRubberShoreAFreeToggle {
@@ -9188,6 +9280,7 @@ view GoodmanBoltRubberParamRubberShoreARow {
     GoodmanBoltRubberParamRubberShoreATop
     GoodmanBoltRubberParamRubberShoreASlider
     GoodmanBoltRubberParamRubberShoreADistBox
+    GoodmanBoltRubberParamRubberShoreASpark
   }
 }
 
@@ -9228,7 +9321,7 @@ view GoodmanBoltRubberParamRubberThicknessMToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamRubberThicknessMFreeToggle {
@@ -9670,6 +9763,7 @@ view GoodmanBoltRubberParamRubberThicknessMRow {
     GoodmanBoltRubberParamRubberThicknessMTop
     GoodmanBoltRubberParamRubberThicknessMSlider
     GoodmanBoltRubberParamRubberThicknessMDistBox
+    GoodmanBoltRubberParamRubberThicknessMSpark
   }
 }
 
@@ -9710,7 +9804,7 @@ view GoodmanBoltRubberParamRubberAreaM2ToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamRubberAreaM2FreeToggle {
@@ -10152,6 +10246,7 @@ view GoodmanBoltRubberParamRubberAreaM2Row {
     GoodmanBoltRubberParamRubberAreaM2Top
     GoodmanBoltRubberParamRubberAreaM2Slider
     GoodmanBoltRubberParamRubberAreaM2DistBox
+    GoodmanBoltRubberParamRubberAreaM2Spark
   }
 }
 
@@ -10192,7 +10287,7 @@ view GoodmanBoltRubberParamRubberNuToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamRubberNuFreeToggle {
@@ -10634,6 +10729,7 @@ view GoodmanBoltRubberParamRubberNuRow {
     GoodmanBoltRubberParamRubberNuTop
     GoodmanBoltRubberParamRubberNuSlider
     GoodmanBoltRubberParamRubberNuDistBox
+    GoodmanBoltRubberParamRubberNuSpark
   }
 }
 
@@ -10674,7 +10770,7 @@ view GoodmanBoltRubberParamRelaxAToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamRelaxAFreeToggle {
@@ -11116,6 +11212,7 @@ view GoodmanBoltRubberParamRelaxARow {
     GoodmanBoltRubberParamRelaxATop
     GoodmanBoltRubberParamRelaxASlider
     GoodmanBoltRubberParamRelaxADistBox
+    GoodmanBoltRubberParamRelaxASpark
   }
 }
 
@@ -11156,7 +11253,7 @@ view GoodmanBoltRubberParamRelaxBToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamRelaxBFreeToggle {
@@ -11598,6 +11695,7 @@ view GoodmanBoltRubberParamRelaxBRow {
     GoodmanBoltRubberParamRelaxBTop
     GoodmanBoltRubberParamRelaxBSlider
     GoodmanBoltRubberParamRelaxBDistBox
+    GoodmanBoltRubberParamRelaxBSpark
   }
 }
 
@@ -11638,7 +11736,7 @@ view GoodmanBoltRubberParamLGripToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamLGripFreeToggle {
@@ -12080,6 +12178,7 @@ view GoodmanBoltRubberParamLGripRow {
     GoodmanBoltRubberParamLGripTop
     GoodmanBoltRubberParamLGripSlider
     GoodmanBoltRubberParamLGripDistBox
+    GoodmanBoltRubberParamLGripSpark
   }
 }
 
@@ -12137,6 +12236,7 @@ view GoodmanBoltRubberParamHeadDirectionRow {
   process GoodmanBoltSetEditor
   children {
     GoodmanBoltRubberParamHeadDirectionTop
+    GoodmanBoltRubberParamHeadDirectionSpark
   }
 }
 
@@ -12177,7 +12277,7 @@ view GoodmanBoltRubberParamDShankToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamDShankFreeToggle {
@@ -12619,6 +12719,7 @@ view GoodmanBoltRubberParamDShankRow {
     GoodmanBoltRubberParamDShankTop
     GoodmanBoltRubberParamDShankSlider
     GoodmanBoltRubberParamDShankDistBox
+    GoodmanBoltRubberParamDShankSpark
   }
 }
 
@@ -12659,7 +12760,7 @@ view GoodmanBoltRubberParamDMinorToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamDMinorFreeToggle {
@@ -13101,6 +13202,7 @@ view GoodmanBoltRubberParamDMinorRow {
     GoodmanBoltRubberParamDMinorTop
     GoodmanBoltRubberParamDMinorSlider
     GoodmanBoltRubberParamDMinorDistBox
+    GoodmanBoltRubberParamDMinorSpark
   }
 }
 
@@ -13141,7 +13243,7 @@ view GoodmanBoltRubberParamASNomToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamASNomFreeToggle {
@@ -13583,6 +13685,7 @@ view GoodmanBoltRubberParamASNomRow {
     GoodmanBoltRubberParamASNomTop
     GoodmanBoltRubberParamASNomSlider
     GoodmanBoltRubberParamASNomDistBox
+    GoodmanBoltRubberParamASNomSpark
   }
 }
 
@@ -13623,7 +13726,7 @@ view GoodmanBoltRubberParamLengthFactorToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamLengthFactorFreeToggle {
@@ -14065,6 +14168,7 @@ view GoodmanBoltRubberParamLengthFactorRow {
     GoodmanBoltRubberParamLengthFactorTop
     GoodmanBoltRubberParamLengthFactorSlider
     GoodmanBoltRubberParamLengthFactorDistBox
+    GoodmanBoltRubberParamLengthFactorSpark
   }
 }
 
@@ -14105,7 +14209,7 @@ view GoodmanBoltRubberParamUtsMPaToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamUtsMPaFreeToggle {
@@ -14547,6 +14651,7 @@ view GoodmanBoltRubberParamUtsMPaRow {
     GoodmanBoltRubberParamUtsMPaTop
     GoodmanBoltRubberParamUtsMPaSlider
     GoodmanBoltRubberParamUtsMPaDistBox
+    GoodmanBoltRubberParamUtsMPaSpark
   }
 }
 
@@ -14587,7 +14692,7 @@ view GoodmanBoltRubberParamSnSigmaLimToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamSnSigmaLimFreeToggle {
@@ -15029,6 +15134,7 @@ view GoodmanBoltRubberParamSnSigmaLimRow {
     GoodmanBoltRubberParamSnSigmaLimTop
     GoodmanBoltRubberParamSnSigmaLimSlider
     GoodmanBoltRubberParamSnSigmaLimDistBox
+    GoodmanBoltRubberParamSnSigmaLimSpark
   }
 }
 
@@ -15069,7 +15175,7 @@ view GoodmanBoltRubberParamSnMToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamSnMFreeToggle {
@@ -15511,6 +15617,7 @@ view GoodmanBoltRubberParamSnMRow {
     GoodmanBoltRubberParamSnMTop
     GoodmanBoltRubberParamSnMSlider
     GoodmanBoltRubberParamSnMDistBox
+    GoodmanBoltRubberParamSnMSpark
   }
 }
 
@@ -15551,7 +15658,7 @@ view GoodmanBoltRubberParamYieldStressMPaToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamYieldStressMPaFreeToggle {
@@ -15993,6 +16100,7 @@ view GoodmanBoltRubberParamYieldStressMPaRow {
     GoodmanBoltRubberParamYieldStressMPaTop
     GoodmanBoltRubberParamYieldStressMPaSlider
     GoodmanBoltRubberParamYieldStressMPaDistBox
+    GoodmanBoltRubberParamYieldStressMPaSpark
   }
 }
 
@@ -16033,7 +16141,7 @@ view GoodmanBoltRubberParamEBoltGPaToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltRubberParamEBoltGPaFreeToggle {
@@ -16475,6 +16583,7 @@ view GoodmanBoltRubberParamEBoltGPaRow {
     GoodmanBoltRubberParamEBoltGPaTop
     GoodmanBoltRubberParamEBoltGPaSlider
     GoodmanBoltRubberParamEBoltGPaDistBox
+    GoodmanBoltRubberParamEBoltGPaSpark
   }
 }
 
@@ -16562,39 +16671,119 @@ view GoodmanBoltSetRubberParams {
   }
 }
 
-view GoodmanBoltSetJemtecCategoryPreloadTitle {
+view GoodmanBoltSetJemtecCategoryPreloadTitleText {
   kind text
-  class edit-group-title
-  prop tag = "div"
+  class eg-title-text
+  prop tag = "span"
   prop text = "Preload & Relaxation"
 }
 
-view GoodmanBoltSetJemtecCategoryLoadTitle {
+view GoodmanBoltSetJemtecCategoryPreloadTitleCount {
   kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "5 of 5 vary"
+}
+
+view GoodmanBoltSetJemtecCategoryPreloadTitle {
+  kind group
   class edit-group-title
-  prop tag = "div"
+  children {
+    GoodmanBoltSetJemtecCategoryPreloadTitleText
+    GoodmanBoltSetJemtecCategoryPreloadTitleCount
+  }
+}
+
+view GoodmanBoltSetJemtecCategoryLoadTitleText {
+  kind text
+  class eg-title-text
+  prop tag = "span"
   prop text = "Load"
 }
 
-view GoodmanBoltSetJemtecCategoryJointTitle {
+view GoodmanBoltSetJemtecCategoryLoadTitleCount {
   kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "2 of 3 vary"
+}
+
+view GoodmanBoltSetJemtecCategoryLoadTitle {
+  kind group
   class edit-group-title
-  prop tag = "div"
+  children {
+    GoodmanBoltSetJemtecCategoryLoadTitleText
+    GoodmanBoltSetJemtecCategoryLoadTitleCount
+  }
+}
+
+view GoodmanBoltSetJemtecCategoryJointTitleText {
+  kind text
+  class eg-title-text
+  prop tag = "span"
   prop text = "Joint Properties"
 }
 
-view GoodmanBoltSetJemtecCategoryGeometryTitle {
+view GoodmanBoltSetJemtecCategoryJointTitleCount {
   kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "3 of 10 vary"
+}
+
+view GoodmanBoltSetJemtecCategoryJointTitle {
+  kind group
   class edit-group-title
-  prop tag = "div"
+  children {
+    GoodmanBoltSetJemtecCategoryJointTitleText
+    GoodmanBoltSetJemtecCategoryJointTitleCount
+  }
+}
+
+view GoodmanBoltSetJemtecCategoryGeometryTitleText {
+  kind text
+  class eg-title-text
+  prop tag = "span"
   prop text = "Bolt Geometry"
 }
 
-view GoodmanBoltSetJemtecCategoryFatigueTitle {
+view GoodmanBoltSetJemtecCategoryGeometryTitleCount {
   kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "1 of 6 vary"
+}
+
+view GoodmanBoltSetJemtecCategoryGeometryTitle {
+  kind group
   class edit-group-title
-  prop tag = "div"
+  children {
+    GoodmanBoltSetJemtecCategoryGeometryTitleText
+    GoodmanBoltSetJemtecCategoryGeometryTitleCount
+  }
+}
+
+view GoodmanBoltSetJemtecCategoryFatigueTitleText {
+  kind text
+  class eg-title-text
+  prop tag = "span"
   prop text = "Material & Fatigue"
+}
+
+view GoodmanBoltSetJemtecCategoryFatigueTitleCount {
+  kind text
+  class eg-title-count
+  prop tag = "span"
+  prop text = "2 of 5 vary"
+}
+
+view GoodmanBoltSetJemtecCategoryFatigueTitle {
+  kind group
+  class edit-group-title
+  children {
+    GoodmanBoltSetJemtecCategoryFatigueTitleText
+    GoodmanBoltSetJemtecCategoryFatigueTitleCount
+  }
 }
 
 view GoodmanBoltJemtecParamPreloadStressMPaLabel {
@@ -16634,7 +16823,7 @@ view GoodmanBoltJemtecParamPreloadStressMPaToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamPreloadStressMPaFreeToggle {
@@ -17076,6 +17265,7 @@ view GoodmanBoltJemtecParamPreloadStressMPaRow {
     GoodmanBoltJemtecParamPreloadStressMPaTop
     GoodmanBoltJemtecParamPreloadStressMPaSlider
     GoodmanBoltJemtecParamPreloadStressMPaDistBox
+    GoodmanBoltJemtecParamPreloadStressMPaSpark
   }
 }
 
@@ -17116,7 +17306,7 @@ view GoodmanBoltJemtecParamPreloadUtilisationToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamPreloadUtilisationFreeToggle {
@@ -17558,6 +17748,7 @@ view GoodmanBoltJemtecParamPreloadUtilisationRow {
     GoodmanBoltJemtecParamPreloadUtilisationTop
     GoodmanBoltJemtecParamPreloadUtilisationSlider
     GoodmanBoltJemtecParamPreloadUtilisationDistBox
+    GoodmanBoltJemtecParamPreloadUtilisationSpark
   }
 }
 
@@ -17598,7 +17789,7 @@ view GoodmanBoltJemtecParamTauAToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamTauAFreeToggle {
@@ -18040,6 +18231,7 @@ view GoodmanBoltJemtecParamTauARow {
     GoodmanBoltJemtecParamTauATop
     GoodmanBoltJemtecParamTauASlider
     GoodmanBoltJemtecParamTauADistBox
+    GoodmanBoltJemtecParamTauASpark
   }
 }
 
@@ -18080,7 +18272,7 @@ view GoodmanBoltJemtecParamTauBToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamTauBFreeToggle {
@@ -18522,6 +18714,7 @@ view GoodmanBoltJemtecParamTauBRow {
     GoodmanBoltJemtecParamTauBTop
     GoodmanBoltJemtecParamTauBSlider
     GoodmanBoltJemtecParamTauBDistBox
+    GoodmanBoltJemtecParamTauBSpark
   }
 }
 
@@ -18562,7 +18755,7 @@ view GoodmanBoltJemtecParamTauCToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamTauCFreeToggle {
@@ -19004,6 +19197,7 @@ view GoodmanBoltJemtecParamTauCRow {
     GoodmanBoltJemtecParamTauCTop
     GoodmanBoltJemtecParamTauCSlider
     GoodmanBoltJemtecParamTauCDistBox
+    GoodmanBoltJemtecParamTauCSpark
   }
 }
 
@@ -19044,7 +19238,7 @@ view GoodmanBoltJemtecParamFAltAppliedNToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamFAltAppliedNFreeToggle {
@@ -19486,6 +19680,7 @@ view GoodmanBoltJemtecParamFAltAppliedNRow {
     GoodmanBoltJemtecParamFAltAppliedNTop
     GoodmanBoltJemtecParamFAltAppliedNSlider
     GoodmanBoltJemtecParamFAltAppliedNDistBox
+    GoodmanBoltJemtecParamFAltAppliedNSpark
   }
 }
 
@@ -19526,7 +19721,7 @@ view GoodmanBoltJemtecParamAngularSpanFactorToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamAngularSpanFactorFreeToggle {
@@ -19968,6 +20163,7 @@ view GoodmanBoltJemtecParamAngularSpanFactorRow {
     GoodmanBoltJemtecParamAngularSpanFactorTop
     GoodmanBoltJemtecParamAngularSpanFactorSlider
     GoodmanBoltJemtecParamAngularSpanFactorDistBox
+    GoodmanBoltJemtecParamAngularSpanFactorSpark
   }
 }
 
@@ -20008,7 +20204,7 @@ view GoodmanBoltJemtecParamRpmToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamRpmFreeToggle {
@@ -20450,6 +20646,7 @@ view GoodmanBoltJemtecParamRpmRow {
     GoodmanBoltJemtecParamRpmTop
     GoodmanBoltJemtecParamRpmSlider
     GoodmanBoltJemtecParamRpmDistBox
+    GoodmanBoltJemtecParamRpmSpark
   }
 }
 
@@ -20508,6 +20705,7 @@ view GoodmanBoltJemtecParamJemtecEnabledRow {
   process GoodmanBoltSetEditor
   children {
     GoodmanBoltJemtecParamJemtecEnabledTop
+    GoodmanBoltJemtecParamJemtecEnabledSpark
   }
 }
 
@@ -20548,7 +20746,7 @@ view GoodmanBoltJemtecParamMuJointToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamMuJointFreeToggle {
@@ -20990,6 +21188,7 @@ view GoodmanBoltJemtecParamMuJointRow {
     GoodmanBoltJemtecParamMuJointTop
     GoodmanBoltJemtecParamMuJointSlider
     GoodmanBoltJemtecParamMuJointDistBox
+    GoodmanBoltJemtecParamMuJointSpark
   }
 }
 
@@ -21030,7 +21229,7 @@ view GoodmanBoltJemtecParamNBoltsToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamNBoltsFreeToggle {
@@ -21472,6 +21671,7 @@ view GoodmanBoltJemtecParamNBoltsRow {
     GoodmanBoltJemtecParamNBoltsTop
     GoodmanBoltJemtecParamNBoltsSlider
     GoodmanBoltJemtecParamNBoltsDistBox
+    GoodmanBoltJemtecParamNBoltsSpark
   }
 }
 
@@ -21512,7 +21712,7 @@ view GoodmanBoltJemtecParamNInterfacesToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamNInterfacesFreeToggle {
@@ -21954,6 +22154,7 @@ view GoodmanBoltJemtecParamNInterfacesRow {
     GoodmanBoltJemtecParamNInterfacesTop
     GoodmanBoltJemtecParamNInterfacesSlider
     GoodmanBoltJemtecParamNInterfacesDistBox
+    GoodmanBoltJemtecParamNInterfacesSpark
   }
 }
 
@@ -21994,7 +22195,7 @@ view GoodmanBoltJemtecParamRubberShoreAToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamRubberShoreAFreeToggle {
@@ -22436,6 +22637,7 @@ view GoodmanBoltJemtecParamRubberShoreARow {
     GoodmanBoltJemtecParamRubberShoreATop
     GoodmanBoltJemtecParamRubberShoreASlider
     GoodmanBoltJemtecParamRubberShoreADistBox
+    GoodmanBoltJemtecParamRubberShoreASpark
   }
 }
 
@@ -22476,7 +22678,7 @@ view GoodmanBoltJemtecParamRubberThicknessMToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamRubberThicknessMFreeToggle {
@@ -22918,6 +23120,7 @@ view GoodmanBoltJemtecParamRubberThicknessMRow {
     GoodmanBoltJemtecParamRubberThicknessMTop
     GoodmanBoltJemtecParamRubberThicknessMSlider
     GoodmanBoltJemtecParamRubberThicknessMDistBox
+    GoodmanBoltJemtecParamRubberThicknessMSpark
   }
 }
 
@@ -22958,7 +23161,7 @@ view GoodmanBoltJemtecParamRubberAreaM2ToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamRubberAreaM2FreeToggle {
@@ -23400,6 +23603,7 @@ view GoodmanBoltJemtecParamRubberAreaM2Row {
     GoodmanBoltJemtecParamRubberAreaM2Top
     GoodmanBoltJemtecParamRubberAreaM2Slider
     GoodmanBoltJemtecParamRubberAreaM2DistBox
+    GoodmanBoltJemtecParamRubberAreaM2Spark
   }
 }
 
@@ -23440,7 +23644,7 @@ view GoodmanBoltJemtecParamRubberNuToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamRubberNuFreeToggle {
@@ -23882,6 +24086,7 @@ view GoodmanBoltJemtecParamRubberNuRow {
     GoodmanBoltJemtecParamRubberNuTop
     GoodmanBoltJemtecParamRubberNuSlider
     GoodmanBoltJemtecParamRubberNuDistBox
+    GoodmanBoltJemtecParamRubberNuSpark
   }
 }
 
@@ -23922,7 +24127,7 @@ view GoodmanBoltJemtecParamRelaxAToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamRelaxAFreeToggle {
@@ -24364,6 +24569,7 @@ view GoodmanBoltJemtecParamRelaxARow {
     GoodmanBoltJemtecParamRelaxATop
     GoodmanBoltJemtecParamRelaxASlider
     GoodmanBoltJemtecParamRelaxADistBox
+    GoodmanBoltJemtecParamRelaxASpark
   }
 }
 
@@ -24404,7 +24610,7 @@ view GoodmanBoltJemtecParamRelaxBToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamRelaxBFreeToggle {
@@ -24846,6 +25052,7 @@ view GoodmanBoltJemtecParamRelaxBRow {
     GoodmanBoltJemtecParamRelaxBTop
     GoodmanBoltJemtecParamRelaxBSlider
     GoodmanBoltJemtecParamRelaxBDistBox
+    GoodmanBoltJemtecParamRelaxBSpark
   }
 }
 
@@ -24886,7 +25093,7 @@ view GoodmanBoltJemtecParamLGripToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamLGripFreeToggle {
@@ -25328,6 +25535,7 @@ view GoodmanBoltJemtecParamLGripRow {
     GoodmanBoltJemtecParamLGripTop
     GoodmanBoltJemtecParamLGripSlider
     GoodmanBoltJemtecParamLGripDistBox
+    GoodmanBoltJemtecParamLGripSpark
   }
 }
 
@@ -25385,6 +25593,7 @@ view GoodmanBoltJemtecParamHeadDirectionRow {
   process GoodmanBoltSetEditor
   children {
     GoodmanBoltJemtecParamHeadDirectionTop
+    GoodmanBoltJemtecParamHeadDirectionSpark
   }
 }
 
@@ -25425,7 +25634,7 @@ view GoodmanBoltJemtecParamDShankToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamDShankFreeToggle {
@@ -25867,6 +26076,7 @@ view GoodmanBoltJemtecParamDShankRow {
     GoodmanBoltJemtecParamDShankTop
     GoodmanBoltJemtecParamDShankSlider
     GoodmanBoltJemtecParamDShankDistBox
+    GoodmanBoltJemtecParamDShankSpark
   }
 }
 
@@ -25907,7 +26117,7 @@ view GoodmanBoltJemtecParamDMinorToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamDMinorFreeToggle {
@@ -26349,6 +26559,7 @@ view GoodmanBoltJemtecParamDMinorRow {
     GoodmanBoltJemtecParamDMinorTop
     GoodmanBoltJemtecParamDMinorSlider
     GoodmanBoltJemtecParamDMinorDistBox
+    GoodmanBoltJemtecParamDMinorSpark
   }
 }
 
@@ -26389,7 +26600,7 @@ view GoodmanBoltJemtecParamASNomToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamASNomFreeToggle {
@@ -26831,6 +27042,7 @@ view GoodmanBoltJemtecParamASNomRow {
     GoodmanBoltJemtecParamASNomTop
     GoodmanBoltJemtecParamASNomSlider
     GoodmanBoltJemtecParamASNomDistBox
+    GoodmanBoltJemtecParamASNomSpark
   }
 }
 
@@ -26871,7 +27083,7 @@ view GoodmanBoltJemtecParamLengthFactorToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamLengthFactorFreeToggle {
@@ -27313,6 +27525,7 @@ view GoodmanBoltJemtecParamLengthFactorRow {
     GoodmanBoltJemtecParamLengthFactorTop
     GoodmanBoltJemtecParamLengthFactorSlider
     GoodmanBoltJemtecParamLengthFactorDistBox
+    GoodmanBoltJemtecParamLengthFactorSpark
   }
 }
 
@@ -27353,7 +27566,7 @@ view GoodmanBoltJemtecParamUtsMPaToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamUtsMPaFreeToggle {
@@ -27795,6 +28008,7 @@ view GoodmanBoltJemtecParamUtsMPaRow {
     GoodmanBoltJemtecParamUtsMPaTop
     GoodmanBoltJemtecParamUtsMPaSlider
     GoodmanBoltJemtecParamUtsMPaDistBox
+    GoodmanBoltJemtecParamUtsMPaSpark
   }
 }
 
@@ -27835,7 +28049,7 @@ view GoodmanBoltJemtecParamSnSigmaLimToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamSnSigmaLimFreeToggle {
@@ -28277,6 +28491,7 @@ view GoodmanBoltJemtecParamSnSigmaLimRow {
     GoodmanBoltJemtecParamSnSigmaLimTop
     GoodmanBoltJemtecParamSnSigmaLimSlider
     GoodmanBoltJemtecParamSnSigmaLimDistBox
+    GoodmanBoltJemtecParamSnSigmaLimSpark
   }
 }
 
@@ -28317,7 +28532,7 @@ view GoodmanBoltJemtecParamSnMToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamSnMFreeToggle {
@@ -28759,6 +28974,7 @@ view GoodmanBoltJemtecParamSnMRow {
     GoodmanBoltJemtecParamSnMTop
     GoodmanBoltJemtecParamSnMSlider
     GoodmanBoltJemtecParamSnMDistBox
+    GoodmanBoltJemtecParamSnMSpark
   }
 }
 
@@ -28799,7 +29015,7 @@ view GoodmanBoltJemtecParamYieldStressMPaToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamYieldStressMPaFreeToggle {
@@ -29241,6 +29457,7 @@ view GoodmanBoltJemtecParamYieldStressMPaRow {
     GoodmanBoltJemtecParamYieldStressMPaTop
     GoodmanBoltJemtecParamYieldStressMPaSlider
     GoodmanBoltJemtecParamYieldStressMPaDistBox
+    GoodmanBoltJemtecParamYieldStressMPaSpark
   }
 }
 
@@ -29281,7 +29498,7 @@ view GoodmanBoltJemtecParamEBoltGPaToggleText {
   kind text
   class tog-lbl
   prop tag = "span"
-  prop text = "free"
+  prop text = "varies"
 }
 
 view GoodmanBoltJemtecParamEBoltGPaFreeToggle {
@@ -29723,6 +29940,7 @@ view GoodmanBoltJemtecParamEBoltGPaRow {
     GoodmanBoltJemtecParamEBoltGPaTop
     GoodmanBoltJemtecParamEBoltGPaSlider
     GoodmanBoltJemtecParamEBoltGPaDistBox
+    GoodmanBoltJemtecParamEBoltGPaSpark
   }
 }
 
@@ -29805,4 +30023,353 @@ view GoodmanBoltSetJemtecParams {
     GoodmanBoltSetJemtecCategoryGeometry
     GoodmanBoltSetJemtecCategoryFatigue
   }
+}
+
+// ── auto-generated static distribution sparklines ──
+view GoodmanBoltRubberParamPreloadStressMPaSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 27.9 L50.3 27.3 L52.6 24.5 L54.9 17.3 L57.2 7.2 L59.5 2.0 L61.8 7.2 L64.1 17.3 L66.4 24.5 L68.7 27.3 L71.0 27.9 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 27.9 L50.3 27.3 L52.6 24.5 L54.9 17.3 L57.2 7.2 L59.5 2.0 L61.8 7.2 L64.1 17.3 L66.4 24.5 L68.7 27.3 L71.0 27.9 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamPreloadUtilisationSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 2.0 L45.7 2.0 L48.0 2.0 L50.3 2.0 L52.6 2.0 L54.9 2.0 L57.2 2.0 L59.5 2.0 L61.8 2.0 L64.1 2.0 L66.4 2.0 L68.7 2.0 L71.0 2.0 L73.3 2.0 L75.6 2.0 L77.9 2.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 2.0 L45.7 2.0 L48.0 2.0 L50.3 2.0 L52.6 2.0 L54.9 2.0 L57.2 2.0 L59.5 2.0 L61.8 2.0 L64.1 2.0 L66.4 2.0 L68.7 2.0 L71.0 2.0 L73.3 2.0 L75.6 2.0 L77.9 2.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamTauASpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.2 L25.0 18.4 L27.3 2.0 L29.6 12.8 L31.9 26.1 L34.2 27.9 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.2 L25.0 18.4 L27.3 2.0 L29.6 12.8 L31.9 26.1 L34.2 27.9 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamTauBSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 27.8 L41.1 27.2 L43.4 25.6 L45.7 21.9 L48.0 15.7 L50.3 8.3 L52.6 2.6 L54.9 2.0 L57.2 6.7 L59.5 14.1 L61.8 20.8 L64.1 25.0 L66.4 27.0 L68.7 27.7 L71.0 27.9 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 27.8 L41.1 27.2 L43.4 25.6 L45.7 21.9 L48.0 15.7 L50.3 8.3 L52.6 2.6 L54.9 2.0 L57.2 6.7 L59.5 14.1 L61.8 20.8 L64.1 25.0 L66.4 27.0 L68.7 27.7 L71.0 27.9 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamTauCSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.9 L25.0 25.6 L27.3 10.9 L29.6 2.0 L31.9 19.5 L34.2 27.4 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.9 L25.0 25.6 L27.3 10.9 L29.6 2.0 L31.9 19.5 L34.2 27.4 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamFAltAppliedNSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 24.4 L11.2 2.0 L13.5 27.6 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 24.4 L11.2 2.0 L13.5 27.6 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamAngularSpanFactorSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 2.0 L31.9 15.4 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 2.0 L31.9 15.4 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamRpmSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='38.8' y1='28' x2='38.8' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='38.8' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamJemtecEnabledSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><rect x='23.7' y='2.0' width='14' height='26.0' rx='1.5' fill='var(--blue)'/><rect x='58.3' y='25.9' width='14' height='2.1' rx='1.5' fill='var(--brd)'/></svg>"
+}
+
+view GoodmanBoltRubberParamMuJointSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 27.7 L38.8 26.5 L41.1 22.9 L43.4 15.3 L45.7 6.3 L48.0 2.0 L50.3 6.3 L52.6 15.3 L54.9 22.9 L57.2 26.5 L59.5 27.7 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 27.7 L38.8 26.5 L41.1 22.9 L43.4 15.3 L45.7 6.3 L48.0 2.0 L50.3 6.3 L52.6 15.3 L54.9 22.9 L57.2 26.5 L59.5 27.7 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamNBoltsSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='20.4' y1='28' x2='20.4' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='20.4' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamNInterfacesSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='32.7' y1='28' x2='32.7' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='32.7' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamRubberShoreASpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 27.9 L54.9 27.4 L57.2 24.4 L59.5 15.7 L61.8 4.3 L64.1 2.0 L66.4 11.7 L68.7 22.2 L71.0 26.8 L73.3 27.9 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 27.9 L54.9 27.4 L57.2 24.4 L59.5 15.7 L61.8 4.3 L64.1 2.0 L66.4 11.7 L68.7 22.2 L71.0 26.8 L73.3 27.9 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamRubberThicknessMSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 27.8 L22.7 22.7 L25.0 2.0 L27.3 7.5 L29.6 25.4 L31.9 27.9 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 27.8 L22.7 22.7 L25.0 2.0 L27.3 7.5 L29.6 25.4 L31.9 27.9 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamRubberAreaM2Spark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='9.1' y1='28' x2='9.1' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='9.1' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamRubberNuSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='84.8' y1='28' x2='84.8' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='84.8' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamRelaxASpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='2.0' y1='28' x2='2.0' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='2.0' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamRelaxBSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='2.0' y1='28' x2='2.0' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='2.0' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamLGripSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.1 L25.0 2.0 L27.3 27.1 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.1 L25.0 2.0 L27.3 27.1 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamHeadDirectionSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><rect x='23.7' y='15.0' width='14' height='13.0' rx='1.5' fill='var(--brd)'/><rect x='58.3' y='15.0' width='14' height='13.0' rx='1.5' fill='var(--blue)'/></svg>"
+}
+
+view GoodmanBoltRubberParamDShankSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='34.2' y1='28' x2='34.2' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='34.2' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamDMinorSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='33.9' y1='28' x2='33.9' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='33.9' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamASNomSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='32.8' y1='28' x2='32.8' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='32.8' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamLengthFactorSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='19.5' y1='28' x2='19.5' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='19.5' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamUtsMPaSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 26.5 L64.1 15.3 L66.4 2.0 L68.7 15.3 L71.0 26.5 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 26.5 L64.1 15.3 L66.4 2.0 L68.7 15.3 L71.0 26.5 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamSnSigmaLimSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 27.8 L20.4 26.9 L22.7 23.5 L25.0 16.1 L27.3 6.6 L29.6 2.0 L31.9 6.6 L34.2 16.1 L36.5 23.5 L38.8 26.9 L41.1 27.8 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 27.8 L20.4 26.9 L22.7 23.5 L25.0 16.1 L27.3 6.6 L29.6 2.0 L31.9 6.6 L34.2 16.1 L36.5 23.5 L38.8 26.9 L41.1 27.8 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltRubberParamSnMSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='41.9' y1='28' x2='41.9' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='41.9' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamYieldStressMPaSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='43.8' y1='28' x2='43.8' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='43.8' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltRubberParamEBoltGPaSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='48.0' y1='28' x2='48.0' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='48.0' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamPreloadStressMPaSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 27.9 L50.3 27.3 L52.6 24.5 L54.9 17.3 L57.2 7.2 L59.5 2.0 L61.8 7.2 L64.1 17.3 L66.4 24.5 L68.7 27.3 L71.0 27.9 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 27.9 L50.3 27.3 L52.6 24.5 L54.9 17.3 L57.2 7.2 L59.5 2.0 L61.8 7.2 L64.1 17.3 L66.4 24.5 L68.7 27.3 L71.0 27.9 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamPreloadUtilisationSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 2.0 L45.7 2.0 L48.0 2.0 L50.3 2.0 L52.6 2.0 L54.9 2.0 L57.2 2.0 L59.5 2.0 L61.8 2.0 L64.1 2.0 L66.4 2.0 L68.7 2.0 L71.0 2.0 L73.3 2.0 L75.6 2.0 L77.9 2.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 2.0 L45.7 2.0 L48.0 2.0 L50.3 2.0 L52.6 2.0 L54.9 2.0 L57.2 2.0 L59.5 2.0 L61.8 2.0 L64.1 2.0 L66.4 2.0 L68.7 2.0 L71.0 2.0 L73.3 2.0 L75.6 2.0 L77.9 2.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamTauASpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.2 L25.0 18.4 L27.3 2.0 L29.6 12.8 L31.9 26.1 L34.2 27.9 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.2 L25.0 18.4 L27.3 2.0 L29.6 12.8 L31.9 26.1 L34.2 27.9 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamTauBSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 27.8 L41.1 27.2 L43.4 25.6 L45.7 21.9 L48.0 15.7 L50.3 8.3 L52.6 2.6 L54.9 2.0 L57.2 6.7 L59.5 14.1 L61.8 20.8 L64.1 25.0 L66.4 27.0 L68.7 27.7 L71.0 27.9 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 27.8 L41.1 27.2 L43.4 25.6 L45.7 21.9 L48.0 15.7 L50.3 8.3 L52.6 2.6 L54.9 2.0 L57.2 6.7 L59.5 14.1 L61.8 20.8 L64.1 25.0 L66.4 27.0 L68.7 27.7 L71.0 27.9 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamTauCSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.9 L25.0 25.6 L27.3 10.9 L29.6 2.0 L31.9 19.5 L34.2 27.4 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.9 L25.0 25.6 L27.3 10.9 L29.6 2.0 L31.9 19.5 L34.2 27.4 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamFAltAppliedNSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 24.4 L11.2 2.0 L13.5 27.6 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 24.4 L11.2 2.0 L13.5 27.6 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamAngularSpanFactorSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 2.0 L31.9 15.4 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 2.0 L31.9 15.4 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamRpmSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='38.8' y1='28' x2='38.8' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='38.8' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamJemtecEnabledSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><rect x='23.7' y='25.9' width='14' height='2.1' rx='1.5' fill='var(--brd)'/><rect x='58.3' y='2.0' width='14' height='26.0' rx='1.5' fill='var(--blue)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamMuJointSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 27.7 L38.8 26.5 L41.1 22.9 L43.4 15.3 L45.7 6.3 L48.0 2.0 L50.3 6.3 L52.6 15.3 L54.9 22.9 L57.2 26.5 L59.5 27.7 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 27.7 L38.8 26.5 L41.1 22.9 L43.4 15.3 L45.7 6.3 L48.0 2.0 L50.3 6.3 L52.6 15.3 L54.9 22.9 L57.2 26.5 L59.5 27.7 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamNBoltsSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='20.4' y1='28' x2='20.4' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='20.4' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamNInterfacesSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='32.7' y1='28' x2='32.7' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='32.7' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamRubberShoreASpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 27.9 L54.9 27.4 L57.2 24.4 L59.5 15.7 L61.8 4.3 L64.1 2.0 L66.4 11.7 L68.7 22.2 L71.0 26.8 L73.3 27.9 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 27.9 L54.9 27.4 L57.2 24.4 L59.5 15.7 L61.8 4.3 L64.1 2.0 L66.4 11.7 L68.7 22.2 L71.0 26.8 L73.3 27.9 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamRubberThicknessMSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 27.8 L22.7 22.7 L25.0 2.0 L27.3 7.5 L29.6 25.4 L31.9 27.9 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 27.8 L22.7 22.7 L25.0 2.0 L27.3 7.5 L29.6 25.4 L31.9 27.9 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamRubberAreaM2Spark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='9.1' y1='28' x2='9.1' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='9.1' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamRubberNuSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='84.8' y1='28' x2='84.8' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='84.8' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamRelaxASpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='2.0' y1='28' x2='2.0' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='2.0' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamRelaxBSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='2.0' y1='28' x2='2.0' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='2.0' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamLGripSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.1 L25.0 2.0 L27.3 27.1 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 27.1 L25.0 2.0 L27.3 27.1 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamHeadDirectionSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><rect x='23.7' y='15.0' width='14' height='13.0' rx='1.5' fill='var(--brd)'/><rect x='58.3' y='15.0' width='14' height='13.0' rx='1.5' fill='var(--blue)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamDShankSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='34.2' y1='28' x2='34.2' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='34.2' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamDMinorSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='33.9' y1='28' x2='33.9' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='33.9' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamASNomSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='32.8' y1='28' x2='32.8' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='32.8' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamLengthFactorSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='19.5' y1='28' x2='19.5' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='19.5' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamUtsMPaSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 26.5 L64.1 15.3 L66.4 2.0 L68.7 15.3 L71.0 26.5 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 28.0 L20.4 28.0 L22.7 28.0 L25.0 28.0 L27.3 28.0 L29.6 28.0 L31.9 28.0 L34.2 28.0 L36.5 28.0 L38.8 28.0 L41.1 28.0 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 26.5 L64.1 15.3 L66.4 2.0 L68.7 15.3 L71.0 26.5 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamSnSigmaLimSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><path d='M2.0 28 L2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 27.8 L20.4 26.9 L22.7 23.5 L25.0 16.1 L27.3 6.6 L29.6 2.0 L31.9 6.6 L34.2 16.1 L36.5 23.5 L38.8 26.9 L41.1 27.8 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0 L94.0 28 Z' fill='var(--blue)' fill-opacity='0.14'/><path d='M2.0 28.0 L4.3 28.0 L6.6 28.0 L8.9 28.0 L11.2 28.0 L13.5 28.0 L15.8 28.0 L18.1 27.8 L20.4 26.9 L22.7 23.5 L25.0 16.1 L27.3 6.6 L29.6 2.0 L31.9 6.6 L34.2 16.1 L36.5 23.5 L38.8 26.9 L41.1 27.8 L43.4 28.0 L45.7 28.0 L48.0 28.0 L50.3 28.0 L52.6 28.0 L54.9 28.0 L57.2 28.0 L59.5 28.0 L61.8 28.0 L64.1 28.0 L66.4 28.0 L68.7 28.0 L71.0 28.0 L73.3 28.0 L75.6 28.0 L77.9 28.0 L80.2 28.0 L82.5 28.0 L84.8 28.0 L87.1 28.0 L89.4 28.0 L91.7 28.0 L94.0 28.0' fill='none' stroke='var(--blue)' stroke-width='1.5'/></svg>"
+}
+
+view GoodmanBoltJemtecParamSnMSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='41.9' y1='28' x2='41.9' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='41.9' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamYieldStressMPaSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='43.8' y1='28' x2='43.8' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='43.8' cy='2' r='2' fill='var(--t2)'/></svg>"
+}
+
+view GoodmanBoltJemtecParamEBoltGPaSpark {
+  kind leaf
+  class sim-spark
+  prop rawHtml = "<svg class='spark' viewBox='0 0 96 30' preserveAspectRatio='none'><line x1='48.0' y1='28' x2='48.0' y2='2' stroke='var(--t2)' stroke-width='1.5'/><circle cx='48.0' cy='2' r='2' fill='var(--t2)'/></svg>"
 }

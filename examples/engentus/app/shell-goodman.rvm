@@ -764,6 +764,7 @@ view GoodmanSimulationSection {
   children {
     GoodmanSimulationTitle
     GoodmanSimulationList
+    GoodmanSetupSimAction
   }
 }
 
@@ -2652,11 +2653,7 @@ view GoodmanBoltSetPrimaryParams {
     className from state GoodmanBoltPrimaryParamsOpen map true open default ""
   }
   children {
-    GoodmanBoltSetRubberCategoryPreload
-    GoodmanBoltSetRubberCategoryLoad
-    GoodmanBoltSetRubberCategoryJoint
-    GoodmanBoltSetRubberCategoryGeometry
-    GoodmanBoltSetRubberCategoryFatigue
+    GoodmanBoltSetPrimaryParamsMovedNote
   }
 }
 
@@ -2846,7 +2843,7 @@ view GoodmanBoltSetMaintenanceParams {
     visible from state GoodmanBoltMaintenanceParamsOpen
   }
   children {
-    GoodmanBoltSetJemtecParams
+    GoodmanBoltSetMaintenanceParamsMovedNote
   }
 }
 
@@ -3733,6 +3730,453 @@ view GoodmanBody {
   children {
     GoodmanSidebar
     GoodmanChartArea
+  }
+}
+
+view GoodmanSetupSimAction {
+  kind action
+  class goodman-setup-sim-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Set up simulation ▸"
+  interactions {
+    on click self deliver EngentusNavigateSimulationSetupRequested
+  }
+}
+
+view GoodmanSimulationSetupBackAction {
+  kind action
+  class sim-setup-back
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "‹ Goodman"
+  interactions {
+    on click self deliver EngentusNavigateGoodmanRequested
+  }
+}
+
+view GoodmanSimulationSetupTitle {
+  kind text
+  class sim-setup-title
+  prop tag = "h1"
+  prop text = "Set up simulation"
+}
+
+view GoodmanSimulationSetupSubtitle {
+  kind text
+  class sim-setup-sub
+  prop tag = "p"
+  prop text = "Define how each bolt set's inputs vary for the Monte Carlo run."
+}
+
+view GoodmanSimulationSetupHeader {
+  kind row
+  class sim-setup-head
+  children {
+    GoodmanSimulationSetupBackAction
+    GoodmanSimulationSetupTitle
+  }
+}
+
+view GoodmanBoltSetPrimaryParamsMovedNote {
+  kind text
+  class bs-moved-note
+  prop tag = "p"
+  prop text = "Input distributions are now edited in Set up simulation (Monte Carlo)."
+}
+
+view GoodmanBoltSetMaintenanceParamsMovedNote {
+  kind text
+  class bs-moved-note
+  prop tag = "p"
+  prop text = "Input distributions are now edited in Set up simulation (Monte Carlo)."
+}
+
+view GoodmanSimSetupNoJemtecDot {
+  kind marker
+  class sim-set-head-dot
+  prop presentationAnchor = "goodman-bolt-primary-swatch"
+}
+
+view GoodmanSimSetupNoJemtecName {
+  kind text
+  class sim-set-head-name
+  prop tag = "h2"
+  prop text = "No Jemtec"
+}
+
+view GoodmanSimSetupNoJemtecDesc {
+  kind text
+  class sim-set-head-desc
+  prop tag = "p"
+  prop text = "Rubber-mounted joint, no anti-loosening insert."
+}
+
+view GoodmanSimSetupNoJemtecMeta {
+  kind group
+  class sim-set-head-meta
+  children {
+    GoodmanSimSetupNoJemtecName
+    GoodmanSimSetupNoJemtecDesc
+  }
+}
+
+view GoodmanSimSetupNoJemtecStatValue {
+  kind text
+  class sim-set-head-stat-value
+  prop tag = "strong"
+  prop text = "13"
+}
+
+view GoodmanSimSetupNoJemtecStatLabel {
+  kind text
+  class sim-set-head-stat-label
+  prop tag = "span"
+  prop text = "varying inputs"
+}
+
+view GoodmanSimSetupNoJemtecStat {
+  kind group
+  class sim-set-head-stat
+  children {
+    GoodmanSimSetupNoJemtecStatValue
+    GoodmanSimSetupNoJemtecStatLabel
+  }
+}
+
+view GoodmanSimSetupNoJemtecHeading {
+  kind group
+  class sim-set-head
+  children {
+    GoodmanSimSetupNoJemtecDot
+    GoodmanSimSetupNoJemtecMeta
+    GoodmanSimSetupNoJemtecStat
+  }
+}
+
+view GoodmanSimSetupJemtecDot {
+  kind marker
+  class sim-set-head-dot
+  prop presentationAnchor = "goodman-bolt-maintenance-swatch"
+}
+
+view GoodmanSimSetupJemtecName {
+  kind text
+  class sim-set-head-name
+  prop tag = "h2"
+  prop text = "Jemtec"
+}
+
+view GoodmanSimSetupJemtecDesc {
+  kind text
+  class sim-set-head-desc
+  prop tag = "p"
+  prop text = "Jemtec anti-loosening insert engaged."
+}
+
+view GoodmanSimSetupJemtecMeta {
+  kind group
+  class sim-set-head-meta
+  children {
+    GoodmanSimSetupJemtecName
+    GoodmanSimSetupJemtecDesc
+  }
+}
+
+view GoodmanSimSetupJemtecStatValue {
+  kind text
+  class sim-set-head-stat-value
+  prop tag = "strong"
+  prop text = "13"
+}
+
+view GoodmanSimSetupJemtecStatLabel {
+  kind text
+  class sim-set-head-stat-label
+  prop tag = "span"
+  prop text = "varying inputs"
+}
+
+view GoodmanSimSetupJemtecStat {
+  kind group
+  class sim-set-head-stat
+  children {
+    GoodmanSimSetupJemtecStatValue
+    GoodmanSimSetupJemtecStatLabel
+  }
+}
+
+view GoodmanSimSetupJemtecHeading {
+  kind group
+  class sim-set-head
+  children {
+    GoodmanSimSetupJemtecDot
+    GoodmanSimSetupJemtecMeta
+    GoodmanSimSetupJemtecStat
+  }
+}
+
+view GoodmanSimSetupRailTitle {
+  kind text
+  class sim-rail-title
+  prop tag = "div"
+  prop text = "Bolt sets"
+}
+
+view GoodmanSimSetupRailRubberDot {
+  kind marker
+  class sim-rail-dot
+  prop presentationAnchor = "goodman-bolt-primary-swatch"
+}
+
+view GoodmanSimSetupRailRubberName {
+  kind text
+  class sim-rail-name
+  prop tag = "span"
+  prop text = "No Jemtec"
+}
+
+view GoodmanSimSetupRailRubberSub {
+  kind text
+  class sim-rail-sub
+  prop tag = "span"
+  prop text = "13 varying"
+}
+
+view GoodmanSimSetupRailRubber {
+  kind action
+  class sim-rail-item
+  prop tag = "button"
+  prop buttonType = "button"
+  bindings {
+    className from state GoodmanSimSetupActiveSet map jemtec "" default active
+  }
+  interactions {
+    on click self deliver GoodmanSimSetupShowRubberRequested
+  }
+  children {
+    GoodmanSimSetupRailRubberDot
+    GoodmanSimSetupRailRubberName
+    GoodmanSimSetupRailRubberSub
+  }
+}
+
+view GoodmanSimSetupRailJemtecDot {
+  kind marker
+  class sim-rail-dot
+  prop presentationAnchor = "goodman-bolt-maintenance-swatch"
+}
+
+view GoodmanSimSetupRailJemtecName {
+  kind text
+  class sim-rail-name
+  prop tag = "span"
+  prop text = "Jemtec"
+}
+
+view GoodmanSimSetupRailJemtecSub {
+  kind text
+  class sim-rail-sub
+  prop tag = "span"
+  prop text = "13 varying"
+}
+
+view GoodmanSimSetupRailJemtec {
+  kind action
+  class sim-rail-item
+  prop tag = "button"
+  prop buttonType = "button"
+  bindings {
+    className from state GoodmanSimSetupActiveSet map jemtec active default ""
+  }
+  interactions {
+    on click self deliver GoodmanSimSetupShowJemtecRequested
+  }
+  children {
+    GoodmanSimSetupRailJemtecDot
+    GoodmanSimSetupRailJemtecName
+    GoodmanSimSetupRailJemtecSub
+  }
+}
+
+view GoodmanSimSetupRailAdd {
+  kind action
+  class sim-rail-add
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "+ New bolt set"
+}
+
+view GoodmanSimSetupRailNote {
+  kind text
+  class sim-rail-note
+  prop tag = "p"
+  prop text = "Each set carries its own input distributions for the Monte Carlo run."
+}
+
+view GoodmanSimSetupRail {
+  kind group
+  class sim-rail
+  children {
+    GoodmanSimSetupRailTitle
+    GoodmanSimSetupRailRubber
+    GoodmanSimSetupRailJemtec
+    GoodmanSimSetupRailAdd
+    GoodmanSimSetupRailNote
+  }
+}
+
+view GoodmanSimSetupToolbarSearch {
+  kind input
+  class sim-search
+  prop tag = "input"
+  prop inputType = "text"
+  prop placeholder = "Filter parameters…"
+}
+
+view GoodmanSimSetupToolbarOnlyVaryBox {
+  kind input
+  class sim-chk-box
+  prop tag = "input"
+  prop inputType = "checkbox"
+}
+
+view GoodmanSimSetupToolbarOnlyVaryText {
+  kind text
+  class sim-chk-text
+  prop tag = "span"
+  prop text = "Only varying"
+}
+
+view GoodmanSimSetupToolbarOnlyVary {
+  kind group
+  class sim-chk
+  children {
+    GoodmanSimSetupToolbarOnlyVaryBox
+    GoodmanSimSetupToolbarOnlyVaryText
+  }
+}
+
+view GoodmanSimSetupToolbarLegendVarySwatch {
+  kind marker
+  class sim-lg sim-lg-vary
+}
+
+view GoodmanSimSetupToolbarLegendVaryText {
+  kind text
+  class sim-lg-text
+  prop tag = "span"
+  prop text = "varies"
+}
+
+view GoodmanSimSetupToolbarLegendFixedSwatch {
+  kind marker
+  class sim-lg sim-lg-fixed
+}
+
+view GoodmanSimSetupToolbarLegendFixedText {
+  kind text
+  class sim-lg-text
+  prop tag = "span"
+  prop text = "fixed"
+}
+
+view GoodmanSimSetupToolbarLegend {
+  kind group
+  class sim-legend
+  children {
+    GoodmanSimSetupToolbarLegendVarySwatch
+    GoodmanSimSetupToolbarLegendVaryText
+    GoodmanSimSetupToolbarLegendFixedSwatch
+    GoodmanSimSetupToolbarLegendFixedText
+  }
+}
+
+view GoodmanSimSetupToolbar {
+  kind group
+  class sim-toolbar
+  children {
+    GoodmanSimSetupToolbarSearch
+    GoodmanSimSetupToolbarOnlyVary
+    GoodmanSimSetupToolbarLegend
+  }
+}
+
+view GoodmanSimSetupRubberGroup {
+  kind group
+  class sim-set-group
+  bindings {
+    className from state GoodmanSimSetupActiveSet map jemtec "off" default ""
+  }
+  children {
+    GoodmanSimSetupNoJemtecHeading
+    GoodmanSimSetupToolbar
+    GoodmanBoltSetRubberCategoryPreload
+    GoodmanBoltSetRubberCategoryLoad
+    GoodmanBoltSetRubberCategoryJoint
+    GoodmanBoltSetRubberCategoryGeometry
+    GoodmanBoltSetRubberCategoryFatigue
+  }
+}
+
+view GoodmanSimSetupJemtecGroup {
+  kind group
+  class sim-set-group
+  bindings {
+    className from state GoodmanSimSetupActiveSet map jemtec "" default "off"
+  }
+  children {
+    GoodmanSimSetupJemtecHeading
+    GoodmanSimSetupToolbar
+    GoodmanBoltSetJemtecCategoryPreload
+    GoodmanBoltSetJemtecCategoryLoad
+    GoodmanBoltSetJemtecCategoryJoint
+    GoodmanBoltSetJemtecCategoryGeometry
+    GoodmanBoltSetJemtecCategoryFatigue
+  }
+}
+
+view GoodmanSimSetupMain {
+  kind group
+  class sim-setup-main
+  children {
+    GoodmanSimSetupRubberGroup
+    GoodmanSimSetupJemtecGroup
+  }
+}
+
+view GoodmanSimSetupLayout {
+  kind row
+  class sim-setup-layout
+  children {
+    GoodmanSimSetupRail
+    GoodmanSimSetupMain
+  }
+}
+
+view GoodmanSimulationSetupBody {
+  kind body
+  class sim-setup-body
+  prop domId = "sim-setup-body"
+  children {
+    GoodmanSimulationSetupHeader
+    GoodmanSimulationSetupSubtitle
+    GoodmanSimSetupLayout
+  }
+}
+
+view EngentusSimulationSetupApp {
+  kind app-shell
+  class engentus-app
+  process EngentusShellNavigation
+  prop domId = "view-goodman-simulation-setup"
+  prop documentTitle = "Set up simulation"
+  prop routeKey = "goodman-simulation-setup"
+  prop routePath = "/engentus/goodman/simulation-setup"
+  prop mountMode = "mounted-panel"
+  children {
+    EngentusModuleChrome
+    GoodmanSimulationSetupBody
   }
 }
 
